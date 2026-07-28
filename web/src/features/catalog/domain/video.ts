@@ -52,7 +52,8 @@ export interface Video {
   thumbnailPath: string
   description: string
   hashtags: string[]
-  categories: string[]
+  /** Topic names this video was discovered under, from topics.yaml. */
+  topics: string[]
   mediaState: MediaState
   mediaPath: string
   sizeBytes: number
@@ -75,7 +76,7 @@ export interface Comment {
   replies: Comment[]
 }
 
-export interface Category {
+export interface Topic {
   name: string
   videoCount: number
 }

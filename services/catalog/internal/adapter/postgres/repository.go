@@ -51,6 +51,10 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 		state      string
 		subscribed bool
 
+		// Both are unknown for videos discovered by a flat listing scan.
+		publishedAt *time.Time
+		viewCount   *int64
+
 		positionSeconds *int32
 		watchedFraction *float32
 		lastWatchedAt   *time.Time
@@ -59,7 +63,7 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 	)
 
 	err := row.Scan(
-		&v.ID, &v.Title, &v.DurationSeconds, &v.ViewCount, &v.PublishedAt, &v.AddedAt,
+		&v.ID, &v.Title, &v.DurationSeconds, &viewCount, &publishedAt, &v.AddedAt,
 		&v.ThumbnailPath, &v.Description, &v.Hashtags, &v.Topics, &state,
 		&v.MediaPath, &v.SizeBytes, &v.Pinned, &v.SourceURL,
 		&v.Channel.ID, &v.Channel.Name, &v.Channel.Handle, &v.Channel.AvatarPath,
@@ -74,6 +78,12 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 
 	v.MediaState = domain.MediaState(state)
 	v.Channel.Subscribed = subscribed
+	if publishedAt != nil {
+		v.PublishedAt = *publishedAt
+	}
+	if viewCount != nil {
+		v.ViewCount = *viewCount
+	}
 
 	// User state is present only when the user has actually interacted with the
 	// video; an untouched video carries no state rather than a zeroed one.
@@ -256,8 +266,10 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		SET title = EXCLUDED.title,
 		    channel_id = EXCLUDED.channel_id,
 		    duration_seconds = EXCLUDED.duration_seconds,
-		    view_count = EXCLUDED.view_count,
-		    published_at = EXCLUDED.published_at,
+		    -- A later scan that knows less must not erase what an earlier full
+		    -- metadata fetch established.
+		    view_count = COALESCE(EXCLUDED.view_count, videos.view_count),
+		    published_at = COALESCE(EXCLUDED.published_at, videos.published_at),
 		    thumbnail_path = COALESCE(NULLIF(EXCLUDED.thumbnail_path, ''), videos.thumbnail_path),
 		    description = EXCLUDED.description,
 		    hashtags = EXCLUDED.hashtags,
@@ -265,7 +277,8 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		    -- the first one instead of being reassigned.
 		    topics = ARRAY(SELECT DISTINCT unnest(videos.topics || EXCLUDED.topics)),
 		    source_url = EXCLUDED.source_url`,
-		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, v.ViewCount, v.PublishedAt,
+		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, nullableCount(v.ViewCount),
+		nullableTime(v.PublishedAt),
 		v.ThumbnailPath, v.Description, v.Hashtags, v.Topics,
 		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL)
 	if err != nil {
@@ -315,12 +328,16 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 	var out []domain.VideoFeatures
 	for rows.Next() {
 		var (
-			f     domain.VideoFeatures
-			state string
+			f           domain.VideoFeatures
+			state       string
+			publishedAt *time.Time
 		)
 		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Topics, &f.Hashtags,
-			&f.PublishedAt, &f.AddedAt, &f.DurationSeconds, &state); err != nil {
+			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state); err != nil {
 			return nil, err
+		}
+		if publishedAt != nil {
+			f.PublishedAt = *publishedAt
 		}
 		f.MediaState = domain.MediaState(state)
 		out = append(out, f)
@@ -500,6 +517,23 @@ func (r *Repository) SetPinned(ctx context.Context, videoID string, pinned bool)
 		return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
 	}
 	return nil
+}
+
+// nullableTime and nullableCount keep "unknown" distinct from "zero" on the
+// way into the database, so a scan that lacks a field cannot overwrite a value
+// a full metadata fetch already found.
+func nullableTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+func nullableCount(n int64) *int64 {
+	if n <= 0 {
+		return nil
+	}
+	return &n
 }
 
 // diskFreeBytes reports free space on the volume holding the media directory.

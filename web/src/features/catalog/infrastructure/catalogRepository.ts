@@ -1,5 +1,5 @@
 import type {
-  Category,
+  Topic,
   Comment,
   ReactionState,
   StorageUsage,
@@ -11,11 +11,12 @@ import type {
  * transport can change without touching a single hook or component.
  */
 export interface CatalogRepository {
-  listFeed(category: string, pageToken?: string): Promise<Feed>
+  listFeed(topic: string, pageToken?: string): Promise<Feed>
   getVideo(id: string): Promise<Video>
   listUpNext(currentVideoId: string, channelFilter?: string): Promise<Video[]>
   listComments(videoId: string): Promise<CommentPage>
-  listCategories(): Promise<Category[]>
+  listTopics(): Promise<Topic[]>
+  refreshTopics(): Promise<ScanStatus>
   search(query: string): Promise<Video[]>
   getStorage(): Promise<StorageUsage>
 
@@ -40,6 +41,16 @@ export interface Feed {
 export interface CommentPage {
   comments: Comment[]
   totalCount: number
+}
+
+export interface ScanStatus {
+  startedAt: string
+  durationMs: number
+  sourcesScanned: number
+  sourcesFailed: number
+  videosSeen: number
+  videosAdded: number
+  errors: string[]
 }
 
 export interface StreamSource {
@@ -106,10 +117,10 @@ const query = (params: Record<string, string | undefined>): string => {
 }
 
 export const httpCatalogRepository: CatalogRepository = {
-  listFeed(category, pageToken) {
+  listFeed(topic, pageToken) {
     // "All" is the client-side label for no filter; the API takes an empty value.
-    const value = category === 'All' ? undefined : category
-    return request<Feed>(`/feed${query({ category: value, pageToken })}`)
+    const value = topic === 'All' ? undefined : topic
+    return request<Feed>(`/feed${query({ topic: value, pageToken })}`)
   },
 
   getVideo(id) {
@@ -127,9 +138,13 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<CommentPage>(`/videos/${encodeURIComponent(videoId)}/comments`)
   },
 
-  async listCategories() {
-    const { categories } = await request<{ categories: Category[] }>('/categories')
-    return categories
+  async listTopics() {
+    const { topics } = await request<{ topics: Topic[] }>('/topics')
+    return topics
+  },
+
+  refreshTopics() {
+    return request<ScanStatus>('/topics/refresh', { method: 'POST' })
   },
 
   async search(q) {

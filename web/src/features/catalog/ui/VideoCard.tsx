@@ -17,7 +17,7 @@ export function VideoCard({ video }: { video: Video }) {
   return (
     <article className="group flex flex-col gap-3">
       <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
-        <ThumbnailSurface hue={hueFromId(video.id)}>
+        <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailPath} alt={video.title}>
           {video.mediaState === 'EVICTED' && (
             <span className="absolute inset-0 grid place-items-center bg-black/55 text-xs font-medium">
               <span className="flex items-center gap-1.5">
@@ -55,9 +55,7 @@ export function VideoCard({ video }: { video: Video }) {
             <span>{video.channel.name}</span>
             {video.channel.verified && <CheckCircle size={12} aria-label="Verified" />}
           </p>
-          <p className="text-xs text-text-2">
-            {formatViews(video.viewCount)} • {formatRelative(video.publishedAt)}
-          </p>
+          <p className="text-xs text-text-2">{describeVideo(video)}</p>
         </div>
 
         <button
@@ -76,6 +74,18 @@ export function VideoCard({ video }: { video: Video }) {
       </div>
     </article>
   )
+}
+
+/**
+ * Scanned videos have no view count or upload date: flat listings omit both.
+ * Printing "0 views • 1 minute ago" for all of them would be a plausible lie,
+ * so each part appears only when it is actually known.
+ */
+function describeVideo(video: Video): string {
+  const parts: string[] = []
+  if (video.viewCount > 0) parts.push(formatViews(video.viewCount))
+  if (video.publishedAt) parts.push(formatRelative(video.publishedAt))
+  return parts.join(' • ')
 }
 
 export function VideoCardSkeleton() {

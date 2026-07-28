@@ -16,7 +16,12 @@ export function DescriptionBox({ video }: { video: Video }) {
       onClick={() => !expanded && setExpanded(true)}
     >
       <p className="font-medium">
-        {formatViews(video.viewCount)} • {formatDate(video.publishedAt)}{' '}
+        {[
+          video.viewCount > 0 ? formatViews(video.viewCount) : null,
+          video.publishedAt ? formatDate(video.publishedAt) : null,
+        ]
+          .filter(Boolean)
+          .join(' • ')}{' '}
         {video.hashtags.map((tag) => (
           <span key={tag} className="text-link">
             {tag}{' '}

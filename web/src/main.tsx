@@ -18,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/topic/:topicName" element={<HomePage />} />
             <Route path="/watch/:videoId" element={<WatchPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

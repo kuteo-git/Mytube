@@ -7,18 +7,33 @@ import { httpCatalogRepository as repo } from '../infrastructure/catalogReposito
  * These know nothing about HTTP; they only talk to the repository port.
  */
 
-export function useFeed(category: string) {
+export function useFeed(topic: string) {
   return useQuery({
-    queryKey: ['feed', category],
-    queryFn: () => repo.listFeed(category),
+    queryKey: ['feed', topic],
+    queryFn: () => repo.listFeed(topic),
   })
 }
 
-export function useCategories() {
+export function useTopics() {
   return useQuery({
-    queryKey: ['categories'],
-    queryFn: () => repo.listCategories(),
+    queryKey: ['topics'],
+    queryFn: () => repo.listTopics(),
     staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * Rescans topics.yaml. A pass walks every source, so this is slow by nature;
+ * the caller should show it running rather than assume it returns quickly.
+ */
+export function useRefreshTopics() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => repo.refreshTopics(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['topics'] })
+      void queryClient.invalidateQueries({ queryKey: ['feed'] })
+    },
   })
 }
 

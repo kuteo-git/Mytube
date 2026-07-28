@@ -124,7 +124,6 @@ func toVideoDTO(v *catalogv1.Video) videoDTO {
 		Channel:         toChannelDTO(v.GetChannel()),
 		DurationSeconds: v.GetDurationSeconds(),
 		ViewCount:       v.GetViewCount(),
-		PublishedAt:     v.GetPublishedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
 		AddedAt:         v.GetAddedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
 		ThumbnailPath:   v.GetThumbnailPath(),
 		Description:     v.GetDescription(),
@@ -136,6 +135,12 @@ func toVideoDTO(v *catalogv1.Video) videoDTO {
 		Pinned:          v.GetPinned(),
 		SourceURL:       v.GetSourceUrl(),
 		LikeCount:       v.GetLikeCount(),
+	}
+
+	// An unknown upload date is sent as an empty string; the client omits the
+	// "x ago" line rather than printing a made-up one.
+	if ts := v.GetPublishedAt(); ts != nil {
+		dto.PublishedAt = ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
 	}
 
 	if us := v.GetUserState(); us != nil {

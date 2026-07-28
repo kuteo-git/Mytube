@@ -104,7 +104,6 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		Channel:         channelToProto(v.Channel),
 		DurationSeconds: v.DurationSeconds,
 		ViewCount:       v.ViewCount,
-		PublishedAt:     timestamppb.New(v.PublishedAt),
 		AddedAt:         timestamppb.New(v.AddedAt),
 		ThumbnailPath:   v.ThumbnailPath,
 		Description:     v.Description,
@@ -116,6 +115,10 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		Pinned:          v.Pinned,
 		SourceUrl:       v.SourceURL,
 		LikeCount:       v.LikeCount,
+	}
+
+	if !v.PublishedAt.IsZero() {
+		out.PublishedAt = timestamppb.New(v.PublishedAt)
 	}
 
 	if v.UserState != nil {
@@ -245,7 +248,6 @@ func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[cat
 			ChannelId:       f.ChannelID,
 			Topics:          f.Topics,
 			Hashtags:        f.Hashtags,
-			PublishedAt:     timestamppb.New(f.PublishedAt),
 			AddedAt:         timestamppb.New(f.AddedAt),
 			DurationSeconds: f.DurationSeconds,
 			MediaState:      mediaStates[f.MediaState],

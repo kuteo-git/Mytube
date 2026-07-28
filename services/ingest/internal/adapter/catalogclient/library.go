@@ -65,11 +65,15 @@ func (l *Library) UpsertVideo(ctx context.Context, v domain.ExternalVideo, state
 			DurationSeconds: v.DurationSeconds,
 			ViewCount:       v.ViewCount,
 			PublishedAt:     timestamppb.New(v.PublishedAt),
-			Description:     v.Description,
-			Hashtags:        v.Hashtags,
-			Topics:          v.Topics,
-			MediaState:      mediaStates[state],
-			SourceUrl:       v.SourceURL,
+			// The remote thumbnail URL is stored as-is and hotlinked by the
+			// client. Fetching 240 images for videos that mostly will not be
+			// watched would cost more disk than the videos we actually keep.
+			ThumbnailPath: v.ThumbnailURL,
+			Description:   v.Description,
+			Hashtags:      v.Hashtags,
+			Topics:        v.Topics,
+			MediaState:    mediaStates[state],
+			SourceUrl:     v.SourceURL,
 		},
 	}))
 	return err

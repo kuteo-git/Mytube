@@ -1,16 +1,8 @@
 import clsx from 'clsx'
-import {
-  Clapperboard,
-  Compass,
-  HardDrive,
-  History,
-  Home,
-  ListVideo,
-  ThumbsUp,
-} from 'lucide-react'
+import { Bookmark, HardDrive, History, Home, Tag } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
-import { useCategories } from '@/features/catalog/application/queries'
+import { useTopics } from '@/features/catalog/application/queries'
 
 type Icon = ComponentType<{ size?: number }>
 
@@ -21,16 +13,17 @@ interface Item {
 }
 
 /**
- * Compared to youtube.com we drop "Your videos", "YouTube Music", "YouTube
- * Kids", Shorts, Live and the legal footer, and repurpose "Downloads" into
- * "Storage" — see CLAUDE.md §5, "no dead buttons".
+ * Four fixed entries plus the topics from topics.yaml.
+ *
+ * Compared to youtube.com this drops Playlists, Watch later, Liked videos,
+ * Your videos, Subscriptions, YouTube Music, YouTube Kids, Shorts, Live and the
+ * legal footer. None of them had anything behind them: content is organised by
+ * topic, and the only personal collection is what you Keep — see CLAUDE.md §5.
  */
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
   { icon: History, label: 'History', to: '/history' },
-  { icon: ListVideo, label: 'Playlists', to: '/playlists' },
-  { icon: Clapperboard, label: 'Watch later', to: '/watch-later' },
-  { icon: ThumbsUp, label: 'Liked videos', to: '/liked' },
+  { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: HardDrive, label: 'Storage', to: '/storage' },
 ]
 
@@ -57,9 +50,7 @@ function Row({ item, mini }: { item: Item; mini: boolean }) {
 }
 
 export function Sidebar({ mini }: { mini: boolean }) {
-  // Explore entries are the categories actually present in the library, so the
-  // section can never offer a filter that yields nothing.
-  const { data: categories } = useCategories()
+  const { data: topics } = useTopics()
 
   if (mini) {
     return (
@@ -67,7 +58,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
         aria-label="Main"
         className="fixed top-14 bottom-0 left-0 z-20 w-[72px] overflow-y-auto bg-bg py-1 no-scrollbar"
       >
-        {PRIMARY.slice(0, 5).map((item) => (
+        {PRIMARY.map((item) => (
           <Row key={item.to} item={item} mini />
         ))}
       </nav>
@@ -85,20 +76,25 @@ export function Sidebar({ mini }: { mini: boolean }) {
         ))}
       </section>
 
-      {categories && categories.length > 0 && (
+      {topics && topics.length > 0 && (
         <>
           <hr className="my-3 border-0 border-t border-line" />
           <section className="flex flex-col gap-0.5">
-            <h2 className="px-3 py-1.5 text-base font-medium">Explore</h2>
-            {categories.slice(0, 6).map((category) => (
+            <h2 className="px-3 py-1.5 text-base font-medium">Topics</h2>
+            {topics.map((topic) => (
               <NavLink
-                key={category.name}
-                to={`/tag/${encodeURIComponent(category.name)}`}
-                className="flex h-10 items-center gap-6 rounded-[10px] px-3 transition-colors duration-150 ease-out hover:bg-surface-hover"
+                key={topic.name}
+                to={`/topic/${encodeURIComponent(topic.name)}`}
+                className={({ isActive }) =>
+                  clsx(
+                    'flex h-10 items-center gap-6 rounded-[10px] px-3 transition-colors duration-150 ease-out hover:bg-surface-hover',
+                    isActive && 'bg-surface-hover font-medium',
+                  )
+                }
               >
-                <Compass size={24} />
-                <span className="clamp-1 text-sm">{category.name}</span>
-                <span className="ml-auto text-xs text-text-2">{category.videoCount}</span>
+                <Tag size={24} />
+                <span className="clamp-1 text-sm">{topic.name}</span>
+                <span className="ml-auto text-xs text-text-2">{topic.videoCount}</span>
               </NavLink>
             ))}
           </section>

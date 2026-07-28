@@ -53,19 +53,38 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		Description:     deref(info.Description),
 	}
 
+	// Flat listings carry no per-entry channel at all: yt-dlp reports the
+	// owner once, on the playlist, as playlist_uploader. Without this fallback
+	// every scanned video would be attributed to whatever the caller guessed.
 	if v.ChannelName == "" {
 		v.ChannelName = deref(info.Uploader)
 	}
+	if v.ChannelName == "" {
+		v.ChannelName = deref(info.PlaylistUploader)
+	}
 	if v.ChannelID == "" {
-		// Playlist entries often omit the channel id; fall back to the
-		// uploader id so the video is never orphaned.
 		v.ChannelID = deref(info.UploaderID)
+	}
+	if v.ChannelID == "" {
+		v.ChannelID = deref(info.PlaylistUploaderID)
 	}
 	if handle := deref(info.UploaderID); handle != "" {
 		v.ChannelHandle = handle
+	} else {
+		v.ChannelHandle = deref(info.PlaylistUploaderID)
 	}
 	if v.SourceURL == "" && info.ID != "" {
 		v.SourceURL = "https://www.youtube.com/watch?v=" + info.ID
+	}
+
+	// Flat listings omit the single "thumbnail" field and only carry the
+	// thumbnails array, ordered smallest first. Fall back to the canonical
+	// still URL, which is derivable from the id and always exists.
+	if v.ThumbnailURL == "" && len(info.Thumbnails) > 0 {
+		v.ThumbnailURL = info.Thumbnails[len(info.Thumbnails)-1].URL
+	}
+	if v.ThumbnailURL == "" && info.ID != "" {
+		v.ThumbnailURL = "https://i.ytimg.com/vi/" + info.ID + "/hqdefault.jpg"
 	}
 
 	// yt-dlp returns free-form tags; keep only the hashtag-looking ones so the
@@ -83,9 +102,9 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 			v.PublishedAt = parsed
 		}
 	}
-	if v.PublishedAt.IsZero() {
-		v.PublishedAt = time.Now().UTC()
-	}
+	// PublishedAt is deliberately left zero when unknown. Flat listings omit
+	// upload dates, and defaulting to now would render as "1 minute ago" on
+	// every card — a plausible-looking lie is worse than a blank.
 	return v
 }
 

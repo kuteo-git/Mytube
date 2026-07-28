@@ -87,7 +87,12 @@ function SuggestionRow({ video }: { video: Video }) {
       className="flex gap-2 rounded-xl p-1 transition-colors duration-150 ease-out hover:bg-surface-hover"
     >
       <div className="w-[168px] shrink-0">
-        <ThumbnailSurface hue={hueFromId(video.id)} rounded="rounded-lg">
+        <ThumbnailSurface
+          hue={hueFromId(video.id)}
+          src={video.thumbnailPath}
+          alt={video.title}
+          rounded="rounded-lg"
+        >
           <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">
             {formatDuration(video.durationSeconds)}
           </span>
@@ -97,7 +102,12 @@ function SuggestionRow({ video }: { video: Video }) {
         <h4 className="clamp-2 text-sm leading-5 font-medium">{video.title}</h4>
         <p className="mt-1 text-xs text-text-2">{video.channel.name}</p>
         <p className="text-xs text-text-2">
-          {formatViews(video.viewCount)} • {formatRelative(video.publishedAt)}
+          {[
+            video.viewCount > 0 ? formatViews(video.viewCount) : null,
+            video.publishedAt ? formatRelative(video.publishedAt) : null,
+          ]
+            .filter(Boolean)
+            .join(' • ')}
         </p>
         {isNew && (
           <span className="mt-1 inline-block rounded bg-surface px-1.5 py-0.5 text-[11px] text-text-2">

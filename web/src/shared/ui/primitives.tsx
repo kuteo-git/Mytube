@@ -89,20 +89,38 @@ export function Avatar({
  */
 export function ThumbnailSurface({
   hue,
+  src,
+  alt,
   rounded = 'rounded-xl',
   children,
 }: {
   hue: number
+  src?: string
+  alt?: string
   rounded?: string
   children?: ReactNode
 }) {
   return (
     <div
       style={{
+        // Shown while the image loads and if it fails, so the card never
+        // collapses or flashes white.
         background: `linear-gradient(135deg, hsl(${hue} 50% 30%), hsl(${(hue + 45) % 360} 55% 16%))`,
       }}
       className={clsx('relative aspect-video w-full overflow-hidden', rounded)}
     >
+      {src && (
+        <img
+          src={src}
+          alt={alt ?? ''}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none'
+          }}
+        />
+      )}
       {children}
     </div>
   )

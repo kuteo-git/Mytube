@@ -129,9 +129,8 @@ func (c *Catalog) UpsertVideo(ctx context.Context, v domain.Video) (domain.Video
 	if v.MediaState == "" {
 		v.MediaState = domain.MediaQueued
 	}
-	if v.PublishedAt.IsZero() {
-		v.PublishedAt = c.now()
-	}
+	// PublishedAt stays zero when the caller does not know it; the repository
+	// stores NULL rather than inventing a date.
 	return c.repo.UpsertVideo(ctx, v)
 }
 
