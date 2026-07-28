@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import type { ReactionState } from '../domain/video'
 import { httpCatalogRepository as repo } from '../infrastructure/catalogRepository'
 
@@ -7,10 +12,16 @@ import { httpCatalogRepository as repo } from '../infrastructure/catalogReposito
  * These know nothing about HTTP; they only talk to the repository port.
  */
 
+/**
+ * The feed is paged all the way down. The gateway hands back an opaque token,
+ * so the client never learns whether that is an offset or a cursor.
+ */
 export function useFeed(topic: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['feed', topic],
-    queryFn: () => repo.listFeed(topic),
+    queryFn: ({ pageParam }) => repo.listFeed(topic, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
   })
 }
 
@@ -30,9 +41,11 @@ export function useSuggestions(query: string) {
 }
 
 export function useSearch(query: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['search', query],
-    queryFn: () => repo.search(query),
+    queryFn: ({ pageParam }) => repo.search(query, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
     enabled: query.trim().length > 0,
   })
 }
@@ -41,12 +54,15 @@ export function useSearch(query: string) {
  * Upstream search. Runs on every query, not as a fallback: the library is what
  * the topics chose to bring in, and searching means looking past that.
  */
-export function useDiscover(query: string) {
+export function useDiscover(query: string, limit: number) {
   return useQuery({
-    queryKey: ['discover', query],
-    queryFn: () => repo.discover(query),
+    queryKey: ['discover', query, limit],
+    queryFn: () => repo.discover(query, limit),
     enabled: query.trim().length > 0,
     staleTime: 5 * 60_000,
+    // Keep the current results on screen while a larger page is fetched, so
+    // asking for more never blanks what is already there.
+    placeholderData: (previous) => previous,
   })
 }
 

@@ -17,9 +17,9 @@ export interface CatalogRepository {
   listComments(videoId: string): Promise<CommentPage>
   listTopics(): Promise<Topic[]>
   refreshTopics(): Promise<ScanStatus>
-  search(query: string): Promise<Video[]>
+  search(query: string, pageToken?: string): Promise<Feed>
   suggest(query: string): Promise<Suggestion[]>
-  discover(query: string): Promise<ExternalVideo[]>
+  discover(query: string, limit: number): Promise<ExternalVideo[]>
   ensureExternal(sourceUrl: string): Promise<string>
   getStorage(): Promise<StorageUsage>
 
@@ -168,10 +168,8 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<ScanStatus>('/topics/refresh', { method: 'POST' })
   },
 
-  async search(q) {
-    if (!q.trim()) return []
-    const feed = await request<Feed>(`/search${query({ q })}`)
-    return feed.videos
+  search(q, pageToken) {
+    return request<Feed>(`/search${query({ q, pageToken })}`)
   },
 
   async suggest(q) {
@@ -181,9 +179,13 @@ export const httpCatalogRepository: CatalogRepository = {
     return suggestions
   },
 
-  async discover(q) {
+  async discover(q, limit) {
     if (!q.trim()) return []
-    const { videos } = await request<{ videos: ExternalVideo[] }>(`/discover${query({ q })}`)
+    // Upstream search has no cursor: asking for more means asking for a larger
+    // page and taking the extra results.
+    const { videos } = await request<{ videos: ExternalVideo[] }>(
+      `/discover${query({ q, limit: String(limit) })}`,
+    )
     return videos
   },
 

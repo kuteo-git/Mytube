@@ -4,6 +4,7 @@ import { useFeed, useStorage, useTopics } from '@/features/catalog/application/q
 import { ChipBar } from '@/features/catalog/ui/ChipBar'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
+import { InfiniteList } from '@/shared/ui/InfiniteList'
 
 /**
  * Serves both "/" and "/topic/:name". A topic route is the same grid with the
@@ -14,9 +15,12 @@ export function HomePage() {
   const [selected, setSelected] = useState('All')
   const active = topicName ?? selected
 
-  const { data: feed, isPending, isError } = useFeed(active)
+  const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useFeed(active)
   const { data: topics } = useTopics()
   const { data: storage } = useStorage()
+
+  const videos = data?.pages.flatMap((page) => page.videos) ?? []
 
   // "All" leads; the rest are topics that actually have videos, so a chip can
   // never produce an empty grid.
@@ -39,14 +43,22 @@ export function HomePage() {
           Could not reach the library service. Is the gateway running?
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-x-4 gap-y-10 pt-3 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
-          {isPending
-            ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
-            : feed?.videos.map((video) => <VideoCard key={video.id} video={video} />)}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-10 pt-3 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
+            {isPending
+              ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
+              : videos.map((video) => <VideoCard key={video.id} video={video} />)}
+          </div>
+
+          <InfiniteList
+            hasMore={Boolean(hasNextPage)}
+            isLoading={isFetchingNextPage}
+            onLoadMore={() => void fetchNextPage()}
+          />
+        </>
       )}
 
-      {!isPending && !isError && feed?.videos.length === 0 && (
+      {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
           Nothing here yet. Topics are scanned every 12 hours; use Refresh to scan now.
         </p>
