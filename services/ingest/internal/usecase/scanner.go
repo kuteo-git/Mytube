@@ -189,19 +189,7 @@ func (s *Scanner) scanSource(
 			v.Topics = []string{topicName}
 		}
 
-		// Neither listing reliably names the owner: a flat listing omits it for
-		// some sources, and the browse listing never carries it at all. The
-		// channel metadata fetched once for this source is the answer, and
-		// without it the catalog rejects the row outright.
-		if v.ChannelID == "" {
-			v.ChannelID = owner.ID
-		}
-		if v.ChannelName == "" {
-			v.ChannelName = owner.Name
-		}
-		if v.ChannelHandle == "" {
-			v.ChannelHandle = owner.Handle
-		}
+		applyOwner(&v, owner, isPlaylistSource(source))
 		if v.ChannelID == "" || v.ChannelName == "" {
 			// Attributing the video to an invented channel would put a row in
 			// the catalog that no channel page can ever show.
@@ -226,6 +214,45 @@ func (s *Scanner) scanSource(
 	return seen, added, nil
 }
 
+// applyOwner fills in — and for a channel source, corrects — who a video
+// belongs to.
+//
+// Neither listing reliably names the owner: a flat listing omits it for some
+// sources, and the browse listing never carries it at all. Worse, when the flat
+// listing does supply one it is often the handle ("@mkbhd") rather than the
+// channel id ("UC..."), and the two forms produce two catalog rows for one
+// channel — which is how the library ended up with sixty duplicate channels.
+//
+// For a channel source every video is that channel's, so the metadata fetched
+// once for the source is authoritative and its id wins. A playlist is
+// different: it can hold videos from many channels, so there the owner only
+// fills gaps and never overrides what the listing said.
+func applyOwner(v *domain.ExternalVideo, owner domain.ChannelMetadata, fromPlaylist bool) {
+	authoritative := !fromPlaylist && owner.ID != ""
+
+	if v.ChannelID == "" || authoritative {
+		if owner.ID != "" {
+			v.ChannelID = owner.ID
+		}
+	}
+	if v.ChannelName == "" || authoritative {
+		if owner.Name != "" {
+			v.ChannelName = owner.Name
+		}
+	}
+	if v.ChannelHandle == "" || authoritative {
+		if owner.Handle != "" {
+			v.ChannelHandle = owner.Handle
+		}
+	}
+}
+
+// isPlaylistSource distinguishes a playlist from a channel. Only a channel has
+// a single owner that can be applied to every video it lists.
+func isPlaylistSource(source string) bool {
+	return strings.Contains(source, "list=")
+}
+
 // listSource reads a source's videos, preferring YouTube's browse API.
 //
 // The flat playlist listing yt-dlp produces carries neither view counts nor
@@ -237,7 +264,7 @@ func (s *Scanner) scanSource(
 // Playlist sources are left to yt-dlp: browse addresses channels, and a
 // playlist is not one.
 func (s *Scanner) listSource(ctx context.Context, source string, limit int32) ([]domain.ExternalVideo, error) {
-	if s.channels != nil && !strings.Contains(source, "list=") {
+	if s.channels != nil && !isPlaylistSource(source) {
 		videos, err := s.listViaBrowse(ctx, source, limit)
 		if err != nil {
 			s.logger.Warn("browse listing, falling back to flat listing",

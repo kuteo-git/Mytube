@@ -178,6 +178,60 @@ func TestVideoWithNoKnownChannelIsSkipped(t *testing.T) {
 	}
 }
 
+// The duplicate-channel bug: a flat listing often reports the owner as a handle
+// ("@mkbhd") while everything else uses the channel id ("UC..."), and the two
+// forms became two catalog rows for one channel — sixty of them, in the library
+// that found this. On a channel source the fetched metadata is authoritative,
+// so its id wins over whatever the listing said.
+func TestChannelSourceOverridesAHandleFormIDWithTheRealChannelID(t *testing.T) {
+	video := domain.ExternalVideo{
+		ID:          "v1",
+		ChannelID:   "@mkbhd",
+		ChannelName: "mkbhd",
+	}
+	owner := domain.ChannelMetadata{ID: "UC123", Name: "Marques Brownlee", Handle: "@mkbhd"}
+
+	applyOwner(&video, owner, false)
+
+	if video.ChannelID != "UC123" {
+		t.Fatalf("ChannelID = %q, want UC123 — the handle form makes a duplicate channel", video.ChannelID)
+	}
+	if video.ChannelName != "Marques Brownlee" {
+		t.Errorf("ChannelName = %q", video.ChannelName)
+	}
+}
+
+// A playlist holds videos from many channels, so its owner must not be stamped
+// over what each video actually said.
+func TestPlaylistSourceNeverOverridesAVideosOwnChannel(t *testing.T) {
+	video := domain.ExternalVideo{
+		ID:          "v1",
+		ChannelID:   "UCsomeoneElse",
+		ChannelName: "Someone Else",
+	}
+	owner := domain.ChannelMetadata{ID: "UCplaylistOwner", Name: "Playlist Owner"}
+
+	applyOwner(&video, owner, true)
+
+	if video.ChannelID != "UCsomeoneElse" || video.ChannelName != "Someone Else" {
+		t.Fatalf("playlist owner overwrote the video's real channel: %q/%q",
+			video.ChannelID, video.ChannelName)
+	}
+}
+
+// Even on a playlist the owner still fills a gap — that is what keeps a
+// channel-less video out of the "skipped" path.
+func TestPlaylistSourceStillFillsAMissingChannel(t *testing.T) {
+	video := domain.ExternalVideo{ID: "v1"}
+	owner := domain.ChannelMetadata{ID: "UCplaylistOwner", Name: "Playlist Owner"}
+
+	applyOwner(&video, owner, true)
+
+	if video.ChannelID != "UCplaylistOwner" || video.ChannelName != "Playlist Owner" {
+		t.Fatalf("gap was not filled: %q/%q", video.ChannelID, video.ChannelName)
+	}
+}
+
 func TestChannelRefFromURL(t *testing.T) {
 	cases := map[string]string{
 		"https://www.youtube.com/@mkbhd/videos":                           "@mkbhd",
