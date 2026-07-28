@@ -130,7 +130,15 @@ func (r *Repository) GetVideo(ctx context.Context, videoID, userID string) (doma
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Video{}, fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
 	}
-	return v, err
+	if err != nil {
+		return domain.Video{}, err
+	}
+
+	one := []domain.Video{v}
+	if err := r.loadSubtitles(ctx, one); err != nil {
+		return domain.Video{}, err
+	}
+	return one[0], nil
 }
 
 // BatchGetVideos preserves the caller's id order, which is what keeps a ranking
@@ -287,8 +295,14 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 	return r.GetVideo(ctx, v.ID, "")
 }
 
-func (r *Repository) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64) error {
-	tag, err := r.pool.Exec(ctx, `
+func (r *Repository) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	tag, err := tx.Exec(ctx, `
 		UPDATE videos
 		SET media_state = $2,
 		    media_path = CASE WHEN $3 <> '' THEN $3 ELSE media_path END,
@@ -301,6 +315,69 @@ func (r *Repository) SetMediaState(ctx context.Context, videoID string, state do
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+	}
+
+	// Replace rather than merge: the track set describes what is on disk right
+	// now, and a re-download may produce a different set of languages.
+	if len(subtitles) > 0 {
+		if _, err := tx.Exec(ctx, `DELETE FROM subtitles WHERE video_id = $1`, videoID); err != nil {
+			return err
+		}
+		for _, t := range subtitles {
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO subtitles (video_id, language, label, path, generated)
+				VALUES ($1, $2, $3, $4, $5)
+				ON CONFLICT (video_id, language) DO UPDATE
+				SET label = EXCLUDED.label, path = EXCLUDED.path, generated = EXCLUDED.generated`,
+				videoID, t.Language, t.Label, t.Path, t.Generated); err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// loadSubtitles attaches caption tracks to already-fetched videos. Done as one
+// extra query rather than a join, because the join would multiply every video
+// row by its track count for a field most callers ignore.
+func (r *Repository) loadSubtitles(ctx context.Context, videos []domain.Video) error {
+	ids := make([]string, 0, len(videos))
+	for _, v := range videos {
+		if v.MediaState == domain.MediaReady {
+			ids = append(ids, v.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT video_id, language, label, path, generated
+		FROM subtitles WHERE video_id = ANY($1)
+		ORDER BY generated, language`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	byVideo := map[string][]domain.SubtitleTrack{}
+	for rows.Next() {
+		var (
+			videoID string
+			t       domain.SubtitleTrack
+		)
+		if err := rows.Scan(&videoID, &t.Language, &t.Label, &t.Path, &t.Generated); err != nil {
+			return err
+		}
+		byVideo[videoID] = append(byVideo[videoID], t)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for i := range videos {
+		videos[i].Subtitles = byVideo[videos[i].ID]
 	}
 	return nil
 }

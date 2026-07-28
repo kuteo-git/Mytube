@@ -79,12 +79,23 @@ func (l *Library) UpsertVideo(ctx context.Context, v domain.ExternalVideo, state
 	return err
 }
 
-func (l *Library) SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64) error {
+func (l *Library) SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
+	tracks := make([]*catalogv1.SubtitleTrack, 0, len(subtitles))
+	for _, t := range subtitles {
+		tracks = append(tracks, &catalogv1.SubtitleTrack{
+			Language:  t.Language,
+			Label:     t.Label,
+			Path:      t.Path,
+			Generated: t.Generated,
+		})
+	}
+
 	_, err := l.client.SetMediaState(ctx, connect.NewRequest(&catalogv1.SetMediaStateRequest{
 		VideoId:    videoID,
 		MediaState: mediaStates[state],
 		MediaPath:  mediaPath,
 		SizeBytes:  sizeBytes,
+		Subtitles:  tracks,
 	}))
 	return err
 }

@@ -59,7 +59,16 @@ type Video struct {
 	Pinned          bool
 	SourceURL       string
 	LikeCount       int64
+	Subtitles       []SubtitleTrack
 	UserState       *VideoUserState
+}
+
+// SubtitleTrack is a caption file on disk, fetched with the media.
+type SubtitleTrack struct {
+	Language  string
+	Label     string
+	Path      string
+	Generated bool
 }
 
 type VideoUserState struct {
@@ -141,7 +150,7 @@ type Repository interface {
 
 	UpsertChannel(ctx context.Context, c Channel) (Channel, error)
 	UpsertVideo(ctx context.Context, v Video) (Video, error)
-	SetMediaState(ctx context.Context, videoID string, state MediaState, mediaPath string, sizeBytes int64) error
+	SetMediaState(ctx context.Context, videoID string, state MediaState, mediaPath string, sizeBytes int64, subtitles []SubtitleTrack) error
 	FindBySourceURL(ctx context.Context, sourceURL, userID string) (Video, error)
 
 	ListComments(ctx context.Context, videoID string, sort CommentSort, page Page) ([]Comment, int32, error)

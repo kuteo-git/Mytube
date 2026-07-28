@@ -22,6 +22,10 @@ import (
 // the real expiry so a client re-resolves before playback breaks mid-video.
 const streamTTL = 90 * time.Minute
 
+// Languages worth storing. Fetching every caption track a popular video has
+// would write dozens of files nobody reads.
+const subtitleLanguages = "en,vi"
+
 type Downloader struct {
 	mediaRoot string
 }
@@ -301,8 +305,107 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		return domain.DownloadResult{}, fmt.Errorf("downloaded file missing: %w", err)
 	}
 
+	// Captions are fetched in a second pass, deliberately. Asking for them in
+	// the same command means a caption failure — a 429 is common — aborts the
+	// whole download, losing a video that was otherwise fine. Optional data
+	// must not be able to break required data.
 	return domain.DownloadResult{
 		MediaPath: filepath.Join(videoID, filepath.Base(target)),
 		SizeBytes: info.Size(),
+		Subtitles: d.fetchSubtitles(ctx, videoURL, dir, videoID, target),
 	}, nil
+}
+
+// fetchSubtitles runs two passes so the result can say truthfully whether a
+// track was written by a human or by a machine. yt-dlp gives both the same
+// filename, so the only way to tell them apart is to ask for them separately:
+// whatever the manual pass produces is authored, and anything the automatic
+// pass adds afterwards is not.
+//
+// It never returns an error. A video without captions is a working video, and
+// the media has already downloaded by the time this runs.
+func (d *Downloader) fetchSubtitles(ctx context.Context, videoURL, dir, videoID, target string) []domain.SubtitleTrack {
+	d.runSubtitlePass(ctx, videoURL, target, false)
+	authored := collectSubtitles(dir, videoID, false)
+
+	d.runSubtitlePass(ctx, videoURL, target, true)
+	all := collectSubtitles(dir, videoID, true)
+
+	authoredLanguages := make(map[string]struct{}, len(authored))
+	for _, t := range authored {
+		authoredLanguages[t.Language] = struct{}{}
+	}
+
+	for i := range all {
+		_, wasAuthored := authoredLanguages[all[i].Language]
+		all[i].Generated = !wasAuthored
+	}
+	return all
+}
+
+func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target string, automatic bool) {
+	// YouTube rate-limits the caption endpoint far more aggressively than the
+	// media one and answers 429 readily. Pacing requests and retrying is what
+	// makes captions arrive at all; failing costs nothing.
+	cmd := ytdlp.New().
+		SkipDownload().
+		SubLangs(subtitleLanguages).
+		ConvertSubs("vtt").
+		SleepRequests(1).
+		Retries("3").
+		NoPlaylist().
+		NoWarnings().
+		Output(target)
+
+	if automatic {
+		cmd = cmd.WriteAutoSubs()
+	} else {
+		cmd = cmd.WriteSubs()
+	}
+
+	_, _ = cmd.Run(ctx, videoURL)
+}
+
+// collectSubtitles reads back what yt-dlp wrote. The filenames follow
+// "<base>.<lang>.vtt", and there is no reliable way to know in advance which
+// languages exist, so the directory is the source of truth.
+func collectSubtitles(dir, videoID string, _ bool) []domain.SubtitleTrack {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var tracks []domain.SubtitleTrack
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".vtt") {
+			continue
+		}
+
+		// "720p.en.vtt" -> "en"; "720p.en-orig.vtt" -> "en-orig".
+		parts := strings.Split(strings.TrimSuffix(name, ".vtt"), ".")
+		if len(parts) < 2 {
+			continue
+		}
+		language := parts[len(parts)-1]
+
+		tracks = append(tracks, domain.SubtitleTrack{
+			Language: language,
+			Label:    subtitleLabel(language),
+			Path:     filepath.Join(videoID, name),
+			// Set by the caller, which knows which pass produced the file.
+		})
+	}
+	return tracks
+}
+
+func subtitleLabel(language string) string {
+	switch strings.ToLower(strings.SplitN(language, "-", 2)[0]) {
+	case "en":
+		return "English"
+	case "vi":
+		return "Tiếng Việt"
+	default:
+		return strings.ToUpper(language)
+	}
 }

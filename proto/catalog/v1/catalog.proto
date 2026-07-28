@@ -115,6 +115,18 @@ message Video {
   optional VideoUserState user_state = 17;
   // Aggregate across all local users, shown next to the like button.
   int64 like_count = 18;
+  // Subtitle tracks on disk. Empty until the media file has been downloaded.
+  repeated SubtitleTrack subtitles = 19;
+}
+
+message SubtitleTrack {
+  // BCP-47, e.g. "en", "vi".
+  string language = 1;
+  string label = 2;
+  // Relative path under the media root, served as WebVTT.
+  string path = 3;
+  // Machine generated captions are noticeably worse; the UI says so.
+  bool generated = 4;
 }
 
 message VideoUserState {
@@ -274,6 +286,8 @@ message SetMediaStateRequest {
   int64 size_bytes = 4;
   // Set when transitioning to FAILED.
   string error_message = 5;
+  // Replaces the stored set when transitioning to READY.
+  repeated SubtitleTrack subtitles = 6;
 }
 
 message SetMediaStateResponse {}

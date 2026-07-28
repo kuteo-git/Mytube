@@ -74,9 +74,18 @@ type StreamLocation struct {
 
 // DownloadResult describes what landed on disk.
 type DownloadResult struct {
-	// Relative to the media root, e.g. "dQw4w9WgXcQ/1080p.mp4".
+	// Relative to the media root, e.g. "dQw4w9WgXcQ/720p.mp4".
 	MediaPath string
 	SizeBytes int64
+	Subtitles []SubtitleTrack
+}
+
+// SubtitleTrack is a caption file written next to the media file.
+type SubtitleTrack struct {
+	Language  string
+	Label     string
+	Path      string
+	Generated bool
 }
 
 // Progress is reported by the downloader while a job runs.
@@ -118,6 +127,6 @@ type Library interface {
 	FindBySourceURL(ctx context.Context, sourceURL string) (videoID string, found bool, err error)
 	UpsertChannel(ctx context.Context, v ExternalVideo) error
 	UpsertVideo(ctx context.Context, v ExternalVideo, state string) error
-	SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64) error
+	SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64, subtitles []SubtitleTrack) error
 	SourceURLFor(ctx context.Context, videoID string) (string, error)
 }

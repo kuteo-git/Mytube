@@ -117,6 +117,15 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		LikeCount:       v.LikeCount,
 	}
 
+	for _, t := range v.Subtitles {
+		out.Subtitles = append(out.Subtitles, &catalogv1.SubtitleTrack{
+			Language:  t.Language,
+			Label:     t.Label,
+			Path:      t.Path,
+			Generated: t.Generated,
+		})
+	}
+
 	if !v.PublishedAt.IsZero() {
 		out.PublishedAt = timestamppb.New(v.PublishedAt)
 	}
@@ -317,11 +326,22 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 }
 
 func (s *Server) SetMediaState(ctx context.Context, req *connect.Request[catalogv1.SetMediaStateRequest]) (*connect.Response[catalogv1.SetMediaStateResponse], error) {
+	tracks := make([]domain.SubtitleTrack, 0, len(req.Msg.GetSubtitles()))
+	for _, t := range req.Msg.GetSubtitles() {
+		tracks = append(tracks, domain.SubtitleTrack{
+			Language:  t.GetLanguage(),
+			Label:     t.GetLabel(),
+			Path:      t.GetPath(),
+			Generated: t.GetGenerated(),
+		})
+	}
+
 	err := s.catalog.SetMediaState(ctx,
 		req.Msg.GetVideoId(),
 		mediaStatesFromProto[req.Msg.GetMediaState()],
 		req.Msg.GetMediaPath(),
-		req.Msg.GetSizeBytes())
+		req.Msg.GetSizeBytes(),
+		tracks)
 	if err != nil {
 		return nil, toConnectErr(err)
 	}

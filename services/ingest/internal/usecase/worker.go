@@ -128,7 +128,7 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 	if err != nil {
 		// Leave the catalog row in a state the UI can explain, rather than
 		// stuck on "downloading" forever.
-		if stateErr := i.library.SetMediaState(ctx, meta.ID, "FAILED", "", 0); stateErr != nil {
+		if stateErr := i.library.SetMediaState(ctx, meta.ID, "FAILED", "", 0, nil); stateErr != nil {
 			w.logger.Error("mark media failed", "video", meta.ID, "error", stateErr)
 		}
 		return err
@@ -136,10 +136,11 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 
 	// 3. Hand the file over. From here playback comes from disk and upstream is
 	// never touched again for this video.
-	if err := i.library.SetMediaState(ctx, meta.ID, "READY", result.MediaPath, result.SizeBytes); err != nil {
+	if err := i.library.SetMediaState(ctx, meta.ID, "READY", result.MediaPath, result.SizeBytes, result.Subtitles); err != nil {
 		return err
 	}
 
-	w.logger.Info("job succeeded", "job", job.ID, "video", meta.ID, "bytes", result.SizeBytes)
+	w.logger.Info("job succeeded", "job", job.ID, "video", meta.ID,
+		"bytes", result.SizeBytes, "subtitles", len(result.Subtitles))
 	return nil
 }

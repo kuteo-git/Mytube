@@ -134,7 +134,7 @@ func (c *Catalog) UpsertVideo(ctx context.Context, v domain.Video) (domain.Video
 	return c.repo.UpsertVideo(ctx, v)
 }
 
-func (c *Catalog) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64) error {
+func (c *Catalog) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
 	if videoID == "" {
 		return fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
 	}
@@ -144,7 +144,7 @@ func (c *Catalog) SetMediaState(ctx context.Context, videoID string, state domai
 	default:
 		return fmt.Errorf("%w: unknown media state %q", domain.ErrInvalid, state)
 	}
-	return c.repo.SetMediaState(ctx, videoID, state, mediaPath, sizeBytes)
+	return c.repo.SetMediaState(ctx, videoID, state, mediaPath, sizeBytes, subtitles)
 }
 
 func (c *Catalog) FindBySourceURL(ctx context.Context, sourceURL, userID string) (domain.Video, error) {

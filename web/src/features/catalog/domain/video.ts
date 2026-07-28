@@ -40,6 +40,14 @@ export type RecommendationReason =
   | 'SHARED_TAGS'
   | ''
 
+export interface SubtitleTrack {
+  language: string
+  label: string
+  url: string
+  /** Machine generated captions are noticeably worse; the UI says so. */
+  generated: boolean
+}
+
 export interface Video {
   id: string
   title: string
@@ -61,6 +69,7 @@ export interface Video {
   sourceUrl: string
   /** Aggregate across all local users. */
   likeCount: number
+  subtitles: SubtitleTrack[]
   userState?: VideoUserState
   reason?: RecommendationReason
 }

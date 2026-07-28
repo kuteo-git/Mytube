@@ -49,9 +49,18 @@ type videoDTO struct {
 	Pinned          bool          `json:"pinned"`
 	SourceURL       string        `json:"sourceUrl"`
 	LikeCount       int64         `json:"likeCount"`
+	Subtitles       []subtitleDTO `json:"subtitles"`
 	UserState       *userStateDTO `json:"userState,omitempty"`
 	// Why the recommendation service surfaced this video. Empty outside feeds.
 	Reason string `json:"reason,omitempty"`
+}
+
+type subtitleDTO struct {
+	Language string `json:"language"`
+	Label    string `json:"label"`
+	// Served under /media, like the video itself.
+	URL       string `json:"url"`
+	Generated bool   `json:"generated"`
 }
 
 type commentDTO struct {
@@ -135,6 +144,16 @@ func toVideoDTO(v *catalogv1.Video) videoDTO {
 		Pinned:          v.GetPinned(),
 		SourceURL:       v.GetSourceUrl(),
 		LikeCount:       v.GetLikeCount(),
+	}
+
+	dto.Subtitles = []subtitleDTO{}
+	for _, t := range v.GetSubtitles() {
+		dto.Subtitles = append(dto.Subtitles, subtitleDTO{
+			Language:  t.GetLanguage(),
+			Label:     t.GetLabel(),
+			URL:       "/media/" + t.GetPath(),
+			Generated: t.GetGenerated(),
+		})
 	}
 
 	// An unknown upload date is sent as an empty string; the client omits the

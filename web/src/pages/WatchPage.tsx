@@ -32,6 +32,7 @@ export function WatchPage() {
           durationSeconds={video.durationSeconds}
           initialPositionSeconds={video.userState?.watchPositionSeconds ?? 0}
           mediaState={video.mediaState}
+          subtitles={video.subtitles}
         />
 
         <h1 className="mt-3 text-xl leading-7 font-bold">{video.title}</h1>
