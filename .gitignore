@@ -7,3 +7,7 @@ dist/
 media/
 data/
 .superpowers/
+
+# Downloaded media. Never committed — served from MEDIA_ROOT (an external
+# drive in this deployment; see CLAUDE.md §1 and §9).
+media/

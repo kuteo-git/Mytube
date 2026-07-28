@@ -80,11 +80,14 @@ export function Player({
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
 
-  // Swapping the source reloads the element and resets currentTime. The
-  // position is captured here just before the swap so playback can resume where
-  // it was, rather than restarting the video the viewer was halfway through.
+  // Swapping the source reloads the element and resets currentTime to 0. This
+  // ref tracks the real position independently of the DOM, updated on every
+  // timeupdate, so onLoadedMetadata can restore it after a source swap. A ref
+  // keyed to the effect-cleanup lifecycle does not work here: React commits the
+  // new `src` to the DOM — which resets currentTime — before running the
+  // cleanup of the effect watching stream?.url, so a cleanup-based capture
+  // reads the position *after* the browser already zeroed it.
   const resumeAtRef = useRef(initialPositionSeconds)
-  const wasPlayingRef = useRef(false)
   // One re-resolve is allowed per mounted player. An expired upstream URL is
   // the common failure and it fixes itself; anything that survives a fresh URL
   // is a real failure and must be shown rather than retried forever.
@@ -106,17 +109,6 @@ export function Player({
       track.mode = track.language === captions ? 'showing' : 'disabled'
     }
   }, [captions, stream?.url, subtitles.length])
-
-  // Runs on the render *before* the new src is committed, so the element still
-  // holds the old media and its clock is still meaningful.
-  useEffect(() => {
-    return () => {
-      const element = videoRef.current
-      if (!element || !Number.isFinite(element.currentTime)) return
-      resumeAtRef.current = element.currentTime
-      wasPlayingRef.current = !element.paused
-    }
-  }, [stream?.url])
 
   useEffect(() => {
     retriedRef.current = false
@@ -333,7 +325,10 @@ export function Player({
               void element.play().catch(() => setAutoplayMuted(false))
             })
           }}
-          onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime)}
+          onTimeUpdate={(e) => {
+            setPosition(e.currentTarget.currentTime)
+            resumeAtRef.current = e.currentTarget.currentTime
+          }}
           onProgress={(e) => {
             const ranges = e.currentTarget.buffered
             if (ranges.length > 0) setBuffered(ranges.end(ranges.length - 1))

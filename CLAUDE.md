@@ -15,7 +15,7 @@ Media library **tự host** chạy trên Mac M4 tại nhà. `yt-dlp` là **công
 
 | | |
 |---|---|
-| Disk | **34 GiB free** → ngân sách media ~25 GiB → **~150 video @1080p** |
+| Disk | ~~34 GiB free~~ **đã giải quyết (2026-07-28): SSD ngoài `/Volumes/Data2/Youtube`, 437 GiB trống.** `MEDIA_ROOT`/`STORAGE_BUDGET_BYTES`/`EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES` trỏ ra đó qua `scripts/dev.sh` (budget 300 GiB, sweep 350→300 GiB). Ổ trong máy không còn là ràng buộc cứng cho dev — vẫn là ràng buộc thật nếu deploy sang máy khác không có ổ ngoài. |
 | Máy | Apple M4, 10 core |
 | Đã cài | `ffmpeg`, `yt-dlp`, `go`, `node`, `python3` |
 | Chưa có | `docker`, `postgres`, `redis` (Postgres cần cài qua Homebrew) |
@@ -130,7 +130,7 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 
 ## 8. Rủi ro đã biết
 
-1. **34 GiB là chỗ đau nhất.** 150 video là ít; eviction sẽ chạy sớm hơn dự đoán. **Một SSD ngoài sẽ giải phóng toàn bộ ràng buộc này** — nếu có, xem lại mục 4.
+1. ~~34 GiB là chỗ đau nhất~~ **Đã giải quyết bằng SSD ngoài** (xem mục 2). Rủi ro còn lại: ổ ngoài rớt kết nối thì service ghi lỗi vào file trên đường dẫn không tồn tại — chưa có test cho trường hợp này.
 2. **Microservices + gRPC với người chưa từng làm gRPC** → P1 chậm hơn monolith đáng kể, thời gian đầu chủ yếu là setup. Đã chấp nhận với giá đã biết. Dùng **ConnectRPC** (curl debug được từng service) thay vì gRPC thuần.
 3. **HTTPS trên Smart TV chưa được chứng minh.** Phải thử sớm với TV thật, đừng để tới Phase 3.
 4. **yt-dlp hỏng định kỳ** khi YouTube đổi cơ chế → ingest phải xử lý lỗi tử tế + cho retry.
@@ -223,4 +223,4 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 ## 9. Câu còn để ngỏ
 - TV nhà là hãng gì? (ảnh hưởng cách xử lý cert)
-- Có SSD ngoài không? (đổi toàn bộ bài toán disk)
+- ~~Có SSD ngoài không?~~ **Có — `/Volumes/Data2/Youtube`, 437 GiB (2026-07-28).** Xem mục 2.

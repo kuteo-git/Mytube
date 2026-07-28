@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { CheckCircle, CloudDownload, MoreVertical } from 'lucide-react'
+import { CheckCircle, MoreVertical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
@@ -18,13 +18,6 @@ export function VideoCard({ video }: { video: Video }) {
     <article className="group flex flex-col gap-3">
       <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
         <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailPath} alt={video.title}>
-          {video.mediaState === 'EVICTED' && (
-            <span className="absolute inset-0 grid place-items-center bg-black/55 text-xs font-medium">
-              <span className="flex items-center gap-1.5">
-                <CloudDownload size={16} /> Removed — click to re-download
-              </span>
-            </span>
-          )}
           {video.mediaState === 'DOWNLOADING' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
               Downloading…

@@ -16,6 +16,15 @@ export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
 LOG_DIR="${TMPDIR:-/tmp}/local-youtube"
 mkdir -p "$LOG_DIR"
 
+# This machine has an external drive, which retires the 34 GiB internal-disk
+# constraint from CLAUDE.md §1 for local development. Media, budget and
+# eviction watermarks all move to reflect the real capacity available.
+export MEDIA_ROOT="${MEDIA_ROOT:-/Volumes/Data2/Youtube}"
+export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
+export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
+export EVICTION_LOW_BYTES="${EVICTION_LOW_BYTES:-322122547200}"        # 300 GiB
+mkdir -p "$MEDIA_ROOT"
+
 pids=()
 cleanup() {
   echo
