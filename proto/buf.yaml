@@ -1,0 +1,13 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # Request/response wrappers are enforced by STANDARD; we keep them, but we
+    # do allow RPCs whose response reuses a top-level entity message.
+    - RPC_RESPONSE_STANDARD_NAME
+breaking:
+  use:
+    - FILE

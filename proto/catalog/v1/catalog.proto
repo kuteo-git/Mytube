@@ -1,0 +1,391 @@
+syntax = "proto3";
+
+package catalog.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/lucnguyen/local-youtube/services/catalog/gen/catalog/v1;catalogv1";
+
+// The catalog service owns everything that describes the local library:
+// videos, channels, comments and per-user interaction state.
+//
+// It deliberately does NOT rank anything. Ordering a feed or an up-next rail
+// is the recommendation service's job; the gateway asks recsys for ranked ids
+// and hydrates them here via BatchGetVideos. Keeping ranking out of catalog is
+// what stops the two services from needing each other's data.
+service CatalogService {
+  // Reads
+  rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
+  // Hydrates ids returned by the recommendation service. Order of the request
+  // is preserved in the response so ranking survives the round trip.
+  rpc BatchGetVideos(BatchGetVideosRequest) returns (BatchGetVideosResponse);
+  rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
+  rpc ListChannelVideos(ListChannelVideosRequest) returns (ListChannelVideosResponse);
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+  // Categories actually present in the library, for the home chip bar.
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+  // Lightweight ranking features, pulled by the recommendation service so it
+  // can rank without ever reading this service's database.
+  rpc ListVideoFeatures(ListVideoFeaturesRequest) returns (ListVideoFeaturesResponse);
+
+  // Writes, called by the ingest worker as a video moves through the pipeline.
+  rpc UpsertChannel(UpsertChannelRequest) returns (UpsertChannelResponse);
+  rpc UpsertVideo(UpsertVideoRequest) returns (UpsertVideoResponse);
+  rpc SetMediaState(SetMediaStateRequest) returns (SetMediaStateResponse);
+  // Resolves an external source URL to an existing library entry, so the same
+  // video is never ingested twice.
+  rpc FindBySourceURL(FindBySourceURLRequest) returns (FindBySourceURLResponse);
+
+  // Comments
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+
+  // Interaction state. Lives here rather than in a separate service because
+  // almost every video read needs it; splitting it out would turn one call
+  // into an N+1 fan-out on the home grid.
+  rpc RecordWatchProgress(RecordWatchProgressRequest) returns (RecordWatchProgressResponse);
+  rpc SetReaction(SetReactionRequest) returns (SetReactionResponse);
+  rpc SetSubscription(SetSubscriptionRequest) returns (SetSubscriptionResponse);
+  rpc ListHistory(ListHistoryRequest) returns (ListHistoryResponse);
+
+  // Storage. Backs the Storage page and the eviction banner.
+  rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse);
+  rpc SetPinned(SetPinnedRequest) returns (SetPinnedResponse);
+}
+
+// ---------------------------------------------------------------------------
+// Entities
+// ---------------------------------------------------------------------------
+
+// State of the media file on disk. Metadata always survives; only bytes are
+// reclaimed, so an EVICTED video still renders and can be re-ingested.
+enum MediaState {
+  MEDIA_STATE_UNSPECIFIED = 0;
+  MEDIA_STATE_QUEUED = 1;
+  MEDIA_STATE_DOWNLOADING = 2;
+  MEDIA_STATE_READY = 3;
+  MEDIA_STATE_EVICTED = 4;
+  MEDIA_STATE_FAILED = 5;
+}
+
+enum Reaction {
+  REACTION_UNSPECIFIED = 0;
+  REACTION_NONE = 1;
+  REACTION_LIKE = 2;
+  REACTION_DISLIKE = 3;
+}
+
+message Channel {
+  string id = 1;
+  string name = 2;
+  string handle = 3;
+  // Path served by Caddy under /media, not an absolute URL, so the client
+  // works under any LAN hostname or scheme.
+  string avatar_path = 4;
+  // Subscriber count as reported by the source platform at ingest time.
+  int64 subscriber_count = 5;
+  bool verified = 6;
+  // Whether the requesting user follows this channel locally.
+  bool subscribed = 7;
+}
+
+message Video {
+  string id = 1;
+  string title = 2;
+  Channel channel = 3;
+  int32 duration_seconds = 4;
+  int64 view_count = 5;
+  google.protobuf.Timestamp published_at = 6;
+  // When the video entered the local library. Drives "recently added" and LRU.
+  google.protobuf.Timestamp added_at = 7;
+  string thumbnail_path = 8;
+  string description = 9;
+  repeated string hashtags = 10;
+  repeated string categories = 11;
+  MediaState media_state = 12;
+  // Relative path of the playable file, empty unless media_state is READY.
+  string media_path = 13;
+  int64 size_bytes = 14;
+  bool pinned = 15;
+  // Original source URL, kept so an evicted video can be re-ingested.
+  string source_url = 16;
+  // Per-user state. Absent for anonymous reads.
+  optional VideoUserState user_state = 17;
+  // Aggregate across all local users, shown next to the like button.
+  int64 like_count = 18;
+}
+
+message VideoUserState {
+  // Watch position as a fraction in the 0..1 range.
+  float watch_progress = 1;
+  int32 watch_position_seconds = 2;
+  google.protobuf.Timestamp last_watched_at = 3;
+  Reaction reaction = 4;
+  bool in_watch_later = 5;
+}
+
+message CommentAuthor {
+  string user_id = 1;
+  string handle = 2;
+  string avatar_path = 3;
+}
+
+message Comment {
+  string id = 1;
+  string video_id = 2;
+  CommentAuthor author = 3;
+  string text = 4;
+  google.protobuf.Timestamp published_at = 5;
+  int64 like_count = 6;
+  // Set when the comment is pinned; carries the handle that pinned it.
+  optional string pinned_by = 7;
+  // Only one level of nesting exists, matching the UI thread model.
+  repeated Comment replies = 8;
+  int32 reply_count = 9;
+}
+
+// ---------------------------------------------------------------------------
+// Reads
+// ---------------------------------------------------------------------------
+
+message GetVideoRequest {
+  string video_id = 1;
+  // Optional: when set, user_state is populated.
+  string user_id = 2;
+}
+
+message GetVideoResponse {
+  Video video = 1;
+}
+
+message BatchGetVideosRequest {
+  // Response order mirrors this list exactly.
+  repeated string video_ids = 1;
+  string user_id = 2;
+}
+
+message BatchGetVideosResponse {
+  // Ids that no longer exist are omitted rather than returned as empty slots.
+  repeated Video videos = 1;
+}
+
+message SearchVideosRequest {
+  // Full-text query across title, description and transcript.
+  string query = 1;
+  string user_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message SearchVideosResponse {
+  repeated Video videos = 1;
+  string next_page_token = 2;
+}
+
+message ListChannelVideosRequest {
+  string channel_id = 1;
+  string user_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListChannelVideosResponse {
+  repeated Video videos = 1;
+  string next_page_token = 2;
+}
+
+message GetChannelRequest {
+  string channel_id = 1;
+  string user_id = 2;
+}
+
+message GetChannelResponse {
+  Channel channel = 1;
+  int32 video_count = 2;
+}
+
+message ListCategoriesRequest {
+  // Only categories with at least this many videos are returned, so the chip
+  // bar never shows a filter that yields an empty grid.
+  int32 min_video_count = 1;
+}
+
+message ListCategoriesResponse {
+  repeated Category categories = 1;
+}
+
+message Category {
+  string name = 1;
+  int32 video_count = 2;
+}
+
+message ListVideoFeaturesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListVideoFeaturesResponse {
+  repeated VideoFeatures videos = 1;
+  string next_page_token = 2;
+}
+
+// Just enough to rank a video. Deliberately excludes titles, descriptions and
+// per-user state: the recommendation service has no business holding those.
+message VideoFeatures {
+  string video_id = 1;
+  string channel_id = 2;
+  repeated string categories = 3;
+  repeated string hashtags = 4;
+  google.protobuf.Timestamp published_at = 5;
+  google.protobuf.Timestamp added_at = 6;
+  int32 duration_seconds = 7;
+  MediaState media_state = 8;
+}
+
+// ---------------------------------------------------------------------------
+// Writes
+// ---------------------------------------------------------------------------
+
+message UpsertChannelRequest {
+  Channel channel = 1;
+}
+
+message UpsertChannelResponse {
+  Channel channel = 1;
+}
+
+message UpsertVideoRequest {
+  // Video.id is the external id (the YouTube watch id), which makes ingest
+  // idempotent: re-submitting the same URL updates rather than duplicates.
+  Video video = 1;
+}
+
+message UpsertVideoResponse {
+  Video video = 1;
+}
+
+message SetMediaStateRequest {
+  string video_id = 1;
+  MediaState media_state = 2;
+  // Set when transitioning to READY.
+  string media_path = 3;
+  int64 size_bytes = 4;
+  // Set when transitioning to FAILED.
+  string error_message = 5;
+}
+
+message SetMediaStateResponse {}
+
+message FindBySourceURLRequest {
+  string source_url = 1;
+}
+
+message FindBySourceURLResponse {
+  // Absent when the URL has never been ingested.
+  optional Video video = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Comments
+// ---------------------------------------------------------------------------
+
+enum CommentSort {
+  COMMENT_SORT_UNSPECIFIED = 0;
+  COMMENT_SORT_TOP = 1;
+  COMMENT_SORT_NEWEST = 2;
+}
+
+message ListCommentsRequest {
+  string video_id = 1;
+  CommentSort sort = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListCommentsResponse {
+  repeated Comment comments = 1;
+  // Includes replies, matching the "N Comments" heading in the UI.
+  int32 total_count = 2;
+  string next_page_token = 3;
+}
+
+message CreateCommentRequest {
+  string video_id = 1;
+  string user_id = 2;
+  string text = 3;
+  // Set to reply to an existing top-level comment.
+  optional string parent_comment_id = 4;
+}
+
+message CreateCommentResponse {
+  Comment comment = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Interaction
+// ---------------------------------------------------------------------------
+
+message RecordWatchProgressRequest {
+  string user_id = 1;
+  string video_id = 2;
+  int32 position_seconds = 3;
+  // Fraction of the video watched in this session, used by recsys as the
+  // strongest engagement signal.
+  float watched_fraction = 4;
+}
+
+message RecordWatchProgressResponse {}
+
+message SetReactionRequest {
+  string user_id = 1;
+  string video_id = 2;
+  Reaction reaction = 3;
+}
+
+message SetReactionResponse {
+  int64 like_count = 1;
+}
+
+message SetSubscriptionRequest {
+  string user_id = 1;
+  string channel_id = 2;
+  bool subscribed = 3;
+}
+
+message SetSubscriptionResponse {}
+
+message ListHistoryRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListHistoryResponse {
+  repeated Video videos = 1;
+  string next_page_token = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Storage
+// ---------------------------------------------------------------------------
+
+message GetStorageUsageRequest {}
+
+message GetStorageUsageResponse {
+  int64 used_bytes = 1;
+  // Configured ceiling, not the physical disk size.
+  int64 budget_bytes = 2;
+  int64 disk_free_bytes = 3;
+  int32 video_count = 4;
+  int32 evicted_count = 5;
+  // Videos closest to being evicted, least recently accessed first.
+  repeated Video eviction_candidates = 6;
+}
+
+message SetPinnedRequest {
+  string video_id = 1;
+  // Pinned videos are never evicted, regardless of access time.
+  bool pinned = 2;
+}
+
+message SetPinnedResponse {}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+
+# Ingested media and the local database never belong in the repo.
+media/
+data/

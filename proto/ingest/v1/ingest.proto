@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package ingest.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/lucnguyen/local-youtube/gen/go/ingest/v1;ingestv1";
+
+// The ingest service is the only component that talks to the outside world.
+//
+// It implements the hybrid playback model: a freshly requested video is
+// playable almost immediately through a resolved upstream stream, while a
+// background job downloads a local copy. Once the copy lands, playback moves to
+// disk and the upstream is never touched again for that video.
+service IngestService {
+  // Metadata only — no media is fetched. Used by search and by the preview
+  // shown before the user commits to importing something.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc Preview(PreviewRequest) returns (PreviewResponse);
+  rpc ListPlaylist(ListPlaylistRequest) returns (ListPlaylistResponse);
+
+  // Resolves a directly playable upstream URL. This is what makes "click and
+  // watch" feel instant; the URL is short-lived and must not be persisted.
+  rpc ResolveStream(ResolveStreamRequest) returns (ResolveStreamResponse);
+
+  // Queues a download. Returns immediately; progress is polled through GetJob.
+  rpc Submit(SubmitRequest) returns (SubmitResponse);
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+}
+
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_QUEUED = 1;
+  JOB_STATE_RUNNING = 2;
+  JOB_STATE_SUCCEEDED = 3;
+  JOB_STATE_FAILED = 4;
+  JOB_STATE_CANCELLED = 5;
+}
+
+// A video discovered upstream but not necessarily present locally.
+message ExternalVideo {
+  // The upstream id, reused as the local video id so ingest is idempotent.
+  string id = 1;
+  string title = 2;
+  string channel_id = 3;
+  string channel_name = 4;
+  int32 duration_seconds = 5;
+  int64 view_count = 6;
+  string thumbnail_url = 7;
+  string source_url = 8;
+  google.protobuf.Timestamp published_at = 9;
+  string description = 10;
+  repeated string categories = 11;
+  repeated string hashtags = 12;
+  // True when this id already exists in the local library.
+  bool in_library = 13;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SearchResponse {
+  repeated ExternalVideo videos = 1;
+}
+
+message PreviewRequest {
+  string url = 1;
+}
+
+message PreviewResponse {
+  ExternalVideo video = 1;
+}
+
+message ListPlaylistRequest {
+  string url = 1;
+  int32 limit = 2;
+}
+
+message ListPlaylistResponse {
+  string playlist_title = 1;
+  repeated ExternalVideo videos = 2;
+}
+
+message ResolveStreamRequest {
+  string video_id = 1;
+}
+
+message ResolveStreamResponse {
+  // Directly playable by a <video> element. Only progressive formats are
+  // returned, because adaptive streams need MSE and a manifest the browser
+  // cannot consume from a bare URL.
+  string url = 1;
+  int32 height = 2;
+  // Upstream URLs expire. The client must re-resolve rather than cache.
+  google.protobuf.Timestamp expires_at = 3;
+  string mime_type = 4;
+}
+
+message SubmitRequest {
+  string url = 1;
+  string requested_by = 2;
+  // Height to download, e.g. 1080. Zero means the configured default.
+  int32 preferred_height = 3;
+}
+
+message SubmitResponse {
+  Job job = 1;
+}
+
+message Job {
+  string id = 1;
+  string source_url = 2;
+  // Populated once metadata resolution succeeds.
+  string video_id = 3;
+  string title = 4;
+  JobState state = 5;
+  // 0..1, reported by the downloader.
+  float progress = 6;
+  int64 downloaded_bytes = 7;
+  int64 total_bytes = 8;
+  string error_message = 9;
+  int32 attempts = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp finished_at = 12;
+}
+
+message GetJobRequest {
+  string job_id = 1;
+}
+
+message GetJobResponse {
+  Job job = 1;
+}
+
+message ListJobsRequest {
+  // When true, only jobs that are queued or running.
+  bool active_only = 1;
+  int32 limit = 2;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message CancelJobRequest {
+  string job_id = 1;
+}
+
+message CancelJobResponse {}

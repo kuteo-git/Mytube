@@ -1,0 +1,514 @@
+// Package postgres implements domain.Repository on top of the catalog schema.
+// It is the only place in the service that knows SQL exists.
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/lucnguyen/local-youtube/services/catalog/internal/domain"
+)
+
+type Repository struct {
+	pool      *pgxpool.Pool
+	mediaRoot string
+}
+
+func New(pool *pgxpool.Pool, mediaRoot string) *Repository {
+	return &Repository{pool: pool, mediaRoot: mediaRoot}
+}
+
+// Every video read goes through this projection so per-user state is always
+// resolved in a single round trip instead of an N+1 fan-out.
+const videoSelect = `
+SELECT v.id, v.title, v.duration_seconds, v.view_count, v.published_at, v.added_at,
+       v.thumbnail_path, v.description, v.hashtags, v.categories, v.media_state,
+       v.media_path, v.size_bytes, v.pinned, v.source_url,
+       c.id, c.name, c.handle, c.avatar_path, c.subscriber_count, c.verified,
+       (s.user_id IS NOT NULL) AS subscribed,
+       wp.position_seconds, wp.watched_fraction, wp.last_watched_at,
+       r.reaction, (wl.user_id IS NOT NULL) AS in_watch_later,
+       (SELECT count(*) FROM reactions lr
+         WHERE lr.video_id = v.id AND lr.reaction = 'LIKE') AS like_count
+FROM videos v
+JOIN channels c ON c.id = v.channel_id
+LEFT JOIN subscriptions  s  ON s.channel_id = c.id  AND s.user_id  = $1
+LEFT JOIN watch_progress wp ON wp.video_id  = v.id  AND wp.user_id = $1
+LEFT JOIN reactions      r  ON r.video_id   = v.id  AND r.user_id  = $1
+LEFT JOIN watch_later    wl ON wl.video_id  = v.id  AND wl.user_id = $1
+`
+
+func scanVideo(row pgx.Row) (domain.Video, error) {
+	var (
+		v          domain.Video
+		state      string
+		subscribed bool
+
+		positionSeconds *int32
+		watchedFraction *float32
+		lastWatchedAt   *time.Time
+		reaction        *string
+		inWatchLater    bool
+	)
+
+	err := row.Scan(
+		&v.ID, &v.Title, &v.DurationSeconds, &v.ViewCount, &v.PublishedAt, &v.AddedAt,
+		&v.ThumbnailPath, &v.Description, &v.Hashtags, &v.Categories, &state,
+		&v.MediaPath, &v.SizeBytes, &v.Pinned, &v.SourceURL,
+		&v.Channel.ID, &v.Channel.Name, &v.Channel.Handle, &v.Channel.AvatarPath,
+		&v.Channel.SubscriberCount, &v.Channel.Verified,
+		&subscribed,
+		&positionSeconds, &watchedFraction, &lastWatchedAt,
+		&reaction, &inWatchLater, &v.LikeCount,
+	)
+	if err != nil {
+		return domain.Video{}, err
+	}
+
+	v.MediaState = domain.MediaState(state)
+	v.Channel.Subscribed = subscribed
+
+	// User state is present only when the user has actually interacted with the
+	// video; an untouched video carries no state rather than a zeroed one.
+	if positionSeconds != nil || reaction != nil || inWatchLater {
+		us := &domain.VideoUserState{InWatchLater: inWatchLater}
+		if positionSeconds != nil {
+			us.WatchPositionSeconds = *positionSeconds
+		}
+		if watchedFraction != nil {
+			us.WatchProgress = *watchedFraction
+		}
+		if lastWatchedAt != nil {
+			us.LastWatchedAt = *lastWatchedAt
+		}
+		if reaction != nil {
+			us.Reaction = domain.Reaction(*reaction)
+		}
+		v.UserState = us
+	}
+
+	return v, nil
+}
+
+func (r *Repository) queryVideos(ctx context.Context, sql string, args ...any) ([]domain.Video, error) {
+	rows, err := r.pool.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	videos := make([]domain.Video, 0, 16)
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		videos = append(videos, v)
+	}
+	return videos, rows.Err()
+}
+
+func (r *Repository) GetVideo(ctx context.Context, videoID, userID string) (domain.Video, error) {
+	v, err := scanVideo(r.pool.QueryRow(ctx, videoSelect+` WHERE v.id = $2`, userID, videoID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Video{}, fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+	}
+	return v, err
+}
+
+// BatchGetVideos preserves the caller's id order, which is what keeps a ranking
+// computed by the recommendation service intact after hydration.
+func (r *Repository) BatchGetVideos(ctx context.Context, videoIDs []string, userID string) ([]domain.Video, error) {
+	videos, err := r.queryVideos(ctx, videoSelect+` WHERE v.id = ANY($2)`, userID, videoIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	byID := make(map[string]domain.Video, len(videos))
+	for _, v := range videos {
+		byID[v.ID] = v
+	}
+
+	ordered := make([]domain.Video, 0, len(videoIDs))
+	for _, id := range videoIDs {
+		if v, ok := byID[id]; ok {
+			ordered = append(ordered, v)
+		}
+	}
+	return ordered, nil
+}
+
+func (r *Repository) SearchVideos(ctx context.Context, query, userID string, page domain.Page) ([]domain.Video, error) {
+	// websearch_to_tsquery tolerates whatever a user types, unlike to_tsquery.
+	return r.queryVideos(ctx, videoSelect+`
+		WHERE v.search_tsv @@ websearch_to_tsquery('simple', $2)
+		ORDER BY ts_rank(v.search_tsv, websearch_to_tsquery('simple', $2)) DESC, v.added_at DESC
+		LIMIT $3 OFFSET $4`,
+		userID, query, page.Size, page.Offset)
+}
+
+func (r *Repository) ListChannelVideos(ctx context.Context, channelID, userID string, page domain.Page) ([]domain.Video, error) {
+	return r.queryVideos(ctx, videoSelect+`
+		WHERE v.channel_id = $2
+		ORDER BY v.published_at DESC
+		LIMIT $3 OFFSET $4`,
+		userID, channelID, page.Size, page.Offset)
+}
+
+func (r *Repository) ListHistory(ctx context.Context, userID string, page domain.Page) ([]domain.Video, error) {
+	return r.queryVideos(ctx, videoSelect+`
+		WHERE wp.user_id IS NOT NULL
+		ORDER BY wp.last_watched_at DESC
+		LIMIT $2 OFFSET $3`,
+		userID, page.Size, page.Offset)
+}
+
+func (r *Repository) GetChannel(ctx context.Context, channelID, userID string) (domain.Channel, int32, error) {
+	var (
+		c          domain.Channel
+		videoCount int32
+	)
+	err := r.pool.QueryRow(ctx, `
+		SELECT c.id, c.name, c.handle, c.avatar_path, c.subscriber_count, c.verified,
+		       (s.user_id IS NOT NULL) AS subscribed,
+		       (SELECT count(*) FROM videos v WHERE v.channel_id = c.id) AS video_count
+		FROM channels c
+		LEFT JOIN subscriptions s ON s.channel_id = c.id AND s.user_id = $1
+		WHERE c.id = $2`,
+		userID, channelID,
+	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.SubscriberCount, &c.Verified,
+		&c.Subscribed, &videoCount)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Channel{}, 0, fmt.Errorf("channel %s: %w", channelID, domain.ErrNotFound)
+	}
+	return c, videoCount, err
+}
+
+func (r *Repository) ListCategories(ctx context.Context, minVideoCount int32) ([]domain.Category, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT category, count(*)::int AS video_count
+		FROM videos, unnest(categories) AS category
+		GROUP BY category
+		HAVING count(*) >= $1
+		ORDER BY video_count DESC, category ASC`, minVideoCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Category
+	for rows.Next() {
+		var c domain.Category
+		if err := rows.Scan(&c.Name, &c.VideoCount); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// UpsertChannel is idempotent on the upstream channel id, so re-ingesting a
+// video from a known channel refreshes its details rather than failing.
+func (r *Repository) UpsertChannel(ctx context.Context, c domain.Channel) (domain.Channel, error) {
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO channels (id, name, handle, avatar_path, subscriber_count, verified)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE
+		SET name = EXCLUDED.name,
+		    handle = EXCLUDED.handle,
+		    avatar_path = COALESCE(NULLIF(EXCLUDED.avatar_path, ''), channels.avatar_path),
+		    subscriber_count = EXCLUDED.subscriber_count,
+		    verified = EXCLUDED.verified
+		RETURNING id, name, handle, avatar_path, subscriber_count, verified`,
+		c.ID, c.Name, c.Handle, c.AvatarPath, c.SubscriberCount, c.Verified,
+	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.SubscriberCount, &c.Verified)
+	return c, err
+}
+
+// UpsertVideo preserves fields the ingest worker does not own — media state,
+// pinning and access time — so re-running metadata refresh cannot silently
+// mark a downloaded video as queued again.
+func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Video, error) {
+	// pgx encodes a nil slice as NULL, which the NOT NULL array columns reject.
+	// An absent list means "no tags", not "unknown".
+	if v.Hashtags == nil {
+		v.Hashtags = []string{}
+	}
+	if v.Categories == nil {
+		v.Categories = []string{}
+	}
+
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO videos (id, title, channel_id, duration_seconds, view_count,
+		                    published_at, added_at, thumbnail_path, description,
+		                    hashtags, categories, media_state, media_path,
+		                    size_bytes, source_url)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14)
+		ON CONFLICT (id) DO UPDATE
+		SET title = EXCLUDED.title,
+		    channel_id = EXCLUDED.channel_id,
+		    duration_seconds = EXCLUDED.duration_seconds,
+		    view_count = EXCLUDED.view_count,
+		    published_at = EXCLUDED.published_at,
+		    thumbnail_path = COALESCE(NULLIF(EXCLUDED.thumbnail_path, ''), videos.thumbnail_path),
+		    description = EXCLUDED.description,
+		    hashtags = EXCLUDED.hashtags,
+		    categories = EXCLUDED.categories,
+		    source_url = EXCLUDED.source_url`,
+		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, v.ViewCount, v.PublishedAt,
+		v.ThumbnailPath, v.Description, v.Hashtags, v.Categories,
+		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL)
+	if err != nil {
+		return domain.Video{}, err
+	}
+	return r.GetVideo(ctx, v.ID, "")
+}
+
+func (r *Repository) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE videos
+		SET media_state = $2,
+		    media_path = CASE WHEN $3 <> '' THEN $3 ELSE media_path END,
+		    size_bytes = CASE WHEN $4 > 0 THEN $4 ELSE size_bytes END,
+		    last_accessed_at = now()
+		WHERE id = $1`,
+		videoID, string(state), mediaPath, sizeBytes)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+func (r *Repository) FindBySourceURL(ctx context.Context, sourceURL, userID string) (domain.Video, error) {
+	v, err := scanVideo(r.pool.QueryRow(ctx, videoSelect+` WHERE v.source_url = $2`, userID, sourceURL))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Video{}, fmt.Errorf("source %s: %w", sourceURL, domain.ErrNotFound)
+	}
+	return v, err
+}
+
+func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([]domain.VideoFeatures, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, channel_id, categories, hashtags, published_at, added_at,
+		       duration_seconds, media_state
+		FROM videos
+		ORDER BY id
+		LIMIT $1 OFFSET $2`, page.Size, page.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.VideoFeatures
+	for rows.Next() {
+		var (
+			f     domain.VideoFeatures
+			state string
+		)
+		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Categories, &f.Hashtags,
+			&f.PublishedAt, &f.AddedAt, &f.DurationSeconds, &state); err != nil {
+			return nil, err
+		}
+		f.MediaState = domain.MediaState(state)
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) ListComments(ctx context.Context, videoID string, sort domain.CommentSort, page domain.Page) ([]domain.Comment, int32, error) {
+	order := `c.like_count DESC, c.published_at DESC`
+	if sort == domain.SortNewest {
+		order = `c.published_at DESC`
+	}
+
+	// Pinned comments always lead, mirroring the reference UI.
+	rows, err := r.pool.Query(ctx, `
+		SELECT c.id, c.video_id, c.user_id, c.author_handle, c.author_avatar,
+		       c.body, c.published_at, c.like_count, c.pinned_by, c.parent_comment_id
+		FROM comments c
+		WHERE c.video_id = $1
+		ORDER BY (c.pinned_by IS NOT NULL) DESC, `+order, videoID)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var (
+		roots     []domain.Comment
+		repliesBy = map[string][]domain.Comment{}
+		total     int32
+	)
+
+	for rows.Next() {
+		var (
+			c        domain.Comment
+			parentID *string
+		)
+		if err := rows.Scan(&c.ID, &c.VideoID, &c.Author.UserID, &c.Author.Handle,
+			&c.Author.AvatarPath, &c.Body, &c.PublishedAt, &c.LikeCount, &c.PinnedBy,
+			&parentID); err != nil {
+			return nil, 0, err
+		}
+		total++
+		if parentID != nil {
+			repliesBy[*parentID] = append(repliesBy[*parentID], c)
+		} else {
+			roots = append(roots, c)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// Only top-level comments are paginated; replies travel with their parent.
+	start := int(page.Offset)
+	if start > len(roots) {
+		start = len(roots)
+	}
+	end := start + int(page.Size)
+	if end > len(roots) {
+		end = len(roots)
+	}
+	pageRoots := roots[start:end]
+
+	for i := range pageRoots {
+		pageRoots[i].Replies = repliesBy[pageRoots[i].ID]
+	}
+	return pageRoots, total, nil
+}
+
+func (r *Repository) CreateComment(ctx context.Context, c domain.Comment, parentID *string) (domain.Comment, error) {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO comments (id, video_id, parent_comment_id, user_id, author_handle,
+		                      author_avatar, body, published_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		c.ID, c.VideoID, parentID, c.Author.UserID, c.Author.Handle,
+		c.Author.AvatarPath, c.Body, c.PublishedAt)
+	if err != nil {
+		return domain.Comment{}, err
+	}
+	return c, nil
+}
+
+// RecordWatchProgress also refreshes last_accessed_at: watching a video is what
+// protects it from LRU eviction, not merely seeing it in a grid.
+func (r *Repository) RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO watch_progress (user_id, video_id, position_seconds, watched_fraction, last_watched_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (user_id, video_id) DO UPDATE
+		SET position_seconds = EXCLUDED.position_seconds,
+		    -- Never regress the high-water mark; rewatching must not undo it.
+		    watched_fraction = GREATEST(watch_progress.watched_fraction, EXCLUDED.watched_fraction),
+		    last_watched_at  = now()`,
+		userID, videoID, positionSeconds, watchedFraction); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE videos SET last_accessed_at = now() WHERE id = $1`, videoID); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *Repository) SetReaction(ctx context.Context, userID, videoID string, reaction domain.Reaction) (int64, error) {
+	var err error
+	if reaction == domain.ReactionNone {
+		_, err = r.pool.Exec(ctx,
+			`DELETE FROM reactions WHERE user_id = $1 AND video_id = $2`, userID, videoID)
+	} else {
+		_, err = r.pool.Exec(ctx, `
+			INSERT INTO reactions (user_id, video_id, reaction)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (user_id, video_id) DO UPDATE SET reaction = EXCLUDED.reaction`,
+			userID, videoID, string(reaction))
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	var likes int64
+	err = r.pool.QueryRow(ctx,
+		`SELECT count(*) FROM reactions WHERE video_id = $1 AND reaction = 'LIKE'`,
+		videoID).Scan(&likes)
+	return likes, err
+}
+
+func (r *Repository) SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error {
+	var err error
+	if subscribed {
+		_, err = r.pool.Exec(ctx, `
+			INSERT INTO subscriptions (user_id, channel_id) VALUES ($1, $2)
+			ON CONFLICT DO NOTHING`, userID, channelID)
+	} else {
+		_, err = r.pool.Exec(ctx,
+			`DELETE FROM subscriptions WHERE user_id = $1 AND channel_id = $2`, userID, channelID)
+	}
+	return err
+}
+
+func (r *Repository) GetStorageUsage(ctx context.Context, budgetBytes int64) (domain.StorageUsage, error) {
+	usage := domain.StorageUsage{BudgetBytes: budgetBytes}
+
+	err := r.pool.QueryRow(ctx, `
+		SELECT coalesce(sum(size_bytes) FILTER (WHERE media_state = 'READY'), 0),
+		       count(*)::int,
+		       count(*) FILTER (WHERE media_state = 'EVICTED')::int
+		FROM videos`).
+		Scan(&usage.UsedBytes, &usage.VideoCount, &usage.EvictedCount)
+	if err != nil {
+		return usage, err
+	}
+
+	usage.DiskFreeBytes = diskFreeBytes(r.mediaRoot)
+
+	// Least recently watched unpinned videos are the next to lose their bytes.
+	usage.EvictionCandidates, err = r.queryVideos(ctx, videoSelect+`
+		WHERE v.media_state = 'READY' AND NOT v.pinned
+		ORDER BY v.last_accessed_at ASC
+		LIMIT 10`, "")
+	return usage, err
+}
+
+func (r *Repository) SetPinned(ctx context.Context, videoID string, pinned bool) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE videos SET pinned = $2 WHERE id = $1`, videoID, pinned)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+// diskFreeBytes reports free space on the volume holding the media directory.
+// Reported as zero when unavailable; the caller treats it as informational.
+func diskFreeBytes(path string) int64 {
+	if strings.TrimSpace(path) == "" {
+		return 0
+	}
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0
+	}
+	return int64(stat.Bavail) * int64(stat.Bsize)
+}

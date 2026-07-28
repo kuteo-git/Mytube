@@ -1,0 +1,99 @@
+// Package catalogclient implements domain.Library over the catalog service.
+//
+// Ingest owns no video metadata of its own: the moment a video is resolved it
+// belongs to catalog. This adapter is the only path between the two.
+package catalogclient
+
+import (
+	"context"
+	"net/http"
+
+	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
+	"github.com/lucnguyen/local-youtube/gen/go/catalog/v1/catalogv1connect"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
+)
+
+type Library struct {
+	client catalogv1connect.CatalogServiceClient
+}
+
+func New(httpClient *http.Client, baseURL string) *Library {
+	return &Library{client: catalogv1connect.NewCatalogServiceClient(httpClient, baseURL)}
+}
+
+var mediaStates = map[string]catalogv1.MediaState{
+	"QUEUED":      catalogv1.MediaState_MEDIA_STATE_QUEUED,
+	"DOWNLOADING": catalogv1.MediaState_MEDIA_STATE_DOWNLOADING,
+	"READY":       catalogv1.MediaState_MEDIA_STATE_READY,
+	"EVICTED":     catalogv1.MediaState_MEDIA_STATE_EVICTED,
+	"FAILED":      catalogv1.MediaState_MEDIA_STATE_FAILED,
+}
+
+func (l *Library) FindBySourceURL(ctx context.Context, sourceURL string) (string, bool, error) {
+	resp, err := l.client.FindBySourceURL(ctx, connect.NewRequest(&catalogv1.FindBySourceURLRequest{
+		SourceUrl: sourceURL,
+	}))
+	if err != nil {
+		return "", false, err
+	}
+	if resp.Msg.Video == nil {
+		return "", false, nil
+	}
+	return resp.Msg.GetVideo().GetId(), true, nil
+}
+
+func (l *Library) UpsertChannel(ctx context.Context, v domain.ExternalVideo) error {
+	_, err := l.client.UpsertChannel(ctx, connect.NewRequest(&catalogv1.UpsertChannelRequest{
+		Channel: &catalogv1.Channel{
+			Id:     v.ChannelID,
+			Name:   v.ChannelName,
+			Handle: v.ChannelHandle,
+		},
+	}))
+	return err
+}
+
+func (l *Library) UpsertVideo(ctx context.Context, v domain.ExternalVideo, state string) error {
+	_, err := l.client.UpsertVideo(ctx, connect.NewRequest(&catalogv1.UpsertVideoRequest{
+		Video: &catalogv1.Video{
+			Id:              v.ID,
+			Title:           v.Title,
+			Channel:         &catalogv1.Channel{Id: v.ChannelID},
+			DurationSeconds: v.DurationSeconds,
+			ViewCount:       v.ViewCount,
+			PublishedAt:     timestamppb.New(v.PublishedAt),
+			Description:     v.Description,
+			Hashtags:        v.Hashtags,
+			Categories:      v.Categories,
+			MediaState:      mediaStates[state],
+			SourceUrl:       v.SourceURL,
+		},
+	}))
+	return err
+}
+
+func (l *Library) SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64) error {
+	_, err := l.client.SetMediaState(ctx, connect.NewRequest(&catalogv1.SetMediaStateRequest{
+		VideoId:    videoID,
+		MediaState: mediaStates[state],
+		MediaPath:  mediaPath,
+		SizeBytes:  sizeBytes,
+	}))
+	return err
+}
+
+// SourceURLFor lets the resolver turn a local video id back into the upstream
+// URL, which is what makes instant playback work for a video that is queued or
+// still downloading.
+func (l *Library) SourceURLFor(ctx context.Context, videoID string) (string, error) {
+	resp, err := l.client.GetVideo(ctx, connect.NewRequest(&catalogv1.GetVideoRequest{
+		VideoId: videoID,
+	}))
+	if err != nil {
+		return "", err
+	}
+	return resp.Msg.GetVideo().GetSourceUrl(), nil
+}

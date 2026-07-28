@@ -1,0 +1,33 @@
+version: v2
+
+# Two consumers of every schema:
+#   - Go services and the gateway, via connect-go
+#   - the web client, via protobuf-es + connect-es
+#
+# ConnectRPC rather than plain gRPC: the same .proto also serves HTTP/JSON, so
+# every service stays reachable with curl during development, and the browser
+# can talk to the gateway without a translation layer.
+
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/lucnguyen/local-youtube/gen/go
+
+# Plugin versions are pinned on purpose. Unpinned remote plugins silently roll
+# forward and can emit code for a runtime major version that is not installed.
+plugins:
+  # ---- Go ----
+  - remote: buf.build/protocolbuffers/go:v1.36.6
+    out: ../gen/go
+    opt: paths=source_relative
+  - remote: buf.build/connectrpc/go:v1.18.1
+    out: ../gen/go
+    opt: paths=source_relative
+
+  # ---- TypeScript (web client) ----
+  # protobuf-es v2 emits service descriptors directly, so connect-es needs no
+  # separate plugin: the client is built from the generated schema.
+  - remote: buf.build/bufbuild/es:v2.2.5
+    out: ../web/src/shared/api/gen
+    opt: target=ts

@@ -1,0 +1,98 @@
+@import '@fontsource/roboto/400.css';
+@import '@fontsource/roboto/500.css';
+@import '@fontsource/roboto/700.css';
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Design tokens — measured from Example/home.png & Example/play.png.
+   Source of truth: design-system/local-youtube/MASTER.md
+   Never use raw hex inside components; always go through these tokens.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-bg: #0f0f0f;
+  --color-surface: #212121;
+  --color-surface-hover: #272727;
+  --color-surface-input: #121212;
+  --color-line: #303030;
+  --color-line-subtle: rgba(255, 255, 255, 0.1);
+  --color-text: #f1f1f1;
+  --color-text-2: #aaaaaa;
+  --color-link: #3ea6ff;
+  --color-brand: #ff0000;
+  --color-invert-bg: #f1f1f1;
+  --color-invert-text: #0f0f0f;
+  --color-ring: #1c62b9;
+  --color-badge: rgba(0, 0, 0, 0.8);
+
+  --font-sans: 'Roboto', system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-bg);
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Focus ring must always be visible: Phase 3 navigates with a TV remote D-pad. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  button {
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+@layer utilities {
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

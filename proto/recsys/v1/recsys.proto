@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package recsys.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/lucnguyen/local-youtube/services/recsys/gen/recsys/v1;recsysv1";
+
+// The recommendation service owns ranking and nothing else. It never returns
+// video metadata: it returns ordered ids plus the reason each id was chosen,
+// and the gateway hydrates them through catalog.BatchGetVideos.
+//
+// Phase 1 ranking is heuristic, not learned — with a library of a few hundred
+// self-imported videos and a handful of users there is not enough signal for a
+// model to beat explicit rules, and rules stay debuggable.
+service RecommendationService {
+  // Ranked ids for the home grid.
+  rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
+  // Ranked ids for the watch page "Next" rail.
+  rpc GetUpNext(GetUpNextRequest) returns (GetUpNextResponse);
+  // Behaviour signals, written on every meaningful interaction so the next
+  // feed request already reflects them. No batch job in the loop.
+  rpc RecordSignal(RecordSignalRequest) returns (RecordSignalResponse);
+  // Suppresses items already shown, so the grid does not repeat itself.
+  rpc RecordImpressions(RecordImpressionsRequest) returns (RecordImpressionsResponse);
+}
+
+// Why a video was surfaced. Sent to the client for debugging and to let the UI
+// group results later without recomputing anything.
+enum RecommendationReason {
+  RECOMMENDATION_REASON_UNSPECIFIED = 0;
+  RECOMMENDATION_REASON_CONTINUE_WATCHING = 1;
+  RECOMMENDATION_REASON_RECENTLY_ADDED = 2;
+  RECOMMENDATION_REASON_NEVER_WATCHED = 3;
+  RECOMMENDATION_REASON_SUBSCRIBED_CHANNEL = 4;
+  RECOMMENDATION_REASON_REWATCH = 5;
+  RECOMMENDATION_REASON_SAME_CHANNEL = 6;
+  RECOMMENDATION_REASON_SHARED_TAGS = 7;
+}
+
+message RankedVideo {
+  string video_id = 1;
+  float score = 2;
+  RecommendationReason reason = 3;
+}
+
+message GetFeedRequest {
+  string user_id = 1;
+  // Chip filter selected in the UI. Empty means no filter.
+  string category = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  // Local wall-clock hour at the client, 0-23. Time of day is one of the
+  // behaviour signals the brief called for.
+  int32 client_hour = 5;
+}
+
+message GetFeedResponse {
+  repeated RankedVideo videos = 1;
+  string next_page_token = 2;
+}
+
+message GetUpNextRequest {
+  string user_id = 1;
+  string current_video_id = 2;
+  // Empty means no filter; otherwise restrict to this channel.
+  string channel_filter = 3;
+  int32 page_size = 4;
+}
+
+message GetUpNextResponse {
+  repeated RankedVideo videos = 1;
+}
+
+enum SignalType {
+  SIGNAL_TYPE_UNSPECIFIED = 0;
+  SIGNAL_TYPE_WATCH = 1;
+  SIGNAL_TYPE_LIKE = 2;
+  SIGNAL_TYPE_DISLIKE = 3;
+  SIGNAL_TYPE_SUBSCRIBE = 4;
+  SIGNAL_TYPE_UNSUBSCRIBE = 5;
+  SIGNAL_TYPE_SEARCH = 6;
+  SIGNAL_TYPE_SKIP = 7;
+}
+
+message RecordSignalRequest {
+  string user_id = 1;
+  SignalType type = 2;
+  // Set for every type except SEARCH.
+  string video_id = 3;
+  // Set for SEARCH.
+  string query = 4;
+  // Set for WATCH: fraction of the video watched, 0..1.
+  float watched_fraction = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+}
+
+message RecordSignalResponse {}
+
+message RecordImpressionsRequest {
+  string user_id = 1;
+  repeated string video_ids = 2;
+}
+
+message RecordImpressionsResponse {}

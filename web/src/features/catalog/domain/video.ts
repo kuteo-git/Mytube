@@ -1,0 +1,96 @@
+/**
+ * Domain layer — pure entities.
+ * Must not import React and must not know that HTTP or a database exist.
+ *
+ * Shapes mirror the gateway contract, which is itself generated from
+ * proto/catalog/v1/catalog.proto.
+ */
+
+export interface Channel {
+  id: string
+  name: string
+  handle: string
+  avatarPath: string
+  subscriberCount: number
+  verified: boolean
+  subscribed: boolean
+}
+
+/** State of the media file on disk. Tied to the LRU eviction policy. */
+export type MediaState = 'QUEUED' | 'DOWNLOADING' | 'READY' | 'EVICTED' | 'FAILED'
+
+export type ReactionState = 'NONE' | 'LIKE' | 'DISLIKE'
+
+export interface VideoUserState {
+  /** Watch position in the 0..1 range. */
+  watchProgress: number
+  watchPositionSeconds: number
+  reaction: ReactionState
+  inWatchLater: boolean
+}
+
+/** Why the recommendation service surfaced a video. Empty outside feeds. */
+export type RecommendationReason =
+  | 'CONTINUE_WATCHING'
+  | 'RECENTLY_ADDED'
+  | 'NEVER_WATCHED'
+  | 'SUBSCRIBED_CHANNEL'
+  | 'REWATCH'
+  | 'SAME_CHANNEL'
+  | 'SHARED_TAGS'
+  | ''
+
+export interface Video {
+  id: string
+  title: string
+  channel: Channel
+  durationSeconds: number
+  viewCount: number
+  publishedAt: string // ISO 8601
+  /** When the video was ingested into the local library. */
+  addedAt: string // ISO 8601
+  thumbnailPath: string
+  description: string
+  hashtags: string[]
+  categories: string[]
+  mediaState: MediaState
+  mediaPath: string
+  sizeBytes: number
+  pinned: boolean
+  sourceUrl: string
+  /** Aggregate across all local users. */
+  likeCount: number
+  userState?: VideoUserState
+  reason?: RecommendationReason
+}
+
+export interface Comment {
+  id: string
+  authorHandle: string
+  avatarPath: string
+  text: string
+  publishedAt: string
+  likeCount: number
+  pinnedBy?: string
+  replies: Comment[]
+}
+
+export interface Category {
+  name: string
+  videoCount: number
+}
+
+export interface StorageUsage {
+  usedBytes: number
+  budgetBytes: number
+  diskFreeBytes: number
+  videoCount: number
+  evictedCount: number
+  evictionCandidates: Video[]
+}
+
+export const watchProgress = (v: Video): number => v.userState?.watchProgress ?? 0
+export const isWatched = (v: Video): boolean => watchProgress(v) > 0.95
+export const isInProgress = (v: Video): boolean =>
+  watchProgress(v) > 0.02 && watchProgress(v) <= 0.95
+export const hasProgress = (v: Video): boolean => watchProgress(v) > 0
