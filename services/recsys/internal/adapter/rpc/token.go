@@ -25,13 +25,18 @@ func decodeToken(token string) (snapshotID string, offset int32) {
 	if err != nil {
 		return "", 0
 	}
-	parts := strings.SplitN(string(decoded), "|", 2)
-	if len(parts) != 2 {
+	raw := string(decoded)
+	// The snapshot id itself embeds "|" — it is built from userID+"|"+topic — so
+	// splitting on the first "|" cuts it apart wrongly. The offset is always a
+	// plain decimal with no "|" in it, so the last "|" is the real boundary.
+	i := strings.LastIndex(raw, "|")
+	if i < 0 {
 		return "", 0
 	}
-	n, err := strconv.Atoi(parts[1])
+	snapshotID, offsetPart := raw[:i], raw[i+1:]
+	n, err := strconv.Atoi(offsetPart)
 	if err != nil || n < 0 {
-		return parts[0], 0
+		return snapshotID, 0
 	}
-	return parts[0], int32(n)
+	return snapshotID, int32(n)
 }
