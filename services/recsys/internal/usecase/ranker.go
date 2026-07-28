@@ -192,7 +192,10 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	}
 
 	sortRanked(ranked)
-	return ranked, nil
+	// The mix applies to the feed, which is what someone browses. Up-next is a
+	// different question — "what follows this?" — and deliberately keeps its
+	// pure same-channel-first ordering.
+	return applyDiscoveryQuota(ranked), nil
 }
 
 func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelFilter string, pageSize int32) ([]domain.RankedVideo, error) {
