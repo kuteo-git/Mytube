@@ -25,7 +25,11 @@ const (
 	weightSubscribed       = 1.2
 	weightRecentlyAdded    = 1.0
 	weightChannelAffinity  = 1.0
-	weightRewatch          = 0.3
+	// Likes are a deliberate statement and outweigh passive watch affinity, but
+	// stay below "continue watching": an unfinished video is a stronger claim on
+	// attention than a preference.
+	weightLikeAffinity = 2.0
+	weightRewatch      = 0.3
 	penaltyImpression      = 2.0
 	penaltyDisliked        = 5.0
 	// Same-channel dominance is what makes the "Next" rail feel coherent.
@@ -140,6 +144,7 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	}
 
 	affinity := channelAffinity(features, profile.WatchedFraction)
+	likes := buildLikeAffinity(features, profile.Liked)
 
 	now := r.now()
 	ranked := make([]domain.RankedVideo, 0, len(features))
@@ -177,6 +182,7 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 		}
 
 		score += weightChannelAffinity * affinity[f.ChannelID]
+		score += weightLikeAffinity * likes.Score(f)
 
 		if profile.RecentImpressions[f.VideoID] {
 			score -= penaltyImpression
