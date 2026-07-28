@@ -98,8 +98,13 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 
 **Heuristic, KHÔNG ML.** Lý do: ~150 video và 5 user → collaborative filtering ra rác, embedding không hơn tag-matching mà lại không debug được.
 
-- **P1:** "mới thêm" + "xem tiếp" + "chưa xem"
-- **P2:** grid trộn có chủ ý ~30% chưa xem / 25% mới / 20% kênh theo dõi / 15% xem dở / 10% xem lại; chống lặp impression 24h
+- **P1 (đã làm):** grid trộn 30% chưa xem / 25% mới / 20% kênh theo dõi / 15% xem dở /
+  10% xem lại; chống lặp impression 24h
+- **Like:** cộng affinity theo topic 1.0 / kênh 0.8 / hashtag 0.5, cộng dồn qua từng like.
+  Đưa lên P1 vì like mà không đổi gì thì là nút chết.
+- **Dislike**: loại khỏi feed và up-next, **vẫn tìm được qua search và trang kênh**.
+  Không phải tính năng phải làm — nó đúng sẵn nhờ ranh giới service: catalog không
+  nhìn thấy signal của recsys nên không thể lọc theo nó.
 - **`Next` (watch page):** cùng kênh > cùng tag > affinity chung; loại video vừa xem
 
 > **Giới hạn đã ghi nhận:** với ~150 video tự tay import, recommendation chỉ là *sắp xếp lại tủ đồ của chính mình* — không tạo được cảm giác khám phá của YouTube. Muốn có, phải làm feed kéo video ngoài vào (Phase 3).
@@ -178,9 +183,7 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
    đường upstream (~360p) rồi tải nền 1080p. Cần: gateway serve file **đang được ghi**,
    trả 206 cho phần đã có, chặn seek quá mép buffer. Đổi `DEFAULT_HEIGHT` về 720 và ép
    yt-dlp lấy progressive format.
-2. **Recsys trộn 55/10/20/15** — hiện mới có affinity theo **kênh**, chưa có affinity theo
-   **chủ đề** và chưa có tỉ lệ khám phá cố định (chống buồng vọng).
-3. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
+2. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
    **Đang là link chết trong sidebar.**
 
