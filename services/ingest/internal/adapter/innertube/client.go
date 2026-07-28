@@ -33,15 +33,24 @@ const (
 )
 
 type Client struct {
-	http     *http.Client
-	endpoint string
+	http *http.Client
+	// Endpoints are fields rather than constants so tests can point them at a
+	// local server.
+	endpoint   string
+	browseURL  string
+	resolveURL string
 }
 
 func New(httpClient *http.Client) *Client {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 15 * time.Second}
+		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-	return &Client{http: httpClient, endpoint: defaultEndpoint}
+	return &Client{
+		http:       httpClient,
+		endpoint:   defaultEndpoint,
+		browseURL:  browseEndpoint,
+		resolveURL: resolveEndpoint,
+	}
 }
 
 type nextRequest struct {

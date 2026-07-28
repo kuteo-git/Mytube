@@ -14,6 +14,9 @@ type recordingLibrary struct {
 	added  []string
 	known  map[string]bool
 	topics map[string][]string // videoID -> topics written
+	// channels records the whole video as written, so a test can assert which
+	// channel it was attributed to.
+	channels map[string]domain.ExternalVideo
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -24,6 +27,9 @@ func (r *recordingLibrary) UpsertVideo(_ context.Context, v domain.ExternalVideo
 	r.added = append(r.added, v.ID)
 	if r.topics != nil {
 		r.topics[v.ID] = v.Topics
+	}
+	if r.channels != nil {
+		r.channels[v.ID] = v
 	}
 	return nil
 }

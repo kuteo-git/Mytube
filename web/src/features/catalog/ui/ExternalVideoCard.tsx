@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ExternalVideo } from '../infrastructure/catalogRepository'
 import { useOpenExternal } from '../application/queries'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration, formatViews } from '@/shared/lib/format'
+import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 
 /**
@@ -49,11 +49,31 @@ export function ExternalVideoCard({ video }: { video: ExternalVideo }) {
         </ThumbnailSurface>
 
         <h3 className="clamp-2 mt-3 text-sm leading-5 font-medium">{video.title}</h3>
-        <p className="mt-1 text-xs text-text-2">{video.channelName}</p>
-        {video.viewCount > 0 && <p className="text-xs text-text-2">{formatViews(video.viewCount)}</p>}
+        {video.channelName && <p className="mt-1 text-xs text-text-2">{video.channelName}</p>}
+        {/* Views and age share one line separated by a dot, as on youtube.com.
+            Each half appears only when known, so a source that discloses
+            neither leaves no empty row behind. */}
+        {describeExternal(video) && (
+          <p className="text-xs text-text-2">{describeExternal(video)}</p>
+        )}
       </button>
 
       {open.isError && <p className="text-xs text-brand">Could not open that video.</p>}
     </article>
   )
+}
+
+/**
+ * Views and upload age, each omitted when the source did not disclose it.
+ *
+ * Upload dates from YouTube's own listing are relative to begin with ("2 years
+ * ago"), so they are stored as an approximate instant and rendered relatively
+ * again — which is both what YouTube shows and the only precision that is
+ * actually there.
+ */
+function describeExternal(video: ExternalVideo): string {
+  const parts: string[] = []
+  if (video.viewCount > 0) parts.push(formatViews(video.viewCount))
+  if (video.publishedAt) parts.push(formatRelative(video.publishedAt))
+  return parts.join(' • ')
 }

@@ -182,15 +182,25 @@ func (s *Server) CancelJob(ctx context.Context, req *connect.Request[ingestv1.Ca
 }
 
 func (s *Server) ListChannelUploads(ctx context.Context, req *connect.Request[ingestv1.ListChannelUploadsRequest]) (*connect.Response[ingestv1.ListChannelUploadsResponse], error) {
-	videos, err := s.ingest.ListChannelUploads(ctx, req.Msg.GetChannel(), req.Msg.GetOffset(), req.Msg.GetLimit())
+	uploads, err := s.ingest.ListChannelUploads(ctx, req.Msg.GetChannel(), req.Msg.GetPageToken())
 	if err != nil {
 		return nil, toConnectErr(err)
 	}
-	out := make([]*ingestv1.ExternalVideo, 0, len(videos))
-	for _, v := range videos {
+
+	out := make([]*ingestv1.ExternalVideo, 0, len(uploads.Videos))
+	for _, v := range uploads.Videos {
 		out = append(out, videoToProto(v))
 	}
-	return connect.NewResponse(&ingestv1.ListChannelUploadsResponse{Videos: out}), nil
+	sorts := make([]*ingestv1.SortOption, 0, len(uploads.SortOptions))
+	for _, o := range uploads.SortOptions {
+		sorts = append(sorts, &ingestv1.SortOption{Label: o.Label, Token: o.Token})
+	}
+
+	return connect.NewResponse(&ingestv1.ListChannelUploadsResponse{
+		Videos:        out,
+		SortOptions:   sorts,
+		NextPageToken: uploads.NextPageToken,
+	}), nil
 }
 
 func (s *Server) ExpandLibrary(ctx context.Context, req *connect.Request[ingestv1.ExpandLibraryRequest]) (*connect.Response[ingestv1.ExpandLibraryResponse], error) {

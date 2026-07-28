@@ -175,6 +175,31 @@ type SubscribedChannel struct {
 	Name   string
 }
 
+// ChannelUploads is one page of a channel's videos, plus the ordering choices
+// YouTube itself offers for that channel. The sort names are whatever YouTube
+// returned ("Latest", "Popular", "Oldest") rather than a fixed list, so a
+// channel that offers fewer of them cannot produce a control that does nothing.
+type ChannelUploads struct {
+	Videos        []ExternalVideo
+	SortOptions   []SortOption
+	NextPageToken string
+}
+
+// SortOption is one ordering, carrying the opaque token that selects it.
+type SortOption struct {
+	Label string
+	Token string
+}
+
+// ChannelSource lists a channel's uploads with real view counts and upload
+// dates — neither of which a flat playlist listing carries. Implemented over
+// YouTube's internal browse API, so callers must tolerate it failing and fall
+// back to the flat listing.
+type ChannelSource interface {
+	ResolveChannelID(ctx context.Context, channel string) (string, error)
+	ChannelUploads(ctx context.Context, browseID, pageToken string) (ChannelUploads, error)
+}
+
 // RelatedSource is the port over YouTube's watch-next panel. It is deliberately
 // separate from Downloader: it speaks to a different, undocumented API, and
 // callers are required to treat its failure as "no results" rather than as an

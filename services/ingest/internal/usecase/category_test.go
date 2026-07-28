@@ -28,7 +28,7 @@ func (d *categoryDownloader) Preview(_ context.Context, url string) (domain.Exte
 // full metadata, so the category — and therefore the topic — is free here.
 func TestEnsureVideoFilesUnderTheYouTubeCategory(t *testing.T) {
 	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
-	ingest := New(&categoryDownloader{}, fakeStore{}, library, 1080)
+	ingest := New(&categoryDownloader{}, nil, fakeStore{}, library, 1080, nil)
 
 	id, err := ingest.EnsureVideo(context.Background(), "https://youtube.test/watch?v=vid1")
 	if err != nil {
@@ -45,7 +45,7 @@ func TestEnsureVideoFilesUnderTheYouTubeCategory(t *testing.T) {
 // Downloading is the other place full metadata is already fetched.
 func TestDownloadWorkerFilesUnderTheYouTubeCategory(t *testing.T) {
 	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
-	ingest := New(&categoryDownloader{}, fakeStore{}, library, 1080)
+	ingest := New(&categoryDownloader{}, nil, fakeStore{}, library, 1080, nil)
 	worker := NewWorker(ingest, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	err := worker.process(context.Background(), domain.Job{

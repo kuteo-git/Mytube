@@ -83,9 +83,10 @@ func (JobState) EnumDescriptor() ([]byte, []int) {
 type ListChannelUploadsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Channel handle ("@mkbhd") or bare channel id ("UC...").
-	Channel       string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
-	Offset        int32  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Limit         int32  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Channel string `protobuf:"bytes,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	// Opaque. Empty starts at the channel's default ordering; otherwise it is
+	// either a sort option's token or the previous page's next_page_token.
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -127,30 +128,80 @@ func (x *ListChannelUploadsRequest) GetChannel() string {
 	return ""
 }
 
-func (x *ListChannelUploadsRequest) GetOffset() int32 {
+func (x *ListChannelUploadsRequest) GetPageToken() string {
 	if x != nil {
-		return x.Offset
+		return x.PageToken
 	}
-	return 0
+	return ""
 }
 
-func (x *ListChannelUploadsRequest) GetLimit() int32 {
+// SortOption is one of the orderings YouTube offers for a channel, carrying the
+// token that selects it. The list is whatever YouTube returned rather than a
+// fixed set, so a channel offering fewer of them cannot produce a dead control.
+type SortOption struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SortOption) Reset() {
+	*x = SortOption{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SortOption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SortOption) ProtoMessage() {}
+
+func (x *SortOption) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[1]
 	if x != nil {
-		return x.Limit
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return 0
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SortOption.ProtoReflect.Descriptor instead.
+func (*SortOption) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SortOption) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *SortOption) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
 }
 
 type ListChannelUploadsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Videos        []*ExternalVideo       `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
+	SortOptions   []*SortOption          `protobuf:"bytes,2,rep,name=sort_options,json=sortOptions,proto3" json:"sort_options,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListChannelUploadsResponse) Reset() {
 	*x = ListChannelUploadsResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[1]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -162,7 +213,7 @@ func (x *ListChannelUploadsResponse) String() string {
 func (*ListChannelUploadsResponse) ProtoMessage() {}
 
 func (x *ListChannelUploadsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[1]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -175,7 +226,7 @@ func (x *ListChannelUploadsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChannelUploadsResponse.ProtoReflect.Descriptor instead.
 func (*ListChannelUploadsResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{1}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListChannelUploadsResponse) GetVideos() []*ExternalVideo {
@@ -183,6 +234,20 @@ func (x *ListChannelUploadsResponse) GetVideos() []*ExternalVideo {
 		return x.Videos
 	}
 	return nil
+}
+
+func (x *ListChannelUploadsResponse) GetSortOptions() []*SortOption {
+	if x != nil {
+		return x.SortOptions
+	}
+	return nil
+}
+
+func (x *ListChannelUploadsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type ExpandLibraryRequest struct {
@@ -197,7 +262,7 @@ type ExpandLibraryRequest struct {
 
 func (x *ExpandLibraryRequest) Reset() {
 	*x = ExpandLibraryRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[2]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -209,7 +274,7 @@ func (x *ExpandLibraryRequest) String() string {
 func (*ExpandLibraryRequest) ProtoMessage() {}
 
 func (x *ExpandLibraryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[2]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -222,7 +287,7 @@ func (x *ExpandLibraryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpandLibraryRequest.ProtoReflect.Descriptor instead.
 func (*ExpandLibraryRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{2}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ExpandLibraryRequest) GetTopic() string {
@@ -248,7 +313,7 @@ type ExpandLibraryResponse struct {
 
 func (x *ExpandLibraryResponse) Reset() {
 	*x = ExpandLibraryResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[3]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -260,7 +325,7 @@ func (x *ExpandLibraryResponse) String() string {
 func (*ExpandLibraryResponse) ProtoMessage() {}
 
 func (x *ExpandLibraryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[3]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -273,7 +338,7 @@ func (x *ExpandLibraryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpandLibraryResponse.ProtoReflect.Descriptor instead.
 func (*ExpandLibraryResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{3}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ExpandLibraryResponse) GetVideosAdded() int32 {
@@ -309,7 +374,7 @@ type ExternalVideo struct {
 
 func (x *ExternalVideo) Reset() {
 	*x = ExternalVideo{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[4]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -321,7 +386,7 @@ func (x *ExternalVideo) String() string {
 func (*ExternalVideo) ProtoMessage() {}
 
 func (x *ExternalVideo) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[4]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -334,7 +399,7 @@ func (x *ExternalVideo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalVideo.ProtoReflect.Descriptor instead.
 func (*ExternalVideo) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{4}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ExternalVideo) GetId() string {
@@ -438,7 +503,7 @@ type SearchRequest struct {
 
 func (x *SearchRequest) Reset() {
 	*x = SearchRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[5]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -450,7 +515,7 @@ func (x *SearchRequest) String() string {
 func (*SearchRequest) ProtoMessage() {}
 
 func (x *SearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[5]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -463,7 +528,7 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
 func (*SearchRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{5}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SearchRequest) GetQuery() string {
@@ -489,7 +554,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[6]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +566,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[6]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +579,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{6}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SearchResponse) GetVideos() []*ExternalVideo {
@@ -533,7 +598,7 @@ type EnsureVideoRequest struct {
 
 func (x *EnsureVideoRequest) Reset() {
 	*x = EnsureVideoRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[7]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -545,7 +610,7 @@ func (x *EnsureVideoRequest) String() string {
 func (*EnsureVideoRequest) ProtoMessage() {}
 
 func (x *EnsureVideoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[7]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,7 +623,7 @@ func (x *EnsureVideoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureVideoRequest.ProtoReflect.Descriptor instead.
 func (*EnsureVideoRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{7}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *EnsureVideoRequest) GetUrl() string {
@@ -578,7 +643,7 @@ type EnsureVideoResponse struct {
 
 func (x *EnsureVideoResponse) Reset() {
 	*x = EnsureVideoResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[8]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -590,7 +655,7 @@ func (x *EnsureVideoResponse) String() string {
 func (*EnsureVideoResponse) ProtoMessage() {}
 
 func (x *EnsureVideoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[8]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -603,7 +668,7 @@ func (x *EnsureVideoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureVideoResponse.ProtoReflect.Descriptor instead.
 func (*EnsureVideoResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{8}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EnsureVideoResponse) GetVideoId() string {
@@ -621,7 +686,7 @@ type RefreshRequest struct {
 
 func (x *RefreshRequest) Reset() {
 	*x = RefreshRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[9]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -633,7 +698,7 @@ func (x *RefreshRequest) String() string {
 func (*RefreshRequest) ProtoMessage() {}
 
 func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[9]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -646,7 +711,7 @@ func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshRequest.ProtoReflect.Descriptor instead.
 func (*RefreshRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{9}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{10}
 }
 
 type RefreshResponse struct {
@@ -658,7 +723,7 @@ type RefreshResponse struct {
 
 func (x *RefreshResponse) Reset() {
 	*x = RefreshResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[10]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -670,7 +735,7 @@ func (x *RefreshResponse) String() string {
 func (*RefreshResponse) ProtoMessage() {}
 
 func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[10]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -683,7 +748,7 @@ func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshResponse.ProtoReflect.Descriptor instead.
 func (*RefreshResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{10}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RefreshResponse) GetStatus() *ScanStatus {
@@ -701,7 +766,7 @@ type GetScanStatusRequest struct {
 
 func (x *GetScanStatusRequest) Reset() {
 	*x = GetScanStatusRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[11]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -713,7 +778,7 @@ func (x *GetScanStatusRequest) String() string {
 func (*GetScanStatusRequest) ProtoMessage() {}
 
 func (x *GetScanStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[11]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -726,7 +791,7 @@ func (x *GetScanStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScanStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetScanStatusRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{11}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{12}
 }
 
 type GetScanStatusResponse struct {
@@ -738,7 +803,7 @@ type GetScanStatusResponse struct {
 
 func (x *GetScanStatusResponse) Reset() {
 	*x = GetScanStatusResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[12]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +815,7 @@ func (x *GetScanStatusResponse) String() string {
 func (*GetScanStatusResponse) ProtoMessage() {}
 
 func (x *GetScanStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[12]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +828,7 @@ func (x *GetScanStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScanStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetScanStatusResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{12}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetScanStatusResponse) GetStatus() *ScanStatus {
@@ -790,7 +855,7 @@ type ScanStatus struct {
 
 func (x *ScanStatus) Reset() {
 	*x = ScanStatus{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[13]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -802,7 +867,7 @@ func (x *ScanStatus) String() string {
 func (*ScanStatus) ProtoMessage() {}
 
 func (x *ScanStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[13]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -815,7 +880,7 @@ func (x *ScanStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScanStatus.ProtoReflect.Descriptor instead.
 func (*ScanStatus) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{13}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ScanStatus) GetStartedAt() *timestamppb.Timestamp {
@@ -876,7 +941,7 @@ type ResolveStreamRequest struct {
 
 func (x *ResolveStreamRequest) Reset() {
 	*x = ResolveStreamRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[14]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -888,7 +953,7 @@ func (x *ResolveStreamRequest) String() string {
 func (*ResolveStreamRequest) ProtoMessage() {}
 
 func (x *ResolveStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[14]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -901,7 +966,7 @@ func (x *ResolveStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveStreamRequest.ProtoReflect.Descriptor instead.
 func (*ResolveStreamRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{14}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ResolveStreamRequest) GetVideoId() string {
@@ -927,7 +992,7 @@ type ResolveStreamResponse struct {
 
 func (x *ResolveStreamResponse) Reset() {
 	*x = ResolveStreamResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[15]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -939,7 +1004,7 @@ func (x *ResolveStreamResponse) String() string {
 func (*ResolveStreamResponse) ProtoMessage() {}
 
 func (x *ResolveStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[15]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -952,7 +1017,7 @@ func (x *ResolveStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveStreamResponse.ProtoReflect.Descriptor instead.
 func (*ResolveStreamResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{15}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ResolveStreamResponse) GetUrl() string {
@@ -995,7 +1060,7 @@ type SubmitRequest struct {
 
 func (x *SubmitRequest) Reset() {
 	*x = SubmitRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[16]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1007,7 +1072,7 @@ func (x *SubmitRequest) String() string {
 func (*SubmitRequest) ProtoMessage() {}
 
 func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[16]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1085,7 @@ func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRequest.ProtoReflect.Descriptor instead.
 func (*SubmitRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{16}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SubmitRequest) GetUrl() string {
@@ -1053,7 +1118,7 @@ type SubmitResponse struct {
 
 func (x *SubmitResponse) Reset() {
 	*x = SubmitResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[17]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1065,7 +1130,7 @@ func (x *SubmitResponse) String() string {
 func (*SubmitResponse) ProtoMessage() {}
 
 func (x *SubmitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[17]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1078,7 +1143,7 @@ func (x *SubmitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitResponse.ProtoReflect.Descriptor instead.
 func (*SubmitResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{17}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SubmitResponse) GetJob() *Job {
@@ -1110,7 +1175,7 @@ type Job struct {
 
 func (x *Job) Reset() {
 	*x = Job{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[18]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1122,7 +1187,7 @@ func (x *Job) String() string {
 func (*Job) ProtoMessage() {}
 
 func (x *Job) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[18]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1135,7 +1200,7 @@ func (x *Job) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Job.ProtoReflect.Descriptor instead.
 func (*Job) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{18}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Job) GetId() string {
@@ -1231,7 +1296,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[19]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1243,7 +1308,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[19]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1256,7 +1321,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{19}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetJobRequest) GetJobId() string {
@@ -1275,7 +1340,7 @@ type GetJobResponse struct {
 
 func (x *GetJobResponse) Reset() {
 	*x = GetJobResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[20]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1287,7 +1352,7 @@ func (x *GetJobResponse) String() string {
 func (*GetJobResponse) ProtoMessage() {}
 
 func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[20]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1300,7 +1365,7 @@ func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
 func (*GetJobResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{20}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetJobResponse) GetJob() *Job {
@@ -1321,7 +1386,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[21]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1333,7 +1398,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[21]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1346,7 +1411,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{21}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListJobsRequest) GetActiveOnly() bool {
@@ -1372,7 +1437,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[22]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1449,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[22]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1462,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{22}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -1416,7 +1481,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[23]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1428,7 +1493,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[23]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1441,7 +1506,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{23}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CancelJobRequest) GetJobId() string {
@@ -1459,7 +1524,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[24]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1471,7 +1536,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[24]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1484,20 +1549,26 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{24}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{25}
 }
 
 var File_ingest_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\n" +
-	"\x16ingest/v1/ingest.proto\x12\tingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"c\n" +
+	"\x16ingest/v1/ingest.proto\x12\tingest.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"T\n" +
 	"\x19ListChannelUploadsRequest\x12\x18\n" +
-	"\achannel\x18\x01 \x01(\tR\achannel\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"N\n" +
+	"\achannel\x18\x01 \x01(\tR\achannel\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\"8\n" +
+	"\n" +
+	"SortOption\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\xb0\x01\n" +
 	"\x1aListChannelUploadsResponse\x120\n" +
-	"\x06videos\x18\x01 \x03(\v2\x18.ingest.v1.ExternalVideoR\x06videos\"R\n" +
+	"\x06videos\x18\x01 \x03(\v2\x18.ingest.v1.ExternalVideoR\x06videos\x128\n" +
+	"\fsort_options\x18\x02 \x03(\v2\x15.ingest.v1.SortOptionR\vsortOptions\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"R\n" +
 	"\x14ExpandLibraryRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12$\n" +
 	"\x0eseed_video_ids\x18\x02 \x03(\tR\fseedVideoIds\":\n" +
@@ -1629,77 +1700,79 @@ func file_ingest_v1_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_ingest_v1_ingest_proto_goTypes = []any{
 	(JobState)(0),                      // 0: ingest.v1.JobState
 	(*ListChannelUploadsRequest)(nil),  // 1: ingest.v1.ListChannelUploadsRequest
-	(*ListChannelUploadsResponse)(nil), // 2: ingest.v1.ListChannelUploadsResponse
-	(*ExpandLibraryRequest)(nil),       // 3: ingest.v1.ExpandLibraryRequest
-	(*ExpandLibraryResponse)(nil),      // 4: ingest.v1.ExpandLibraryResponse
-	(*ExternalVideo)(nil),              // 5: ingest.v1.ExternalVideo
-	(*SearchRequest)(nil),              // 6: ingest.v1.SearchRequest
-	(*SearchResponse)(nil),             // 7: ingest.v1.SearchResponse
-	(*EnsureVideoRequest)(nil),         // 8: ingest.v1.EnsureVideoRequest
-	(*EnsureVideoResponse)(nil),        // 9: ingest.v1.EnsureVideoResponse
-	(*RefreshRequest)(nil),             // 10: ingest.v1.RefreshRequest
-	(*RefreshResponse)(nil),            // 11: ingest.v1.RefreshResponse
-	(*GetScanStatusRequest)(nil),       // 12: ingest.v1.GetScanStatusRequest
-	(*GetScanStatusResponse)(nil),      // 13: ingest.v1.GetScanStatusResponse
-	(*ScanStatus)(nil),                 // 14: ingest.v1.ScanStatus
-	(*ResolveStreamRequest)(nil),       // 15: ingest.v1.ResolveStreamRequest
-	(*ResolveStreamResponse)(nil),      // 16: ingest.v1.ResolveStreamResponse
-	(*SubmitRequest)(nil),              // 17: ingest.v1.SubmitRequest
-	(*SubmitResponse)(nil),             // 18: ingest.v1.SubmitResponse
-	(*Job)(nil),                        // 19: ingest.v1.Job
-	(*GetJobRequest)(nil),              // 20: ingest.v1.GetJobRequest
-	(*GetJobResponse)(nil),             // 21: ingest.v1.GetJobResponse
-	(*ListJobsRequest)(nil),            // 22: ingest.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),           // 23: ingest.v1.ListJobsResponse
-	(*CancelJobRequest)(nil),           // 24: ingest.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),          // 25: ingest.v1.CancelJobResponse
-	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
+	(*SortOption)(nil),                 // 2: ingest.v1.SortOption
+	(*ListChannelUploadsResponse)(nil), // 3: ingest.v1.ListChannelUploadsResponse
+	(*ExpandLibraryRequest)(nil),       // 4: ingest.v1.ExpandLibraryRequest
+	(*ExpandLibraryResponse)(nil),      // 5: ingest.v1.ExpandLibraryResponse
+	(*ExternalVideo)(nil),              // 6: ingest.v1.ExternalVideo
+	(*SearchRequest)(nil),              // 7: ingest.v1.SearchRequest
+	(*SearchResponse)(nil),             // 8: ingest.v1.SearchResponse
+	(*EnsureVideoRequest)(nil),         // 9: ingest.v1.EnsureVideoRequest
+	(*EnsureVideoResponse)(nil),        // 10: ingest.v1.EnsureVideoResponse
+	(*RefreshRequest)(nil),             // 11: ingest.v1.RefreshRequest
+	(*RefreshResponse)(nil),            // 12: ingest.v1.RefreshResponse
+	(*GetScanStatusRequest)(nil),       // 13: ingest.v1.GetScanStatusRequest
+	(*GetScanStatusResponse)(nil),      // 14: ingest.v1.GetScanStatusResponse
+	(*ScanStatus)(nil),                 // 15: ingest.v1.ScanStatus
+	(*ResolveStreamRequest)(nil),       // 16: ingest.v1.ResolveStreamRequest
+	(*ResolveStreamResponse)(nil),      // 17: ingest.v1.ResolveStreamResponse
+	(*SubmitRequest)(nil),              // 18: ingest.v1.SubmitRequest
+	(*SubmitResponse)(nil),             // 19: ingest.v1.SubmitResponse
+	(*Job)(nil),                        // 20: ingest.v1.Job
+	(*GetJobRequest)(nil),              // 21: ingest.v1.GetJobRequest
+	(*GetJobResponse)(nil),             // 22: ingest.v1.GetJobResponse
+	(*ListJobsRequest)(nil),            // 23: ingest.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),           // 24: ingest.v1.ListJobsResponse
+	(*CancelJobRequest)(nil),           // 25: ingest.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),          // 26: ingest.v1.CancelJobResponse
+	(*timestamppb.Timestamp)(nil),      // 27: google.protobuf.Timestamp
 }
 var file_ingest_v1_ingest_proto_depIdxs = []int32{
-	5,  // 0: ingest.v1.ListChannelUploadsResponse.videos:type_name -> ingest.v1.ExternalVideo
-	26, // 1: ingest.v1.ExternalVideo.published_at:type_name -> google.protobuf.Timestamp
-	5,  // 2: ingest.v1.SearchResponse.videos:type_name -> ingest.v1.ExternalVideo
-	14, // 3: ingest.v1.RefreshResponse.status:type_name -> ingest.v1.ScanStatus
-	14, // 4: ingest.v1.GetScanStatusResponse.status:type_name -> ingest.v1.ScanStatus
-	26, // 5: ingest.v1.ScanStatus.started_at:type_name -> google.protobuf.Timestamp
-	26, // 6: ingest.v1.ResolveStreamResponse.expires_at:type_name -> google.protobuf.Timestamp
-	19, // 7: ingest.v1.SubmitResponse.job:type_name -> ingest.v1.Job
-	0,  // 8: ingest.v1.Job.state:type_name -> ingest.v1.JobState
-	26, // 9: ingest.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	26, // 10: ingest.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
-	19, // 11: ingest.v1.GetJobResponse.job:type_name -> ingest.v1.Job
-	19, // 12: ingest.v1.ListJobsResponse.jobs:type_name -> ingest.v1.Job
-	6,  // 13: ingest.v1.IngestService.Search:input_type -> ingest.v1.SearchRequest
-	8,  // 14: ingest.v1.IngestService.EnsureVideo:input_type -> ingest.v1.EnsureVideoRequest
-	10, // 15: ingest.v1.IngestService.Refresh:input_type -> ingest.v1.RefreshRequest
-	12, // 16: ingest.v1.IngestService.GetScanStatus:input_type -> ingest.v1.GetScanStatusRequest
-	15, // 17: ingest.v1.IngestService.ResolveStream:input_type -> ingest.v1.ResolveStreamRequest
-	17, // 18: ingest.v1.IngestService.Submit:input_type -> ingest.v1.SubmitRequest
-	20, // 19: ingest.v1.IngestService.GetJob:input_type -> ingest.v1.GetJobRequest
-	22, // 20: ingest.v1.IngestService.ListJobs:input_type -> ingest.v1.ListJobsRequest
-	24, // 21: ingest.v1.IngestService.CancelJob:input_type -> ingest.v1.CancelJobRequest
-	3,  // 22: ingest.v1.IngestService.ExpandLibrary:input_type -> ingest.v1.ExpandLibraryRequest
-	1,  // 23: ingest.v1.IngestService.ListChannelUploads:input_type -> ingest.v1.ListChannelUploadsRequest
-	7,  // 24: ingest.v1.IngestService.Search:output_type -> ingest.v1.SearchResponse
-	9,  // 25: ingest.v1.IngestService.EnsureVideo:output_type -> ingest.v1.EnsureVideoResponse
-	11, // 26: ingest.v1.IngestService.Refresh:output_type -> ingest.v1.RefreshResponse
-	13, // 27: ingest.v1.IngestService.GetScanStatus:output_type -> ingest.v1.GetScanStatusResponse
-	16, // 28: ingest.v1.IngestService.ResolveStream:output_type -> ingest.v1.ResolveStreamResponse
-	18, // 29: ingest.v1.IngestService.Submit:output_type -> ingest.v1.SubmitResponse
-	21, // 30: ingest.v1.IngestService.GetJob:output_type -> ingest.v1.GetJobResponse
-	23, // 31: ingest.v1.IngestService.ListJobs:output_type -> ingest.v1.ListJobsResponse
-	25, // 32: ingest.v1.IngestService.CancelJob:output_type -> ingest.v1.CancelJobResponse
-	4,  // 33: ingest.v1.IngestService.ExpandLibrary:output_type -> ingest.v1.ExpandLibraryResponse
-	2,  // 34: ingest.v1.IngestService.ListChannelUploads:output_type -> ingest.v1.ListChannelUploadsResponse
-	24, // [24:35] is the sub-list for method output_type
-	13, // [13:24] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	6,  // 0: ingest.v1.ListChannelUploadsResponse.videos:type_name -> ingest.v1.ExternalVideo
+	2,  // 1: ingest.v1.ListChannelUploadsResponse.sort_options:type_name -> ingest.v1.SortOption
+	27, // 2: ingest.v1.ExternalVideo.published_at:type_name -> google.protobuf.Timestamp
+	6,  // 3: ingest.v1.SearchResponse.videos:type_name -> ingest.v1.ExternalVideo
+	15, // 4: ingest.v1.RefreshResponse.status:type_name -> ingest.v1.ScanStatus
+	15, // 5: ingest.v1.GetScanStatusResponse.status:type_name -> ingest.v1.ScanStatus
+	27, // 6: ingest.v1.ScanStatus.started_at:type_name -> google.protobuf.Timestamp
+	27, // 7: ingest.v1.ResolveStreamResponse.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 8: ingest.v1.SubmitResponse.job:type_name -> ingest.v1.Job
+	0,  // 9: ingest.v1.Job.state:type_name -> ingest.v1.JobState
+	27, // 10: ingest.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	27, // 11: ingest.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	20, // 12: ingest.v1.GetJobResponse.job:type_name -> ingest.v1.Job
+	20, // 13: ingest.v1.ListJobsResponse.jobs:type_name -> ingest.v1.Job
+	7,  // 14: ingest.v1.IngestService.Search:input_type -> ingest.v1.SearchRequest
+	9,  // 15: ingest.v1.IngestService.EnsureVideo:input_type -> ingest.v1.EnsureVideoRequest
+	11, // 16: ingest.v1.IngestService.Refresh:input_type -> ingest.v1.RefreshRequest
+	13, // 17: ingest.v1.IngestService.GetScanStatus:input_type -> ingest.v1.GetScanStatusRequest
+	16, // 18: ingest.v1.IngestService.ResolveStream:input_type -> ingest.v1.ResolveStreamRequest
+	18, // 19: ingest.v1.IngestService.Submit:input_type -> ingest.v1.SubmitRequest
+	21, // 20: ingest.v1.IngestService.GetJob:input_type -> ingest.v1.GetJobRequest
+	23, // 21: ingest.v1.IngestService.ListJobs:input_type -> ingest.v1.ListJobsRequest
+	25, // 22: ingest.v1.IngestService.CancelJob:input_type -> ingest.v1.CancelJobRequest
+	4,  // 23: ingest.v1.IngestService.ExpandLibrary:input_type -> ingest.v1.ExpandLibraryRequest
+	1,  // 24: ingest.v1.IngestService.ListChannelUploads:input_type -> ingest.v1.ListChannelUploadsRequest
+	8,  // 25: ingest.v1.IngestService.Search:output_type -> ingest.v1.SearchResponse
+	10, // 26: ingest.v1.IngestService.EnsureVideo:output_type -> ingest.v1.EnsureVideoResponse
+	12, // 27: ingest.v1.IngestService.Refresh:output_type -> ingest.v1.RefreshResponse
+	14, // 28: ingest.v1.IngestService.GetScanStatus:output_type -> ingest.v1.GetScanStatusResponse
+	17, // 29: ingest.v1.IngestService.ResolveStream:output_type -> ingest.v1.ResolveStreamResponse
+	19, // 30: ingest.v1.IngestService.Submit:output_type -> ingest.v1.SubmitResponse
+	22, // 31: ingest.v1.IngestService.GetJob:output_type -> ingest.v1.GetJobResponse
+	24, // 32: ingest.v1.IngestService.ListJobs:output_type -> ingest.v1.ListJobsResponse
+	26, // 33: ingest.v1.IngestService.CancelJob:output_type -> ingest.v1.CancelJobResponse
+	5,  // 34: ingest.v1.IngestService.ExpandLibrary:output_type -> ingest.v1.ExpandLibraryResponse
+	3,  // 35: ingest.v1.IngestService.ListChannelUploads:output_type -> ingest.v1.ListChannelUploadsResponse
+	25, // [25:36] is the sub-list for method output_type
+	14, // [14:25] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_ingest_v1_ingest_proto_init() }
@@ -1713,7 +1786,7 @@ func file_ingest_v1_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ingest_v1_ingest_proto_rawDesc), len(file_ingest_v1_ingest_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

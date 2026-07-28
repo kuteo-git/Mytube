@@ -4,6 +4,9 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,19 +16,33 @@ import (
 
 type Ingest struct {
 	downloader    domain.Downloader
+	channels      domain.ChannelSource
 	store         domain.JobStore
 	library       domain.Library
 	defaultHeight int32
 	newID         func() string
+	logger        *slog.Logger
 }
 
-func New(downloader domain.Downloader, store domain.JobStore, library domain.Library, defaultHeight int32) *Ingest {
+func New(
+	downloader domain.Downloader,
+	channels domain.ChannelSource,
+	store domain.JobStore,
+	library domain.Library,
+	defaultHeight int32,
+	logger *slog.Logger,
+) *Ingest {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	return &Ingest{
 		downloader:    downloader,
+		channels:      channels,
 		store:         store,
 		library:       library,
 		defaultHeight: defaultHeight,
 		newID:         uuid.NewString,
+		logger:        logger,
 	}
 }
 
@@ -88,30 +105,79 @@ func (i *Ingest) EnsureVideo(ctx context.Context, url string) (string, error) {
 	return meta.ID, nil
 }
 
+// fallbackChannelPage is the page size used when the browse API is unavailable
+// and the flat playlist listing has to stand in.
+const fallbackChannelPage = 30
+
 // ListChannelUploads reads a channel's uploads straight from YouTube.
 //
 // The channel page uses this instead of the local catalog: a scan only ever
 // brings in the most recent few dozen uploads, so browsing a channel through
-// the catalog would hit a wall that has nothing to do with the channel. Results
-// are annotated with whether each video is already local, which is the
-// difference between opening instantly and waiting for a fetch.
-func (i *Ingest) ListChannelUploads(ctx context.Context, channel string, offset, limit int32) ([]domain.ExternalVideo, error) {
+// the catalog would hit a wall that has nothing to do with the channel.
+//
+// YouTube's internal browse API is tried first, because it is the only source
+// that carries view counts, upload dates and the channel's own sort options. It
+// is undocumented, so any failure falls back to the flat playlist listing —
+// which always works but knows none of those three things.
+func (i *Ingest) ListChannelUploads(ctx context.Context, channel, pageToken string) (domain.ChannelUploads, error) {
 	channel = strings.TrimSpace(channel)
 	if channel == "" {
-		return nil, fmt.Errorf("%w: channel is required", domain.ErrInvalid)
+		return domain.ChannelUploads{}, fmt.Errorf("%w: channel is required", domain.ErrInvalid)
 	}
 
-	_, videos, err := i.downloader.ListPlaylist(ctx, channelUploadsURL(channel), offset, limit)
+	if uploads, err := i.channelUploadsViaBrowse(ctx, channel, pageToken); err != nil {
+		i.logger.Warn("channel uploads via browse", "channel", channel, "error", err)
+	} else if len(uploads.Videos) > 0 {
+		i.markInLibrary(ctx, uploads.Videos)
+		return uploads, nil
+	}
+
+	// The fallback pages by offset rather than by token, so the page token is
+	// simply the numeric offset the flat listing understands.
+	offset, _ := strconv.Atoi(pageToken)
+	if offset < 0 {
+		offset = 0
+	}
+
+	_, videos, err := i.downloader.ListPlaylist(ctx, channelUploadsURL(channel), int32(offset), fallbackChannelPage)
 	if err != nil {
-		return nil, err
+		return domain.ChannelUploads{}, err
+	}
+	i.markInLibrary(ctx, videos)
+
+	next := ""
+	if len(videos) >= fallbackChannelPage {
+		next = strconv.Itoa(offset + len(videos))
+	}
+	return domain.ChannelUploads{Videos: videos, NextPageToken: next}, nil
+}
+
+func (i *Ingest) channelUploadsViaBrowse(ctx context.Context, channel, pageToken string) (domain.ChannelUploads, error) {
+	if i.channels == nil {
+		return domain.ChannelUploads{}, fmt.Errorf("no channel source configured")
 	}
 
+	// A continuation token already encodes both the channel and the ordering it
+	// belongs to, so resolving the id again would be wasted work.
+	browseID := ""
+	if pageToken == "" {
+		id, err := i.channels.ResolveChannelID(ctx, channel)
+		if err != nil {
+			return domain.ChannelUploads{}, err
+		}
+		browseID = id
+	}
+	return i.channels.ChannelUploads(ctx, browseID, pageToken)
+}
+
+// markInLibrary annotates results with whether each video already has a catalog
+// row — the difference between opening instantly and waiting for a fetch.
+func (i *Ingest) markInLibrary(ctx context.Context, videos []domain.ExternalVideo) {
 	for idx := range videos {
 		if _, found, err := i.library.FindBySourceURL(ctx, videos[idx].SourceURL); err == nil {
 			videos[idx].InLibrary = found
 		}
 	}
-	return videos, nil
 }
 
 // channelUploadsURL accepts either a handle or a bare channel id, since the

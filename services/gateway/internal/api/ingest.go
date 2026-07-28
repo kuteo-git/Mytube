@@ -63,9 +63,20 @@ type externalVideoDTO struct {
 	ViewCount       int64  `json:"viewCount"`
 	ThumbnailURL    string `json:"thumbnailUrl"`
 	SourceURL       string `json:"sourceUrl"`
+	// Empty when unknown. A flat listing carries no upload date, and printing a
+	// made-up one would render as "1 minute ago" on every card.
+	PublishedAt string `json:"publishedAt,omitempty"`
 	// True when the video already has a catalog row, which is what decides
 	// whether opening it plays immediately or starts a download.
 	InLibrary bool `json:"inLibrary"`
+}
+
+// sortOptionDTO is one ordering a channel offers, with the opaque token that
+// selects it. The set comes from YouTube, so a channel that offers fewer
+// orderings simply renders fewer controls.
+type sortOptionDTO struct {
+	Label string `json:"label"`
+	Token string `json:"token"`
 }
 
 // handleDiscover searches upstream. It runs on every search, not only when the

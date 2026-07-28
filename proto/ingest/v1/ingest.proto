@@ -47,12 +47,23 @@ service IngestService {
 message ListChannelUploadsRequest {
   // Channel handle ("@mkbhd") or bare channel id ("UC...").
   string channel = 1;
-  int32 offset = 2;
-  int32 limit = 3;
+  // Opaque. Empty starts at the channel's default ordering; otherwise it is
+  // either a sort option's token or the previous page's next_page_token.
+  string page_token = 2;
+}
+
+// SortOption is one of the orderings YouTube offers for a channel, carrying the
+// token that selects it. The list is whatever YouTube returned rather than a
+// fixed set, so a channel offering fewer of them cannot produce a dead control.
+message SortOption {
+  string label = 1;
+  string token = 2;
 }
 
 message ListChannelUploadsResponse {
   repeated ExternalVideo videos = 1;
+  repeated SortOption sort_options = 2;
+  string next_page_token = 3;
 }
 
 message ExpandLibraryRequest {

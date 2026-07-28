@@ -38,7 +38,7 @@ export interface CatalogRepository {
   addComment(videoId: string, text: string, parentCommentId?: string): Promise<Comment>
 
   getChannel(channelId: string): Promise<ChannelPage>
-  listChannelVideos(channelId: string, offset?: number): Promise<ChannelUploads>
+  listChannelVideos(channelId: string, pageToken?: string): Promise<ChannelUploads>
   setSubscription(channelId: string, subscribed: boolean): Promise<void>
   listSubscriptions(): Promise<Channel[]>
 }
@@ -51,11 +51,22 @@ export interface ChannelPage {
 /**
  * A page of a channel's uploads, read live from YouTube rather than from the
  * local library — so browsing a channel is not capped at whatever a scan
- * happened to bring in. `nextOffset` is 0 when the channel has run out.
+ * happened to bring in.
+ *
+ * `sortOptions` is whatever orderings YouTube offers for that channel, not a
+ * fixed list, so the control can never present an ordering that does nothing.
+ * `nextPageToken` is empty when the channel has run out.
  */
 export interface ChannelUploads {
   videos: ExternalVideo[]
-  nextOffset: number
+  sortOptions: SortOption[]
+  nextPageToken: string
+}
+
+export interface SortOption {
+  label: string
+  /** Opaque; selecting an ordering means passing this back as the page token. */
+  token: string
 }
 
 export interface Feed {
@@ -77,6 +88,8 @@ export interface ExternalVideo {
   viewCount: number
   thumbnailUrl: string
   sourceUrl: string
+  /** ISO 8601, or absent when the source did not disclose an upload date. */
+  publishedAt?: string
   inLibrary: boolean
 }
 
@@ -264,9 +277,10 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<ChannelPage>(`/channels/${encodeURIComponent(channelId)}`)
   },
 
-  listChannelVideos(channelId, offset) {
-    const suffix = offset ? `?offset=${offset}` : ''
-    return request<ChannelUploads>(`/channels/${encodeURIComponent(channelId)}/videos${suffix}`)
+  listChannelVideos(channelId, pageToken) {
+    return request<ChannelUploads>(
+      `/channels/${encodeURIComponent(channelId)}/videos${query({ pageToken })}`,
+    )
   },
 
   setSubscription(channelId, subscribed) {

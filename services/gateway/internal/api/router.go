@@ -494,20 +494,9 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 		lookup = channelID
 	}
 
-	pageSize := intParam(r, "pageSize", 30)
-	offset := intParam(r, "offset", 0)
-	// intParam treats 0 as absent and returns the fallback, so offset needs its
-	// own parse: page 1 legitimately starts at zero.
-	if raw := r.URL.Query().Get("offset"); raw != "" {
-		if v, convErr := strconv.Atoi(raw); convErr == nil && v >= 0 {
-			offset = int32(v)
-		}
-	}
-
 	resp, err := g.ingest.ListChannelUploads(ctx, connect.NewRequest(&ingestv1.ListChannelUploadsRequest{
-		Channel: lookup,
-		Offset:  offset,
-		Limit:   pageSize,
+		Channel:   lookup,
+		PageToken: r.URL.Query().Get("pageToken"),
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
@@ -516,7 +505,7 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))
 	for _, v := range resp.Msg.GetVideos() {
-		out = append(out, externalVideoDTO{
+		dto := externalVideoDTO{
 			ID:              v.GetId(),
 			Title:           v.GetTitle(),
 			ChannelName:     v.GetChannelName(),
@@ -525,15 +514,25 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 			ThumbnailURL:    v.GetThumbnailUrl(),
 			SourceURL:       v.GetSourceUrl(),
 			InLibrary:       v.GetInLibrary(),
-		})
+		}
+		// Sent as an empty string when unknown, so the client omits the line
+		// rather than printing an invented date.
+		if ts := v.GetPublishedAt(); ts != nil && ts.AsTime().Unix() > 0 {
+			dto.PublishedAt = ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+		}
+		out = append(out, dto)
 	}
 
-	// A short page means the channel ran out; that is what ends the scroll.
-	nextOffset := 0
-	if int32(len(out)) >= pageSize {
-		nextOffset = int(offset) + len(out)
+	sorts := make([]sortOptionDTO, 0, len(resp.Msg.GetSortOptions()))
+	for _, o := range resp.Msg.GetSortOptions() {
+		sorts = append(sorts, sortOptionDTO{Label: o.GetLabel(), Token: o.GetToken()})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"videos": out, "nextOffset": nextOffset})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"videos":        out,
+		"sortOptions":   sorts,
+		"nextPageToken": resp.Msg.GetNextPageToken(),
+	})
 }
 
 type setSubscriptionRequest struct {

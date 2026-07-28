@@ -17,8 +17,12 @@ import (
 // becomes a row that the feed can rank, and bytes are fetched later, if and
 // when someone presses play.
 type Scanner struct {
-	topics   domain.TopicSource
-	fetch    domain.Downloader
+	topics domain.TopicSource
+	fetch  domain.Downloader
+	// channels is YouTube's own browse API. Preferred over the flat playlist
+	// listing because it is the only source that carries view counts and upload
+	// dates; it is undocumented, so every use falls back to fetch.
+	channels domain.ChannelSource
 	library  domain.Library
 	logger   *slog.Logger
 	interval time.Duration
@@ -30,10 +34,18 @@ type Scanner struct {
 	lastScan domain.ScanResult
 }
 
-func NewScanner(topics domain.TopicSource, fetch domain.Downloader, library domain.Library, logger *slog.Logger, interval time.Duration) *Scanner {
+func NewScanner(
+	topics domain.TopicSource,
+	fetch domain.Downloader,
+	channels domain.ChannelSource,
+	library domain.Library,
+	logger *slog.Logger,
+	interval time.Duration,
+) *Scanner {
 	return &Scanner{
 		topics:   topics,
 		fetch:    fetch,
+		channels: channels,
 		library:  library,
 		logger:   logger,
 		interval: interval,
@@ -94,17 +106,26 @@ func (s *Scanner) ScanNow(ctx context.Context) (domain.ScanResult, error) {
 
 	targets := s.sources(ctx, config)
 
-	// Channel artwork is fetched once per source per scan, ahead of the video
-	// listing: it is decoration, and a failure here must never cost a source
-	// its videos.
+	// Channel metadata is fetched once per source per scan. It carries the
+	// artwork, and it is also the only place the channel's real identity is
+	// known: the browse listing returns videos without saying whose they are,
+	// so without this every scanned video would be attributed to a synthetic
+	// channel invented from the source URL.
+	owners := make(map[string]domain.ChannelMetadata, len(targets))
 	for _, target := range targets {
-		if meta, err := s.fetch.ChannelInfo(ctx, target.URL); err != nil {
+		meta, err := s.fetch.ChannelInfo(ctx, target.URL)
+		if err != nil {
 			s.logger.Warn("channel info", "source", target.URL, "error", err)
-		} else if meta.ID != "" {
-			avatar, banner := s.fetch.FetchChannelArtwork(ctx, meta)
-			if err := s.library.UpsertChannelArtwork(ctx, meta, avatar, banner); err != nil {
-				s.logger.Warn("store channel artwork", "channel", meta.ID, "error", err)
-			}
+			continue
+		}
+		if meta.ID == "" {
+			continue
+		}
+
+		owners[target.URL] = meta
+		avatar, banner := s.fetch.FetchChannelArtwork(ctx, meta)
+		if err := s.library.UpsertChannelArtwork(ctx, meta, avatar, banner); err != nil {
+			s.logger.Warn("store channel artwork", "channel", meta.ID, "error", err)
 		}
 	}
 
@@ -113,7 +134,7 @@ func (s *Scanner) ScanNow(ctx context.Context) (domain.ScanResult, error) {
 			return result, ctx.Err()
 		}
 
-		seen, added, err := s.scanSource(ctx, target.TopicName, target.URL, config.PerSourceLimit)
+		seen, added, err := s.scanSource(ctx, target.TopicName, target.URL, owners[target.URL], config.PerSourceLimit)
 		result.SourcesScanned++
 		result.VideosSeen += seen
 		result.VideosAdded += added
@@ -142,8 +163,13 @@ func (s *Scanner) ScanNow(ctx context.Context) (domain.ScanResult, error) {
 	return result, nil
 }
 
-func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limit int32) (seen, added int, err error) {
-	_, videos, err := s.fetch.ListPlaylist(ctx, source, 0, limit)
+func (s *Scanner) scanSource(
+	ctx context.Context,
+	topicName, source string,
+	owner domain.ChannelMetadata,
+	limit int32,
+) (seen, added int, err error) {
+	videos, err := s.listSource(ctx, source, limit)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -163,13 +189,24 @@ func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limi
 			v.Topics = []string{topicName}
 		}
 
-		// Flat listings omit the channel for some sources; without one the
-		// catalog row cannot be written, so fall back to the source itself.
+		// Neither listing reliably names the owner: a flat listing omits it for
+		// some sources, and the browse listing never carries it at all. The
+		// channel metadata fetched once for this source is the answer, and
+		// without it the catalog rejects the row outright.
 		if v.ChannelID == "" {
-			v.ChannelID = "src:" + source
-			if v.ChannelName == "" {
-				v.ChannelName = topicName
-			}
+			v.ChannelID = owner.ID
+		}
+		if v.ChannelName == "" {
+			v.ChannelName = owner.Name
+		}
+		if v.ChannelHandle == "" {
+			v.ChannelHandle = owner.Handle
+		}
+		if v.ChannelID == "" || v.ChannelName == "" {
+			// Attributing the video to an invented channel would put a row in
+			// the catalog that no channel page can ever show.
+			s.logger.Warn("skipping video with no known channel", "video", v.ID, "source", source)
+			continue
 		}
 
 		if err := s.library.UpsertChannel(ctx, v); err != nil {
@@ -187,6 +224,83 @@ func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limi
 	}
 
 	return seen, added, nil
+}
+
+// listSource reads a source's videos, preferring YouTube's browse API.
+//
+// The flat playlist listing yt-dlp produces carries neither view counts nor
+// upload dates, which is why almost every card in the library used to show a
+// bare title. Browse carries both. It is an undocumented API, so this falls
+// back to the flat listing on any failure — a scan that loses view counts is a
+// working scan, a scan that fails is not.
+//
+// Playlist sources are left to yt-dlp: browse addresses channels, and a
+// playlist is not one.
+func (s *Scanner) listSource(ctx context.Context, source string, limit int32) ([]domain.ExternalVideo, error) {
+	if s.channels != nil && !strings.Contains(source, "list=") {
+		videos, err := s.listViaBrowse(ctx, source, limit)
+		if err != nil {
+			s.logger.Warn("browse listing, falling back to flat listing",
+				"source", source, "error", err)
+		} else if len(videos) > 0 {
+			return videos, nil
+		}
+	}
+
+	_, videos, err := s.fetch.ListPlaylist(ctx, source, 0, limit)
+	return videos, err
+}
+
+// listViaBrowse pages the browse API until it has enough videos, since one
+// browse page is thirty and per_source_limit may be larger.
+func (s *Scanner) listViaBrowse(ctx context.Context, source string, limit int32) ([]domain.ExternalVideo, error) {
+	browseID, err := s.channels.ResolveChannelID(ctx, channelRefFromURL(source))
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		out   []domain.ExternalVideo
+		token string
+	)
+	for int32(len(out)) < limit {
+		page, err := s.channels.ChannelUploads(ctx, browseID, token)
+		if err != nil {
+			// Whatever arrived so far is still usable; the caller decides
+			// whether it is enough to skip the fallback.
+			return out, err
+		}
+		if len(page.Videos) == 0 {
+			break
+		}
+
+		out = append(out, page.Videos...)
+		token = page.NextPageToken
+		if token == "" {
+			break
+		}
+		// Continuations address the channel on their own, so the id is only
+		// needed for the first request.
+		browseID = ""
+	}
+
+	if int32(len(out)) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// channelRefFromURL reduces a source URL to the handle or channel id the browse
+// API addresses channels by.
+func channelRefFromURL(source string) string {
+	trimmed := strings.TrimSuffix(strings.TrimSuffix(source, "/"), "/videos")
+	if idx := strings.LastIndex(trimmed, "/channel/"); idx >= 0 {
+		return trimmed[idx+len("/channel/"):]
+	}
+	if idx := strings.LastIndex(trimmed, "/@"); idx >= 0 {
+		return trimmed[idx+1:]
+	}
+	return trimmed
 }
 
 // scanTarget is one thing to scan. An empty TopicName marks a subscription:

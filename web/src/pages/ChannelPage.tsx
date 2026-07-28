@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useChannel, useChannelVideos } from '@/features/catalog/application/queries'
 import { ChannelHeader } from '@/features/catalog/ui/ChannelHeader'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { Pill } from '@/shared/ui/primitives'
 
 /**
  * A channel's own page. The video grid comes live from YouTube, paged as you
@@ -13,6 +15,12 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
  */
 export function ChannelPage() {
   const { channelId } = useParams()
+  const [sortToken, setSortToken] = useState<string | undefined>(undefined)
+
+  // A token belongs to one channel. Carrying it across a navigation would ask
+  // YouTube to continue a listing for a channel nobody is looking at.
+  useEffect(() => setSortToken(undefined), [channelId])
+
   const { data: channelPage, isPending: channelPending, isError: channelError } =
     useChannel(channelId)
   const {
@@ -22,9 +30,11 @@ export function ChannelPage() {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-  } = useChannelVideos(channelId)
+  } = useChannelVideos(channelId, sortToken)
 
   const videos = data?.pages.flatMap((page) => page.videos) ?? []
+  // Only the first page carries the chips; later pages are continuations.
+  const sortOptions = data?.pages[0]?.sortOptions ?? []
 
   if (channelError) {
     return <p className="py-16 text-center text-text-2">Channel not found.</p>
@@ -36,6 +46,33 @@ export function ChannelPage() {
         <div className="mt-4 aspect-[6/1] w-full animate-pulse rounded-xl bg-surface" />
       ) : (
         <ChannelHeader channel={channelPage.channel} videoCount={channelPage.videoCount} />
+      )}
+
+      {/* Orderings come from YouTube, so this row is empty rather than wrong
+          when a channel offers none — and never renders a control that would
+          do nothing. */}
+      {sortOptions.length > 1 && (
+        <div
+          role="group"
+          aria-label="Sort videos"
+          className="mt-6 flex flex-wrap gap-3 border-b border-line pb-4"
+        >
+          {sortOptions.map((option, index) => {
+            // The first option is the ordering the page loaded with, so it is
+            // the selected one until a chip is picked.
+            const active = sortToken === undefined ? index === 0 : sortToken === option.token
+            return (
+              <Pill
+                key={option.token}
+                active={active}
+                aria-pressed={active}
+                onClick={() => setSortToken(index === 0 ? undefined : option.token)}
+              >
+                {option.label}
+              </Pill>
+            )
+          })}
+        </div>
       )}
 
       {videosError ? (

@@ -203,16 +203,21 @@ export function useChannel(channelId: string | undefined) {
 }
 
 /**
- * A channel's uploads, live from YouTube and paged by offset. Not served from
- * the catalog: a scan only ever brings in the newest few dozen videos, and
- * capping the channel page at that would look like the channel had no more.
+ * A channel's uploads, live from YouTube. Not served from the catalog: a scan
+ * only ever brings in the newest few dozen videos, and capping the channel page
+ * at that would look like the channel itself had no more.
+ *
+ * `sortToken` selects an ordering. It is passed as the first page token because
+ * that is how YouTube models it — an ordering is just another continuation —
+ * and it is part of the query key so switching order refetches from the top
+ * rather than appending a differently-sorted page to the current one.
  */
-export function useChannelVideos(channelId: string | undefined) {
+export function useChannelVideos(channelId: string | undefined, sortToken?: string) {
   return useInfiniteQuery({
-    queryKey: ['channel-videos', channelId],
+    queryKey: ['channel-videos', channelId, sortToken ?? ''],
     queryFn: ({ pageParam }) => repo.listChannelVideos(channelId!, pageParam),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => lastPage.nextOffset || undefined,
+    initialPageParam: sortToken ?? '',
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
     enabled: Boolean(channelId),
   })
 }

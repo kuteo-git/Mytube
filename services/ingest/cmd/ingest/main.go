@@ -92,11 +92,17 @@ func main() {
 	logger.Info("preparing yt-dlp and ffmpeg")
 	downloader := ytdlp.New(ctx, mediaRoot)
 
+	// One client, shared: the browse API backs both channel browsing and the
+	// related-video layer of library expansion.
+	channels := innertube.New(nil)
+
 	ingest := usecase.New(
 		downloader,
+		channels,
 		postgres.New(pool),
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		defaultHeight,
+		logger,
 	)
 
 	go usecase.NewWorker(ingest, logger).Run(ctx)
@@ -107,6 +113,7 @@ func main() {
 	scanner := usecase.NewScanner(
 		topicfile.New(topicsPath),
 		downloader,
+		channels,
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		logger,
 		12*time.Hour,
@@ -116,7 +123,7 @@ func main() {
 	store := postgres.New(pool)
 	expander := usecase.NewExpander(
 		downloader,
-		innertube.New(nil),
+		channels,
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		topicfile.New(topicsPath),
 		store,

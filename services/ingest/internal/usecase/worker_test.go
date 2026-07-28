@@ -99,7 +99,7 @@ func (fakeStore) ReleaseExpired(context.Context) (int, error) { return 0, nil }
 func TestProcessPublishesSubtitlesBeforeMedia(t *testing.T) {
 	downloader := &fakeDownloader{}
 	library := &fakeLibrary{}
-	ingest := New(downloader, fakeStore{}, library, 1080)
+	ingest := New(downloader, nil, fakeStore{}, library, 1080, nil)
 	worker := NewWorker(ingest, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	err := worker.process(context.Background(), domain.Job{
