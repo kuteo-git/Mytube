@@ -292,8 +292,10 @@ type Video struct {
 	ThumbnailPath string                 `protobuf:"bytes,8,opt,name=thumbnail_path,json=thumbnailPath,proto3" json:"thumbnail_path,omitempty"`
 	Description   string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
 	Hashtags      []string               `protobuf:"bytes,10,rep,name=hashtags,proto3" json:"hashtags,omitempty"`
-	Categories    []string               `protobuf:"bytes,11,rep,name=categories,proto3" json:"categories,omitempty"`
-	MediaState    MediaState             `protobuf:"varint,12,opt,name=media_state,json=mediaState,proto3,enum=catalog.v1.MediaState" json:"media_state,omitempty"`
+	// Topic names this video was discovered under, from topics.yaml. A video
+	// found in two topics' sources carries both.
+	Topics     []string   `protobuf:"bytes,11,rep,name=topics,proto3" json:"topics,omitempty"`
+	MediaState MediaState `protobuf:"varint,12,opt,name=media_state,json=mediaState,proto3,enum=catalog.v1.MediaState" json:"media_state,omitempty"`
 	// Relative path of the playable file, empty unless media_state is READY.
 	MediaPath string `protobuf:"bytes,13,opt,name=media_path,json=mediaPath,proto3" json:"media_path,omitempty"`
 	SizeBytes int64  `protobuf:"varint,14,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
@@ -408,9 +410,9 @@ func (x *Video) GetHashtags() []string {
 	return nil
 }
 
-func (x *Video) GetCategories() []string {
+func (x *Video) GetTopics() []string {
 	if x != nil {
-		return x.Categories
+		return x.Topics
 	}
 	return nil
 }
@@ -1251,29 +1253,29 @@ func (x *GetChannelResponse) GetVideoCount() int32 {
 	return 0
 }
 
-type ListCategoriesRequest struct {
+type ListTopicsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Only categories with at least this many videos are returned, so the chip
-	// bar never shows a filter that yields an empty grid.
+	// Only topics with at least this many videos are returned, so the chip bar
+	// never shows a filter that yields an empty grid.
 	MinVideoCount int32 `protobuf:"varint,1,opt,name=min_video_count,json=minVideoCount,proto3" json:"min_video_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListCategoriesRequest) Reset() {
-	*x = ListCategoriesRequest{}
+func (x *ListTopicsRequest) Reset() {
+	*x = ListTopicsRequest{}
 	mi := &file_catalog_v1_catalog_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListCategoriesRequest) String() string {
+func (x *ListTopicsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListCategoriesRequest) ProtoMessage() {}
+func (*ListTopicsRequest) ProtoMessage() {}
 
-func (x *ListCategoriesRequest) ProtoReflect() protoreflect.Message {
+func (x *ListTopicsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_catalog_v1_catalog_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1285,39 +1287,39 @@ func (x *ListCategoriesRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCategoriesRequest.ProtoReflect.Descriptor instead.
-func (*ListCategoriesRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListTopicsRequest.ProtoReflect.Descriptor instead.
+func (*ListTopicsRequest) Descriptor() ([]byte, []int) {
 	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *ListCategoriesRequest) GetMinVideoCount() int32 {
+func (x *ListTopicsRequest) GetMinVideoCount() int32 {
 	if x != nil {
 		return x.MinVideoCount
 	}
 	return 0
 }
 
-type ListCategoriesResponse struct {
+type ListTopicsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Categories    []*Category            `protobuf:"bytes,1,rep,name=categories,proto3" json:"categories,omitempty"`
+	Topics        []*Topic               `protobuf:"bytes,1,rep,name=topics,proto3" json:"topics,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListCategoriesResponse) Reset() {
-	*x = ListCategoriesResponse{}
+func (x *ListTopicsResponse) Reset() {
+	*x = ListTopicsResponse{}
 	mi := &file_catalog_v1_catalog_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListCategoriesResponse) String() string {
+func (x *ListTopicsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListCategoriesResponse) ProtoMessage() {}
+func (*ListTopicsResponse) ProtoMessage() {}
 
-func (x *ListCategoriesResponse) ProtoReflect() protoreflect.Message {
+func (x *ListTopicsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_catalog_v1_catalog_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1329,19 +1331,19 @@ func (x *ListCategoriesResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListCategoriesResponse.ProtoReflect.Descriptor instead.
-func (*ListCategoriesResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListTopicsResponse.ProtoReflect.Descriptor instead.
+func (*ListTopicsResponse) Descriptor() ([]byte, []int) {
 	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *ListCategoriesResponse) GetCategories() []*Category {
+func (x *ListTopicsResponse) GetTopics() []*Topic {
 	if x != nil {
-		return x.Categories
+		return x.Topics
 	}
 	return nil
 }
 
-type Category struct {
+type Topic struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	VideoCount    int32                  `protobuf:"varint,2,opt,name=video_count,json=videoCount,proto3" json:"video_count,omitempty"`
@@ -1349,20 +1351,20 @@ type Category struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Category) Reset() {
-	*x = Category{}
+func (x *Topic) Reset() {
+	*x = Topic{}
 	mi := &file_catalog_v1_catalog_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Category) String() string {
+func (x *Topic) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Category) ProtoMessage() {}
+func (*Topic) ProtoMessage() {}
 
-func (x *Category) ProtoReflect() protoreflect.Message {
+func (x *Topic) ProtoReflect() protoreflect.Message {
 	mi := &file_catalog_v1_catalog_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1374,19 +1376,19 @@ func (x *Category) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Category.ProtoReflect.Descriptor instead.
-func (*Category) Descriptor() ([]byte, []int) {
+// Deprecated: Use Topic.ProtoReflect.Descriptor instead.
+func (*Topic) Descriptor() ([]byte, []int) {
 	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *Category) GetName() string {
+func (x *Topic) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Category) GetVideoCount() int32 {
+func (x *Topic) GetVideoCount() int32 {
 	if x != nil {
 		return x.VideoCount
 	}
@@ -1503,7 +1505,7 @@ type VideoFeatures struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	VideoId         string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
 	ChannelId       string                 `protobuf:"bytes,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
-	Categories      []string               `protobuf:"bytes,3,rep,name=categories,proto3" json:"categories,omitempty"`
+	Topics          []string               `protobuf:"bytes,3,rep,name=topics,proto3" json:"topics,omitempty"`
 	Hashtags        []string               `protobuf:"bytes,4,rep,name=hashtags,proto3" json:"hashtags,omitempty"`
 	PublishedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
 	AddedAt         *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
@@ -1557,9 +1559,9 @@ func (x *VideoFeatures) GetChannelId() string {
 	return ""
 }
 
-func (x *VideoFeatures) GetCategories() []string {
+func (x *VideoFeatures) GetTopics() []string {
 	if x != nil {
-		return x.Categories
+		return x.Topics
 	}
 	return nil
 }
@@ -2867,7 +2869,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\bverified\x18\x06 \x01(\bR\bverified\x12\x1e\n" +
 	"\n" +
 	"subscribed\x18\a \x01(\bR\n" +
-	"subscribed\"\xbd\x05\n" +
+	"subscribed\"\xb5\x05\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12-\n" +
@@ -2880,10 +2882,8 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x0ethumbnail_path\x18\b \x01(\tR\rthumbnailPath\x12 \n" +
 	"\vdescription\x18\t \x01(\tR\vdescription\x12\x1a\n" +
 	"\bhashtags\x18\n" +
-	" \x03(\tR\bhashtags\x12\x1e\n" +
-	"\n" +
-	"categories\x18\v \x03(\tR\n" +
-	"categories\x127\n" +
+	" \x03(\tR\bhashtags\x12\x16\n" +
+	"\x06topics\x18\v \x03(\tR\x06topics\x127\n" +
 	"\vmedia_state\x18\f \x01(\x0e2\x16.catalog.v1.MediaStateR\n" +
 	"mediaState\x12\x1d\n" +
 	"\n" +
@@ -2959,14 +2959,12 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x12GetChannelResponse\x12-\n" +
 	"\achannel\x18\x01 \x01(\v2\x13.catalog.v1.ChannelR\achannel\x12\x1f\n" +
 	"\vvideo_count\x18\x02 \x01(\x05R\n" +
-	"videoCount\"?\n" +
-	"\x15ListCategoriesRequest\x12&\n" +
-	"\x0fmin_video_count\x18\x01 \x01(\x05R\rminVideoCount\"N\n" +
-	"\x16ListCategoriesResponse\x124\n" +
-	"\n" +
-	"categories\x18\x01 \x03(\v2\x14.catalog.v1.CategoryR\n" +
-	"categories\"?\n" +
-	"\bCategory\x12\x12\n" +
+	"videoCount\";\n" +
+	"\x11ListTopicsRequest\x12&\n" +
+	"\x0fmin_video_count\x18\x01 \x01(\x05R\rminVideoCount\"?\n" +
+	"\x12ListTopicsResponse\x12)\n" +
+	"\x06topics\x18\x01 \x03(\v2\x11.catalog.v1.TopicR\x06topics\"<\n" +
+	"\x05Topic\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vvideo_count\x18\x02 \x01(\x05R\n" +
 	"videoCount\"V\n" +
@@ -2976,14 +2974,12 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"v\n" +
 	"\x19ListVideoFeaturesResponse\x121\n" +
 	"\x06videos\x18\x01 \x03(\v2\x19.catalog.v1.VideoFeaturesR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xdf\x02\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd7\x02\n" +
 	"\rVideoFeatures\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x1d\n" +
 	"\n" +
-	"channel_id\x18\x02 \x01(\tR\tchannelId\x12\x1e\n" +
-	"\n" +
-	"categories\x18\x03 \x03(\tR\n" +
-	"categories\x12\x1a\n" +
+	"channel_id\x18\x02 \x01(\tR\tchannelId\x12\x16\n" +
+	"\x06topics\x18\x03 \x03(\tR\x06topics\x12\x1a\n" +
 	"\bhashtags\x18\x04 \x03(\tR\bhashtags\x12=\n" +
 	"\fpublished_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x125\n" +
 	"\badded_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\aaddedAt\x12)\n" +
@@ -3092,15 +3088,16 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\vCommentSort\x12\x1c\n" +
 	"\x18COMMENT_SORT_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10COMMENT_SORT_TOP\x10\x01\x12\x17\n" +
-	"\x13COMMENT_SORT_NEWEST\x10\x022\xf8\f\n" +
+	"\x13COMMENT_SORT_NEWEST\x10\x022\xec\f\n" +
 	"\x0eCatalogService\x12E\n" +
 	"\bGetVideo\x12\x1b.catalog.v1.GetVideoRequest\x1a\x1c.catalog.v1.GetVideoResponse\x12W\n" +
 	"\x0eBatchGetVideos\x12!.catalog.v1.BatchGetVideosRequest\x1a\".catalog.v1.BatchGetVideosResponse\x12Q\n" +
 	"\fSearchVideos\x12\x1f.catalog.v1.SearchVideosRequest\x1a .catalog.v1.SearchVideosResponse\x12`\n" +
 	"\x11ListChannelVideos\x12$.catalog.v1.ListChannelVideosRequest\x1a%.catalog.v1.ListChannelVideosResponse\x12K\n" +
 	"\n" +
-	"GetChannel\x12\x1d.catalog.v1.GetChannelRequest\x1a\x1e.catalog.v1.GetChannelResponse\x12W\n" +
-	"\x0eListCategories\x12!.catalog.v1.ListCategoriesRequest\x1a\".catalog.v1.ListCategoriesResponse\x12`\n" +
+	"GetChannel\x12\x1d.catalog.v1.GetChannelRequest\x1a\x1e.catalog.v1.GetChannelResponse\x12K\n" +
+	"\n" +
+	"ListTopics\x12\x1d.catalog.v1.ListTopicsRequest\x1a\x1e.catalog.v1.ListTopicsResponse\x12`\n" +
 	"\x11ListVideoFeatures\x12$.catalog.v1.ListVideoFeaturesRequest\x1a%.catalog.v1.ListVideoFeaturesResponse\x12T\n" +
 	"\rUpsertChannel\x12 .catalog.v1.UpsertChannelRequest\x1a!.catalog.v1.UpsertChannelResponse\x12N\n" +
 	"\vUpsertVideo\x12\x1e.catalog.v1.UpsertVideoRequest\x1a\x1f.catalog.v1.UpsertVideoResponse\x12T\n" +
@@ -3151,9 +3148,9 @@ var file_catalog_v1_catalog_proto_goTypes = []any{
 	(*ListChannelVideosResponse)(nil),   // 15: catalog.v1.ListChannelVideosResponse
 	(*GetChannelRequest)(nil),           // 16: catalog.v1.GetChannelRequest
 	(*GetChannelResponse)(nil),          // 17: catalog.v1.GetChannelResponse
-	(*ListCategoriesRequest)(nil),       // 18: catalog.v1.ListCategoriesRequest
-	(*ListCategoriesResponse)(nil),      // 19: catalog.v1.ListCategoriesResponse
-	(*Category)(nil),                    // 20: catalog.v1.Category
+	(*ListTopicsRequest)(nil),           // 18: catalog.v1.ListTopicsRequest
+	(*ListTopicsResponse)(nil),          // 19: catalog.v1.ListTopicsResponse
+	(*Topic)(nil),                       // 20: catalog.v1.Topic
 	(*ListVideoFeaturesRequest)(nil),    // 21: catalog.v1.ListVideoFeaturesRequest
 	(*ListVideoFeaturesResponse)(nil),   // 22: catalog.v1.ListVideoFeaturesResponse
 	(*VideoFeatures)(nil),               // 23: catalog.v1.VideoFeatures
@@ -3199,7 +3196,7 @@ var file_catalog_v1_catalog_proto_depIdxs = []int32{
 	4,  // 12: catalog.v1.SearchVideosResponse.videos:type_name -> catalog.v1.Video
 	4,  // 13: catalog.v1.ListChannelVideosResponse.videos:type_name -> catalog.v1.Video
 	3,  // 14: catalog.v1.GetChannelResponse.channel:type_name -> catalog.v1.Channel
-	20, // 15: catalog.v1.ListCategoriesResponse.categories:type_name -> catalog.v1.Category
+	20, // 15: catalog.v1.ListTopicsResponse.topics:type_name -> catalog.v1.Topic
 	23, // 16: catalog.v1.ListVideoFeaturesResponse.videos:type_name -> catalog.v1.VideoFeatures
 	48, // 17: catalog.v1.VideoFeatures.published_at:type_name -> google.protobuf.Timestamp
 	48, // 18: catalog.v1.VideoFeatures.added_at:type_name -> google.protobuf.Timestamp
@@ -3221,7 +3218,7 @@ var file_catalog_v1_catalog_proto_depIdxs = []int32{
 	12, // 34: catalog.v1.CatalogService.SearchVideos:input_type -> catalog.v1.SearchVideosRequest
 	14, // 35: catalog.v1.CatalogService.ListChannelVideos:input_type -> catalog.v1.ListChannelVideosRequest
 	16, // 36: catalog.v1.CatalogService.GetChannel:input_type -> catalog.v1.GetChannelRequest
-	18, // 37: catalog.v1.CatalogService.ListCategories:input_type -> catalog.v1.ListCategoriesRequest
+	18, // 37: catalog.v1.CatalogService.ListTopics:input_type -> catalog.v1.ListTopicsRequest
 	21, // 38: catalog.v1.CatalogService.ListVideoFeatures:input_type -> catalog.v1.ListVideoFeaturesRequest
 	24, // 39: catalog.v1.CatalogService.UpsertChannel:input_type -> catalog.v1.UpsertChannelRequest
 	26, // 40: catalog.v1.CatalogService.UpsertVideo:input_type -> catalog.v1.UpsertVideoRequest
@@ -3240,7 +3237,7 @@ var file_catalog_v1_catalog_proto_depIdxs = []int32{
 	13, // 53: catalog.v1.CatalogService.SearchVideos:output_type -> catalog.v1.SearchVideosResponse
 	15, // 54: catalog.v1.CatalogService.ListChannelVideos:output_type -> catalog.v1.ListChannelVideosResponse
 	17, // 55: catalog.v1.CatalogService.GetChannel:output_type -> catalog.v1.GetChannelResponse
-	19, // 56: catalog.v1.CatalogService.ListCategories:output_type -> catalog.v1.ListCategoriesResponse
+	19, // 56: catalog.v1.CatalogService.ListTopics:output_type -> catalog.v1.ListTopicsResponse
 	22, // 57: catalog.v1.CatalogService.ListVideoFeatures:output_type -> catalog.v1.ListVideoFeaturesResponse
 	25, // 58: catalog.v1.CatalogService.UpsertChannel:output_type -> catalog.v1.UpsertChannelResponse
 	27, // 59: catalog.v1.CatalogService.UpsertVideo:output_type -> catalog.v1.UpsertVideoResponse

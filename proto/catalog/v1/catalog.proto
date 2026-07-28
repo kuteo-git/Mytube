@@ -22,8 +22,8 @@ service CatalogService {
   rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
   rpc ListChannelVideos(ListChannelVideosRequest) returns (ListChannelVideosResponse);
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
-  // Categories actually present in the library, for the home chip bar.
-  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+  // Topics actually present in the library, for the home chip bar and sidebar.
+  rpc ListTopics(ListTopicsRequest) returns (ListTopicsResponse);
   // Lightweight ranking features, pulled by the recommendation service so it
   // can rank without ever reading this service's database.
   rpc ListVideoFeatures(ListVideoFeaturesRequest) returns (ListVideoFeaturesResponse);
@@ -101,7 +101,9 @@ message Video {
   string thumbnail_path = 8;
   string description = 9;
   repeated string hashtags = 10;
-  repeated string categories = 11;
+  // Topic names this video was discovered under, from topics.yaml. A video
+  // found in two topics' sources carries both.
+  repeated string topics = 11;
   MediaState media_state = 12;
   // Relative path of the playable file, empty unless media_state is READY.
   string media_path = 13;
@@ -204,17 +206,17 @@ message GetChannelResponse {
   int32 video_count = 2;
 }
 
-message ListCategoriesRequest {
-  // Only categories with at least this many videos are returned, so the chip
-  // bar never shows a filter that yields an empty grid.
+message ListTopicsRequest {
+  // Only topics with at least this many videos are returned, so the chip bar
+  // never shows a filter that yields an empty grid.
   int32 min_video_count = 1;
 }
 
-message ListCategoriesResponse {
-  repeated Category categories = 1;
+message ListTopicsResponse {
+  repeated Topic topics = 1;
 }
 
-message Category {
+message Topic {
   string name = 1;
   int32 video_count = 2;
 }
@@ -234,7 +236,7 @@ message ListVideoFeaturesResponse {
 message VideoFeatures {
   string video_id = 1;
   string channel_id = 2;
-  repeated string categories = 3;
+  repeated string topics = 3;
   repeated string hashtags = 4;
   google.protobuf.Timestamp published_at = 5;
   google.protobuf.Timestamp added_at = 6;

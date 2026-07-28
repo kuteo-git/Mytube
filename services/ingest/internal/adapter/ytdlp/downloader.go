@@ -51,7 +51,6 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		ThumbnailURL:    deref(info.Thumbnail),
 		SourceURL:       deref(info.WebpageURL),
 		Description:     deref(info.Description),
-		Categories:      info.Categories,
 	}
 
 	if v.ChannelName == "" {

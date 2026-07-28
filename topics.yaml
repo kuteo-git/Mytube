@@ -1,0 +1,38 @@
+# The only content source in the system.
+#
+# Every video in the library got here because it appeared in one of the sources
+# below. There is no in-app way to add a video: to change what the feed can show
+# you, edit this file. That is deliberate — it keeps the library something you
+# curate rather than something you accumulate by browsing.
+#
+# A source is a YouTube playlist or channel URL. Scanning uses --flat-playlist,
+# which fetches listing metadata only: no media is downloaded until you press
+# play on something.
+#
+# A video that appears under two topics carries both.
+
+topics:
+  - name: Tech
+    sources:
+      - https://www.youtube.com/@LinusTechTips/videos
+      - https://www.youtube.com/@mkbhd/videos
+
+  - name: Gaming
+    sources:
+      - https://www.youtube.com/@IGN/videos
+
+  - name: Music
+    sources:
+      - https://www.youtube.com/@NoCopyrightSounds/videos
+
+  - name: Vietnamese music
+    sources:
+      - https://www.youtube.com/@SOOBINofficial/videos
+
+  - name: AI
+    sources:
+      - https://www.youtube.com/@TwoMinutePapers/videos
+
+# How many videos to take from each source per scan. Sources are usually
+# ordered newest first, so this is effectively "the most recent N".
+per_source_limit: 40

@@ -87,13 +87,13 @@ func (c *Catalog) GetChannel(ctx context.Context, channelID, userID string) (dom
 	return c.repo.GetChannel(ctx, channelID, userID)
 }
 
-// ListCategories powers the home chip bar. A minimum count of one keeps the UI
-// from offering a filter that would produce an empty grid.
-func (c *Catalog) ListCategories(ctx context.Context, minVideoCount int32) ([]domain.Category, error) {
+// ListTopics powers the home chip bar and the sidebar. A minimum count of one
+// keeps the UI from offering a filter that would produce an empty grid.
+func (c *Catalog) ListTopics(ctx context.Context, minVideoCount int32) ([]domain.Topic, error) {
 	if minVideoCount <= 0 {
 		minVideoCount = 1
 	}
-	return c.repo.ListCategories(ctx, minVideoCount)
+	return c.repo.ListTopics(ctx, minVideoCount)
 }
 
 // ListVideoFeatures serves the recommendation service. The page cap is higher

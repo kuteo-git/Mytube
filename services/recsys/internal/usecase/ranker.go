@@ -71,7 +71,7 @@ func recencyBoost(addedAt time.Time, now time.Time) float64 {
 func isContinueWatching(fraction float32) bool { return fraction > 0.02 && fraction <= 0.95 }
 func isWatched(fraction float32) bool          { return fraction > 0.95 }
 
-func (r *Ranker) GetFeed(ctx context.Context, userID, category string, pageSize, offset int32) ([]domain.RankedVideo, error) {
+func (r *Ranker) GetFeed(ctx context.Context, userID, topic string, pageSize, offset int32) ([]domain.RankedVideo, error) {
 	features, err := r.features.ListVideoFeatures(ctx)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (r *Ranker) GetFeed(ctx context.Context, userID, category string, pageSize,
 	ranked := make([]domain.RankedVideo, 0, len(features))
 
 	for _, f := range features {
-		if !matchesCategory(f, category) {
+		if !matchesTopic(f, topic) {
 			continue
 		}
 		if profile.Disliked[f.VideoID] {
@@ -172,7 +172,7 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 				score += weightSameChannel
 				reason = domain.ReasonSameChannel
 			}
-			if overlap := countOverlap(f.Categories, current.Categories) +
+			if overlap := countOverlap(f.Topics, current.Topics) +
 				countOverlap(f.Hashtags, current.Hashtags); overlap > 0 {
 				score += weightSharedTags * float64(overlap)
 				if reason != domain.ReasonSameChannel {
@@ -234,12 +234,12 @@ func channelAffinity(features []domain.VideoFeatures, watched map[string]float32
 	return totals
 }
 
-func matchesCategory(f domain.VideoFeatures, category string) bool {
-	if category == "" || strings.EqualFold(category, "all") {
+func matchesTopic(f domain.VideoFeatures, topic string) bool {
+	if topic == "" || strings.EqualFold(topic, "all") {
 		return true
 	}
-	for _, c := range f.Categories {
-		if strings.EqualFold(c, category) {
+	for _, t := range f.Topics {
+		if strings.EqualFold(t, topic) {
 			return true
 		}
 	}

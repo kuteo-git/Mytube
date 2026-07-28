@@ -42,7 +42,7 @@ type videoDTO struct {
 	ThumbnailPath   string        `json:"thumbnailPath"`
 	Description     string        `json:"description"`
 	Hashtags        []string      `json:"hashtags"`
-	Categories      []string      `json:"categories"`
+	Topics          []string      `json:"topics"`
 	MediaState      string        `json:"mediaState"`
 	MediaPath       string        `json:"mediaPath"`
 	SizeBytes       int64         `json:"sizeBytes"`
@@ -76,7 +76,7 @@ type commentsResponse struct {
 	NextPageToken string       `json:"nextPageToken,omitempty"`
 }
 
-type categoryDTO struct {
+type topicDTO struct {
 	Name       string `json:"name"`
 	VideoCount int32  `json:"videoCount"`
 }
@@ -129,7 +129,7 @@ func toVideoDTO(v *catalogv1.Video) videoDTO {
 		ThumbnailPath:   v.GetThumbnailPath(),
 		Description:     v.GetDescription(),
 		Hashtags:        orEmpty(v.GetHashtags()),
-		Categories:      orEmpty(v.GetCategories()),
+		Topics:          orEmpty(v.GetTopics()),
 		MediaState:      trimEnumPrefix(v.GetMediaState().String(), "MEDIA_STATE_"),
 		MediaPath:       v.GetMediaPath(),
 		SizeBytes:       v.GetSizeBytes(),

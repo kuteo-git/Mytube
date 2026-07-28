@@ -14,11 +14,38 @@ import (
 )
 
 type Server struct {
-	ingest *usecase.Ingest
+	ingest  *usecase.Ingest
+	scanner *usecase.Scanner
 }
 
-func NewServer(ingest *usecase.Ingest) *Server {
-	return &Server{ingest: ingest}
+func NewServer(ingest *usecase.Ingest, scanner *usecase.Scanner) *Server {
+	return &Server{ingest: ingest, scanner: scanner}
+}
+
+func scanToProto(r domain.ScanResult) *ingestv1.ScanStatus {
+	return &ingestv1.ScanStatus{
+		StartedAt:      timestamppb.New(r.StartedAt),
+		DurationMs:     r.Duration.Milliseconds(),
+		SourcesScanned: r.SourcesScanned,
+		SourcesFailed:  r.SourcesFailed,
+		VideosSeen:     int32(r.VideosSeen),
+		VideosAdded:    int32(r.VideosAdded),
+		Errors:         r.Errors,
+	}
+}
+
+func (s *Server) Refresh(ctx context.Context, _ *connect.Request[ingestv1.RefreshRequest]) (*connect.Response[ingestv1.RefreshResponse], error) {
+	result, err := s.scanner.ScanNow(ctx)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.RefreshResponse{Status: scanToProto(result)}), nil
+}
+
+func (s *Server) GetScanStatus(_ context.Context, _ *connect.Request[ingestv1.GetScanStatusRequest]) (*connect.Response[ingestv1.GetScanStatusResponse], error) {
+	return connect.NewResponse(&ingestv1.GetScanStatusResponse{
+		Status: scanToProto(s.scanner.LastScan()),
+	}), nil
 }
 
 func toConnectErr(err error) error {
@@ -46,32 +73,6 @@ var jobStates = map[domain.JobState]ingestv1.JobState{
 	domain.JobCancelled: ingestv1.JobState_JOB_STATE_CANCELLED,
 }
 
-func videoToProto(v domain.ExternalVideo) *ingestv1.ExternalVideo {
-	return &ingestv1.ExternalVideo{
-		Id:              v.ID,
-		Title:           v.Title,
-		ChannelId:       v.ChannelID,
-		ChannelName:     v.ChannelName,
-		DurationSeconds: v.DurationSeconds,
-		ViewCount:       v.ViewCount,
-		ThumbnailUrl:    v.ThumbnailURL,
-		SourceUrl:       v.SourceURL,
-		PublishedAt:     timestamppb.New(v.PublishedAt),
-		Description:     v.Description,
-		Categories:      v.Categories,
-		Hashtags:        v.Hashtags,
-		InLibrary:       v.InLibrary,
-	}
-}
-
-func videosToProto(vs []domain.ExternalVideo) []*ingestv1.ExternalVideo {
-	out := make([]*ingestv1.ExternalVideo, 0, len(vs))
-	for _, v := range vs {
-		out = append(out, videoToProto(v))
-	}
-	return out
-}
-
 func jobToProto(j domain.Job) *ingestv1.Job {
 	job := &ingestv1.Job{
 		Id:              j.ID,
@@ -90,33 +91,6 @@ func jobToProto(j domain.Job) *ingestv1.Job {
 		job.FinishedAt = timestamppb.New(*j.FinishedAt)
 	}
 	return job
-}
-
-func (s *Server) Search(ctx context.Context, req *connect.Request[ingestv1.SearchRequest]) (*connect.Response[ingestv1.SearchResponse], error) {
-	videos, err := s.ingest.Search(ctx, req.Msg.GetQuery(), req.Msg.GetLimit())
-	if err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&ingestv1.SearchResponse{Videos: videosToProto(videos)}), nil
-}
-
-func (s *Server) Preview(ctx context.Context, req *connect.Request[ingestv1.PreviewRequest]) (*connect.Response[ingestv1.PreviewResponse], error) {
-	v, err := s.ingest.Preview(ctx, req.Msg.GetUrl())
-	if err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&ingestv1.PreviewResponse{Video: videoToProto(v)}), nil
-}
-
-func (s *Server) ListPlaylist(ctx context.Context, req *connect.Request[ingestv1.ListPlaylistRequest]) (*connect.Response[ingestv1.ListPlaylistResponse], error) {
-	title, videos, err := s.ingest.ListPlaylist(ctx, req.Msg.GetUrl(), req.Msg.GetLimit())
-	if err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&ingestv1.ListPlaylistResponse{
-		PlaylistTitle: title,
-		Videos:        videosToProto(videos),
-	}), nil
 }
 
 func (s *Server) ResolveStream(ctx context.Context, req *connect.Request[ingestv1.ResolveStreamRequest]) (*connect.Response[ingestv1.ResolveStreamResponse], error) {

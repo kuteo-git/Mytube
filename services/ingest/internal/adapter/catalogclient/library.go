@@ -67,7 +67,7 @@ func (l *Library) UpsertVideo(ctx context.Context, v domain.ExternalVideo, state
 			PublishedAt:     timestamppb.New(v.PublishedAt),
 			Description:     v.Description,
 			Hashtags:        v.Hashtags,
-			Categories:      v.Categories,
+			Topics:          v.Topics,
 			MediaState:      mediaStates[state],
 			SourceUrl:       v.SourceURL,
 		},

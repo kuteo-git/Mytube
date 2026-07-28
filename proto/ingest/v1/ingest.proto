@@ -13,11 +13,9 @@ option go_package = "github.com/lucnguyen/local-youtube/gen/go/ingest/v1;ingestv
 // background job downloads a local copy. Once the copy lands, playback moves to
 // disk and the upstream is never touched again for that video.
 service IngestService {
-  // Metadata only — no media is fetched. Used by search and by the preview
-  // shown before the user commits to importing something.
-  rpc Search(SearchRequest) returns (SearchResponse);
-  rpc Preview(PreviewRequest) returns (PreviewResponse);
-  rpc ListPlaylist(ListPlaylistRequest) returns (ListPlaylistResponse);
+  // Rescans topics.yaml now instead of waiting for the timer.
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
 
   // Resolves a directly playable upstream URL. This is what makes "click and
   // watch" feel instant; the URL is short-lived and must not be persisted.
@@ -39,7 +37,8 @@ enum JobState {
   JOB_STATE_CANCELLED = 5;
 }
 
-// A video discovered upstream but not necessarily present locally.
+// A video discovered upstream but not necessarily present locally. Produced by
+// the scanner; the RPC surface no longer returns these directly.
 message ExternalVideo {
   // The upstream id, reused as the local video id so ingest is idempotent.
   string id = 1;
@@ -52,37 +51,35 @@ message ExternalVideo {
   string source_url = 8;
   google.protobuf.Timestamp published_at = 9;
   string description = 10;
-  repeated string categories = 11;
+  // Topic names assigned by the scanner, not YouTube's own categories.
+  repeated string topics = 11;
   repeated string hashtags = 12;
   // True when this id already exists in the local library.
   bool in_library = 13;
 }
 
-message SearchRequest {
-  string query = 1;
-  int32 limit = 2;
+message RefreshRequest {}
+
+message RefreshResponse {
+  ScanStatus status = 1;
 }
 
-message SearchResponse {
-  repeated ExternalVideo videos = 1;
+message GetScanStatusRequest {}
+
+message GetScanStatusResponse {
+  ScanStatus status = 1;
 }
 
-message PreviewRequest {
-  string url = 1;
-}
-
-message PreviewResponse {
-  ExternalVideo video = 1;
-}
-
-message ListPlaylistRequest {
-  string url = 1;
-  int32 limit = 2;
-}
-
-message ListPlaylistResponse {
-  string playlist_title = 1;
-  repeated ExternalVideo videos = 2;
+// Reports the most recent scan, so the UI can show when the library last
+// changed and whether any source is broken.
+message ScanStatus {
+  google.protobuf.Timestamp started_at = 1;
+  int64 duration_ms = 2;
+  int32 sources_scanned = 3;
+  int32 sources_failed = 4;
+  int32 videos_seen = 5;
+  int32 videos_added = 6;
+  repeated string errors = 7;
 }
 
 message ResolveStreamRequest {

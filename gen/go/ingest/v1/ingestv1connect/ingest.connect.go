@@ -33,13 +33,11 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// IngestServiceSearchProcedure is the fully-qualified name of the IngestService's Search RPC.
-	IngestServiceSearchProcedure = "/ingest.v1.IngestService/Search"
-	// IngestServicePreviewProcedure is the fully-qualified name of the IngestService's Preview RPC.
-	IngestServicePreviewProcedure = "/ingest.v1.IngestService/Preview"
-	// IngestServiceListPlaylistProcedure is the fully-qualified name of the IngestService's
-	// ListPlaylist RPC.
-	IngestServiceListPlaylistProcedure = "/ingest.v1.IngestService/ListPlaylist"
+	// IngestServiceRefreshProcedure is the fully-qualified name of the IngestService's Refresh RPC.
+	IngestServiceRefreshProcedure = "/ingest.v1.IngestService/Refresh"
+	// IngestServiceGetScanStatusProcedure is the fully-qualified name of the IngestService's
+	// GetScanStatus RPC.
+	IngestServiceGetScanStatusProcedure = "/ingest.v1.IngestService/GetScanStatus"
 	// IngestServiceResolveStreamProcedure is the fully-qualified name of the IngestService's
 	// ResolveStream RPC.
 	IngestServiceResolveStreamProcedure = "/ingest.v1.IngestService/ResolveStream"
@@ -55,11 +53,9 @@ const (
 
 // IngestServiceClient is a client for the ingest.v1.IngestService service.
 type IngestServiceClient interface {
-	// Metadata only — no media is fetched. Used by search and by the preview
-	// shown before the user commits to importing something.
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
-	Preview(context.Context, *connect.Request[v1.PreviewRequest]) (*connect.Response[v1.PreviewResponse], error)
-	ListPlaylist(context.Context, *connect.Request[v1.ListPlaylistRequest]) (*connect.Response[v1.ListPlaylistResponse], error)
+	// Rescans topics.yaml now instead of waiting for the timer.
+	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
+	GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error)
 	// Resolves a directly playable upstream URL. This is what makes "click and
 	// watch" feel instant; the URL is short-lived and must not be persisted.
 	ResolveStream(context.Context, *connect.Request[v1.ResolveStreamRequest]) (*connect.Response[v1.ResolveStreamResponse], error)
@@ -81,22 +77,16 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	ingestServiceMethods := v1.File_ingest_v1_ingest_proto.Services().ByName("IngestService").Methods()
 	return &ingestServiceClient{
-		search: connect.NewClient[v1.SearchRequest, v1.SearchResponse](
+		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
 			httpClient,
-			baseURL+IngestServiceSearchProcedure,
-			connect.WithSchema(ingestServiceMethods.ByName("Search")),
+			baseURL+IngestServiceRefreshProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("Refresh")),
 			connect.WithClientOptions(opts...),
 		),
-		preview: connect.NewClient[v1.PreviewRequest, v1.PreviewResponse](
+		getScanStatus: connect.NewClient[v1.GetScanStatusRequest, v1.GetScanStatusResponse](
 			httpClient,
-			baseURL+IngestServicePreviewProcedure,
-			connect.WithSchema(ingestServiceMethods.ByName("Preview")),
-			connect.WithClientOptions(opts...),
-		),
-		listPlaylist: connect.NewClient[v1.ListPlaylistRequest, v1.ListPlaylistResponse](
-			httpClient,
-			baseURL+IngestServiceListPlaylistProcedure,
-			connect.WithSchema(ingestServiceMethods.ByName("ListPlaylist")),
+			baseURL+IngestServiceGetScanStatusProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("GetScanStatus")),
 			connect.WithClientOptions(opts...),
 		),
 		resolveStream: connect.NewClient[v1.ResolveStreamRequest, v1.ResolveStreamResponse](
@@ -134,9 +124,8 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
-	search        *connect.Client[v1.SearchRequest, v1.SearchResponse]
-	preview       *connect.Client[v1.PreviewRequest, v1.PreviewResponse]
-	listPlaylist  *connect.Client[v1.ListPlaylistRequest, v1.ListPlaylistResponse]
+	refresh       *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
+	getScanStatus *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
 	resolveStream *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
 	submit        *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
 	getJob        *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
@@ -144,19 +133,14 @@ type ingestServiceClient struct {
 	cancelJob     *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
 }
 
-// Search calls ingest.v1.IngestService.Search.
-func (c *ingestServiceClient) Search(ctx context.Context, req *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return c.search.CallUnary(ctx, req)
+// Refresh calls ingest.v1.IngestService.Refresh.
+func (c *ingestServiceClient) Refresh(ctx context.Context, req *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {
+	return c.refresh.CallUnary(ctx, req)
 }
 
-// Preview calls ingest.v1.IngestService.Preview.
-func (c *ingestServiceClient) Preview(ctx context.Context, req *connect.Request[v1.PreviewRequest]) (*connect.Response[v1.PreviewResponse], error) {
-	return c.preview.CallUnary(ctx, req)
-}
-
-// ListPlaylist calls ingest.v1.IngestService.ListPlaylist.
-func (c *ingestServiceClient) ListPlaylist(ctx context.Context, req *connect.Request[v1.ListPlaylistRequest]) (*connect.Response[v1.ListPlaylistResponse], error) {
-	return c.listPlaylist.CallUnary(ctx, req)
+// GetScanStatus calls ingest.v1.IngestService.GetScanStatus.
+func (c *ingestServiceClient) GetScanStatus(ctx context.Context, req *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error) {
+	return c.getScanStatus.CallUnary(ctx, req)
 }
 
 // ResolveStream calls ingest.v1.IngestService.ResolveStream.
@@ -186,11 +170,9 @@ func (c *ingestServiceClient) CancelJob(ctx context.Context, req *connect.Reques
 
 // IngestServiceHandler is an implementation of the ingest.v1.IngestService service.
 type IngestServiceHandler interface {
-	// Metadata only — no media is fetched. Used by search and by the preview
-	// shown before the user commits to importing something.
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
-	Preview(context.Context, *connect.Request[v1.PreviewRequest]) (*connect.Response[v1.PreviewResponse], error)
-	ListPlaylist(context.Context, *connect.Request[v1.ListPlaylistRequest]) (*connect.Response[v1.ListPlaylistResponse], error)
+	// Rescans topics.yaml now instead of waiting for the timer.
+	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
+	GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error)
 	// Resolves a directly playable upstream URL. This is what makes "click and
 	// watch" feel instant; the URL is short-lived and must not be persisted.
 	ResolveStream(context.Context, *connect.Request[v1.ResolveStreamRequest]) (*connect.Response[v1.ResolveStreamResponse], error)
@@ -208,22 +190,16 @@ type IngestServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	ingestServiceMethods := v1.File_ingest_v1_ingest_proto.Services().ByName("IngestService").Methods()
-	ingestServiceSearchHandler := connect.NewUnaryHandler(
-		IngestServiceSearchProcedure,
-		svc.Search,
-		connect.WithSchema(ingestServiceMethods.ByName("Search")),
+	ingestServiceRefreshHandler := connect.NewUnaryHandler(
+		IngestServiceRefreshProcedure,
+		svc.Refresh,
+		connect.WithSchema(ingestServiceMethods.ByName("Refresh")),
 		connect.WithHandlerOptions(opts...),
 	)
-	ingestServicePreviewHandler := connect.NewUnaryHandler(
-		IngestServicePreviewProcedure,
-		svc.Preview,
-		connect.WithSchema(ingestServiceMethods.ByName("Preview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	ingestServiceListPlaylistHandler := connect.NewUnaryHandler(
-		IngestServiceListPlaylistProcedure,
-		svc.ListPlaylist,
-		connect.WithSchema(ingestServiceMethods.ByName("ListPlaylist")),
+	ingestServiceGetScanStatusHandler := connect.NewUnaryHandler(
+		IngestServiceGetScanStatusProcedure,
+		svc.GetScanStatus,
+		connect.WithSchema(ingestServiceMethods.ByName("GetScanStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceResolveStreamHandler := connect.NewUnaryHandler(
@@ -258,12 +234,10 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case IngestServiceSearchProcedure:
-			ingestServiceSearchHandler.ServeHTTP(w, r)
-		case IngestServicePreviewProcedure:
-			ingestServicePreviewHandler.ServeHTTP(w, r)
-		case IngestServiceListPlaylistProcedure:
-			ingestServiceListPlaylistHandler.ServeHTTP(w, r)
+		case IngestServiceRefreshProcedure:
+			ingestServiceRefreshHandler.ServeHTTP(w, r)
+		case IngestServiceGetScanStatusProcedure:
+			ingestServiceGetScanStatusHandler.ServeHTTP(w, r)
 		case IngestServiceResolveStreamProcedure:
 			ingestServiceResolveStreamHandler.ServeHTTP(w, r)
 		case IngestServiceSubmitProcedure:
@@ -283,16 +257,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 // UnimplementedIngestServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedIngestServiceHandler struct{}
 
-func (UnimplementedIngestServiceHandler) Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.Search is not implemented"))
+func (UnimplementedIngestServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.Refresh is not implemented"))
 }
 
-func (UnimplementedIngestServiceHandler) Preview(context.Context, *connect.Request[v1.PreviewRequest]) (*connect.Response[v1.PreviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.Preview is not implemented"))
-}
-
-func (UnimplementedIngestServiceHandler) ListPlaylist(context.Context, *connect.Request[v1.ListPlaylistRequest]) (*connect.Response[v1.ListPlaylistResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ListPlaylist is not implemented"))
+func (UnimplementedIngestServiceHandler) GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.GetScanStatus is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) ResolveStream(context.Context, *connect.Request[v1.ResolveStreamRequest]) (*connect.Response[v1.ResolveStreamResponse], error) {

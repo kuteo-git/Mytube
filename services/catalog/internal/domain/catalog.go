@@ -52,7 +52,7 @@ type Video struct {
 	ThumbnailPath   string
 	Description     string
 	Hashtags        []string
-	Categories      []string
+	Topics          []string
 	MediaState      MediaState
 	MediaPath       string
 	SizeBytes       int64
@@ -94,7 +94,7 @@ const (
 	SortNewest CommentSort = "NEWEST"
 )
 
-type Category struct {
+type Topic struct {
 	Name       string
 	VideoCount int32
 }
@@ -104,7 +104,7 @@ type Category struct {
 type VideoFeatures struct {
 	VideoID         string
 	ChannelID       string
-	Categories      []string
+	Topics          []string
 	Hashtags        []string
 	PublishedAt     time.Time
 	AddedAt         time.Time
@@ -136,7 +136,7 @@ type Repository interface {
 	SearchVideos(ctx context.Context, query, userID string, page Page) ([]Video, error)
 	ListChannelVideos(ctx context.Context, channelID, userID string, page Page) ([]Video, error)
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, int32, error)
-	ListCategories(ctx context.Context, minVideoCount int32) ([]Category, error)
+	ListTopics(ctx context.Context, minVideoCount int32) ([]Topic, error)
 	ListVideoFeatures(ctx context.Context, page Page) ([]VideoFeatures, error)
 
 	UpsertChannel(ctx context.Context, c Channel) (Channel, error)

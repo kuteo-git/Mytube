@@ -48,7 +48,9 @@ func (g *Gateway) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/feed", g.handleFeed)
 	mux.HandleFunc("GET /api/search", g.handleSearch)
-	mux.HandleFunc("GET /api/categories", g.handleCategories)
+	mux.HandleFunc("GET /api/topics", g.handleTopics)
+	mux.HandleFunc("POST /api/topics/refresh", g.handleRefreshTopics)
+	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
 
@@ -139,7 +141,7 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 	// 1. Ranking, from the service that owns ranking.
 	ranked, err := g.recsys.GetFeed(ctx, connect.NewRequest(&recsysv1.GetFeedRequest{
 		UserId:     userID,
-		Category:   r.URL.Query().Get("category"),
+		Category:   r.URL.Query().Get("topic"),
 		PageSize:   pageSize,
 		PageToken:  r.URL.Query().Get("pageToken"),
 		ClientHour: int32(time.Now().Hour()),
@@ -291,8 +293,8 @@ func (g *Gateway) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (g *Gateway) handleCategories(w http.ResponseWriter, r *http.Request) {
-	resp, err := g.catalog.ListCategories(r.Context(), connect.NewRequest(&catalogv1.ListCategoriesRequest{
+func (g *Gateway) handleTopics(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListTopics(r.Context(), connect.NewRequest(&catalogv1.ListTopicsRequest{
 		MinVideoCount: intParam(r, "minVideoCount", 1),
 	}))
 	if err != nil {
@@ -300,11 +302,11 @@ func (g *Gateway) handleCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	out := make([]categoryDTO, 0, len(resp.Msg.GetCategories()))
-	for _, c := range resp.Msg.GetCategories() {
-		out = append(out, categoryDTO{Name: c.GetName(), VideoCount: c.GetVideoCount()})
+	out := make([]topicDTO, 0, len(resp.Msg.GetTopics()))
+	for _, t := range resp.Msg.GetTopics() {
+		out = append(out, topicDTO{Name: t.GetName(), VideoCount: t.GetVideoCount()})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"categories": out})
+	writeJSON(w, http.StatusOK, map[string]any{"topics": out})
 }
 
 func (g *Gateway) handleHistory(w http.ResponseWriter, r *http.Request) {

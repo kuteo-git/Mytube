@@ -54,6 +54,53 @@ func toJobDTO(j *ingestv1.Job) jobDTO {
 	}
 }
 
+type scanStatusDTO struct {
+	StartedAt      string   `json:"startedAt"`
+	DurationMs     int64    `json:"durationMs"`
+	SourcesScanned int32    `json:"sourcesScanned"`
+	SourcesFailed  int32    `json:"sourcesFailed"`
+	VideosSeen     int32    `json:"videosSeen"`
+	VideosAdded    int32    `json:"videosAdded"`
+	Errors         []string `json:"errors"`
+}
+
+func toScanStatusDTO(s *ingestv1.ScanStatus) scanStatusDTO {
+	errs := s.GetErrors()
+	if errs == nil {
+		errs = []string{}
+	}
+	return scanStatusDTO{
+		StartedAt:      s.GetStartedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
+		DurationMs:     s.GetDurationMs(),
+		SourcesScanned: s.GetSourcesScanned(),
+		SourcesFailed:  s.GetSourcesFailed(),
+		VideosSeen:     s.GetVideosSeen(),
+		VideosAdded:    s.GetVideosAdded(),
+		Errors:         errs,
+	}
+}
+
+// handleRefreshTopics rescans topics.yaml on demand. A scan walks every source
+// and takes minutes, so it runs against the request context and returns only
+// when done — the caller is a person who pressed Refresh and expects a result.
+func (g *Gateway) handleRefreshTopics(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.ingest.Refresh(r.Context(), connect.NewRequest(&ingestv1.RefreshRequest{}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toScanStatusDTO(resp.Msg.GetStatus()))
+}
+
+func (g *Gateway) handleScanStatus(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.ingest.GetScanStatus(r.Context(), connect.NewRequest(&ingestv1.GetScanStatusRequest{}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toScanStatusDTO(resp.Msg.GetStatus()))
+}
+
 func (g *Gateway) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	activeOnly, _ := strconv.ParseBool(r.URL.Query().Get("activeOnly"))
 

@@ -47,9 +47,9 @@ const (
 	// CatalogServiceGetChannelProcedure is the fully-qualified name of the CatalogService's GetChannel
 	// RPC.
 	CatalogServiceGetChannelProcedure = "/catalog.v1.CatalogService/GetChannel"
-	// CatalogServiceListCategoriesProcedure is the fully-qualified name of the CatalogService's
-	// ListCategories RPC.
-	CatalogServiceListCategoriesProcedure = "/catalog.v1.CatalogService/ListCategories"
+	// CatalogServiceListTopicsProcedure is the fully-qualified name of the CatalogService's ListTopics
+	// RPC.
+	CatalogServiceListTopicsProcedure = "/catalog.v1.CatalogService/ListTopics"
 	// CatalogServiceListVideoFeaturesProcedure is the fully-qualified name of the CatalogService's
 	// ListVideoFeatures RPC.
 	CatalogServiceListVideoFeaturesProcedure = "/catalog.v1.CatalogService/ListVideoFeatures"
@@ -101,8 +101,8 @@ type CatalogServiceClient interface {
 	SearchVideos(context.Context, *connect.Request[v1.SearchVideosRequest]) (*connect.Response[v1.SearchVideosResponse], error)
 	ListChannelVideos(context.Context, *connect.Request[v1.ListChannelVideosRequest]) (*connect.Response[v1.ListChannelVideosResponse], error)
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
-	// Categories actually present in the library, for the home chip bar.
-	ListCategories(context.Context, *connect.Request[v1.ListCategoriesRequest]) (*connect.Response[v1.ListCategoriesResponse], error)
+	// Topics actually present in the library, for the home chip bar and sidebar.
+	ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error)
 	// Lightweight ranking features, pulled by the recommendation service so it
 	// can rank without ever reading this service's database.
 	ListVideoFeatures(context.Context, *connect.Request[v1.ListVideoFeaturesRequest]) (*connect.Response[v1.ListVideoFeaturesResponse], error)
@@ -169,10 +169,10 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("GetChannel")),
 			connect.WithClientOptions(opts...),
 		),
-		listCategories: connect.NewClient[v1.ListCategoriesRequest, v1.ListCategoriesResponse](
+		listTopics: connect.NewClient[v1.ListTopicsRequest, v1.ListTopicsResponse](
 			httpClient,
-			baseURL+CatalogServiceListCategoriesProcedure,
-			connect.WithSchema(catalogServiceMethods.ByName("ListCategories")),
+			baseURL+CatalogServiceListTopicsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListTopics")),
 			connect.WithClientOptions(opts...),
 		),
 		listVideoFeatures: connect.NewClient[v1.ListVideoFeaturesRequest, v1.ListVideoFeaturesResponse](
@@ -263,7 +263,7 @@ type catalogServiceClient struct {
 	searchVideos        *connect.Client[v1.SearchVideosRequest, v1.SearchVideosResponse]
 	listChannelVideos   *connect.Client[v1.ListChannelVideosRequest, v1.ListChannelVideosResponse]
 	getChannel          *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
-	listCategories      *connect.Client[v1.ListCategoriesRequest, v1.ListCategoriesResponse]
+	listTopics          *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
 	listVideoFeatures   *connect.Client[v1.ListVideoFeaturesRequest, v1.ListVideoFeaturesResponse]
 	upsertChannel       *connect.Client[v1.UpsertChannelRequest, v1.UpsertChannelResponse]
 	upsertVideo         *connect.Client[v1.UpsertVideoRequest, v1.UpsertVideoResponse]
@@ -304,9 +304,9 @@ func (c *catalogServiceClient) GetChannel(ctx context.Context, req *connect.Requ
 	return c.getChannel.CallUnary(ctx, req)
 }
 
-// ListCategories calls catalog.v1.CatalogService.ListCategories.
-func (c *catalogServiceClient) ListCategories(ctx context.Context, req *connect.Request[v1.ListCategoriesRequest]) (*connect.Response[v1.ListCategoriesResponse], error) {
-	return c.listCategories.CallUnary(ctx, req)
+// ListTopics calls catalog.v1.CatalogService.ListTopics.
+func (c *catalogServiceClient) ListTopics(ctx context.Context, req *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error) {
+	return c.listTopics.CallUnary(ctx, req)
 }
 
 // ListVideoFeatures calls catalog.v1.CatalogService.ListVideoFeatures.
@@ -384,8 +384,8 @@ type CatalogServiceHandler interface {
 	SearchVideos(context.Context, *connect.Request[v1.SearchVideosRequest]) (*connect.Response[v1.SearchVideosResponse], error)
 	ListChannelVideos(context.Context, *connect.Request[v1.ListChannelVideosRequest]) (*connect.Response[v1.ListChannelVideosResponse], error)
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
-	// Categories actually present in the library, for the home chip bar.
-	ListCategories(context.Context, *connect.Request[v1.ListCategoriesRequest]) (*connect.Response[v1.ListCategoriesResponse], error)
+	// Topics actually present in the library, for the home chip bar and sidebar.
+	ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error)
 	// Lightweight ranking features, pulled by the recommendation service so it
 	// can rank without ever reading this service's database.
 	ListVideoFeatures(context.Context, *connect.Request[v1.ListVideoFeaturesRequest]) (*connect.Response[v1.ListVideoFeaturesResponse], error)
@@ -448,10 +448,10 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("GetChannel")),
 		connect.WithHandlerOptions(opts...),
 	)
-	catalogServiceListCategoriesHandler := connect.NewUnaryHandler(
-		CatalogServiceListCategoriesProcedure,
-		svc.ListCategories,
-		connect.WithSchema(catalogServiceMethods.ByName("ListCategories")),
+	catalogServiceListTopicsHandler := connect.NewUnaryHandler(
+		CatalogServiceListTopicsProcedure,
+		svc.ListTopics,
+		connect.WithSchema(catalogServiceMethods.ByName("ListTopics")),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListVideoFeaturesHandler := connect.NewUnaryHandler(
@@ -544,8 +544,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListChannelVideosHandler.ServeHTTP(w, r)
 		case CatalogServiceGetChannelProcedure:
 			catalogServiceGetChannelHandler.ServeHTTP(w, r)
-		case CatalogServiceListCategoriesProcedure:
-			catalogServiceListCategoriesHandler.ServeHTTP(w, r)
+		case CatalogServiceListTopicsProcedure:
+			catalogServiceListTopicsHandler.ServeHTTP(w, r)
 		case CatalogServiceListVideoFeaturesProcedure:
 			catalogServiceListVideoFeaturesHandler.ServeHTTP(w, r)
 		case CatalogServiceUpsertChannelProcedure:
@@ -601,8 +601,8 @@ func (UnimplementedCatalogServiceHandler) GetChannel(context.Context, *connect.R
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.GetChannel is not implemented"))
 }
 
-func (UnimplementedCatalogServiceHandler) ListCategories(context.Context, *connect.Request[v1.ListCategoriesRequest]) (*connect.Response[v1.ListCategoriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListCategories is not implemented"))
+func (UnimplementedCatalogServiceHandler) ListTopics(context.Context, *connect.Request[v1.ListTopicsRequest]) (*connect.Response[v1.ListTopicsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListTopics is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ListVideoFeatures(context.Context, *connect.Request[v1.ListVideoFeaturesRequest]) (*connect.Response[v1.ListVideoFeaturesResponse], error) {

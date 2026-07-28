@@ -26,6 +26,7 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/catalogclient"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/topicfile"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/ytdlp"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/usecase"
 )
@@ -46,6 +47,7 @@ func main() {
 			"postgres://ingest_svc:ingest_dev@localhost:5432/localyoutube?search_path=ingest")
 		catalogURL = env("CATALOG_URL", "http://localhost:8081")
 		mediaRoot  = env("MEDIA_ROOT", "./media")
+		topicsPath = env("TOPICS_FILE", "./topics.yaml")
 	)
 
 	defaultHeight := int32(1080)
@@ -95,8 +97,20 @@ func main() {
 
 	go usecase.NewWorker(ingest, logger).Run(ctx)
 
+	// The scanner is what fills the library. Twelve hours between passes keeps
+	// the request rate to the source negligible while still surfacing new
+	// uploads twice a day.
+	scanner := usecase.NewScanner(
+		topicfile.New(topicsPath),
+		downloader,
+		catalogclient.New(catalogHTTP, catalogURL),
+		logger,
+		12*time.Hour,
+	)
+	go scanner.Run(ctx)
+
 	mux := http.NewServeMux()
-	mux.Handle(ingestv1connect.NewIngestServiceHandler(rpc.NewServer(ingest)))
+	mux.Handle(ingestv1connect.NewIngestServiceHandler(rpc.NewServer(ingest, scanner)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := pool.Ping(r.Context()); err != nil {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
@@ -113,7 +127,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("ingest service listening", "addr", addr, "media", mediaRoot)
+		logger.Info("ingest service listening", "addr", addr, "media", mediaRoot, "topics", topicsPath)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("serve", "error", err)
 			os.Exit(1)

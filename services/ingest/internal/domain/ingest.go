@@ -56,9 +56,12 @@ type ExternalVideo struct {
 	SourceURL       string
 	PublishedAt     time.Time
 	Description     string
-	Categories      []string
-	Hashtags        []string
-	InLibrary       bool
+	// Topic names assigned by the scanner from the source this video was found
+	// in. Never taken from YouTube's own categories, which are too coarse to be
+	// useful — there are about fifteen of them globally.
+	Topics    []string
+	Hashtags  []string
+	InLibrary bool
 }
 
 // StreamLocation is a short-lived, directly playable upstream URL.

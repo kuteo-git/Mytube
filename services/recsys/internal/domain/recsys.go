@@ -44,7 +44,7 @@ type Signal struct {
 type VideoFeatures struct {
 	VideoID         string
 	ChannelID       string
-	Categories      []string
+	Topics          []string
 	Hashtags        []string
 	PublishedAt     time.Time
 	AddedAt         time.Time

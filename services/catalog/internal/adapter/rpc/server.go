@@ -109,7 +109,7 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		ThumbnailPath:   v.ThumbnailPath,
 		Description:     v.Description,
 		Hashtags:        v.Hashtags,
-		Categories:      v.Categories,
+		Topics:          v.Topics,
 		MediaState:      mediaStates[v.MediaState],
 		MediaPath:       v.MediaPath,
 		SizeBytes:       v.SizeBytes,
@@ -219,16 +219,16 @@ func (s *Server) GetChannel(ctx context.Context, req *connect.Request[catalogv1.
 	}), nil
 }
 
-func (s *Server) ListCategories(ctx context.Context, req *connect.Request[catalogv1.ListCategoriesRequest]) (*connect.Response[catalogv1.ListCategoriesResponse], error) {
-	cs, err := s.catalog.ListCategories(ctx, req.Msg.GetMinVideoCount())
+func (s *Server) ListTopics(ctx context.Context, req *connect.Request[catalogv1.ListTopicsRequest]) (*connect.Response[catalogv1.ListTopicsResponse], error) {
+	ts, err := s.catalog.ListTopics(ctx, req.Msg.GetMinVideoCount())
 	if err != nil {
 		return nil, toConnectErr(err)
 	}
-	out := make([]*catalogv1.Category, 0, len(cs))
-	for _, c := range cs {
-		out = append(out, &catalogv1.Category{Name: c.Name, VideoCount: c.VideoCount})
+	out := make([]*catalogv1.Topic, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, &catalogv1.Topic{Name: t.Name, VideoCount: t.VideoCount})
 	}
-	return connect.NewResponse(&catalogv1.ListCategoriesResponse{Categories: out}), nil
+	return connect.NewResponse(&catalogv1.ListTopicsResponse{Topics: out}), nil
 }
 
 func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[catalogv1.ListVideoFeaturesRequest]) (*connect.Response[catalogv1.ListVideoFeaturesResponse], error) {
@@ -243,7 +243,7 @@ func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[cat
 		out = append(out, &catalogv1.VideoFeatures{
 			VideoId:         f.VideoID,
 			ChannelId:       f.ChannelID,
-			Categories:      f.Categories,
+			Topics:          f.Topics,
 			Hashtags:        f.Hashtags,
 			PublishedAt:     timestamppb.New(f.PublishedAt),
 			AddedAt:         timestamppb.New(f.AddedAt),
@@ -297,7 +297,7 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 		ThumbnailPath:   in.GetThumbnailPath(),
 		Description:     in.GetDescription(),
 		Hashtags:        in.GetHashtags(),
-		Categories:      in.GetCategories(),
+		Topics:          in.GetTopics(),
 		MediaState:      mediaStatesFromProto[in.GetMediaState()],
 		MediaPath:       in.GetMediaPath(),
 		SizeBytes:       in.GetSizeBytes(),

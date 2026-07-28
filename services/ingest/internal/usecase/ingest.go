@@ -29,52 +29,13 @@ func New(downloader domain.Downloader, store domain.JobStore, library domain.Lib
 	}
 }
 
-// Search annotates results with whether each video is already in the library,
-// so the UI can show "Add" or "Play" rather than making the user guess.
-func (i *Ingest) Search(ctx context.Context, query string, limit int32) ([]domain.ExternalVideo, error) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return nil, nil
-	}
-
-	videos, err := i.downloader.Search(ctx, query, limit)
-	if err != nil {
-		return nil, err
-	}
-	return i.annotate(ctx, videos), nil
-}
-
+// Preview resolves full metadata for one video. Used by the download worker,
+// because flat listings omit fields the catalog row needs.
 func (i *Ingest) Preview(ctx context.Context, url string) (domain.ExternalVideo, error) {
 	if strings.TrimSpace(url) == "" {
 		return domain.ExternalVideo{}, fmt.Errorf("%w: url is required", domain.ErrInvalid)
 	}
-
-	v, err := i.downloader.Preview(ctx, url)
-	if err != nil {
-		return domain.ExternalVideo{}, err
-	}
-	return i.annotate(ctx, []domain.ExternalVideo{v})[0], nil
-}
-
-func (i *Ingest) ListPlaylist(ctx context.Context, url string, limit int32) (string, []domain.ExternalVideo, error) {
-	if strings.TrimSpace(url) == "" {
-		return "", nil, fmt.Errorf("%w: url is required", domain.ErrInvalid)
-	}
-
-	title, videos, err := i.downloader.ListPlaylist(ctx, url, limit)
-	if err != nil {
-		return "", nil, err
-	}
-	return title, i.annotate(ctx, videos), nil
-}
-
-func (i *Ingest) annotate(ctx context.Context, videos []domain.ExternalVideo) []domain.ExternalVideo {
-	for idx := range videos {
-		if _, found, err := i.library.FindBySourceURL(ctx, videos[idx].SourceURL); err == nil {
-			videos[idx].InLibrary = found
-		}
-	}
-	return videos
+	return i.downloader.Preview(ctx, url)
 }
 
 // ResolveStream returns a directly playable upstream URL for a video that is

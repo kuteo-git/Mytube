@@ -84,7 +84,7 @@ func (f *FeatureSource) fetchAll(ctx context.Context) ([]domain.VideoFeatures, e
 			out = append(out, domain.VideoFeatures{
 				VideoID:         v.GetVideoId(),
 				ChannelID:       v.GetChannelId(),
-				Categories:      v.GetCategories(),
+				Topics:          v.GetTopics(),
 				Hashtags:        v.GetHashtags(),
 				PublishedAt:     v.GetPublishedAt().AsTime(),
 				AddedAt:         v.GetAddedAt().AsTime(),

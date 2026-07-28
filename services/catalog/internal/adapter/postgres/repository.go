@@ -29,7 +29,7 @@ func New(pool *pgxpool.Pool, mediaRoot string) *Repository {
 // resolved in a single round trip instead of an N+1 fan-out.
 const videoSelect = `
 SELECT v.id, v.title, v.duration_seconds, v.view_count, v.published_at, v.added_at,
-       v.thumbnail_path, v.description, v.hashtags, v.categories, v.media_state,
+       v.thumbnail_path, v.description, v.hashtags, v.topics, v.media_state,
        v.media_path, v.size_bytes, v.pinned, v.source_url,
        c.id, c.name, c.handle, c.avatar_path, c.subscriber_count, c.verified,
        (s.user_id IS NOT NULL) AS subscribed,
@@ -60,7 +60,7 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 
 	err := row.Scan(
 		&v.ID, &v.Title, &v.DurationSeconds, &v.ViewCount, &v.PublishedAt, &v.AddedAt,
-		&v.ThumbnailPath, &v.Description, &v.Hashtags, &v.Categories, &state,
+		&v.ThumbnailPath, &v.Description, &v.Hashtags, &v.Topics, &state,
 		&v.MediaPath, &v.SizeBytes, &v.Pinned, &v.SourceURL,
 		&v.Channel.ID, &v.Channel.Name, &v.Channel.Handle, &v.Channel.AvatarPath,
 		&v.Channel.SubscriberCount, &v.Channel.Verified,
@@ -192,21 +192,21 @@ func (r *Repository) GetChannel(ctx context.Context, channelID, userID string) (
 	return c, videoCount, err
 }
 
-func (r *Repository) ListCategories(ctx context.Context, minVideoCount int32) ([]domain.Category, error) {
+func (r *Repository) ListTopics(ctx context.Context, minVideoCount int32) ([]domain.Topic, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT category, count(*)::int AS video_count
-		FROM videos, unnest(categories) AS category
-		GROUP BY category
+		SELECT topic, count(*)::int AS video_count
+		FROM videos, unnest(topics) AS topic
+		GROUP BY topic
 		HAVING count(*) >= $1
-		ORDER BY video_count DESC, category ASC`, minVideoCount)
+		ORDER BY video_count DESC, topic ASC`, minVideoCount)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var out []domain.Category
+	var out []domain.Topic
 	for rows.Next() {
-		var c domain.Category
+		var c domain.Topic
 		if err := rows.Scan(&c.Name, &c.VideoCount); err != nil {
 			return nil, err
 		}
@@ -242,14 +242,14 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 	if v.Hashtags == nil {
 		v.Hashtags = []string{}
 	}
-	if v.Categories == nil {
-		v.Categories = []string{}
+	if v.Topics == nil {
+		v.Topics = []string{}
 	}
 
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO videos (id, title, channel_id, duration_seconds, view_count,
 		                    published_at, added_at, thumbnail_path, description,
-		                    hashtags, categories, media_state, media_path,
+		                    hashtags, topics, media_state, media_path,
 		                    size_bytes, source_url)
 		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (id) DO UPDATE
@@ -261,10 +261,12 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		    thumbnail_path = COALESCE(NULLIF(EXCLUDED.thumbnail_path, ''), videos.thumbnail_path),
 		    description = EXCLUDED.description,
 		    hashtags = EXCLUDED.hashtags,
-		    categories = EXCLUDED.categories,
+		    -- Topics accumulate: a video discovered under a second topic keeps
+		    -- the first one instead of being reassigned.
+		    topics = ARRAY(SELECT DISTINCT unnest(videos.topics || EXCLUDED.topics)),
 		    source_url = EXCLUDED.source_url`,
 		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, v.ViewCount, v.PublishedAt,
-		v.ThumbnailPath, v.Description, v.Hashtags, v.Categories,
+		v.ThumbnailPath, v.Description, v.Hashtags, v.Topics,
 		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL)
 	if err != nil {
 		return domain.Video{}, err
@@ -300,7 +302,7 @@ func (r *Repository) FindBySourceURL(ctx context.Context, sourceURL, userID stri
 
 func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([]domain.VideoFeatures, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, channel_id, categories, hashtags, published_at, added_at,
+		SELECT id, channel_id, topics, hashtags, published_at, added_at,
 		       duration_seconds, media_state
 		FROM videos
 		ORDER BY id
@@ -316,7 +318,7 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 			f     domain.VideoFeatures
 			state string
 		)
-		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Categories, &f.Hashtags,
+		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Topics, &f.Hashtags,
 			&f.PublishedAt, &f.AddedAt, &f.DurationSeconds, &state); err != nil {
 			return nil, err
 		}
