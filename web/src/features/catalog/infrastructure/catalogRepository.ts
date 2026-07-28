@@ -38,7 +38,7 @@ export interface CatalogRepository {
   addComment(videoId: string, text: string, parentCommentId?: string): Promise<Comment>
 
   getChannel(channelId: string): Promise<ChannelPage>
-  listChannelVideos(channelId: string, pageToken?: string): Promise<Feed>
+  listChannelVideos(channelId: string, offset?: number): Promise<ChannelUploads>
   setSubscription(channelId: string, subscribed: boolean): Promise<void>
   listSubscriptions(): Promise<Channel[]>
 }
@@ -46,6 +46,16 @@ export interface CatalogRepository {
 export interface ChannelPage {
   channel: Channel
   videoCount: number
+}
+
+/**
+ * A page of a channel's uploads, read live from YouTube rather than from the
+ * local library — so browsing a channel is not capped at whatever a scan
+ * happened to bring in. `nextOffset` is 0 when the channel has run out.
+ */
+export interface ChannelUploads {
+  videos: ExternalVideo[]
+  nextOffset: number
 }
 
 export interface Feed {
@@ -254,8 +264,9 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<ChannelPage>(`/channels/${encodeURIComponent(channelId)}`)
   },
 
-  listChannelVideos(channelId, pageToken) {
-    return request<Feed>(`/channels/${encodeURIComponent(channelId)}/videos${query({ pageToken })}`)
+  listChannelVideos(channelId, offset) {
+    const suffix = offset ? `?offset=${offset}` : ''
+    return request<ChannelUploads>(`/channels/${encodeURIComponent(channelId)}/videos${suffix}`)
   },
 
   setSubscription(channelId, subscribed) {

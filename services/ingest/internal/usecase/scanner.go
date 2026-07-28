@@ -154,7 +154,14 @@ func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limi
 		}
 		seen++
 
-		s.assignTopic(ctx, &v, topicName)
+		// The topic comes from the source it was found in. An empty topicName
+		// marks a subscription: its videos join the library unfiled, because
+		// nobody said the channel belongs to a topic. YouTube's own category is
+		// filled in later, free of charge, the first time something actually
+		// fetches full metadata for the video — see CLAUDE.md §7.
+		if topicName != "" {
+			v.Topics = []string{topicName}
+		}
 
 		// Flat listings omit the channel for some sources; without one the
 		// catalog row cannot be written, so fall back to the source itself.
@@ -180,41 +187,6 @@ func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limi
 	}
 
 	return seen, added, nil
-}
-
-// assignTopic decides what topic a video is filed under.
-//
-// YouTube's own category is the source of truth now (CLAUDE.md §7): a video
-// gets whatever category YouTube assigns it, the same taxonomy YouTube's own
-// subscriptions/explore chips use. That information only exists on a full
-// per-video fetch, which costs roughly two seconds — acceptable for a video
-// nobody has seen before, ruinous if paid on every video on every scan. So
-// this only fetches for videos the library does not already know: an
-// already-known video keeps its first-assigned topic and this function does
-// not touch the network for it at all.
-//
-// If the fetch fails, or the video carries no category, curated sources fall
-// back to the topics.yaml name so they are never topic-less; subscriptions
-// (topicName == "") have no such fallback and simply stay unfiled, same as
-// before this change.
-func (s *Scanner) assignTopic(ctx context.Context, v *domain.ExternalVideo, topicName string) {
-	if _, known, err := s.library.FindBySourceURL(ctx, v.SourceURL); err != nil {
-		s.logger.Warn("check known video", "video", v.ID, "error", err)
-	} else if known {
-		return
-	}
-
-	full, err := s.fetch.Preview(ctx, v.SourceURL)
-	if err != nil || full.Category == "" {
-		if err != nil {
-			s.logger.Warn("fetch category", "video", v.ID, "error", err)
-		}
-		if topicName != "" {
-			v.Topics = []string{topicName}
-		}
-		return
-	}
-	v.Topics = []string{full.Category}
 }
 
 // scanTarget is one thing to scan. An empty TopicName marks a subscription:

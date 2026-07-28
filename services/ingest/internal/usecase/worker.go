@@ -113,6 +113,10 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 	if err := i.library.UpsertChannel(ctx, meta); err != nil {
 		return err
 	}
+	// Preview above already fetched full metadata, so the category is free
+	// here — the same source of truth for topics the rest of the system uses.
+	meta.Topics = categoryTopics(meta)
+
 	if err := i.library.UpsertVideo(ctx, meta, "DOWNLOADING"); err != nil {
 		return err
 	}

@@ -73,6 +73,12 @@ func (i *Ingest) EnsureVideo(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("%w: upstream returned no video id", domain.ErrNotFound)
 	}
 
+	// Preview already paid for full metadata, so YouTube's own category is
+	// here for free — that is where topics come from now (CLAUDE.md §7).
+	// Catalog merges topics on conflict, so this adds to whatever a scan may
+	// have already filed the video under rather than replacing it.
+	meta.Topics = categoryTopics(meta)
+
 	if err := i.library.UpsertChannel(ctx, meta); err != nil {
 		return "", err
 	}
@@ -80,6 +86,44 @@ func (i *Ingest) EnsureVideo(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 	return meta.ID, nil
+}
+
+// ListChannelUploads reads a channel's uploads straight from YouTube.
+//
+// The channel page uses this instead of the local catalog: a scan only ever
+// brings in the most recent few dozen uploads, so browsing a channel through
+// the catalog would hit a wall that has nothing to do with the channel. Results
+// are annotated with whether each video is already local, which is the
+// difference between opening instantly and waiting for a fetch.
+func (i *Ingest) ListChannelUploads(ctx context.Context, channel string, offset, limit int32) ([]domain.ExternalVideo, error) {
+	channel = strings.TrimSpace(channel)
+	if channel == "" {
+		return nil, fmt.Errorf("%w: channel is required", domain.ErrInvalid)
+	}
+
+	_, videos, err := i.downloader.ListPlaylist(ctx, channelUploadsURL(channel), offset, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	for idx := range videos {
+		if _, found, err := i.library.FindBySourceURL(ctx, videos[idx].SourceURL); err == nil {
+			videos[idx].InLibrary = found
+		}
+	}
+	return videos, nil
+}
+
+// channelUploadsURL accepts either a handle or a bare channel id, since the
+// catalog stores both shapes depending on what the source listing carried.
+func channelUploadsURL(channel string) string {
+	if strings.HasPrefix(channel, "http://") || strings.HasPrefix(channel, "https://") {
+		return channel
+	}
+	if strings.HasPrefix(channel, "@") {
+		return "https://www.youtube.com/" + channel + "/videos"
+	}
+	return "https://www.youtube.com/channel/" + channel + "/videos"
 }
 
 // Preview resolves full metadata for one video. Used by the download worker,
@@ -150,4 +194,14 @@ func (i *Ingest) CancelJob(ctx context.Context, jobID string) error {
 		return fmt.Errorf("%w: job_id is required", domain.ErrInvalid)
 	}
 	return i.store.Cancel(ctx, jobID)
+}
+
+// categoryTopics turns YouTube's own category into the video's topic list.
+// Empty when the category is unknown, which leaves the video's existing topics
+// untouched rather than clearing them.
+func categoryTopics(v domain.ExternalVideo) []string {
+	if v.Category == "" {
+		return v.Topics
+	}
+	return []string{v.Category}
 }

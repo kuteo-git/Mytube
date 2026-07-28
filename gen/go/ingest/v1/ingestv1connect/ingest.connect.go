@@ -57,6 +57,9 @@ const (
 	// IngestServiceExpandLibraryProcedure is the fully-qualified name of the IngestService's
 	// ExpandLibrary RPC.
 	IngestServiceExpandLibraryProcedure = "/ingest.v1.IngestService/ExpandLibrary"
+	// IngestServiceListChannelUploadsProcedure is the fully-qualified name of the IngestService's
+	// ListChannelUploads RPC.
+	IngestServiceListChannelUploadsProcedure = "/ingest.v1.IngestService/ListChannelUploads"
 )
 
 // IngestServiceClient is a client for the ingest.v1.IngestService service.
@@ -81,6 +84,10 @@ type IngestServiceClient interface {
 	// Brings new material into the library when the feed is running low. Metadata
 	// only: nothing is downloaded until someone presses play.
 	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
+	// Lists a channel's uploads straight from YouTube, paginated. The channel
+	// page uses this rather than the local catalog so browsing a channel is not
+	// limited to whatever a scan happened to bring in.
+	ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error)
 }
 
 // NewIngestServiceClient constructs a client for the ingest.v1.IngestService service. By default,
@@ -154,21 +161,28 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("ExpandLibrary")),
 			connect.WithClientOptions(opts...),
 		),
+		listChannelUploads: connect.NewClient[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse](
+			httpClient,
+			baseURL+IngestServiceListChannelUploadsProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ListChannelUploads")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
-	search        *connect.Client[v1.SearchRequest, v1.SearchResponse]
-	ensureVideo   *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
-	refresh       *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
-	getScanStatus *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
-	resolveStream *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
-	submit        *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
-	getJob        *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
-	listJobs      *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
-	cancelJob     *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
-	expandLibrary *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
+	search             *connect.Client[v1.SearchRequest, v1.SearchResponse]
+	ensureVideo        *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
+	refresh            *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
+	getScanStatus      *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
+	resolveStream      *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
+	submit             *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
+	getJob             *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	listJobs           *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	cancelJob          *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	expandLibrary      *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
+	listChannelUploads *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
 }
 
 // Search calls ingest.v1.IngestService.Search.
@@ -221,6 +235,11 @@ func (c *ingestServiceClient) ExpandLibrary(ctx context.Context, req *connect.Re
 	return c.expandLibrary.CallUnary(ctx, req)
 }
 
+// ListChannelUploads calls ingest.v1.IngestService.ListChannelUploads.
+func (c *ingestServiceClient) ListChannelUploads(ctx context.Context, req *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {
+	return c.listChannelUploads.CallUnary(ctx, req)
+}
+
 // IngestServiceHandler is an implementation of the ingest.v1.IngestService service.
 type IngestServiceHandler interface {
 	// Searches upstream. Topics decide what the feed offers; search is how the
@@ -243,6 +262,10 @@ type IngestServiceHandler interface {
 	// Brings new material into the library when the feed is running low. Metadata
 	// only: nothing is downloaded until someone presses play.
 	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
+	// Lists a channel's uploads straight from YouTube, paginated. The channel
+	// page uses this rather than the local catalog so browsing a channel is not
+	// limited to whatever a scan happened to bring in.
+	ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error)
 }
 
 // NewIngestServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -312,6 +335,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("ExpandLibrary")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceListChannelUploadsHandler := connect.NewUnaryHandler(
+		IngestServiceListChannelUploadsProcedure,
+		svc.ListChannelUploads,
+		connect.WithSchema(ingestServiceMethods.ByName("ListChannelUploads")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IngestServiceSearchProcedure:
@@ -334,6 +363,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceCancelJobHandler.ServeHTTP(w, r)
 		case IngestServiceExpandLibraryProcedure:
 			ingestServiceExpandLibraryHandler.ServeHTTP(w, r)
+		case IngestServiceListChannelUploadsProcedure:
+			ingestServiceListChannelUploadsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -381,4 +412,8 @@ func (UnimplementedIngestServiceHandler) CancelJob(context.Context, *connect.Req
 
 func (UnimplementedIngestServiceHandler) ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ExpandLibrary is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ListChannelUploads is not implemented"))
 }

@@ -166,42 +166,35 @@ func TestExpandSkipsVideosAlreadyPresent(t *testing.T) {
 	}
 }
 
-// A genuinely new video is filed under YouTube's own category, not the
-// curated source's topic name (CLAUDE.md §7).
-func TestExpandFilesNewVideosUnderTheirYouTubeCategory(t *testing.T) {
-	downloader := &deepenDownloader{
-		previewByURL: map[string]domain.ExternalVideo{
-			"https://youtube.test/watch?v=deep1": {Category: "Science & Technology"},
-			"https://youtube.test/watch?v=deep2": {Category: "Science & Technology"},
-		},
-	}
+// Expansion must stay cheap: it walks flat listings only and never pays for a
+// full per-video metadata fetch. The category that fills in a video's topic
+// arrives later, free, from the Preview that EnsureVideo or the download worker
+// already performs — see CLAUDE.md §7.
+func TestExpandNeverFetchesFullMetadata(t *testing.T) {
+	downloader := &deepenDownloader{}
 	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
 	expander := newExpander(downloader, failingRelated{}, library, &stubCursors{offsets: map[string]int32{}})
 
 	if _, err := expander.Expand(context.Background(), "Tech", nil); err != nil {
 		t.Fatalf("Expand: %v", err)
 	}
-	if got := library.topics["deep1"]; len(got) != 1 || got[0] != "Science & Technology" {
-		t.Fatalf("topics = %v, want [Science & Technology]", got)
+	if len(downloader.previewCalls) != 0 {
+		t.Fatalf("Preview called %d times during expansion, want 0: %v",
+			len(downloader.previewCalls), downloader.previewCalls)
 	}
 }
 
-// Same cost guarantee as the scanner: a video the library already has must
-// never trigger a full metadata fetch during expansion.
-func TestExpandNeverPreviewsAnAlreadyKnownVideo(t *testing.T) {
-	downloader := &deepenDownloader{}
-	library := &recordingLibrary{
-		known:  map[string]bool{"https://youtube.test/watch?v=deep1": true},
-		topics: map[string][]string{},
-	}
-	expander := newExpander(downloader, failingRelated{}, library, &stubCursors{offsets: map[string]int32{}})
+// deepen files videos under the curated source's topic; that is the one place
+// a topic is known without asking YouTube anything.
+func TestExpandFilesDeepenedVideosUnderTheCuratedTopic(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
+	expander := newExpander(&deepenDownloader{}, failingRelated{}, library,
+		&stubCursors{offsets: map[string]int32{}})
 
 	if _, err := expander.Expand(context.Background(), "Tech", nil); err != nil {
 		t.Fatalf("Expand: %v", err)
 	}
-	for _, url := range downloader.previewCalls {
-		if url == "https://youtube.test/watch?v=deep1" {
-			t.Fatalf("Preview called for an already-known video: %v", downloader.previewCalls)
-		}
+	if got := library.topics["deep1"]; len(got) != 1 || got[0] != "Tech" {
+		t.Fatalf("topics = %v, want [Tech]", got)
 	}
 }

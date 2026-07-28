@@ -197,20 +197,21 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   "Keep" (pin) là bộ sưu tập cá nhân duy nhất.
 - **`categories` → `topics`, lần 1**: YouTube chỉ có ~15 category toàn cục → chốt bỏ, dùng
   topics.yaml curate tay.
-- **`categories` → `topics`, lần 2 (2026-07-28, đảo lại lần 1)**: topic của video **mới** giờ
-  lấy thẳng từ category thật của YouTube (vd "Science & Technology"), giống hệt taxonomy
-  YouTube dùng cho chip Subscriptions/Explore. Video **cũ** giữ nguyên tên topic cũ (Tech,
-  Gaming...) — không quét lại, hai tập tên topic cùng tồn tại song song trong sidebar.
-  **Giá thật đã đo**: `--flat-playlist` (cách scan hiện tại, 1 request/kênh) không trả category
-  — phải full fetch/video (`Preview`, ~2.2s/video). Nếu áp cho toàn bộ thư viện thì 1 lần quét
-  từ 8 giây thành ~14 phút. **Giảm chi phí**: chỉ fetch cho video **thật sự mới**
-  (`FindBySourceURL` xác nhận chưa có) — video đã biết không bao giờ bị fetch lại, khoá bằng
-  test (`TestAlreadyKnownVideoIsNeverRePreviewed`, `TestExpandNeverPreviewsAnAlreadyKnownVideo`).
-  Nguồn curate (topics.yaml) vẫn là fallback nếu fetch category lỗi; subscription không có
-  fallback, video ở lại không gắn topic như trước.
-  **Tác dụng phụ đã sửa cùng lúc**: gateway dùng chung 1 `http.Client` timeout cứng 15s cho cả
-  3 RPC nội bộ — timeout này đè lên context nên `ExpandLibrary` (giờ tốn thêm ~2s/video mới)
-  sẽ luôn chết giữa chừng. Tách riêng client cho ingest với timeout 10 phút.
+- **`categories` → `topics`, lần 2 (2026-07-28, đảo lại lần 1)**: topic của video lấy từ
+  category thật của YouTube (vd "Science & Technology"), giống taxonomy YouTube dùng cho chip
+  Subscriptions/Explore. Video cũ giữ nguyên tên topic cũ (Tech, Gaming...) — hai tập tên
+  cùng tồn tại trong sidebar.
+  **Category lấy ở đâu**: `--flat-playlist` (cách scan) **không** trả category — chỉ full fetch
+  mỗi video (`Preview`, ~2.2s) mới có. Nên scan/expand **không bao giờ** gọi Preview; category
+  được nhặt **miễn phí** ở hai chỗ vốn đã gọi Preview sẵn: `EnsureVideo` (mở video từ search /
+  trang kênh) và worker tải video. Đánh đổi: video chưa ai mở thì chưa có topic.
+  **Đã thử cách khác và bỏ**: từng cho scan tự fetch category từng video mới. Đo thật:
+  scan 8 giây → 101 giây cho 40 video mới; với 55 kênh subscribe thì thành ~73 phút. Không đáng.
+- **Trang kênh**: từng đọc từ catalog local (`ListChannelVideos`) → **đảo lại**: đọc **live từ
+  YouTube**, phân trang theo offset (`ListChannelUploads`). Lý do: scan chỉ mang về ~40 video mới
+  nhất, nên trang kênh đọc catalog sẽ bị chặn ở con số đó vì lý do người xem không nhìn thấy.
+  Bấm vào video chưa có trong thư viện → `EnsureVideo` ghi metadata rồi mở, đúng luồng của
+  kết quả search. Subscribe **không cần đợi scan** mới xem được kênh.
 - **Feed**: từng chốt "topics.yaml là nguồn duy nhất của feed" → **đảo lại**: khi feed sắp cạn,
   gateway gọi `ExpandLibrary` để kéo thêm — đào sâu chính các source trong topics.yaml trước,
   rồi related qua InnerTube, cuối cùng mới là search. Lý do: cuộn vô tận là yêu cầu, mà 280 video

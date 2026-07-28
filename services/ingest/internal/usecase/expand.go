@@ -101,7 +101,10 @@ func (e *Expander) deepen(ctx context.Context, topic string) int {
 				continue // source exhausted
 			}
 
-			added += e.store(ctx, videos, t.Name)
+			for i := range videos {
+				videos[i].Topics = []string{t.Name}
+			}
+			added += e.store(ctx, videos)
 
 			if err := e.cursors.AdvanceOffset(ctx, source, int32(len(videos))); err != nil {
 				e.logger.Warn("advance source cursor", "source", source, "error", err)
@@ -124,7 +127,7 @@ func (e *Expander) fromRelated(ctx context.Context, seedVideoIDs []string) int {
 			e.logger.Warn("related lookup", "seed", seed, "error", err)
 			continue
 		}
-		added += e.store(ctx, videos, "")
+		added += e.store(ctx, videos)
 		if added >= expandTarget {
 			return added
 		}
@@ -141,7 +144,7 @@ func (e *Expander) fromSearch(ctx context.Context, topic string) int {
 		e.logger.Warn("expand by search", "topic", topic, "error", err)
 		return 0
 	}
-	return e.store(ctx, videos, "")
+	return e.store(ctx, videos)
 }
 
 // store writes metadata only. Nothing is downloaded here: a video becomes a row
@@ -151,10 +154,11 @@ func (e *Expander) fromSearch(ctx context.Context, topic string) int {
 // "QUEUED" matches the state the topic scanner already uses for a metadata-only
 // row: known to the catalog, not yet on disk.
 //
-// fallbackTopic is used only when the video is genuinely new and a category
-// fetch fails or comes back empty. deepen passes the curated source's topic
-// name; related and search pass "" since they have no such fallback.
-func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo, fallbackTopic string) int {
+// Topics are whatever the caller already set: deepen files videos under the
+// curated source's topic, related and search leave them unfiled. YouTube's own
+// category arrives later, free, the first time full metadata is fetched for the
+// video — see CLAUDE.md §7.
+func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo) int {
 	added := 0
 	for _, v := range videos {
 		if v.ID == "" || v.SourceURL == "" {
@@ -163,8 +167,6 @@ func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo, fal
 		if _, found, err := e.library.FindBySourceURL(ctx, v.SourceURL); err == nil && found {
 			continue
 		}
-
-		v.Topics = e.categoryTopic(ctx, v.SourceURL, fallbackTopic)
 
 		if err := e.library.UpsertChannel(ctx, v); err != nil {
 			e.logger.Warn("upsert channel", "video", v.ID, "error", err)
@@ -177,22 +179,4 @@ func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo, fal
 		added++
 	}
 	return added
-}
-
-// categoryTopic fetches YouTube's own category for a video new to the
-// library (CLAUDE.md §7) and uses it as the topic. Cost is paid only here,
-// once per genuinely new video — store's caller has already confirmed the
-// video was not previously known.
-func (e *Expander) categoryTopic(ctx context.Context, sourceURL, fallbackTopic string) []string {
-	full, err := e.downloader.Preview(ctx, sourceURL)
-	if err != nil || full.Category == "" {
-		if err != nil {
-			e.logger.Warn("fetch category", "source", sourceURL, "error", err)
-		}
-		if fallbackTopic != "" {
-			return []string{fallbackTopic}
-		}
-		return nil
-	}
-	return []string{full.Category}
 }

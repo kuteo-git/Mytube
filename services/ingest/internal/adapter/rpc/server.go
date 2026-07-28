@@ -181,6 +181,18 @@ func (s *Server) CancelJob(ctx context.Context, req *connect.Request[ingestv1.Ca
 	return connect.NewResponse(&ingestv1.CancelJobResponse{}), nil
 }
 
+func (s *Server) ListChannelUploads(ctx context.Context, req *connect.Request[ingestv1.ListChannelUploadsRequest]) (*connect.Response[ingestv1.ListChannelUploadsResponse], error) {
+	videos, err := s.ingest.ListChannelUploads(ctx, req.Msg.GetChannel(), req.Msg.GetOffset(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*ingestv1.ExternalVideo, 0, len(videos))
+	for _, v := range videos {
+		out = append(out, videoToProto(v))
+	}
+	return connect.NewResponse(&ingestv1.ListChannelUploadsResponse{Videos: out}), nil
+}
+
 func (s *Server) ExpandLibrary(ctx context.Context, req *connect.Request[ingestv1.ExpandLibraryRequest]) (*connect.Response[ingestv1.ExpandLibraryResponse], error) {
 	added, err := s.expander.Expand(ctx, req.Msg.GetTopic(), req.Msg.GetSeedVideoIds())
 	if err != nil {

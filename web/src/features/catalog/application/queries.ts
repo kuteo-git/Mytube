@@ -202,12 +202,17 @@ export function useChannel(channelId: string | undefined) {
   })
 }
 
+/**
+ * A channel's uploads, live from YouTube and paged by offset. Not served from
+ * the catalog: a scan only ever brings in the newest few dozen videos, and
+ * capping the channel page at that would look like the channel had no more.
+ */
 export function useChannelVideos(channelId: string | undefined) {
   return useInfiniteQuery({
     queryKey: ['channel-videos', channelId],
     queryFn: ({ pageParam }) => repo.listChannelVideos(channelId!, pageParam),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextOffset || undefined,
     enabled: Boolean(channelId),
   })
 }

@@ -473,22 +473,67 @@ func (g *Gateway) handleGetChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
-	resp, err := g.catalog.ListChannelVideos(r.Context(), connect.NewRequest(&catalogv1.ListChannelVideosRequest{
-		ChannelId: r.PathValue("id"),
+	ctx := r.Context()
+	channelID := r.PathValue("id")
+
+	// Ask YouTube, not the catalog. A scan only ever brings in the newest few
+	// dozen uploads, so serving this page from the catalog would cap a channel
+	// at that number for reasons the viewer cannot see. The handle is preferred
+	// over the raw id because that is the form YouTube resolves most reliably.
+	channel, err := g.catalog.GetChannel(ctx, connect.NewRequest(&catalogv1.GetChannelRequest{
+		ChannelId: channelID,
 		UserId:    g.userID(r),
-		PageSize:  intParam(r, "pageSize", 24),
-		PageToken: r.URL.Query().Get("pageToken"),
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
 		return
 	}
 
-	out := make([]videoDTO, 0, len(resp.Msg.GetVideos()))
-	for _, v := range resp.Msg.GetVideos() {
-		out = append(out, toVideoDTO(v))
+	lookup := channel.Msg.GetChannel().GetHandle()
+	if lookup == "" {
+		lookup = channelID
 	}
-	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+
+	pageSize := intParam(r, "pageSize", 30)
+	offset := intParam(r, "offset", 0)
+	// intParam treats 0 as absent and returns the fallback, so offset needs its
+	// own parse: page 1 legitimately starts at zero.
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		if v, convErr := strconv.Atoi(raw); convErr == nil && v >= 0 {
+			offset = int32(v)
+		}
+	}
+
+	resp, err := g.ingest.ListChannelUploads(ctx, connect.NewRequest(&ingestv1.ListChannelUploadsRequest{
+		Channel: lookup,
+		Offset:  offset,
+		Limit:   pageSize,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		out = append(out, externalVideoDTO{
+			ID:              v.GetId(),
+			Title:           v.GetTitle(),
+			ChannelName:     v.GetChannelName(),
+			DurationSeconds: v.GetDurationSeconds(),
+			ViewCount:       v.GetViewCount(),
+			ThumbnailURL:    v.GetThumbnailUrl(),
+			SourceURL:       v.GetSourceUrl(),
+			InLibrary:       v.GetInLibrary(),
+		})
+	}
+
+	// A short page means the channel ran out; that is what ends the scroll.
+	nextOffset := 0
+	if int32(len(out)) >= pageSize {
+		nextOffset = int(offset) + len(out)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"videos": out, "nextOffset": nextOffset})
 }
 
 type setSubscriptionRequest struct {

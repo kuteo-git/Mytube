@@ -37,6 +37,22 @@ service IngestService {
   // Brings new material into the library when the feed is running low. Metadata
   // only: nothing is downloaded until someone presses play.
   rpc ExpandLibrary(ExpandLibraryRequest) returns (ExpandLibraryResponse);
+
+  // Lists a channel's uploads straight from YouTube, paginated. The channel
+  // page uses this rather than the local catalog so browsing a channel is not
+  // limited to whatever a scan happened to bring in.
+  rpc ListChannelUploads(ListChannelUploadsRequest) returns (ListChannelUploadsResponse);
+}
+
+message ListChannelUploadsRequest {
+  // Channel handle ("@mkbhd") or bare channel id ("UC...").
+  string channel = 1;
+  int32 offset = 2;
+  int32 limit = 3;
+}
+
+message ListChannelUploadsResponse {
+  repeated ExternalVideo videos = 1;
 }
 
 message ExpandLibraryRequest {

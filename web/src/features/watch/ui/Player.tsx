@@ -9,7 +9,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import { useStream } from '@/features/catalog/application/queries'
@@ -80,14 +80,15 @@ export function Player({
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
 
-  // Swapping the source reloads the element and resets currentTime to 0. This
-  // ref tracks the real position independently of the DOM, updated on every
-  // timeupdate, so onLoadedMetadata can restore it after a source swap. A ref
-  // keyed to the effect-cleanup lifecycle does not work here: React commits the
-  // new `src` to the DOM — which resets currentTime — before running the
-  // cleanup of the effect watching stream?.url, so a cleanup-based capture
-  // reads the position *after* the browser already zeroed it.
+  // Position to restore after the source swaps from upstream to the local copy.
+  //
+  // Written continuously from timeupdate, and frozen the moment the source
+  // changes. The freeze is the whole point: changing <video src> resets
+  // currentTime to 0, and the reset itself can dispatch a timeupdate — which
+  // would otherwise overwrite the saved position with 0 and restart the video
+  // from the beginning, exactly the bug this is here to prevent.
   const resumeAtRef = useRef(initialPositionSeconds)
+  const swappingRef = useRef(true)
   // One re-resolve is allowed per mounted player. An expired upstream URL is
   // the common failure and it fixes itself; anything that survives a fresh URL
   // is a real failure and must be shown rather than retried forever.
@@ -109,6 +110,13 @@ export function Player({
       track.mode = track.language === captions ? 'showing' : 'disabled'
     }
   }, [captions, stream?.url, subtitles.length])
+
+  // useLayoutEffect, not useEffect: this runs synchronously after React commits
+  // the new src to the DOM and before the browser can dispatch any media event,
+  // so the freeze is in place before a reset-to-zero timeupdate can land.
+  useLayoutEffect(() => {
+    swappingRef.current = true
+  }, [stream?.url])
 
   useEffect(() => {
     retriedRef.current = false
@@ -314,6 +322,8 @@ export function Player({
             if (resumeAt > 0 && resumeAt < element.duration) {
               element.currentTime = resumeAt
             }
+            // The new source is loaded and positioned: resume tracking.
+            swappingRef.current = false
 
             // Start playing on arrival. If the browser refuses audible
             // autoplay, retry muted rather than leaving a dead frame, and
@@ -327,7 +337,9 @@ export function Player({
           }}
           onTimeUpdate={(e) => {
             setPosition(e.currentTarget.currentTime)
-            resumeAtRef.current = e.currentTarget.currentTime
+            // Frozen across a source swap, so the browser's reset to 0 cannot
+            // erase where the viewer actually was.
+            if (!swappingRef.current) resumeAtRef.current = e.currentTarget.currentTime
           }}
           onProgress={(e) => {
             const ranges = e.currentTarget.buffered
