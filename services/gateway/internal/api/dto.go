@@ -19,6 +19,7 @@ type channelDTO struct {
 	Name            string `json:"name"`
 	Handle          string `json:"handle"`
 	AvatarPath      string `json:"avatarPath"`
+	BannerPath      string `json:"bannerPath"`
 	SubscriberCount int64  `json:"subscriberCount"`
 	Verified        bool   `json:"verified"`
 	Subscribed      bool   `json:"subscribed"`
@@ -124,6 +125,7 @@ func toChannelDTO(c *catalogv1.Channel) channelDTO {
 		Name:            c.GetName(),
 		Handle:          c.GetHandle(),
 		AvatarPath:      c.GetAvatarPath(),
+		BannerPath:      c.GetBannerPath(),
 		SubscriberCount: c.GetSubscriberCount(),
 		Verified:        c.GetVerified(),
 		Subscribed:      c.GetSubscribed(),

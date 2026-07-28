@@ -61,6 +61,11 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
+	mux.HandleFunc("GET /api/subscriptions", g.handleListSubscriptions)
+
+	mux.HandleFunc("GET /api/channels/{id}", g.handleGetChannel)
+	mux.HandleFunc("GET /api/channels/{id}/videos", g.handleChannelVideos)
+	mux.HandleFunc("POST /api/channels/{id}/subscription", g.handleSetSubscription)
 
 	mux.HandleFunc("GET /api/videos/{id}", g.handleGetVideo)
 	mux.HandleFunc("GET /api/videos/{id}/up-next", g.handleUpNext)
@@ -443,4 +448,91 @@ func (g *Gateway) handleListComments(w http.ResponseWriter, r *http.Request) {
 		TotalCount:    resp.Msg.GetTotalCount(),
 		NextPageToken: resp.Msg.GetNextPageToken(),
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Channels & subscriptions
+// ---------------------------------------------------------------------------
+
+func (g *Gateway) handleGetChannel(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.GetChannel(r.Context(), connect.NewRequest(&catalogv1.GetChannelRequest{
+		ChannelId: r.PathValue("id"),
+		UserId:    g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"channel":    toChannelDTO(resp.Msg.GetChannel()),
+		"videoCount": resp.Msg.GetVideoCount(),
+	})
+}
+
+func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListChannelVideos(r.Context(), connect.NewRequest(&catalogv1.ListChannelVideosRequest{
+		ChannelId: r.PathValue("id"),
+		UserId:    g.userID(r),
+		PageSize:  intParam(r, "pageSize", 24),
+		PageToken: r.URL.Query().Get("pageToken"),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]videoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		out = append(out, toVideoDTO(v))
+	}
+	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+}
+
+type setSubscriptionRequest struct {
+	Subscribed bool `json:"subscribed"`
+}
+
+func (g *Gateway) handleSetSubscription(w http.ResponseWriter, r *http.Request) {
+	var body setSubscriptionRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	userID := g.userID(r)
+	channelID := r.PathValue("id")
+
+	if _, err := g.catalog.SetSubscription(r.Context(), connect.NewRequest(&catalogv1.SetSubscriptionRequest{
+		UserId:     userID,
+		ChannelId:  channelID,
+		Subscribed: body.Subscribed,
+	})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	// Subscribing is a behaviour signal too — recsys already weighs it.
+	signalType := recsysv1.SignalType_SIGNAL_TYPE_SUBSCRIBE
+	if !body.Subscribed {
+		signalType = recsysv1.SignalType_SIGNAL_TYPE_UNSUBSCRIBE
+	}
+	go g.recordSignal(userID, signalType, "", "", 0)
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleListSubscriptions(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListSubscriptions(r.Context(), connect.NewRequest(&catalogv1.ListSubscriptionsRequest{
+		UserId: g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]channelDTO, 0, len(resp.Msg.GetChannels()))
+	for _, c := range resp.Msg.GetChannels() {
+		out = append(out, toChannelDTO(c))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"channels": out})
 }
