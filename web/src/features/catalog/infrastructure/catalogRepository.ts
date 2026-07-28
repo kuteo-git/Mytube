@@ -18,6 +18,7 @@ export interface CatalogRepository {
   listTopics(): Promise<Topic[]>
   refreshTopics(): Promise<ScanStatus>
   search(query: string): Promise<Video[]>
+  suggest(query: string): Promise<Suggestion[]>
   getStorage(): Promise<StorageUsage>
 
   /**
@@ -41,6 +42,12 @@ export interface Feed {
 export interface CommentPage {
   comments: Comment[]
   totalCount: number
+}
+
+export interface Suggestion {
+  text: string
+  kind: 'TITLE' | 'TOPIC' | 'CHANNEL'
+  videoCount: number
 }
 
 export interface ScanStatus {
@@ -151,6 +158,13 @@ export const httpCatalogRepository: CatalogRepository = {
     if (!q.trim()) return []
     const feed = await request<Feed>(`/search${query({ q })}`)
     return feed.videos
+  },
+
+  async suggest(q) {
+    const { suggestions } = await request<{ suggestions: Suggestion[] }>(
+      `/suggest${query({ q })}`,
+    )
+    return suggestions
   },
 
   getStorage() {

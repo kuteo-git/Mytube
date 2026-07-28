@@ -14,6 +14,29 @@ export function useFeed(topic: string) {
   })
 }
 
+/**
+ * Type-ahead. Debounced by staleTime plus the three-character floor enforced
+ * server-side, so typing a sentence costs a handful of queries rather than one
+ * per keystroke.
+ */
+export function useSuggestions(query: string) {
+  return useQuery({
+    queryKey: ['suggest', query],
+    queryFn: () => repo.suggest(query),
+    enabled: query.trim().length >= 3,
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useSearch(query: string) {
+  return useQuery({
+    queryKey: ['search', query],
+    queryFn: () => repo.search(query),
+    enabled: query.trim().length > 0,
+  })
+}
+
 export function useTopics() {
   return useQuery({
     queryKey: ['topics'],

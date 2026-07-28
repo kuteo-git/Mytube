@@ -20,6 +20,9 @@ service CatalogService {
   // is preserved in the response so ranking survives the round trip.
   rpc BatchGetVideos(BatchGetVideosRequest) returns (BatchGetVideosResponse);
   rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
+  // Type-ahead over the local library only. Suggesting terms the library
+  // cannot answer would lead every one of them to an empty result page.
+  rpc Suggest(SuggestRequest) returns (SuggestResponse);
   rpc ListChannelVideos(ListChannelVideosRequest) returns (ListChannelVideosResponse);
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
   // Topics actually present in the library, for the home chip bar and sidebar.
@@ -194,6 +197,29 @@ message SearchVideosRequest {
 message SearchVideosResponse {
   repeated Video videos = 1;
   string next_page_token = 2;
+}
+
+message SuggestRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SuggestResponse {
+  repeated Suggestion suggestions = 1;
+}
+
+message Suggestion {
+  string text = 1;
+  SuggestionKind kind = 2;
+  // Number of videos behind this suggestion, for topics and channels.
+  int32 video_count = 3;
+}
+
+enum SuggestionKind {
+  SUGGESTION_KIND_UNSPECIFIED = 0;
+  SUGGESTION_KIND_TITLE = 1;
+  SUGGESTION_KIND_TOPIC = 2;
+  SUGGESTION_KIND_CHANNEL = 3;
 }
 
 message ListChannelVideosRequest {

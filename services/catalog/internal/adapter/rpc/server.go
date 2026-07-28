@@ -208,6 +208,29 @@ func (s *Server) SearchVideos(ctx context.Context, req *connect.Request[catalogv
 	}), nil
 }
 
+var suggestionKinds = map[domain.SuggestionKind]catalogv1.SuggestionKind{
+	domain.SuggestTitle:   catalogv1.SuggestionKind_SUGGESTION_KIND_TITLE,
+	domain.SuggestTopic:   catalogv1.SuggestionKind_SUGGESTION_KIND_TOPIC,
+	domain.SuggestChannel: catalogv1.SuggestionKind_SUGGESTION_KIND_CHANNEL,
+}
+
+func (s *Server) Suggest(ctx context.Context, req *connect.Request[catalogv1.SuggestRequest]) (*connect.Response[catalogv1.SuggestResponse], error) {
+	suggestions, err := s.catalog.Suggest(ctx, req.Msg.GetQuery(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+
+	out := make([]*catalogv1.Suggestion, 0, len(suggestions))
+	for _, sg := range suggestions {
+		out = append(out, &catalogv1.Suggestion{
+			Text:       sg.Text,
+			Kind:       suggestionKinds[sg.Kind],
+			VideoCount: sg.VideoCount,
+		})
+	}
+	return connect.NewResponse(&catalogv1.SuggestResponse{Suggestions: out}), nil
+}
+
 func (s *Server) ListChannelVideos(ctx context.Context, req *connect.Request[catalogv1.ListChannelVideosRequest]) (*connect.Response[catalogv1.ListChannelVideosResponse], error) {
 	offset := decodePageToken(req.Msg.GetPageToken())
 	vs, err := s.catalog.ListChannelVideos(ctx, req.Msg.GetChannelId(), req.Msg.GetUserId(), req.Msg.GetPageSize(), offset)

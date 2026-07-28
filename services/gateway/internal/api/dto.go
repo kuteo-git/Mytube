@@ -85,6 +85,13 @@ type commentsResponse struct {
 	NextPageToken string       `json:"nextPageToken,omitempty"`
 }
 
+type suggestionDTO struct {
+	Text string `json:"text"`
+	// TITLE, TOPIC or CHANNEL.
+	Kind       string `json:"kind"`
+	VideoCount int32  `json:"videoCount"`
+}
+
 type topicDTO struct {
 	Name       string `json:"name"`
 	VideoCount int32  `json:"videoCount"`

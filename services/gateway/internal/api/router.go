@@ -48,6 +48,7 @@ func (g *Gateway) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/feed", g.handleFeed)
 	mux.HandleFunc("GET /api/search", g.handleSearch)
+	mux.HandleFunc("GET /api/suggest", g.handleSuggest)
 	mux.HandleFunc("GET /api/topics", g.handleTopics)
 	mux.HandleFunc("POST /api/topics/refresh", g.handleRefreshTopics)
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
@@ -291,6 +292,30 @@ func (g *Gateway) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Videos:        out,
 		NextPageToken: resp.Msg.GetNextPageToken(),
 	})
+}
+
+// handleSuggest backs the search box type-ahead. Suggestions come from the
+// local library only: proposing terms the library cannot answer would send
+// every one of them to an empty result page.
+func (g *Gateway) handleSuggest(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.Suggest(r.Context(), connect.NewRequest(&catalogv1.SuggestRequest{
+		Query: r.URL.Query().Get("q"),
+		Limit: intParam(r, "limit", 10),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]suggestionDTO, 0, len(resp.Msg.GetSuggestions()))
+	for _, s := range resp.Msg.GetSuggestions() {
+		out = append(out, suggestionDTO{
+			Text:       s.GetText(),
+			Kind:       trimEnumPrefix(s.GetKind().String(), "SUGGESTION_KIND_"),
+			VideoCount: s.GetVideoCount(),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"suggestions": out})
 }
 
 func (g *Gateway) handleTopics(w http.ResponseWriter, r *http.Request) {

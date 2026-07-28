@@ -103,6 +103,20 @@ const (
 	SortNewest CommentSort = "NEWEST"
 )
 
+type SuggestionKind string
+
+const (
+	SuggestTitle   SuggestionKind = "TITLE"
+	SuggestTopic   SuggestionKind = "TOPIC"
+	SuggestChannel SuggestionKind = "CHANNEL"
+)
+
+type Suggestion struct {
+	Text       string
+	Kind       SuggestionKind
+	VideoCount int32
+}
+
 type Topic struct {
 	Name       string
 	VideoCount int32
@@ -143,6 +157,7 @@ type Repository interface {
 	// ranking produced elsewhere survives hydration. Missing ids are skipped.
 	BatchGetVideos(ctx context.Context, videoIDs []string, userID string) ([]Video, error)
 	SearchVideos(ctx context.Context, query, userID string, page Page) ([]Video, error)
+	Suggest(ctx context.Context, query string, limit int32) ([]Suggestion, error)
 	ListChannelVideos(ctx context.Context, channelID, userID string, page Page) ([]Video, error)
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, int32, error)
 	ListTopics(ctx context.Context, minVideoCount int32) ([]Topic, error)

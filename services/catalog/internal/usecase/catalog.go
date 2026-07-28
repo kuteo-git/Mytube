@@ -73,6 +73,22 @@ func (c *Catalog) SearchVideos(ctx context.Context, query, userID string, size, 
 	return c.repo.SearchVideos(ctx, query, userID, clampPage(size, offset))
 }
 
+// Suggest powers type-ahead. It stays deliberately cheap: a couple of ILIKE
+// scans over a few thousand rows costs under a millisecond, and the query runs
+// on every keystroke after a debounce.
+func (c *Catalog) Suggest(ctx context.Context, query string, limit int32) ([]domain.Suggestion, error) {
+	query = strings.TrimSpace(query)
+	// Below three characters almost everything matches, which is noise rather
+	// than help.
+	if len([]rune(query)) < 3 {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 20 {
+		limit = 10
+	}
+	return c.repo.Suggest(ctx, query, limit)
+}
+
 func (c *Catalog) ListChannelVideos(ctx context.Context, channelID, userID string, size, offset int32) ([]domain.Video, error) {
 	if channelID == "" {
 		return nil, fmt.Errorf("%w: channel_id is required", domain.ErrInvalid)

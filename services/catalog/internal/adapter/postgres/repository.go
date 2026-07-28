@@ -172,6 +172,62 @@ func (r *Repository) SearchVideos(ctx context.Context, query, userID string, pag
 		userID, query, page.Size, page.Offset)
 }
 
+// Suggest returns topics and channels first, then video titles.
+//
+// Ordering matters more than cleverness here: a topic or channel is a
+// destination that always has results behind it, while a title is a single
+// video, so the broader targets belong at the top of the list.
+func (r *Repository) Suggest(ctx context.Context, query string, limit int32) ([]domain.Suggestion, error) {
+	pattern := "%" + query + "%"
+
+	rows, err := r.pool.Query(ctx, `
+		(
+			SELECT topic AS text, 'TOPIC' AS kind, count(*)::int AS video_count, 0 AS rank
+			FROM videos, unnest(topics) AS topic
+			WHERE topic ILIKE $1
+			GROUP BY topic
+		)
+		UNION ALL
+		(
+			SELECT c.name, 'CHANNEL', count(v.id)::int, 1
+			FROM channels c
+			JOIN videos v ON v.channel_id = c.id
+			WHERE c.name ILIKE $1
+			GROUP BY c.name
+		)
+		UNION ALL
+		(
+			SELECT title, 'TITLE', 1, 2
+			FROM videos
+			WHERE title ILIKE $1
+			-- Prefer what the library actually holds: a cached video is
+			-- watchable right now, a queued one has to be fetched first.
+			ORDER BY (media_state = 'READY') DESC, view_count DESC NULLS LAST
+			LIMIT $2
+		)
+		ORDER BY rank, video_count DESC
+		LIMIT $2`, pattern, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Suggestion
+	for rows.Next() {
+		var (
+			s    domain.Suggestion
+			kind string
+			rank int
+		)
+		if err := rows.Scan(&s.Text, &kind, &s.VideoCount, &rank); err != nil {
+			return nil, err
+		}
+		s.Kind = domain.SuggestionKind(kind)
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) ListChannelVideos(ctx context.Context, channelID, userID string, page domain.Page) ([]domain.Video, error) {
 	return r.queryVideos(ctx, videoSelect+`
 		WHERE v.channel_id = $2

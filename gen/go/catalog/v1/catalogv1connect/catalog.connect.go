@@ -41,6 +41,8 @@ const (
 	// CatalogServiceSearchVideosProcedure is the fully-qualified name of the CatalogService's
 	// SearchVideos RPC.
 	CatalogServiceSearchVideosProcedure = "/catalog.v1.CatalogService/SearchVideos"
+	// CatalogServiceSuggestProcedure is the fully-qualified name of the CatalogService's Suggest RPC.
+	CatalogServiceSuggestProcedure = "/catalog.v1.CatalogService/Suggest"
 	// CatalogServiceListChannelVideosProcedure is the fully-qualified name of the CatalogService's
 	// ListChannelVideos RPC.
 	CatalogServiceListChannelVideosProcedure = "/catalog.v1.CatalogService/ListChannelVideos"
@@ -99,6 +101,9 @@ type CatalogServiceClient interface {
 	// is preserved in the response so ranking survives the round trip.
 	BatchGetVideos(context.Context, *connect.Request[v1.BatchGetVideosRequest]) (*connect.Response[v1.BatchGetVideosResponse], error)
 	SearchVideos(context.Context, *connect.Request[v1.SearchVideosRequest]) (*connect.Response[v1.SearchVideosResponse], error)
+	// Type-ahead over the local library only. Suggesting terms the library
+	// cannot answer would lead every one of them to an empty result page.
+	Suggest(context.Context, *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error)
 	ListChannelVideos(context.Context, *connect.Request[v1.ListChannelVideosRequest]) (*connect.Response[v1.ListChannelVideosResponse], error)
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
 	// Topics actually present in the library, for the home chip bar and sidebar.
@@ -155,6 +160,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+CatalogServiceSearchVideosProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("SearchVideos")),
+			connect.WithClientOptions(opts...),
+		),
+		suggest: connect.NewClient[v1.SuggestRequest, v1.SuggestResponse](
+			httpClient,
+			baseURL+CatalogServiceSuggestProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("Suggest")),
 			connect.WithClientOptions(opts...),
 		),
 		listChannelVideos: connect.NewClient[v1.ListChannelVideosRequest, v1.ListChannelVideosResponse](
@@ -261,6 +272,7 @@ type catalogServiceClient struct {
 	getVideo            *connect.Client[v1.GetVideoRequest, v1.GetVideoResponse]
 	batchGetVideos      *connect.Client[v1.BatchGetVideosRequest, v1.BatchGetVideosResponse]
 	searchVideos        *connect.Client[v1.SearchVideosRequest, v1.SearchVideosResponse]
+	suggest             *connect.Client[v1.SuggestRequest, v1.SuggestResponse]
 	listChannelVideos   *connect.Client[v1.ListChannelVideosRequest, v1.ListChannelVideosResponse]
 	getChannel          *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
 	listTopics          *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
@@ -292,6 +304,11 @@ func (c *catalogServiceClient) BatchGetVideos(ctx context.Context, req *connect.
 // SearchVideos calls catalog.v1.CatalogService.SearchVideos.
 func (c *catalogServiceClient) SearchVideos(ctx context.Context, req *connect.Request[v1.SearchVideosRequest]) (*connect.Response[v1.SearchVideosResponse], error) {
 	return c.searchVideos.CallUnary(ctx, req)
+}
+
+// Suggest calls catalog.v1.CatalogService.Suggest.
+func (c *catalogServiceClient) Suggest(ctx context.Context, req *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error) {
+	return c.suggest.CallUnary(ctx, req)
 }
 
 // ListChannelVideos calls catalog.v1.CatalogService.ListChannelVideos.
@@ -382,6 +399,9 @@ type CatalogServiceHandler interface {
 	// is preserved in the response so ranking survives the round trip.
 	BatchGetVideos(context.Context, *connect.Request[v1.BatchGetVideosRequest]) (*connect.Response[v1.BatchGetVideosResponse], error)
 	SearchVideos(context.Context, *connect.Request[v1.SearchVideosRequest]) (*connect.Response[v1.SearchVideosResponse], error)
+	// Type-ahead over the local library only. Suggesting terms the library
+	// cannot answer would lead every one of them to an empty result page.
+	Suggest(context.Context, *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error)
 	ListChannelVideos(context.Context, *connect.Request[v1.ListChannelVideosRequest]) (*connect.Response[v1.ListChannelVideosResponse], error)
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
 	// Topics actually present in the library, for the home chip bar and sidebar.
@@ -434,6 +454,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceSearchVideosProcedure,
 		svc.SearchVideos,
 		connect.WithSchema(catalogServiceMethods.ByName("SearchVideos")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceSuggestHandler := connect.NewUnaryHandler(
+		CatalogServiceSuggestProcedure,
+		svc.Suggest,
+		connect.WithSchema(catalogServiceMethods.ByName("Suggest")),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListChannelVideosHandler := connect.NewUnaryHandler(
@@ -540,6 +566,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceBatchGetVideosHandler.ServeHTTP(w, r)
 		case CatalogServiceSearchVideosProcedure:
 			catalogServiceSearchVideosHandler.ServeHTTP(w, r)
+		case CatalogServiceSuggestProcedure:
+			catalogServiceSuggestHandler.ServeHTTP(w, r)
 		case CatalogServiceListChannelVideosProcedure:
 			catalogServiceListChannelVideosHandler.ServeHTTP(w, r)
 		case CatalogServiceGetChannelProcedure:
@@ -591,6 +619,10 @@ func (UnimplementedCatalogServiceHandler) BatchGetVideos(context.Context, *conne
 
 func (UnimplementedCatalogServiceHandler) SearchVideos(context.Context, *connect.Request[v1.SearchVideosRequest]) (*connect.Response[v1.SearchVideosResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SearchVideos is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) Suggest(context.Context, *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.Suggest is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ListChannelVideos(context.Context, *connect.Request[v1.ListChannelVideosRequest]) (*connect.Response[v1.ListChannelVideosResponse], error) {
