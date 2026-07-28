@@ -1,4 +1,5 @@
 import type {
+  Channel,
   Topic,
   Comment,
   ReactionState,
@@ -35,6 +36,16 @@ export interface CatalogRepository {
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
   setReaction(videoId: string, reaction: ReactionState): Promise<number>
   addComment(videoId: string, text: string, parentCommentId?: string): Promise<Comment>
+
+  getChannel(channelId: string): Promise<ChannelPage>
+  listChannelVideos(channelId: string, pageToken?: string): Promise<Feed>
+  setSubscription(channelId: string, subscribed: boolean): Promise<void>
+  listSubscriptions(): Promise<Channel[]>
+}
+
+export interface ChannelPage {
+  channel: Channel
+  videoCount: number
 }
 
 export interface Feed {
@@ -237,5 +248,25 @@ export const httpCatalogRepository: CatalogRepository = {
       method: 'POST',
       body: JSON.stringify({ text, parentCommentId }),
     })
+  },
+
+  getChannel(channelId) {
+    return request<ChannelPage>(`/channels/${encodeURIComponent(channelId)}`)
+  },
+
+  listChannelVideos(channelId, pageToken) {
+    return request<Feed>(`/channels/${encodeURIComponent(channelId)}/videos${query({ pageToken })}`)
+  },
+
+  setSubscription(channelId, subscribed) {
+    return request<void>(`/channels/${encodeURIComponent(channelId)}/subscription`, {
+      method: 'POST',
+      body: JSON.stringify({ subscribed }),
+    })
+  },
+
+  async listSubscriptions() {
+    const { channels } = await request<{ channels: Channel[] }>('/subscriptions')
+    return channels
   },
 }

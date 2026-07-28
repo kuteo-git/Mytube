@@ -52,7 +52,9 @@ export function VideoCard({ video }: { video: Video }) {
             <Link to={`/watch/${video.id}`}>{video.title}</Link>
           </h3>
           <p className="mt-1 flex items-center gap-1 text-xs text-text-2">
-            <span>{video.channel.name}</span>
+            <Link to={`/channel/${video.channel.id}`} className="hover:text-text">
+              {video.channel.name}
+            </Link>
             {video.channel.verified && <CheckCircle size={12} aria-label="Verified" />}
           </p>
           <p className="text-xs text-text-2">{describeVideo(video)}</p>

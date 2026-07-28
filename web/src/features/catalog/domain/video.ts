@@ -11,6 +11,7 @@ export interface Channel {
   name: string
   handle: string
   avatarPath: string
+  bannerPath: string
   subscriberCount: number
   verified: boolean
   subscribed: boolean

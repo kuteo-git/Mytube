@@ -194,6 +194,49 @@ export function useSetReaction(videoId: string) {
   })
 }
 
+export function useChannel(channelId: string | undefined) {
+  return useQuery({
+    queryKey: ['channel', channelId],
+    queryFn: () => repo.getChannel(channelId!),
+    enabled: Boolean(channelId),
+  })
+}
+
+export function useChannelVideos(channelId: string | undefined) {
+  return useInfiniteQuery({
+    queryKey: ['channel-videos', channelId],
+    queryFn: ({ pageParam }) => repo.listChannelVideos(channelId!, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+    enabled: Boolean(channelId),
+  })
+}
+
+export function useSubscriptions() {
+  return useQuery({
+    queryKey: ['subscriptions'],
+    queryFn: () => repo.listSubscriptions(),
+    staleTime: 60_000,
+  })
+}
+
+/**
+ * Subscribing is not only a ranking signal here: it registers the channel as a
+ * content source, so the scanner starts bringing its uploads in. The feed cache
+ * is invalidated for the first effect; the second lands on the next scan.
+ */
+export function useSetSubscription(channelId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (subscribed: boolean) => repo.setSubscription(channelId, subscribed),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['channel', channelId] })
+      void queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
+      void queryClient.invalidateQueries({ queryKey: ['feed'] })
+    },
+  })
+}
+
 export function useAddComment(videoId: string) {
   const queryClient = useQueryClient()
   return useMutation({

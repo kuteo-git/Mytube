@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
-import { useSetReaction } from '@/features/catalog/application/queries'
+import { useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { formatCount, formatSubscribers } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
@@ -9,9 +10,8 @@ import { hueFromId } from '@/shared/lib/hue'
 /**
  * Channel row plus the action cluster.
  *
- * Two buttons from youtube.com are deliberately absent. "Ask" is out of scope,
- * and Subscribe has no meaning here: content is sourced per topic from
- * topics.yaml, not per channel, so subscribing would change nothing.
+ * "Ask" is out of scope. Subscribe registers the channel as a content source —
+ * the scanner starts bringing its uploads in — so it is real, not decoration.
  *
  * Save is relabelled "Keep": it pins the video so the cache eviction sweep
  * will never reclaim it.
@@ -19,18 +19,35 @@ import { hueFromId } from '@/shared/lib/hue'
 export function VideoActions({ video, likeCount }: { video: Video; likeCount: number }) {
   const reaction = video.userState?.reaction ?? 'NONE'
   const setReaction = useSetReaction(video.id)
+  const setSubscription = useSetSubscription(video.channel.id)
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <Avatar hue={hueFromId(video.channel.id)} name={video.channel.name} size={40} />
+        <Link to={`/channel/${video.channel.id}`}>
+          <Avatar hue={hueFromId(video.channel.id)} name={video.channel.name} size={40} />
+        </Link>
         <div>
-          <p className="flex items-center gap-1 text-base font-medium">
+          <Link to={`/channel/${video.channel.id}`} className="flex items-center gap-1 text-base font-medium">
             {video.channel.name}
             {video.channel.verified && <CheckCircle size={14} className="text-text-2" />}
-          </p>
+          </Link>
           <p className="text-xs text-text-2">{formatSubscribers(video.channel.subscriberCount)}</p>
         </div>
+        <button
+          type="button"
+          aria-pressed={video.channel.subscribed}
+          disabled={setSubscription.isPending}
+          onClick={() => setSubscription.mutate(!video.channel.subscribed)}
+          className={
+            'ml-2 rounded-full px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out disabled:opacity-60 ' +
+            (video.channel.subscribed
+              ? 'bg-surface hover:bg-surface-hover'
+              : 'bg-text text-bg hover:bg-text/90')
+          }
+        >
+          {video.channel.subscribed ? 'Subscribed' : 'Subscribe'}
+        </button>
       </div>
 
       <div className="flex items-center gap-2">

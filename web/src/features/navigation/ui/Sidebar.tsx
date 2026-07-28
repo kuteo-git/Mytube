@@ -2,7 +2,9 @@ import clsx from 'clsx'
 import { Activity, Bookmark, HardDrive, History, Home, Tag } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
-import { useTopics } from '@/features/catalog/application/queries'
+import { useSubscriptions, useTopics } from '@/features/catalog/application/queries'
+import { Avatar } from '@/shared/ui/primitives'
+import { hueFromId } from '@/shared/lib/hue'
 
 type Icon = ComponentType<{ size?: number }>
 
@@ -52,6 +54,7 @@ function Row({ item, mini }: { item: Item; mini: boolean }) {
 
 export function Sidebar({ mini }: { mini: boolean }) {
   const { data: topics } = useTopics()
+  const { data: subscriptions } = useSubscriptions()
 
   if (mini) {
     return (
@@ -76,6 +79,38 @@ export function Sidebar({ mini }: { mini: boolean }) {
           <Row key={item.to} item={item} mini={false} />
         ))}
       </section>
+
+      {subscriptions && subscriptions.length > 0 && (
+        <>
+          <hr className="my-3 border-0 border-t border-line" />
+          <section className="flex flex-col gap-0.5">
+            <h2 className="px-3 py-1.5 text-base font-medium">Subscriptions</h2>
+            {subscriptions.map((channel) => (
+              <NavLink
+                key={channel.id}
+                to={`/channel/${channel.id}`}
+                className={({ isActive }) =>
+                  clsx(
+                    'flex h-10 items-center gap-6 rounded-[10px] px-3 transition-colors duration-150 ease-out hover:bg-surface-hover',
+                    isActive && 'bg-surface-hover font-medium',
+                  )
+                }
+              >
+                {channel.avatarPath ? (
+                  <img
+                    src={`/media/${channel.avatarPath}`}
+                    alt=""
+                    className="h-6 w-6 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <Avatar hue={hueFromId(channel.id)} name={channel.name} size={24} />
+                )}
+                <span className="clamp-1 text-sm">{channel.name}</span>
+              </NavLink>
+            ))}
+          </section>
+        </>
+      )}
 
       {topics && topics.length > 0 && (
         <>
