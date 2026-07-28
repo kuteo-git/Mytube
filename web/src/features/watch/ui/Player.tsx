@@ -65,7 +65,9 @@ export function Player({
   const [muted, setMuted] = useState(false)
   const [position, setPosition] = useState(initialPositionSeconds)
   const [buffered, setBuffered] = useState(0)
-  const [duration, setDuration] = useState(durationSeconds)
+  // Duration reported by the media element. Only meaningful once the whole
+  // file is there; see `duration` below for why it is not used directly.
+  const [elementDuration, setElementDuration] = useState(0)
   // The catalog row can say READY while the file is missing from disk, for
   // example after a manual cleanup. Trust the element, not the metadata.
   const [loadFailed, setLoadFailed] = useState(false)
@@ -94,6 +96,15 @@ export function Player({
   // is a real failure and must be shown rather than retried forever.
   const retriedRef = useRef(false)
 
+  // A fragmented stream declares no total length: its header says only how much
+  // has been muxed so far, which grows as it plays. Trusting it makes the
+  // progress bar read as full from the first second, since position and
+  // duration are then the same number. The catalog knows the real length, so
+  // that is what the bar is drawn against until the complete file takes over.
+  const streaming = stream?.source === 'remux'
+  const duration =
+    !streaming && elementDuration > 0 ? elementDuration : durationSeconds
+
   const playable = Boolean(stream?.url) && !loadFailed
   // Captions no longer wait for the media file: ingest publishes them ahead of
   // the transfer, precisely so they are usable during upstream playback.
@@ -121,6 +132,10 @@ export function Player({
   useEffect(() => {
     retriedRef.current = false
     setLoadFailed(false)
+    // Otherwise the previous video's length would draw this one's progress bar
+    // until the element got around to reporting its own.
+    setElementDuration(0)
+    setBuffered(0)
   }, [videoId])
 
   useEffect(() => {
@@ -321,7 +336,7 @@ export function Player({
           }}
           onLoadedMetadata={(e) => {
             const element = e.currentTarget
-            if (Number.isFinite(element.duration)) setDuration(element.duration)
+            if (Number.isFinite(element.duration)) setElementDuration(element.duration)
 
             const resumeAt = resumeAtRef.current
             if (resumeAt > 0 && resumeAt < element.duration) {
@@ -339,6 +354,10 @@ export function Player({
               setAutoplayMuted(true)
               void element.play().catch(() => setAutoplayMuted(false))
             })
+          }}
+          onDurationChange={(e) => {
+            const value = e.currentTarget.duration
+            if (Number.isFinite(value) && value > 0) setElementDuration(value)
           }}
           onTimeUpdate={(e) => {
             setPosition(e.currentTarget.currentTime)
