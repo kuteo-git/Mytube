@@ -112,39 +112,6 @@ func (g *Gateway) handleReaction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]int64{"likeCount": resp.Msg.GetLikeCount()})
 }
 
-type subscriptionRequest struct {
-	Subscribed bool `json:"subscribed"`
-}
-
-func (g *Gateway) handleSubscription(w http.ResponseWriter, r *http.Request) {
-	var body subscriptionRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	userID := g.userID(r)
-	channelID := r.PathValue("id")
-
-	if _, err := g.catalog.SetSubscription(r.Context(), connect.NewRequest(&catalogv1.SetSubscriptionRequest{
-		UserId:     userID,
-		ChannelId:  channelID,
-		Subscribed: body.Subscribed,
-	})); err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-
-	signalType := recsysv1.SignalType_SIGNAL_TYPE_UNSUBSCRIBE
-	if body.Subscribed {
-		signalType = recsysv1.SignalType_SIGNAL_TYPE_SUBSCRIBE
-	}
-	// Subscription signals carry the channel id in the video_id field.
-	go g.recordSignal(userID, signalType, channelID, "", 0)
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 type createCommentRequest struct {
 	Text            string  `json:"text"`
 	ParentCommentID *string `json:"parentCommentId,omitempty"`

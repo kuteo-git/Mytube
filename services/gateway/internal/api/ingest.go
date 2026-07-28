@@ -1,34 +1,21 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"connectrpc.com/connect"
 
 	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 	ingestv1 "github.com/lucnguyen/local-youtube/gen/go/ingest/v1"
-	recsysv1 "github.com/lucnguyen/local-youtube/gen/go/recsys/v1"
 )
 
-// Ingest-facing endpoints. These are what make the hybrid playback model
-// visible to the client: search finds videos that are not in the library yet,
-// submit queues the local copy, and stream returns something playable in the
-// meantime.
-
-type externalVideoDTO struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	ChannelID       string `json:"channelId"`
-	ChannelName     string `json:"channelName"`
-	DurationSeconds int32  `json:"durationSeconds"`
-	ViewCount       int64  `json:"viewCount"`
-	ThumbnailURL    string `json:"thumbnailUrl"`
-	SourceURL       string `json:"sourceUrl"`
-	PublishedAt     string `json:"publishedAt"`
-	InLibrary       bool   `json:"inLibrary"`
-}
+// Ingest-facing endpoints.
+//
+// Nothing here lets a user ask for a download directly. Content is discovered
+// by the topic scanner, and a copy is fetched as a side effect of pressing
+// play. These endpoints only resolve playback and report on the queue.
 
 type jobDTO struct {
 	ID              string  `json:"id"`
@@ -52,21 +39,6 @@ type streamDTO struct {
 	ExpiresAt string `json:"expiresAt,omitempty"`
 }
 
-func toExternalDTO(v *ingestv1.ExternalVideo) externalVideoDTO {
-	return externalVideoDTO{
-		ID:              v.GetId(),
-		Title:           v.GetTitle(),
-		ChannelID:       v.GetChannelId(),
-		ChannelName:     v.GetChannelName(),
-		DurationSeconds: v.GetDurationSeconds(),
-		ViewCount:       v.GetViewCount(),
-		ThumbnailURL:    v.GetThumbnailUrl(),
-		SourceURL:       v.GetSourceUrl(),
-		PublishedAt:     v.GetPublishedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
-		InLibrary:       v.GetInLibrary(),
-	}
-}
-
 func toJobDTO(j *ingestv1.Job) jobDTO {
 	return jobDTO{
 		ID:              j.GetId(),
@@ -80,89 +52,6 @@ func toJobDTO(j *ingestv1.Job) jobDTO {
 		ErrorMessage:    j.GetErrorMessage(),
 		CreatedAt:       j.GetCreatedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
 	}
-}
-
-// handleDiscover searches upstream. Kept separate from /api/search, which only
-// looks at the local library: mixing them would make every keystroke in the
-// search box hit yt-dlp.
-func (g *Gateway) handleDiscover(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
-	if query == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"videos": []externalVideoDTO{}})
-		return
-	}
-
-	resp, err := g.ingest.Search(r.Context(), connect.NewRequest(&ingestv1.SearchRequest{
-		Query: query,
-		Limit: intParam(r, "limit", 20),
-	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-
-	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))
-	for _, v := range resp.Msg.GetVideos() {
-		out = append(out, toExternalDTO(v))
-	}
-
-	go g.recordSignal(g.userID(r), recsysv1.SignalType_SIGNAL_TYPE_SEARCH, "", query, 0)
-	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
-}
-
-func (g *Gateway) handlePreview(w http.ResponseWriter, r *http.Request) {
-	resp, err := g.ingest.Preview(r.Context(), connect.NewRequest(&ingestv1.PreviewRequest{
-		Url: r.URL.Query().Get("url"),
-	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toExternalDTO(resp.Msg.GetVideo()))
-}
-
-func (g *Gateway) handlePlaylist(w http.ResponseWriter, r *http.Request) {
-	resp, err := g.ingest.ListPlaylist(r.Context(), connect.NewRequest(&ingestv1.ListPlaylistRequest{
-		Url:   r.URL.Query().Get("url"),
-		Limit: intParam(r, "limit", 50),
-	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-
-	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))
-	for _, v := range resp.Msg.GetVideos() {
-		out = append(out, toExternalDTO(v))
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"playlistTitle": resp.Msg.GetPlaylistTitle(),
-		"videos":        out,
-	})
-}
-
-type submitRequest struct {
-	URL             string `json:"url"`
-	PreferredHeight int32  `json:"preferredHeight,omitempty"`
-}
-
-func (g *Gateway) handleSubmitIngest(w http.ResponseWriter, r *http.Request) {
-	var body submitRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	resp, err := g.ingest.Submit(r.Context(), connect.NewRequest(&ingestv1.SubmitRequest{
-		Url:             body.URL,
-		RequestedBy:     g.userID(r),
-		PreferredHeight: body.PreferredHeight,
-	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusAccepted, toJobDTO(resp.Msg.GetJob()))
 }
 
 func (g *Gateway) handleListJobs(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +71,21 @@ func (g *Gateway) handleListJobs(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toJobDTO(j))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"jobs": out})
+}
+
+// ensureDownload schedules a cached copy. Failures are logged and dropped: the
+// user is already watching from upstream, so a queueing problem must not
+// surface as a playback error.
+func (g *Gateway) ensureDownload(sourceURL, userID string) {
+	ctx, cancel := contextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	if _, err := g.ingest.Submit(ctx, connect.NewRequest(&ingestv1.SubmitRequest{
+		Url:         sourceURL,
+		RequestedBy: userID,
+	})); err != nil {
+		g.logger.Warn("schedule download", "url", sourceURL, "error", err)
+	}
 }
 
 func (g *Gateway) handleCancelJob(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +113,11 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if v := video.Msg.GetVideo(); v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_READY && v.GetMediaPath() != "" {
+	v := video.Msg.GetVideo()
+
+	if v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_READY && v.GetMediaPath() != "" {
+		// Cached. Touching last_accessed_at happens through watch progress, so
+		// the eviction sweep sees actual viewing rather than mere resolution.
 		writeJSON(w, http.StatusOK, streamDTO{
 			Source:   "local",
 			URL:      "/media/" + v.GetMediaPath(),
@@ -218,8 +126,13 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Not on disk yet: fall back to a resolved upstream stream so playback can
-	// start now. This is the half of the hybrid model that hides the download.
+	// Pressing play is what schedules a download. Enqueue is idempotent per
+	// source URL, so repeated resolves attach to the running job.
+	if v.GetSourceUrl() != "" {
+		go g.ensureDownload(v.GetSourceUrl(), g.userID(r))
+	}
+
+	// Until the copy is usable, play from upstream so the video starts now.
 	resolved, err := g.ingest.ResolveStream(ctx, connect.NewRequest(&ingestv1.ResolveStreamRequest{
 		VideoId: videoID,
 	}))

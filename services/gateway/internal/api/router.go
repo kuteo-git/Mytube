@@ -61,14 +61,8 @@ func (g *Gateway) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/videos/{id}/stream", g.handleStream)
 
-	mux.HandleFunc("POST /api/channels/{id}/subscription", g.handleSubscription)
-
-	// Ingest: discovery of videos that are not in the library yet, and the
-	// download queue that brings them in.
-	mux.HandleFunc("GET /api/discover", g.handleDiscover)
-	mux.HandleFunc("GET /api/discover/preview", g.handlePreview)
-	mux.HandleFunc("GET /api/discover/playlist", g.handlePlaylist)
-	mux.HandleFunc("POST /api/ingest", g.handleSubmitIngest)
+	// Downloads are never requested directly: they are a side effect of asking
+	// to play something. These endpoints only report on them.
 	mux.HandleFunc("GET /api/ingest/jobs", g.handleListJobs)
 	mux.HandleFunc("POST /api/ingest/jobs/{id}/cancel", g.handleCancelJob)
 

@@ -1,21 +1,24 @@
 import type { ReactNode } from 'react'
 import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import type { Video } from '@/features/catalog/domain/video'
-import { useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
+import { useSetReaction } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { formatCount, formatSubscribers } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 
 /**
- * Channel row plus the action cluster. The "Ask" button from youtube.com is
- * deliberately absent: the AI Q&A block is out of scope (CLAUDE.md §7).
+ * Channel row plus the action cluster.
+ *
+ * Two buttons from youtube.com are deliberately absent. "Ask" is out of scope,
+ * and Subscribe has no meaning here: content is sourced per topic from
+ * topics.yaml, not per channel, so subscribing would change nothing.
+ *
+ * Save is relabelled "Keep": it pins the video so the cache eviction sweep
+ * will never reclaim it.
  */
 export function VideoActions({ video, likeCount }: { video: Video; likeCount: number }) {
   const reaction = video.userState?.reaction ?? 'NONE'
-  const subscribed = video.channel.subscribed
-
   const setReaction = useSetReaction(video.id)
-  const setSubscription = useSetSubscription(video.channel.id)
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -28,19 +31,6 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           </p>
           <p className="text-xs text-text-2">{formatSubscribers(video.channel.subscriberCount)}</p>
         </div>
-        <button
-          type="button"
-          aria-pressed={subscribed}
-          disabled={setSubscription.isPending}
-          onClick={() => setSubscription.mutate(!subscribed)}
-          className={
-            subscribed
-              ? 'ml-4 h-9 rounded-full bg-surface px-4 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover'
-              : 'ml-4 h-9 rounded-full bg-invert-bg px-4 text-sm font-medium text-invert-text transition-colors duration-150 ease-out hover:bg-white'
-          }
-        >
-          {subscribed ? 'Subscribed' : 'Subscribe'}
-        </button>
       </div>
 
       <div className="flex items-center gap-2">
@@ -74,7 +64,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           label="Share"
           onClick={() => void navigator.clipboard?.writeText(window.location.href)}
         />
-        <ActionPill icon={<Bookmark size={20} />} label="Save" />
+        <ActionPill icon={<Bookmark size={20} />} label="Keep" />
 
         <button
           type="button"

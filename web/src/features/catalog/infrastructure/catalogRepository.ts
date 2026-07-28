@@ -25,14 +25,10 @@ export interface CatalogRepository {
    * know which half of the hybrid model it is in.
    */
   getStream(videoId: string): Promise<StreamSource>
-  discover(query: string): Promise<ExternalVideo[]>
-  previewUrl(url: string): Promise<ExternalVideo>
-  submitIngest(url: string, preferredHeight?: number): Promise<IngestJob>
   listJobs(activeOnly: boolean): Promise<IngestJob[]>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
   setReaction(videoId: string, reaction: ReactionState): Promise<number>
-  setSubscription(channelId: string, subscribed: boolean): Promise<void>
   addComment(videoId: string, text: string, parentCommentId?: string): Promise<Comment>
 }
 
@@ -52,19 +48,6 @@ export interface StreamSource {
   height?: number
   mimeType?: string
   expiresAt?: string
-}
-
-export interface ExternalVideo {
-  id: string
-  title: string
-  channelId: string
-  channelName: string
-  durationSeconds: number
-  viewCount: number
-  thumbnailUrl: string
-  sourceUrl: string
-  publishedAt: string
-  inLibrary: boolean
 }
 
 export type JobState = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
@@ -163,23 +146,6 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<StreamSource>(`/videos/${encodeURIComponent(videoId)}/stream`)
   },
 
-  async discover(q) {
-    if (!q.trim()) return []
-    const { videos } = await request<{ videos: ExternalVideo[] }>(`/discover${query({ q })}`)
-    return videos
-  },
-
-  previewUrl(url) {
-    return request<ExternalVideo>(`/discover/preview${query({ url })}`)
-  },
-
-  submitIngest(url, preferredHeight) {
-    return request<IngestJob>('/ingest', {
-      method: 'POST',
-      body: JSON.stringify({ url, preferredHeight }),
-    })
-  },
-
   async listJobs(activeOnly) {
     const { jobs } = await request<{ jobs: IngestJob[] }>(
       `/ingest/jobs${query({ activeOnly: activeOnly ? 'true' : undefined })}`,
@@ -200,13 +166,6 @@ export const httpCatalogRepository: CatalogRepository = {
       { method: 'POST', body: JSON.stringify({ reaction }) },
     )
     return likeCount
-  },
-
-  setSubscription(channelId, subscribed) {
-    return request<void>(`/channels/${encodeURIComponent(channelId)}/subscription`, {
-      method: 'POST',
-      body: JSON.stringify({ subscribed }),
-    })
   },
 
   addComment(videoId, text, parentCommentId) {

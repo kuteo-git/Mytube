@@ -61,15 +61,6 @@ export function useStream(videoId: string | undefined) {
   })
 }
 
-export function useDiscover(query: string) {
-  return useQuery({
-    queryKey: ['discover', query],
-    queryFn: () => repo.discover(query),
-    enabled: query.trim().length > 1,
-    staleTime: 5 * 60_000,
-  })
-}
-
 /** Polls while anything is downloading, then stops. */
 export function useIngestJobs(activeOnly = false) {
   return useQuery({
@@ -78,17 +69,6 @@ export function useIngestJobs(activeOnly = false) {
     refetchInterval: (query) => {
       const jobs = query.state.data ?? []
       return jobs.some((j) => j.state === 'QUEUED' || j.state === 'RUNNING') ? 2000 : false
-    },
-  })
-}
-
-export function useSubmitIngest() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (url: string) => repo.submitIngest(url),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['ingest-jobs'] })
-      void queryClient.invalidateQueries({ queryKey: ['feed'] })
     },
   })
 }
@@ -111,17 +91,6 @@ export function useSetReaction(videoId: string) {
     mutationFn: (reaction: ReactionState) => repo.setReaction(videoId, reaction),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['video', videoId] })
-      void queryClient.invalidateQueries({ queryKey: ['feed'] })
-    },
-  })
-}
-
-export function useSetSubscription(channelId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (subscribed: boolean) => repo.setSubscription(channelId, subscribed),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['video'] })
       void queryClient.invalidateQueries({ queryKey: ['feed'] })
     },
   })

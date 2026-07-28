@@ -1,18 +1,17 @@
-import { Bell, Menu, Mic, Plus, Search } from 'lucide-react'
+import { Bell, Menu, Mic, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AddVideoDialog } from '@/features/catalog/ui/AddVideoDialog'
 import { useIngestJobs } from '@/features/catalog/application/queries'
 import { Avatar, IconButton } from '@/shared/ui/primitives'
 
 /**
- * Top bar. Note the deliberate deviations from youtube.com, per CLAUDE.md §5
- * ("no dead buttons"): the Create button becomes "Add video" (the ingest entry
- * point) and the notification bell reports ingest events.
+ * Top bar. Deviations from youtube.com follow the "no dead buttons" rule in
+ * CLAUDE.md §5: there is no Create button, because content arrives from
+ * topics.yaml rather than from anything a user types here. The bell reports
+ * real download activity.
  */
 export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const [query, setQuery] = useState('')
-  const [addOpen, setAddOpen] = useState(false)
   const navigate = useNavigate()
 
   // The badge reports real ingest activity rather than imaginary social
@@ -69,18 +68,8 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
       </form>
 
       <div className="flex shrink-0 items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="flex h-9 items-center gap-2 rounded-full bg-surface px-4 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
-        >
-          <Plus size={20} />
-          Add video
-        </button>
-
         <IconButton
           label={`Downloads: ${active} active, ${failed} failed`}
-          onClick={() => setAddOpen(true)}
           className="relative"
         >
           <Bell size={22} />
@@ -95,7 +84,6 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           <Avatar hue={210} name="Luc" size={32} />
         </button>
       </div>
-      {addOpen && <AddVideoDialog onClose={() => setAddOpen(false)} />}
     </header>
   )
 }

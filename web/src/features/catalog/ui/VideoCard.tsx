@@ -45,18 +45,14 @@ export function VideoCard({ video }: { video: Video }) {
       </Link>
 
       <div className="flex gap-3">
-        <Link to={`/channel/${video.channel.id}`} aria-label={video.channel.name}>
-          <Avatar hue={hueFromId(video.channel.id)} name={video.channel.name} size={36} />
-        </Link>
+        <Avatar hue={hueFromId(video.channel.id)} name={video.channel.name} size={36} />
 
         <div className="min-w-0 flex-1">
           <h3 className="clamp-2 text-sm leading-5 font-medium">
             <Link to={`/watch/${video.id}`}>{video.title}</Link>
           </h3>
           <p className="mt-1 flex items-center gap-1 text-xs text-text-2">
-            <Link to={`/channel/${video.channel.id}`} className="hover:text-text">
-              {video.channel.name}
-            </Link>
+            <span>{video.channel.name}</span>
             {video.channel.verified && <CheckCircle size={12} aria-label="Verified" />}
           </p>
           <p className="text-xs text-text-2">
