@@ -24,6 +24,7 @@ import (
 
 	"github.com/lucnguyen/local-youtube/gen/go/ingest/v1/ingestv1connect"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/catalogclient"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/httpapi"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/innertube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
@@ -132,6 +133,15 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle(ingestv1connect.NewIngestServiceHandler(rpc.NewServer(ingest, scanner, expander)))
+
+	// Plain HTTP, not ConnectRPC: this is a continuous body of media bytes, and
+	// wrapping it in an RPC envelope would buy nothing.
+	httpapi.NewHandler(
+		downloader,
+		catalogclient.New(catalogHTTP, catalogURL, devUserID),
+		defaultHeight,
+		logger,
+	).Routes(mux)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := pool.Ping(r.Context()); err != nil {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)

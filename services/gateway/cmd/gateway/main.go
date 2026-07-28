@@ -76,6 +76,7 @@ func main() {
 		ingestv1connect.NewIngestServiceClient(ingestClient, ingestURL),
 		logger,
 		devUserID,
+		ingestURL,
 	)
 
 	mux := http.NewServeMux()

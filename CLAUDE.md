@@ -148,7 +148,7 @@ Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST
 (`POST /api/topics/refresh` để quét ngay). Hiện **280 video / 6 chủ đề / 7 nguồn**,
 quét hết trong ~8 giây, chỉ lấy metadata.
 
-**Phát:** bấm play → `GET /api/videos/{id}/stream` trả `local` hoặc `upstream`,
+**Phát 1080p ngay từ giây đầu (2026-07-28):** bấm play → `GET /api/videos/{id}/stream` trả `local` hoặc `remux`,
 đồng thời **tự enqueue tải nền**. Tải xong thì client tự đổi sang bản local.
 Player: autoplay (bị chặn thì muted + nút bật tiếng), click = play/pause,
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
@@ -180,15 +180,27 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 ### Chưa làm — thứ tự đề xuất khi làm tiếp
 
-1. **Serve-while-downloading (B1, 720p)** — phần khó nhất còn lại. Hiện bấm play vẫn đi
-   đường upstream (~360p) rồi tải nền 1080p. Cần: gateway serve file **đang được ghi**,
-   trả 206 cho phần đã có, chặn seek quá mép buffer. Đổi `DEFAULT_HEIGHT` về 720 và ép
-   yt-dlp lấy progressive format.
 2. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
    **Đang là link chết trong sidebar.**
 
 ### Quyết định đã bị đảo trong quá trình làm
+
+- **Serve-while-downloading → remux fMP4**: charter từng chốt "gateway serve file **đang được
+  ghi**, trả 206 cho phần đã có". **Bất khả thi, đã đo**: tải 1080p là 2 luồng riêng
+  (`1080p.f399.mp4` + `1080p.f251.webm`) rồi mới merge — file `1080p.mp4` **không tồn tại**
+  cho tới giây cuối. Không có gì để serve.
+  **Thay bằng**: ffmpeg remux 2 URL adaptive → **fragmented MP4** đẩy thẳng qua pipe
+  (`-movflags frag_keyframe+empty_moov+default_base_moof`). MP4 thường để index ở cuối nên
+  chưa xong là chưa phát được; fMP4 phát được từ fragment đầu. `-c copy`, không encode lại,
+  CPU ≈ 0 — đúng luật "không transcode" của §4.
+  **Giá phải trả**: stream không có index → **không seek được** cho tới khi file local tải xong
+  (seek bar bị disable, có nói rõ). Ưu tiên h264 hơn AV1/VP9 vì TV cũ giải mã được h264.
+  **Bối cảnh**: YouTube đã bỏ hết progressive độ nét cao — chỉ còn itag 18, tối đa 360p.
+  Đó là lý do lần xem đầu trước đây luôn mờ.
+- **yt-dlp cũ làm mất adaptive format**: bản 2026.02.04 chỉ thấy itag 18; nâng lên 2026.07.04
+  thì đủ 144p→1080p. Đúng rủi ro §8.4 — **kiểm tra version yt-dlp trước khi kết luận
+  "YouTube không có định dạng đó"**.
 
 - **Search**: từng chốt "chỉ tìm local" (Câu 3/12) → **đảo lại**: search luôn hỏi YouTube.
   Lý do: feed là thứ được phục vụ, search là thứ chủ động đi tìm — không có lý do bó search

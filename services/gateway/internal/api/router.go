@@ -30,6 +30,11 @@ type Gateway struct {
 	// One expansion at a time. Concurrent passes would double the request rate
 	// against YouTube for material the first pass is already fetching.
 	expanding atomic.Bool
+	// ingestBaseURL and streamClient exist for the muxed stream, which is raw
+	// bytes over plain HTTP rather than an RPC. The client has no timeout: the
+	// response lasts as long as the video plays.
+	ingestBaseURL string
+	streamClient  *http.Client
 }
 
 func NewGateway(
@@ -38,13 +43,16 @@ func NewGateway(
 	ingest ingestv1connect.IngestServiceClient,
 	logger *slog.Logger,
 	devUserID string,
+	ingestBaseURL string,
 ) *Gateway {
 	return &Gateway{
-		catalog:   catalog,
-		recsys:    recsys,
-		ingest:    ingest,
-		logger:    logger,
-		devUserID: devUserID,
+		catalog:       catalog,
+		recsys:        recsys,
+		ingest:        ingest,
+		logger:        logger,
+		devUserID:     devUserID,
+		ingestBaseURL: ingestBaseURL,
+		streamClient:  &http.Client{},
 	}
 }
 
@@ -75,6 +83,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 
 	mux.HandleFunc("GET /api/videos/{id}/stream", g.handleStream)
+	mux.HandleFunc("GET /api/videos/{id}/remux", g.handleRemuxStream)
 
 	// Downloads are never requested directly: they are a side effect of asking
 	// to play something. These endpoints only report on them.

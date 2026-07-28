@@ -56,7 +56,7 @@ export function Player({
   const { data: stream, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
   // Playing from upstream always schedules a copy, so a job is coming even if
   // the queue has not caught up yet.
-  const download = useDownloadProgress(videoId, stream?.source === 'upstream')
+  const download = useDownloadProgress(videoId, stream?.source === 'remux')
   const queryClient = useQueryClient()
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -241,9 +241,14 @@ export function Player({
           : { background: `radial-gradient(120% 90% at 50% 30%, hsl(${hue} 40% 22%), #000 70%)` }
       }
     >
-      {stream?.source === 'upstream' && (
+      {stream?.source === 'remux' && (
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-badge px-2.5 py-1.5 text-xs font-medium">
-          <span>Streaming{stream.height ? ` ${stream.height}p` : ''}</span>
+          {/* Says "Live" rather than a resolution: the stream is full quality,
+              and what is actually worth warning about is that seeking is
+              limited until the downloaded file takes over. */}
+          <span title="Muxed live — seeking is limited until the download finishes">
+            Live{stream.height ? ` ${stream.height}p` : ''}
+          </span>
           {downloading && (
             <>
               <span className="h-3 w-px bg-white/25" />
@@ -391,7 +396,11 @@ export function Player({
           position={position}
           duration={duration}
           buffered={buffered}
-          disabled={!playable}
+          // A muxed-on-the-fly stream has no index, so the browser cannot seek
+          // in it at all. Disabling the bar says so plainly instead of leaving
+          // a control that silently does nothing; the downloaded file restores
+          // seeking the moment it lands.
+          disabled={!playable || stream?.source === 'remux'}
           onSeek={(next) => {
             setPosition(next)
             const element = videoRef.current
@@ -409,6 +418,25 @@ export function Player({
           >
             {playing ? <Pause size={22} /> : <Play size={22} />}
           </button>
+
+          {/* A real Next button. The autoplay switch sits further along the bar:
+              a skip-forward icon means "go to the next video" everywhere else,
+              so using it for a toggle made the control look broken. */}
+          {onPlayNext && (
+            <button
+              type="button"
+              aria-label="Next video"
+              title={nextVideoTitle ? `Next: ${nextVideoTitle}` : 'Next video'}
+              onClick={() => {
+                resetAutoplayChain()
+                setCountdown(null)
+                onPlayNext()
+              }}
+              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+            >
+              <SkipForward size={22} />
+            </button>
+          )}
 
           <VolumeControl
             volume={muted ? 0 : volume}
@@ -431,12 +459,24 @@ export function Player({
               aria-label="Autoplay"
               title={autoplayEnabled ? 'Autoplay is on' : 'Autoplay is off'}
               onClick={() => setAutoplayEnabled(!autoplayEnabled)}
-              className={
-                'grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10 ' +
-                (autoplayEnabled ? '' : 'text-text-2')
-              }
+              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
             >
-              <SkipForward size={22} />
+              {/* Drawn as a switch, not an action: the state has to be readable
+                  at a glance, and an icon that looks clickable-once would read
+                  as "skip", which is the button next to it. */}
+              <span
+                className={
+                  'flex h-3.5 w-7 items-center rounded-full px-0.5 transition-colors duration-150 ease-out ' +
+                  (autoplayEnabled ? 'bg-white' : 'bg-white/30')
+                }
+              >
+                <span
+                  className={
+                    'h-2.5 w-2.5 rounded-full transition-transform duration-150 ease-out ' +
+                    (autoplayEnabled ? 'translate-x-3.5 bg-black' : 'bg-white')
+                  }
+                />
+              </span>
             </button>
           )}
 

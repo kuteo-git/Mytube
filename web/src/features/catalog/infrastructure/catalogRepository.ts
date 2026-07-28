@@ -110,7 +110,12 @@ export interface ScanStatus {
 }
 
 export interface StreamSource {
-  source: 'local' | 'upstream'
+  /**
+   * "local" plays the downloaded file. "remux" is a stream muxed on the fly
+   * from YouTube's separate video and audio tracks — full resolution, but with
+   * no index, so it cannot be seeked past what has buffered.
+   */
+  source: 'local' | 'remux'
   url: string
   height?: number
   mimeType?: string

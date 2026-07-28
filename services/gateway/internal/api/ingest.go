@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -32,7 +33,9 @@ type jobDTO struct {
 }
 
 type streamDTO struct {
-	// "local" when the file is on disk, "upstream" while the copy downloads.
+	// "local" when the file is on disk, "remux" while the copy downloads:
+	// YouTube's only muxed format is capped at 360p, so full resolution before
+	// the download lands means muxing the adaptive streams on the fly.
 	Source    string `json:"source"`
 	URL       string `json:"url"`
 	Height    int32  `json:"height,omitempty"`
@@ -263,20 +266,66 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		go g.ensureDownload(v.GetSourceUrl(), g.userID(r))
 	}
 
-	// Until the copy is usable, play from upstream so the video starts now.
-	resolved, err := g.ingest.ResolveStream(ctx, connect.NewRequest(&ingestv1.ResolveStreamRequest{
-		VideoId: videoID,
-	}))
+	// Until the copy lands, play a stream muxed on the fly. YouTube's only
+	// directly playable format is itag 18 at 360p; everything above it is
+	// adaptive, so full resolution now means putting video and audio back
+	// together ourselves. Seeking is limited to what has buffered until the
+	// local file arrives — the price of a stream with no index.
+	writeJSON(w, http.StatusOK, streamDTO{
+		Source:   "remux",
+		URL:      "/api/videos/" + url.PathEscape(videoID) + "/remux",
+		MimeType: "video/mp4",
+	})
+}
+
+// handleRemuxStream proxies the muxed stream from ingest, which owns yt-dlp and
+// ffmpeg. Streamed straight through rather than buffered: the body is a whole
+// video, and holding it in memory to forward it would be pointless.
+func (g *Gateway) handleRemuxStream(w http.ResponseWriter, r *http.Request) {
+	target := g.ingestBaseURL + "/stream/" + url.PathEscape(r.PathValue("id"))
+	if h := r.URL.Query().Get("height"); h != "" {
+		target += "?height=" + url.QueryEscape(h)
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
 	if err != nil {
 		g.writeErr(w, r, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, streamDTO{
-		Source:    "upstream",
-		URL:       resolved.Msg.GetUrl(),
-		Height:    resolved.Msg.GetHeight(),
-		MimeType:  resolved.Msg.GetMimeType(),
-		ExpiresAt: resolved.Msg.GetExpiresAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
-	})
+	// A dedicated client with no timeout: this response lasts as long as the
+	// video does, and the shared clients would cut it off mid-playback.
+	resp, err := g.streamClient.Do(req)
+	if err != nil {
+		g.logger.Warn("remux proxy", "video", r.PathValue("id"), "error", err)
+		http.Error(w, "cannot open stream", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	for _, header := range []string{"Content-Type", "Cache-Control", "Accept-Ranges"} {
+		if v := resp.Header.Get(header); v != "" {
+			w.Header().Set(header, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	// Flushing as the bytes arrive is what lets playback begin before the whole
+	// video has been muxed.
+	flusher, _ := w.(http.Flusher)
+	buf := make([]byte, 64*1024)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			return
+		}
+	}
 }
