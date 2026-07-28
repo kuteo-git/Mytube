@@ -102,6 +102,10 @@ type Downloader interface {
 	Preview(ctx context.Context, url string) (ExternalVideo, error)
 	ListPlaylist(ctx context.Context, url string, limit int32) (string, []ExternalVideo, error)
 	ResolveStream(ctx context.Context, videoURL string) (StreamLocation, error)
+	// FetchSubtitles runs ahead of the media transfer so captions are usable
+	// while the viewer is still watching the upstream stream. It never returns
+	// an error: a video without captions is a working video.
+	FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) []SubtitleTrack
 	Download(ctx context.Context, videoURL, videoID string, height int32, onProgress func(Progress)) (DownloadResult, error)
 }
 

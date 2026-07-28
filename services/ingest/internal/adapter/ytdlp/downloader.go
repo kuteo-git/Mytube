@@ -258,20 +258,38 @@ func (d *Downloader) ResolveStream(ctx context.Context, videoURL string) (domain
 	}, nil
 }
 
+// mediaPaths derives the per-video directory and the media file path. Both the
+// media transfer and the subtitle pass need them, and the subtitle filenames
+// are derived from the media target, so the two must agree exactly.
+func (d *Downloader) mediaPaths(videoID string, height int32) (dir, target string) {
+	if height <= 0 {
+		height = 1080
+	}
+	dir = filepath.Join(d.mediaRoot, videoID)
+	target = filepath.Join(dir, fmt.Sprintf("%dp.mp4", height))
+	return dir, target
+}
+
+// FetchSubtitles writes the caption files and reports what landed. It runs
+// before the media transfer: captions are tiny and the viewer is watching a
+// lower-quality upstream stream in the meantime, which is exactly when they are
+// most wanted.
+func (d *Downloader) FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) []domain.SubtitleTrack {
+	dir, target := d.mediaPaths(videoID, height)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil
+	}
+	return d.fetchSubtitles(ctx, videoURL, dir, videoID, target)
+}
+
 // Download fetches a local copy. It asks for a muxed mp4 so the result is
 // directly seekable over HTTP range requests without a remux step, and moves
 // the moov atom to the front so playback can start before the file is complete.
 func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, height int32, onProgress func(domain.Progress)) (domain.DownloadResult, error) {
-	if height <= 0 {
-		height = 1080
-	}
-
-	dir := filepath.Join(d.mediaRoot, videoID)
+	dir, target := d.mediaPaths(videoID, height)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return domain.DownloadResult{}, err
 	}
-
-	target := filepath.Join(dir, fmt.Sprintf("%dp.mp4", height))
 
 	cmd := ytdlp.New().
 		Format(fmt.Sprintf("bestvideo[height<=%d]+bestaudio/best[height<=%d]", height, height)).
@@ -305,14 +323,13 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		return domain.DownloadResult{}, fmt.Errorf("downloaded file missing: %w", err)
 	}
 
-	// Captions are fetched in a second pass, deliberately. Asking for them in
-	// the same command means a caption failure — a 429 is common — aborts the
-	// whole download, losing a video that was otherwise fine. Optional data
-	// must not be able to break required data.
+	// Captions are fetched by FetchSubtitles, in a separate pass run before this
+	// one. Asking for them in the same command means a caption failure — a 429
+	// is common — aborts the whole download, losing a video that was otherwise
+	// fine. Optional data must not be able to break required data.
 	return domain.DownloadResult{
 		MediaPath: filepath.Join(videoID, filepath.Base(target)),
 		SizeBytes: info.Size(),
-		Subtitles: d.fetchSubtitles(ctx, videoURL, dir, videoID, target),
 	}, nil
 }
 

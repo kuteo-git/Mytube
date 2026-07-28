@@ -11,9 +11,16 @@ import type { IngestJob } from '../infrastructure/catalogRepository'
  * client cannot know when that happens by watching the video element, so it
  * watches the job instead and re-asks — which is what makes playback move from
  * upstream to disk without the viewer doing anything.
+ *
+ * `expectDownload` says a transfer is coming even though the queue has not
+ * admitted it yet. Playing from upstream always schedules one, and the schedule
+ * is a fire-and-forget call made after the stream answer was already sent.
  */
-export function useDownloadProgress(videoId: string | undefined): IngestJob | undefined {
-  const { data: jobs } = useIngestJobs(false)
+export function useDownloadProgress(
+  videoId: string | undefined,
+  expectDownload: boolean,
+): IngestJob | undefined {
+  const { data: jobs } = useIngestJobs(false, expectDownload)
   const queryClient = useQueryClient()
 
   const job = jobs?.find((j) => j.videoId === videoId)

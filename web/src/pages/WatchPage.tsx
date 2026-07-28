@@ -1,5 +1,6 @@
-import { useParams } from 'react-router-dom'
-import { useVideo } from '@/features/catalog/application/queries'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useUpNext, useVideo } from '@/features/catalog/application/queries'
+import { recordAutoplayHop } from '@/features/watch/application/autoplay'
 import { CommentSection } from '@/features/watch/ui/CommentSection'
 import { DescriptionBox } from '@/features/watch/ui/DescriptionBox'
 import { Player } from '@/features/watch/ui/Player'
@@ -10,6 +11,9 @@ import { hueFromId } from '@/shared/lib/hue'
 export function WatchPage() {
   const { videoId } = useParams()
   const { data: video, isPending, isError } = useVideo(videoId)
+  const { data: upNext } = useUpNext(videoId)
+  const navigate = useNavigate()
+  const next = upNext?.[0]
 
   if (isPending) {
     return (
@@ -33,6 +37,15 @@ export function WatchPage() {
           initialPositionSeconds={video.userState?.watchPositionSeconds ?? 0}
           mediaState={video.mediaState}
           subtitles={video.subtitles}
+          nextVideoTitle={next?.title}
+          onPlayNext={
+            next
+              ? () => {
+                  recordAutoplayHop()
+                  navigate(`/watch/${next.id}`)
+                }
+              : undefined
+          }
         />
 
         <h1 className="mt-3 text-xl leading-7 font-bold">{video.title}</h1>

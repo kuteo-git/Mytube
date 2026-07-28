@@ -145,7 +145,9 @@ quét hết trong ~8 giây, chỉ lấy metadata.
 **Phát:** bấm play → `GET /api/videos/{id}/stream` trả `local` hoặc `upstream`,
 đồng thời **tự enqueue tải nền**. Tải xong thì client tự đổi sang bản local.
 Player: autoplay (bị chặn thì muted + nút bật tiếng), click = play/pause,
-`Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC.
+`Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
+được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
+đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).
 
 **Search:** **luôn** hỏi YouTube song song với thư viện. Trang kết quả 2 khối
 (In your library / On YouTube). Autocomplete từ local (chủ đề → kênh → tiêu đề).

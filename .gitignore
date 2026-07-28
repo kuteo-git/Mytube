@@ -6,3 +6,4 @@ dist/
 # Ingested media and the local database never belong in the repo.
 media/
 data/
+.superpowers/

@@ -124,23 +124,35 @@ export function useComments(videoId: string | undefined) {
  * Where to play a video from. Kept out of the video query because the answer
  * changes on its own — an upstream URL expires, and a background download
  * flips the answer to a local file.
+ *
+ * The cache window is deliberately far shorter than the upstream URL's own
+ * lifetime. Serving a URL that died five minutes ago costs a playback failure;
+ * re-resolving costs one cheap request.
  */
 export function useStream(videoId: string | undefined) {
   return useQuery({
     queryKey: ['stream', videoId],
     queryFn: () => repo.getStream(videoId!),
     enabled: Boolean(videoId),
-    staleTime: 30 * 60_000,
+    staleTime: 5 * 60_000,
     retry: false,
   })
 }
 
-/** Polls while anything is downloading, then stops. */
-export function useIngestJobs(activeOnly = false) {
+/**
+ * Polls while anything is downloading, then stops.
+ *
+ * `forcePoll` exists because a caller can know a download is coming before the
+ * queue does: pressing play schedules the transfer asynchronously, so the first
+ * job list is empty and a self-driving interval would shut off before the job
+ * ever appears.
+ */
+export function useIngestJobs(activeOnly = false, forcePoll = false) {
   return useQuery({
     queryKey: ['ingest-jobs', activeOnly],
     queryFn: () => repo.listJobs(activeOnly),
     refetchInterval: (query) => {
+      if (forcePoll) return 2000
       const jobs = query.state.data ?? []
       return jobs.some((j) => j.state === 'QUEUED' || j.state === 'RUNNING') ? 2000 : false
     },

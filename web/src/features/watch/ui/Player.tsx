@@ -1,8 +1,24 @@
-import { Captions, CaptionsOff, Maximize, Pause, Play, Volume1, Volume2, VolumeX } from 'lucide-react'
+import {
+  Captions,
+  CaptionsOff,
+  Maximize,
+  Pause,
+  Play,
+  SkipForward,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import { useStream } from '@/features/catalog/application/queries'
 import { useDownloadProgress } from '@/features/catalog/application/download'
+import {
+  autoplayChainExhausted,
+  resetAutoplayChain,
+  useAutoplayPreference,
+} from '@/features/watch/application/autoplay'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
 
@@ -25,6 +41,8 @@ export function Player({
   initialPositionSeconds,
   mediaState,
   subtitles,
+  nextVideoTitle,
+  onPlayNext,
 }: {
   videoId: string
   hue: number
@@ -32,9 +50,14 @@ export function Player({
   initialPositionSeconds: number
   mediaState: MediaState
   subtitles: SubtitleTrack[]
+  nextVideoTitle?: string
+  onPlayNext?: () => void
 }) {
   const { data: stream, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
-  const download = useDownloadProgress(videoId)
+  // Playing from upstream always schedules a copy, so a job is coming even if
+  // the queue has not caught up yet.
+  const download = useDownloadProgress(videoId, stream?.source === 'upstream')
+  const queryClient = useQueryClient()
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
@@ -50,12 +73,27 @@ export function Player({
   // require a gesture on the page the video is on, and arriving by navigation
   // does not count, so the fallback is to start muted and say so.
   const [autoplayMuted, setAutoplayMuted] = useState(false)
-  // Language code of the active caption track, or null for off. Captions exist
-  // only for downloaded videos: an upstream stream has no track files.
+  // Language code of the active caption track, or null for off. Tracks arrive
+  // shortly after playback starts, before the media file finishes downloading.
   const [captions, setCaptions] = useState<string | null>(null)
+  const [autoplayEnabled, setAutoplayEnabled] = useAutoplayPreference()
+  // Seconds left before the next video starts, or null when no countdown runs.
+  const [countdown, setCountdown] = useState<number | null>(null)
+
+  // Swapping the source reloads the element and resets currentTime. The
+  // position is captured here just before the swap so playback can resume where
+  // it was, rather than restarting the video the viewer was halfway through.
+  const resumeAtRef = useRef(initialPositionSeconds)
+  const wasPlayingRef = useRef(false)
+  // One re-resolve is allowed per mounted player. An expired upstream URL is
+  // the common failure and it fixes itself; anything that survives a fresh URL
+  // is a real failure and must be shown rather than retried forever.
+  const retriedRef = useRef(false)
 
   const playable = Boolean(stream?.url) && !loadFailed
-  const captionsAvailable = stream?.source === 'local' && subtitles.length > 0
+  // Captions no longer wait for the media file: ingest publishes them ahead of
+  // the transfer, precisely so they are usable during upstream playback.
+  const captionsAvailable = subtitles.length > 0
 
   // <track> elements are declarative but their display is not: the browser
   // decides which one shows. Driving textTracks directly keeps the button and
@@ -69,7 +107,35 @@ export function Player({
     }
   }, [captions, stream?.url, subtitles.length])
 
+  // Runs on the render *before* the new src is committed, so the element still
+  // holds the old media and its clock is still meaningful.
+  useEffect(() => {
+    return () => {
+      const element = videoRef.current
+      if (!element || !Number.isFinite(element.currentTime)) return
+      resumeAtRef.current = element.currentTime
+      wasPlayingRef.current = !element.paused
+    }
+  }, [stream?.url])
+
+  useEffect(() => {
+    retriedRef.current = false
+    setLoadFailed(false)
+  }, [videoId])
+
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown <= 0) {
+      setCountdown(null)
+      onPlayNext?.()
+      return
+    }
+    const timer = window.setTimeout(() => setCountdown((n) => (n === null ? null : n - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [countdown, onPlayNext])
+
   const toggle = useCallback(() => {
+    resetAutoplayChain()
     const element = videoRef.current
     if (!element) return
     if (element.paused) void element.play()
@@ -77,12 +143,14 @@ export function Player({
   }, [])
 
   const seekBy = useCallback((delta: number) => {
+    resetAutoplayChain()
     const element = videoRef.current
     if (!element) return
     element.currentTime = Math.max(0, Math.min(element.duration || 0, element.currentTime + delta))
   }, [])
 
   const applyVolume = (next: number) => {
+    resetAutoplayChain()
     const element = videoRef.current
     setVolume(next)
     if (element) {
@@ -211,6 +279,25 @@ export function Player({
         </button>
       )}
 
+      {countdown !== null && (
+        <div className="absolute inset-0 z-20 grid place-items-center bg-black/75 px-6 text-center">
+          <div>
+            <p className="text-sm text-text-2">Up next in {countdown}</p>
+            {nextVideoTitle && <p className="mt-1 clamp-2 text-base font-medium">{nextVideoTitle}</p>}
+            <button
+              type="button"
+              onClick={() => {
+                setCountdown(null)
+                resetAutoplayChain()
+              }}
+              className="mt-4 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {playable ? (
         <video
           ref={videoRef}
@@ -230,8 +317,10 @@ export function Player({
           onLoadedMetadata={(e) => {
             const element = e.currentTarget
             if (Number.isFinite(element.duration)) setDuration(element.duration)
-            if (initialPositionSeconds > 0 && initialPositionSeconds < element.duration) {
-              element.currentTime = initialPositionSeconds
+
+            const resumeAt = resumeAtRef.current
+            if (resumeAt > 0 && resumeAt < element.duration) {
+              element.currentTime = resumeAt
             }
 
             // Start playing on arrival. If the browser refuses audible
@@ -249,7 +338,21 @@ export function Player({
             const ranges = e.currentTarget.buffered
             if (ranges.length > 0) setBuffered(ranges.end(ranges.length - 1))
           }}
-          onError={() => setLoadFailed(true)}
+          onEnded={() => {
+            setPlaying(false)
+            if (!autoplayEnabled || !onPlayNext) return
+            // Three hops with nobody touching anything means nobody is here.
+            if (autoplayChainExhausted()) return
+            setCountdown(5)
+          }}
+          onError={() => {
+            if (retriedRef.current) {
+              setLoadFailed(true)
+              return
+            }
+            retriedRef.current = true
+            void queryClient.invalidateQueries({ queryKey: ['stream', videoId] })
+          }}
         >
           {captionsAvailable &&
             subtitles.map((track) => (
@@ -312,6 +415,23 @@ export function Player({
             {formatDuration(position)} / {formatDuration(duration)}
           </span>
           <span className="flex-1" />
+
+          {onPlayNext && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoplayEnabled}
+              aria-label="Autoplay"
+              title={autoplayEnabled ? 'Autoplay is on' : 'Autoplay is off'}
+              onClick={() => setAutoplayEnabled(!autoplayEnabled)}
+              className={
+                'grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10 ' +
+                (autoplayEnabled ? '' : 'text-text-2')
+              }
+            >
+              <SkipForward size={22} />
+            </button>
+          )}
 
           {captionsAvailable && (
             <CaptionMenu tracks={subtitles} active={captions} onSelect={setCaptions} />
