@@ -35,8 +35,10 @@ func env(key, fallback string) string {
 }
 
 // h2cClient speaks HTTP/2 without TLS, which is what the services expose on the
-// loopback interface.
-func h2cClient() *http.Client {
+// loopback interface. The client's own Timeout is a hard deadline on the whole
+// request that overrides any context deadline a caller sets — so callers with
+// slow RPCs need a client built with a longer one, not a longer context.
+func h2cClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &http2.Transport{
 			AllowHTTP: true,
@@ -44,7 +46,7 @@ func h2cClient() *http.Client {
 				return (&net.Dialer{}).DialContext(ctx, network, addr)
 			},
 		},
-		Timeout: 15 * time.Second,
+		Timeout: timeout,
 	}
 }
 
@@ -61,11 +63,17 @@ func main() {
 		webOrigin  = env("WEB_ORIGIN", "http://localhost:5173")
 	)
 
-	client := h2cClient()
+	// catalog and recsys answer in milliseconds; a slow response there means
+	// something is actually wrong, so 15s stays a tight, fast-failing budget.
+	// ingest is different by design: Refresh and ExpandLibrary walk real
+	// YouTube listings and now fetch full metadata per new video (CLAUDE.md
+	// §7), so a scan or expansion can legitimately run for minutes.
+	fastClient := h2cClient(15 * time.Second)
+	ingestClient := h2cClient(10 * time.Minute)
 	gateway := api.NewGateway(
-		catalogv1connect.NewCatalogServiceClient(client, catalogURL),
-		recsysv1connect.NewRecommendationServiceClient(client, recsysURL),
-		ingestv1connect.NewIngestServiceClient(client, ingestURL),
+		catalogv1connect.NewCatalogServiceClient(fastClient, catalogURL),
+		recsysv1connect.NewRecommendationServiceClient(fastClient, recsysURL),
+		ingestv1connect.NewIngestServiceClient(ingestClient, ingestURL),
 		logger,
 		devUserID,
 	)

@@ -56,12 +56,18 @@ type ExternalVideo struct {
 	SourceURL       string
 	PublishedAt     time.Time
 	Description     string
-	// Topic names assigned by the scanner from the source this video was found
-	// in. Never taken from YouTube's own categories, which are too coarse to be
-	// useful — there are about fifteen of them globally.
+	// Topic names a new video is filed under, taken from YouTube's own category
+	// (e.g. "Science & Technology", "Gaming") — see CLAUDE.md §7 for the
+	// reversal of the earlier "categories are too coarse" decision. Only
+	// populated for videos the scanner has not seen before; an already-known
+	// video keeps whatever topic it was first given, and is never re-fetched.
 	Topics    []string
 	Hashtags  []string
 	InLibrary bool
+	// Category is the first entry of YouTube's own category list for this
+	// video. Only present when the caller did a full metadata fetch (Preview);
+	// a flat playlist listing never carries it.
+	Category string
 }
 
 // ChannelMetadata is everything a channel page needs that a flat video listing

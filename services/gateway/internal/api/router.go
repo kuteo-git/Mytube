@@ -233,7 +233,10 @@ func (g *Gateway) expandLibrary(topic string, seedVideoIDs []string) {
 	}
 	defer g.expanding.Store(false)
 
-	ctx, cancel := contextWithTimeout(2 * time.Minute)
+	// Every genuinely new video now costs a full metadata fetch (~2s) to learn
+	// its YouTube category (CLAUDE.md §7), on top of the listing calls — a
+	// 40-video batch can take a couple of minutes on its own.
+	ctx, cancel := contextWithTimeout(5 * time.Minute)
 	defer cancel()
 
 	// A handful of seeds is plenty; every one is a separate round trip.

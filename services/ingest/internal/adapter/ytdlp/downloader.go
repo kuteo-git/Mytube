@@ -102,6 +102,13 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		}
 	}
 
+	// Categories are absent from flat-playlist listings and present only on a
+	// full per-video fetch (Preview). A video can carry more than one; the
+	// first is YouTube's primary classification and what becomes the topic.
+	if len(info.Categories) > 0 {
+		v.Category = info.Categories[0]
+	}
+
 	if ts := deref(info.Timestamp); ts > 0 {
 		v.PublishedAt = time.Unix(int64(ts), 0).UTC()
 	} else if raw := deref(info.UploadDate); len(raw) == 8 {

@@ -11,8 +11,9 @@ import (
 )
 
 type recordingLibrary struct {
-	added []string
-	known map[string]bool
+	added  []string
+	known  map[string]bool
+	topics map[string][]string // videoID -> topics written
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -21,6 +22,9 @@ func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (strin
 func (r *recordingLibrary) UpsertChannel(context.Context, domain.ExternalVideo) error { return nil }
 func (r *recordingLibrary) UpsertVideo(_ context.Context, v domain.ExternalVideo, _ string) error {
 	r.added = append(r.added, v.ID)
+	if r.topics != nil {
+		r.topics[v.ID] = v.Topics
+	}
 	return nil
 }
 func (r *recordingLibrary) SetMediaState(context.Context, string, string, string, int64, []domain.SubtitleTrack) error {
@@ -58,6 +62,8 @@ func (stubTopics) Load(context.Context) (domain.TopicConfig, error) {
 
 type deepenDownloader struct {
 	offsetsAsked []int32
+	previewByURL map[string]domain.ExternalVideo
+	previewCalls []string
 }
 
 // Search returns nothing: this fake exists to isolate the deepen path, and a
@@ -67,8 +73,9 @@ type deepenDownloader struct {
 func (d *deepenDownloader) Search(context.Context, string, int32) ([]domain.ExternalVideo, error) {
 	return nil, nil
 }
-func (d *deepenDownloader) Preview(context.Context, string) (domain.ExternalVideo, error) {
-	return domain.ExternalVideo{}, nil
+func (d *deepenDownloader) Preview(_ context.Context, url string) (domain.ExternalVideo, error) {
+	d.previewCalls = append(d.previewCalls, url)
+	return d.previewByURL[url], nil
 }
 func (d *deepenDownloader) ListPlaylist(_ context.Context, _ string, offset, _ int32) (string, []domain.ExternalVideo, error) {
 	d.offsetsAsked = append(d.offsetsAsked, offset)
@@ -156,5 +163,45 @@ func TestExpandSkipsVideosAlreadyPresent(t *testing.T) {
 	}
 	if len(library.added) != 1 || library.added[0] != "deep2" {
 		t.Fatalf("added %v, want [deep2]", library.added)
+	}
+}
+
+// A genuinely new video is filed under YouTube's own category, not the
+// curated source's topic name (CLAUDE.md §7).
+func TestExpandFilesNewVideosUnderTheirYouTubeCategory(t *testing.T) {
+	downloader := &deepenDownloader{
+		previewByURL: map[string]domain.ExternalVideo{
+			"https://youtube.test/watch?v=deep1": {Category: "Science & Technology"},
+			"https://youtube.test/watch?v=deep2": {Category: "Science & Technology"},
+		},
+	}
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
+	expander := newExpander(downloader, failingRelated{}, library, &stubCursors{offsets: map[string]int32{}})
+
+	if _, err := expander.Expand(context.Background(), "Tech", nil); err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+	if got := library.topics["deep1"]; len(got) != 1 || got[0] != "Science & Technology" {
+		t.Fatalf("topics = %v, want [Science & Technology]", got)
+	}
+}
+
+// Same cost guarantee as the scanner: a video the library already has must
+// never trigger a full metadata fetch during expansion.
+func TestExpandNeverPreviewsAnAlreadyKnownVideo(t *testing.T) {
+	downloader := &deepenDownloader{}
+	library := &recordingLibrary{
+		known:  map[string]bool{"https://youtube.test/watch?v=deep1": true},
+		topics: map[string][]string{},
+	}
+	expander := newExpander(downloader, failingRelated{}, library, &stubCursors{offsets: map[string]int32{}})
+
+	if _, err := expander.Expand(context.Background(), "Tech", nil); err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+	for _, url := range downloader.previewCalls {
+		if url == "https://youtube.test/watch?v=deep1" {
+			t.Fatalf("Preview called for an already-known video: %v", downloader.previewCalls)
+		}
 	}
 }

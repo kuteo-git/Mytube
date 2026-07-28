@@ -195,7 +195,22 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   trong nguồn của feed.
 - **Playlist**: từng định làm bảng `playlists` + watch-later → **bỏ hẳn**. Chủ đề thay thế,
   "Keep" (pin) là bộ sưu tập cá nhân duy nhất.
-- **`categories` → `topics`**: YouTube chỉ có ~15 category toàn cục, vô dụng để phân loại.
+- **`categories` → `topics`, lần 1**: YouTube chỉ có ~15 category toàn cục → chốt bỏ, dùng
+  topics.yaml curate tay.
+- **`categories` → `topics`, lần 2 (2026-07-28, đảo lại lần 1)**: topic của video **mới** giờ
+  lấy thẳng từ category thật của YouTube (vd "Science & Technology"), giống hệt taxonomy
+  YouTube dùng cho chip Subscriptions/Explore. Video **cũ** giữ nguyên tên topic cũ (Tech,
+  Gaming...) — không quét lại, hai tập tên topic cùng tồn tại song song trong sidebar.
+  **Giá thật đã đo**: `--flat-playlist` (cách scan hiện tại, 1 request/kênh) không trả category
+  — phải full fetch/video (`Preview`, ~2.2s/video). Nếu áp cho toàn bộ thư viện thì 1 lần quét
+  từ 8 giây thành ~14 phút. **Giảm chi phí**: chỉ fetch cho video **thật sự mới**
+  (`FindBySourceURL` xác nhận chưa có) — video đã biết không bao giờ bị fetch lại, khoá bằng
+  test (`TestAlreadyKnownVideoIsNeverRePreviewed`, `TestExpandNeverPreviewsAnAlreadyKnownVideo`).
+  Nguồn curate (topics.yaml) vẫn là fallback nếu fetch category lỗi; subscription không có
+  fallback, video ở lại không gắn topic như trước.
+  **Tác dụng phụ đã sửa cùng lúc**: gateway dùng chung 1 `http.Client` timeout cứng 15s cho cả
+  3 RPC nội bộ — timeout này đè lên context nên `ExpandLibrary` (giờ tốn thêm ~2s/video mới)
+  sẽ luôn chết giữa chừng. Tách riêng client cho ingest với timeout 10 phút.
 - **Feed**: từng chốt "topics.yaml là nguồn duy nhất của feed" → **đảo lại**: khi feed sắp cạn,
   gateway gọi `ExpandLibrary` để kéo thêm — đào sâu chính các source trong topics.yaml trước,
   rồi related qua InnerTube, cuối cùng mới là search. Lý do: cuộn vô tận là yêu cầu, mà 280 video
