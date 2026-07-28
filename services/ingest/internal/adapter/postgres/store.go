@@ -174,3 +174,27 @@ func (s *Store) ReleaseExpired(ctx context.Context) (int, error) {
 	}
 	return int(tag.RowsAffected()), nil
 }
+
+// NextOffset reports how far into a source the library has already been
+// filled. A source never seen before starts at zero.
+func (s *Store) NextOffset(ctx context.Context, sourceURL string) (int32, error) {
+	var offset int32
+	err := s.pool.QueryRow(ctx,
+		`SELECT next_offset FROM source_cursors WHERE source_url = $1`, sourceURL).Scan(&offset)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return offset, err
+}
+
+// AdvanceOffset moves the cursor forward by the number of entries just read,
+// so the next deepening pass resumes past them instead of re-reading them.
+func (s *Store) AdvanceOffset(ctx context.Context, sourceURL string, by int32) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO source_cursors (source_url, next_offset)
+		VALUES ($1, $2)
+		ON CONFLICT (source_url) DO UPDATE
+		SET next_offset = source_cursors.next_offset + EXCLUDED.next_offset,
+		    updated_at = now()`, sourceURL, by)
+	return err
+}

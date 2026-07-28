@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
 
 	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 	"github.com/lucnguyen/local-youtube/gen/go/catalog/v1/catalogv1connect"
+	ingestv1 "github.com/lucnguyen/local-youtube/gen/go/ingest/v1"
 	"github.com/lucnguyen/local-youtube/gen/go/ingest/v1/ingestv1connect"
 	recsysv1 "github.com/lucnguyen/local-youtube/gen/go/recsys/v1"
 	"github.com/lucnguyen/local-youtube/gen/go/recsys/v1/recsysv1connect"
@@ -25,6 +27,9 @@ type Gateway struct {
 	// devUserID is used until the identity service exists. Phase 1 ships two
 	// seeded accounts and no signup screen, so a header is enough.
 	devUserID string
+	// One expansion at a time. Concurrent passes would double the request rate
+	// against YouTube for material the first pass is already fetching.
+	expanding atomic.Bool
 }
 
 func NewGateway(
@@ -136,6 +141,11 @@ func intParam(r *http.Request, key string, fallback int32) int32 {
 // Feed — the composition that justifies having a gateway at all
 // ---------------------------------------------------------------------------
 
+// expandThreshold is how few remaining videos count as "running low". Two pages
+// of headroom is enough to refill before a scroller reaches the end, and the
+// refill itself is metadata-only so it costs nothing on disk.
+const expandThreshold = 48
+
 func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := g.userID(r)
@@ -187,6 +197,13 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 	// failing write never delays or breaks the grid.
 	go g.recordImpressions(userID, ids)
 
+	// Running low: go and find more. Fire-and-forget, because a viewer must
+	// never wait on a network round trip to YouTube to get the page they asked
+	// for — the new material lands in the next page instead.
+	if ranked.Msg.GetRemainingCount() < expandThreshold {
+		go g.expandLibrary(r.URL.Query().Get("topic"), ids)
+	}
+
 	writeJSON(w, http.StatusOK, feedResponse{
 		Videos:        out,
 		NextPageToken: ranked.Msg.GetNextPageToken(),
@@ -203,6 +220,31 @@ func (g *Gateway) recordImpressions(userID string, ids []string) {
 	})); err != nil {
 		g.logger.Warn("record impressions", "error", err)
 	}
+}
+
+func (g *Gateway) expandLibrary(topic string, seedVideoIDs []string) {
+	if !g.expanding.CompareAndSwap(false, true) {
+		return
+	}
+	defer g.expanding.Store(false)
+
+	ctx, cancel := contextWithTimeout(2 * time.Minute)
+	defer cancel()
+
+	// A handful of seeds is plenty; every one is a separate round trip.
+	if len(seedVideoIDs) > 3 {
+		seedVideoIDs = seedVideoIDs[:3]
+	}
+
+	resp, err := g.ingest.ExpandLibrary(ctx, connect.NewRequest(&ingestv1.ExpandLibraryRequest{
+		Topic:        topic,
+		SeedVideoIds: seedVideoIDs,
+	}))
+	if err != nil {
+		g.logger.Warn("expand library", "topic", topic, "error", err)
+		return
+	}
+	g.logger.Info("library expanded", "topic", topic, "added", resp.Msg.GetVideosAdded())
 }
 
 func (g *Gateway) handleUpNext(w http.ResponseWriter, r *http.Request) {

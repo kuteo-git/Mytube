@@ -164,15 +164,23 @@ func (d *Downloader) Preview(ctx context.Context, url string) (domain.ExternalVi
 	return toExternal(infos[0]), nil
 }
 
-func (d *Downloader) ListPlaylist(ctx context.Context, url string, limit int32) (string, []domain.ExternalVideo, error) {
+// offset skips entries already scanned, which is how the library is deepened
+// past the most recent few dozen uploads. yt-dlp's playlist range is 1-based
+// and inclusive at both ends.
+func (d *Downloader) ListPlaylist(ctx context.Context, url string, offset, limit int32) (string, []domain.ExternalVideo, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
+	if offset < 0 {
+		offset = 0
+	}
+	start := offset + 1
+	end := offset + limit
 
 	result, err := ytdlp.New().
 		FlatPlaylist().
 		DumpJSON().
-		PlaylistItems(fmt.Sprintf("1:%d", limit)).
+		PlaylistItems(fmt.Sprintf("%d:%d", start, end)).
 		NoWarnings().
 		Run(ctx, url)
 	if err != nil {

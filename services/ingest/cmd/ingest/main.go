@@ -24,6 +24,7 @@ import (
 
 	"github.com/lucnguyen/local-youtube/gen/go/ingest/v1/ingestv1connect"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/catalogclient"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/innertube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/topicfile"
@@ -109,8 +110,18 @@ func main() {
 	)
 	go scanner.Run(ctx)
 
+	store := postgres.New(pool)
+	expander := usecase.NewExpander(
+		downloader,
+		innertube.New(nil),
+		catalogclient.New(catalogHTTP, catalogURL),
+		topicfile.New(topicsPath),
+		store,
+		logger,
+	)
+
 	mux := http.NewServeMux()
-	mux.Handle(ingestv1connect.NewIngestServiceHandler(rpc.NewServer(ingest, scanner)))
+	mux.Handle(ingestv1connect.NewIngestServiceHandler(rpc.NewServer(ingest, scanner, expander)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if err := pool.Ping(r.Context()); err != nil {
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)

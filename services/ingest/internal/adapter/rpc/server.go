@@ -14,12 +14,13 @@ import (
 )
 
 type Server struct {
-	ingest  *usecase.Ingest
-	scanner *usecase.Scanner
+	ingest   *usecase.Ingest
+	scanner  *usecase.Scanner
+	expander *usecase.Expander
 }
 
-func NewServer(ingest *usecase.Ingest, scanner *usecase.Scanner) *Server {
-	return &Server{ingest: ingest, scanner: scanner}
+func NewServer(ingest *usecase.Ingest, scanner *usecase.Scanner, expander *usecase.Expander) *Server {
+	return &Server{ingest: ingest, scanner: scanner, expander: expander}
 }
 
 func videoToProto(v domain.ExternalVideo) *ingestv1.ExternalVideo {
@@ -178,4 +179,12 @@ func (s *Server) CancelJob(ctx context.Context, req *connect.Request[ingestv1.Ca
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&ingestv1.CancelJobResponse{}), nil
+}
+
+func (s *Server) ExpandLibrary(ctx context.Context, req *connect.Request[ingestv1.ExpandLibraryRequest]) (*connect.Response[ingestv1.ExpandLibraryResponse], error) {
+	added, err := s.expander.Expand(ctx, req.Msg.GetTopic(), req.Msg.GetSeedVideoIds())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.ExpandLibraryResponse{VideosAdded: int32(added)}), nil
 }

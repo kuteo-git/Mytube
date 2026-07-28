@@ -24,7 +24,7 @@ func (f *fakeDownloader) Preview(context.Context, string) (domain.ExternalVideo,
 	return domain.ExternalVideo{ID: "vid1", Title: "Test"}, nil
 }
 
-func (f *fakeDownloader) ListPlaylist(context.Context, string, int32) (string, []domain.ExternalVideo, error) {
+func (f *fakeDownloader) ListPlaylist(context.Context, string, int32, int32) (string, []domain.ExternalVideo, error) {
 	return "", nil, nil
 }
 

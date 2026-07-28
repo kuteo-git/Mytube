@@ -128,7 +128,7 @@ func (s *Scanner) ScanNow(ctx context.Context) (domain.ScanResult, error) {
 }
 
 func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limit int32) (seen, added int, err error) {
-	_, videos, err := s.fetch.ListPlaylist(ctx, source, limit)
+	_, videos, err := s.fetch.ListPlaylist(ctx, source, 0, limit)
 	if err != nil {
 		return 0, 0, err
 	}

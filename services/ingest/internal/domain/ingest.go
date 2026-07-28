@@ -100,7 +100,9 @@ type Progress struct {
 type Downloader interface {
 	Search(ctx context.Context, query string, limit int32) ([]ExternalVideo, error)
 	Preview(ctx context.Context, url string) (ExternalVideo, error)
-	ListPlaylist(ctx context.Context, url string, limit int32) (string, []ExternalVideo, error)
+	// offset skips entries already scanned, which is how the library is
+	// deepened past the most recent few dozen uploads.
+	ListPlaylist(ctx context.Context, url string, offset, limit int32) (string, []ExternalVideo, error)
 	ResolveStream(ctx context.Context, videoURL string) (StreamLocation, error)
 	// FetchSubtitles runs ahead of the media transfer so captions are usable
 	// while the viewer is still watching the upstream stream. It never returns
@@ -133,4 +135,19 @@ type Library interface {
 	UpsertVideo(ctx context.Context, v ExternalVideo, state string) error
 	SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64, subtitles []SubtitleTrack) error
 	SourceURLFor(ctx context.Context, videoID string) (string, error)
+}
+
+// RelatedSource is the port over YouTube's watch-next panel. It is deliberately
+// separate from Downloader: it speaks to a different, undocumented API, and
+// callers are required to treat its failure as "no results" rather than as an
+// error worth surfacing.
+type RelatedSource interface {
+	Related(ctx context.Context, videoID string) ([]ExternalVideo, error)
+}
+
+// CursorStore remembers how far into each source the library has been filled,
+// so deepening resumes rather than re-reading the same first page forever.
+type CursorStore interface {
+	NextOffset(ctx context.Context, sourceURL string) (int32, error)
+	AdvanceOffset(ctx context.Context, sourceURL string, by int32) error
 }

@@ -54,6 +54,9 @@ const (
 	IngestServiceListJobsProcedure = "/ingest.v1.IngestService/ListJobs"
 	// IngestServiceCancelJobProcedure is the fully-qualified name of the IngestService's CancelJob RPC.
 	IngestServiceCancelJobProcedure = "/ingest.v1.IngestService/CancelJob"
+	// IngestServiceExpandLibraryProcedure is the fully-qualified name of the IngestService's
+	// ExpandLibrary RPC.
+	IngestServiceExpandLibraryProcedure = "/ingest.v1.IngestService/ExpandLibrary"
 )
 
 // IngestServiceClient is a client for the ingest.v1.IngestService service.
@@ -75,6 +78,9 @@ type IngestServiceClient interface {
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// Brings new material into the library when the feed is running low. Metadata
+	// only: nothing is downloaded until someone presses play.
+	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
 }
 
 // NewIngestServiceClient constructs a client for the ingest.v1.IngestService service. By default,
@@ -142,6 +148,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("CancelJob")),
 			connect.WithClientOptions(opts...),
 		),
+		expandLibrary: connect.NewClient[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse](
+			httpClient,
+			baseURL+IngestServiceExpandLibraryProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ExpandLibrary")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -156,6 +168,7 @@ type ingestServiceClient struct {
 	getJob        *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	listJobs      *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	cancelJob     *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	expandLibrary *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
 }
 
 // Search calls ingest.v1.IngestService.Search.
@@ -203,6 +216,11 @@ func (c *ingestServiceClient) CancelJob(ctx context.Context, req *connect.Reques
 	return c.cancelJob.CallUnary(ctx, req)
 }
 
+// ExpandLibrary calls ingest.v1.IngestService.ExpandLibrary.
+func (c *ingestServiceClient) ExpandLibrary(ctx context.Context, req *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error) {
+	return c.expandLibrary.CallUnary(ctx, req)
+}
+
 // IngestServiceHandler is an implementation of the ingest.v1.IngestService service.
 type IngestServiceHandler interface {
 	// Searches upstream. Topics decide what the feed offers; search is how the
@@ -222,6 +240,9 @@ type IngestServiceHandler interface {
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// Brings new material into the library when the feed is running low. Metadata
+	// only: nothing is downloaded until someone presses play.
+	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
 }
 
 // NewIngestServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -285,6 +306,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("CancelJob")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceExpandLibraryHandler := connect.NewUnaryHandler(
+		IngestServiceExpandLibraryProcedure,
+		svc.ExpandLibrary,
+		connect.WithSchema(ingestServiceMethods.ByName("ExpandLibrary")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IngestServiceSearchProcedure:
@@ -305,6 +332,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceListJobsHandler.ServeHTTP(w, r)
 		case IngestServiceCancelJobProcedure:
 			ingestServiceCancelJobHandler.ServeHTTP(w, r)
+		case IngestServiceExpandLibraryProcedure:
+			ingestServiceExpandLibraryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -348,4 +377,8 @@ func (UnimplementedIngestServiceHandler) ListJobs(context.Context, *connect.Requ
 
 func (UnimplementedIngestServiceHandler) CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.CancelJob is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ExpandLibrary is not implemented"))
 }

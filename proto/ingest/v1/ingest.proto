@@ -33,6 +33,21 @@ service IngestService {
   rpc GetJob(GetJobRequest) returns (GetJobResponse);
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+
+  // Brings new material into the library when the feed is running low. Metadata
+  // only: nothing is downloaded until someone presses play.
+  rpc ExpandLibrary(ExpandLibraryRequest) returns (ExpandLibraryResponse);
+}
+
+message ExpandLibraryRequest {
+  // Empty means "any topic".
+  string topic = 1;
+  // Videos to look beside, normally the most recently watched.
+  repeated string seed_video_ids = 2;
+}
+
+message ExpandLibraryResponse {
+  int32 videos_added = 1;
 }
 
 enum JobState {
