@@ -159,6 +159,18 @@ export function useIngestJobs(activeOnly = false, forcePoll = false) {
   })
 }
 
+/**
+ * Result of the most recent topic scan. Scans are manual or twelve-hourly, so
+ * this does not poll; the Activity page refetches it when the user asks.
+ */
+export function useScanStatus() {
+  return useQuery({
+    queryKey: ['scan-status'],
+    queryFn: () => repo.getScanStatus(),
+    staleTime: 30_000,
+  })
+}
+
 export function useStorage() {
   return useQuery({
     queryKey: ['storage'],

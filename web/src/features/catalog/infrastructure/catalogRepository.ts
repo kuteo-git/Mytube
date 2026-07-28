@@ -17,6 +17,7 @@ export interface CatalogRepository {
   listComments(videoId: string): Promise<CommentPage>
   listTopics(): Promise<Topic[]>
   refreshTopics(): Promise<ScanStatus>
+  getScanStatus(): Promise<ScanStatus>
   search(query: string, pageToken?: string): Promise<Feed>
   suggest(query: string): Promise<Suggestion[]>
   discover(query: string, limit: number): Promise<ExternalVideo[]>
@@ -166,6 +167,10 @@ export const httpCatalogRepository: CatalogRepository = {
 
   refreshTopics() {
     return request<ScanStatus>('/topics/refresh', { method: 'POST' })
+  },
+
+  getScanStatus() {
+    return request<ScanStatus>('/topics/scan-status')
   },
 
   search(q, pageToken) {

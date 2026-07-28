@@ -157,6 +157,10 @@ Bỏ dấu tiếng Việt hai chiều qua `unaccent`. Mở video từ YouTube �
 **Phân trang:** feed + search dùng `useInfiniteQuery`, tự nạp trước 600px, kèm nút
 "Load more" thật cho bàn phím/remote.
 
+**Activity:** trang `/activity` gộp hàng đợi tải (kèm lỗi yt-dlp nguyên văn) và kết quả
+lần quét gần nhất (kèm nguồn nào hỏng). Có nút "Scan now" thật. Không phải log viewer —
+log 4 service vẫn ra stdout.
+
 ### Chưa làm — thứ tự đề xuất khi làm tiếp
 
 1. **Serve-while-downloading (B1, 720p)** — phần khó nhất còn lại. Hiện bấm play vẫn đi
@@ -170,8 +174,6 @@ Bỏ dấu tiếng Việt hai chiều qua `unaccent`. Mở video từ YouTube �
 4. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
    **Đang là link chết trong sidebar.**
-5. **Nút Refresh trong UI** — endpoint + hook `useRefreshTopics` đã có, chưa có nút.
-   Empty state của Home đang nhắc tới nó → **đang nói dối**.
 
 ### Quyết định đã bị đảo trong quá trình làm
 

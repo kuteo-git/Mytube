@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './app/AppShell'
+import { ActivityPage } from './pages/ActivityPage'
 import { HomePage } from './pages/HomePage'
 import { SearchResultsPage } from './pages/SearchResultsPage'
 import { WatchPage } from './pages/WatchPage'
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/" element={<HomePage />} />
             <Route path="/topic/:topicName" element={<HomePage />} />
             <Route path="/results" element={<SearchResultsPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
             <Route path="/watch/:videoId" element={<WatchPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

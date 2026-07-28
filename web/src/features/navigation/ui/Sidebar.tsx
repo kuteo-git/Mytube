@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Bookmark, HardDrive, History, Home, Tag } from 'lucide-react'
+import { Activity, Bookmark, HardDrive, History, Home, Tag } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useTopics } from '@/features/catalog/application/queries'
@@ -13,7 +13,7 @@ interface Item {
 }
 
 /**
- * Four fixed entries plus the topics from topics.yaml.
+ * Fixed entries plus the topics from topics.yaml.
  *
  * Compared to youtube.com this drops Playlists, Watch later, Liked videos,
  * Your videos, Subscriptions, YouTube Music, YouTube Kids, Shorts, Live and the
@@ -22,6 +22,7 @@ interface Item {
  */
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
+  { icon: Activity, label: 'Activity', to: '/activity' },
   { icon: History, label: 'History', to: '/history' },
   { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: HardDrive, label: 'Storage', to: '/storage' },
