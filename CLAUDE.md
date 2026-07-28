@@ -161,6 +161,17 @@ Bỏ dấu tiếng Việt hai chiều qua `unaccent`. Mở video từ YouTube �
 lần quét gần nhất (kèm nguồn nào hỏng). Có nút "Scan now" thật. Không phải log viewer —
 log 4 service vẫn ra stdout.
 
+**Feed vô tận:** `GetFeedPage` đông cứng thứ tự rank vào một snapshot theo phiên (memory
+recsys, TTL 30 phút) — trang sau đọc từ snapshot đó thay vì rank lại, nên không trùng video.
+Khi snapshot còn dưới 48 video, gateway tự gọi `ExpandLibrary` (ingest) chạy nền: đào sâu
+source trong topics.yaml (có cursor lưu Postgres để lần sau tiếp tục từ chỗ cũ) → related qua
+InnerTube (`/youtubei/v1/next`, tự viết, không có contract) → search theo tên chủ đề. Chỉ một
+lượt expand chạy cùng lúc.
+
+**Eviction:** catalog chạy sweep mỗi giờ (`services/catalog/internal/usecase/evict.go`).
+Vượt 20 GiB → xoá file media của LRU không pinned về 16 GiB, giữ metadata + thumbnail +
+history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
+
 ### Chưa làm — thứ tự đề xuất khi làm tiếp
 
 1. **Serve-while-downloading (B1, 720p)** — phần khó nhất còn lại. Hiện bấm play vẫn đi
@@ -169,9 +180,7 @@ log 4 service vẫn ra stdout.
    yt-dlp lấy progressive format.
 2. **Recsys trộn 55/10/20/15** — hiện mới có affinity theo **kênh**, chưa có affinity theo
    **chủ đề** và chưa có tỉ lệ khám phá cố định (chống buồng vọng).
-3. **Eviction job** — mới có cột `last_accessed_at` + `pinned` trong DB, **chưa có job nào dọn**.
-   Ngưỡng đã chốt: vượt 20 GiB → xoá LRU không pinned về 16 GiB.
-4. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
+3. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
    **Đang là link chết trong sidebar.**
 
@@ -183,6 +192,14 @@ log 4 service vẫn ra stdout.
 - **Playlist**: từng định làm bảng `playlists` + watch-later → **bỏ hẳn**. Chủ đề thay thế,
   "Keep" (pin) là bộ sưu tập cá nhân duy nhất.
 - **`categories` → `topics`**: YouTube chỉ có ~15 category toàn cục, vô dụng để phân loại.
+- **Feed**: từng chốt "topics.yaml là nguồn duy nhất của feed" → **đảo lại**: khi feed sắp cạn,
+  gateway gọi `ExpandLibrary` để kéo thêm — đào sâu chính các source trong topics.yaml trước,
+  rồi related qua InnerTube, cuối cùng mới là search. Lý do: cuộn vô tận là yêu cầu, mà 280 video
+  thì hết sau ~12 trang. Thứ tự các lớp là có chủ đích — lớp đào sâu không thể hỏng, nên
+  InnerTube vỡ thì feed vẫn vô tận, chỉ kém đa dạng.
+- **Phân trang feed**: offset trên bảng xếp hạng vừa rank lại → **snapshot đông cứng theo phiên**
+  (memory recsys, TTL 30 phút). Lý do: `recordImpressions` trừ điểm chính những video vừa hiện,
+  nên trang sau rank trên bảng đã khác trang trước và sinh ra video trùng.
 
 ### Bẫy đã gặp, đừng lặp lại
 
