@@ -295,8 +295,11 @@ type GetFeedResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Videos        []*RankedVideo         `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// How many ranked videos are left after this page. The gateway uses it to
+	// decide when to go looking for more material, before the viewer hits the end.
+	RemainingCount int32 `protobuf:"varint,3,opt,name=remaining_count,json=remainingCount,proto3" json:"remaining_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetFeedResponse) Reset() {
@@ -341,6 +344,13 @@ func (x *GetFeedResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
+}
+
+func (x *GetFeedResponse) GetRemainingCount() int32 {
+	if x != nil {
+		return x.RemainingCount
+	}
+	return 0
 }
 
 type GetUpNextRequest struct {
@@ -683,10 +693,11 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\n" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1f\n" +
 	"\vclient_hour\x18\x05 \x01(\x05R\n" +
-	"clientHour\"i\n" +
+	"clientHour\"\x92\x01\n" +
 	"\x0fGetFeedResponse\x12.\n" +
 	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x99\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12'\n" +
+	"\x0fremaining_count\x18\x03 \x01(\x05R\x0eremainingCount\"\x99\x01\n" +
 	"\x10GetUpNextRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12(\n" +
 	"\x10current_video_id\x18\x02 \x01(\tR\x0ecurrentVideoId\x12%\n" +

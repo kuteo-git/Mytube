@@ -58,6 +58,9 @@ message GetFeedRequest {
 message GetFeedResponse {
   repeated RankedVideo videos = 1;
   string next_page_token = 2;
+  // How many ranked videos are left after this page. The gateway uses it to
+  // decide when to go looking for more material, before the viewer hits the end.
+  int32 remaining_count = 3;
 }
 
 message GetUpNextRequest {

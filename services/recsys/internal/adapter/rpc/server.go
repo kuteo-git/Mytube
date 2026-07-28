@@ -52,19 +52,22 @@ func toProto(ranked []domain.RankedVideo) []*recsysv1.RankedVideo {
 }
 
 func (s *Server) GetFeed(ctx context.Context, req *connect.Request[recsysv1.GetFeedRequest]) (*connect.Response[recsysv1.GetFeedResponse], error) {
-	offset := decodeToken(req.Msg.GetPageToken())
-	ranked, err := s.ranker.GetFeed(ctx, req.Msg.GetUserId(), req.Msg.GetCategory(), req.Msg.GetPageSize(), offset)
+	snapshotID, offset := decodeToken(req.Msg.GetPageToken())
+
+	page, err := s.ranker.GetFeedPage(ctx, req.Msg.GetUserId(), req.Msg.GetCategory(),
+		snapshotID, req.Msg.GetPageSize(), offset)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	next := ""
-	if len(ranked) == int(req.Msg.GetPageSize()) && req.Msg.GetPageSize() > 0 {
-		next = encodeToken(offset + int32(len(ranked)))
+	if page.Remaining > 0 {
+		next = encodeToken(page.SnapshotID, offset+int32(len(page.Videos)))
 	}
 	return connect.NewResponse(&recsysv1.GetFeedResponse{
-		Videos:        toProto(ranked),
-		NextPageToken: next,
+		Videos:         toProto(page.Videos),
+		NextPageToken:  next,
+		RemainingCount: int32(page.Remaining),
 	}), nil
 }
 
