@@ -68,8 +68,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Charter §4: sweep above 20 GiB, down to 16 GiB.
+	var (
+		highWatermark int64 = 20 << 30
+		lowWatermark  int64 = 16 << 30
+	)
+	if raw := os.Getenv("EVICTION_HIGH_BYTES"); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+			highWatermark = v
+		}
+	}
+	if raw := os.Getenv("EVICTION_LOW_BYTES"); raw != "" {
+		if v, err := strconv.ParseInt(raw, 10, 64); err == nil && v > 0 {
+			lowWatermark = v
+		}
+	}
+
 	repo := postgres.New(pool, mediaRoot)
 	server := rpc.NewServer(usecase.NewCatalog(repo, budgetBytes))
+
+	evictor := usecase.NewEvictor(repo, mediaRoot, highWatermark, lowWatermark, logger)
+	go evictor.Run(ctx)
 
 	mux := http.NewServeMux()
 	mux.Handle(catalogv1connect.NewCatalogServiceHandler(server))

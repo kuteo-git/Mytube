@@ -666,6 +666,48 @@ func (r *Repository) SetPinned(ctx context.Context, videoID string, pinned bool)
 	return nil
 }
 
+func (r *Repository) UsedBytes(ctx context.Context) (int64, error) {
+	var used int64
+	err := r.pool.QueryRow(ctx,
+		`SELECT COALESCE(SUM(size_bytes), 0) FROM videos WHERE media_state = 'READY'`).Scan(&used)
+	return used, err
+}
+
+// ListEvictionCandidates returns unpinned downloaded videos, least recently
+// accessed first. This is the query the partial index in 0001_init.sql exists
+// to serve.
+func (r *Repository) ListEvictionCandidates(ctx context.Context, _ int64) ([]domain.EvictionCandidate, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, media_path, size_bytes
+		FROM videos
+		WHERE media_state = 'READY' AND NOT pinned
+		ORDER BY last_accessed_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.EvictionCandidate
+	for rows.Next() {
+		var c domain.EvictionCandidate
+		if err := rows.Scan(&c.VideoID, &c.MediaPath, &c.SizeBytes); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// MarkEvicted keeps everything except the bytes: the row, the thumbnail and the
+// history survive so the video can offer to fetch itself again.
+func (r *Repository) MarkEvicted(ctx context.Context, videoID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE videos
+		SET media_state = 'EVICTED', media_path = '', size_bytes = 0
+		WHERE id = $1`, videoID)
+	return err
+}
+
 // nullableTime and nullableCount keep "unknown" distinct from "zero" on the
 // way into the database, so a scan that lacks a field cannot overwrite a value
 // a full metadata fetch already found.

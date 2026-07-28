@@ -149,6 +149,24 @@ type Page struct {
 	Offset int32
 }
 
+// EvictionCandidate is a downloaded, unpinned video, offered oldest-accessed
+// first. Only the media file is ever removed: metadata, thumbnail and watch
+// history stay, so the grid can offer a one-click re-download rather than
+// pretending the video never existed.
+type EvictionCandidate struct {
+	VideoID   string
+	MediaPath string
+	SizeBytes int64
+}
+
+// EvictionRepository is the slice of the repository the sweep needs. Kept
+// narrow so the sweep can be tested without a database.
+type EvictionRepository interface {
+	UsedBytes(ctx context.Context) (int64, error)
+	ListEvictionCandidates(ctx context.Context, downToBytes int64) ([]EvictionCandidate, error)
+	MarkEvicted(ctx context.Context, videoID string) error
+}
+
 // Repository is the port the use cases depend on. The Postgres adapter is one
 // implementation; tests can supply another without touching business logic.
 type Repository interface {
