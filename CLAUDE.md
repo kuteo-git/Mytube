@@ -139,7 +139,8 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 
 ### Chạy được, đã verify bằng request thật
 
-**Hạ tầng:** 4 service (`catalog` 8081 · `recsys` 8082 · `ingest` 8083) + `gateway` 8080 + web 5173.
+**Hạ tầng:** 4 service (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + web 5173.
+Đổi khỏi block 808x vì máy này có project khác chiếm cứng 8080 và 8082.
 Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST ra ngoài.
 `scripts/dev.sh` chạy cả stack. `make check` = buf lint + tsc + go build.
 

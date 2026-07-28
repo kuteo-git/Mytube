@@ -14,8 +14,8 @@ export default defineConfig({
     // Proxy to the gateway so the browser sees a single origin in development,
     // exactly as it will in the LAN deployment behind Caddy.
     proxy: {
-      '/api': { target: 'http://localhost:8080', changeOrigin: true },
-      '/media': { target: 'http://localhost:8080', changeOrigin: true },
+      '/api': { target: 'http://localhost:8180', changeOrigin: true },
+      '/media': { target: 'http://localhost:8180', changeOrigin: true },
     },
   },
 })

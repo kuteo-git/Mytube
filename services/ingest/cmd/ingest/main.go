@@ -43,10 +43,10 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	var (
-		addr        = env("INGEST_ADDR", ":8083")
+		addr        = env("INGEST_ADDR", ":8183")
 		databaseURL = env("INGEST_DATABASE_URL",
 			"postgres://ingest_svc:ingest_dev@localhost:5432/localyoutube?search_path=ingest")
-		catalogURL = env("CATALOG_URL", "http://localhost:8081")
+		catalogURL = env("CATALOG_URL", "http://localhost:8181")
 		mediaRoot  = env("MEDIA_ROOT", "./media")
 		topicsPath = env("TOPICS_FILE", "./topics.yaml")
 		// Same default as the gateway's devUserID: until identity exists, Phase 1

@@ -52,10 +52,10 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	var (
-		addr       = env("GATEWAY_ADDR", ":8080")
-		catalogURL = env("CATALOG_URL", "http://localhost:8081")
-		recsysURL  = env("RECSYS_URL", "http://localhost:8082")
-		ingestURL  = env("INGEST_URL", "http://localhost:8083")
+		addr       = env("GATEWAY_ADDR", ":8180")
+		catalogURL = env("CATALOG_URL", "http://localhost:8181")
+		recsysURL  = env("RECSYS_URL", "http://localhost:8182")
+		ingestURL  = env("INGEST_URL", "http://localhost:8183")
 		mediaRoot  = env("MEDIA_ROOT", "./media")
 		devUserID  = env("DEV_USER_ID", "u_luc")
 		webOrigin  = env("WEB_ORIGIN", "http://localhost:5173")

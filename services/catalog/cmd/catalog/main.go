@@ -37,7 +37,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	var (
-		addr        = env("CATALOG_ADDR", ":8081")
+		addr        = env("CATALOG_ADDR", ":8181")
 		databaseURL = env("CATALOG_DATABASE_URL",
 			"postgres://catalog_svc:catalog_dev@localhost:5432/localyoutube?search_path=catalog")
 		mediaRoot = env("MEDIA_ROOT", "./media")

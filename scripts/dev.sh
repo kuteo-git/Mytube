@@ -3,8 +3,10 @@
 #
 #   scripts/dev.sh
 #
-# Ports: gateway 8080 (the only one the browser talks to), catalog 8081,
-# recsys 8082, ingest 8083, Vite 5173. Requires Postgres to be running:
+# Ports: gateway 8180 (the only one the browser talks to), catalog 8181,
+# recsys 8182, ingest 8183, Vite 5173. Chosen off the 808x block because other
+# projects on this machine hold 8080 and 8082 permanently.
+# Requires Postgres to be running:
 #   brew services start postgresql@17
 set -euo pipefail
 
@@ -43,10 +45,10 @@ go build -o "$LOG_DIR/gateway" ./services/gateway/cmd/gateway
 
 # The gateway depends on the other two, so wait for it rather than for itself.
 for _ in $(seq 1 20); do
-  if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then break; fi
+  if curl -fsS http://localhost:8180/healthz >/dev/null 2>&1; then break; fi
   sleep 0.5
 done
 
-echo "catalog :8081 | recsys :8082 | ingest :8083 | gateway :8080 | logs in $LOG_DIR"
+echo "catalog :8181 | recsys :8182 | ingest :8183 | gateway :8180 | logs in $LOG_DIR"
 echo "starting web..."
 npm --prefix web run dev

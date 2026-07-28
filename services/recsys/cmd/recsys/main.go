@@ -35,10 +35,10 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	var (
-		addr        = env("RECSYS_ADDR", ":8082")
+		addr        = env("RECSYS_ADDR", ":8182")
 		databaseURL = env("RECSYS_DATABASE_URL",
 			"postgres://recsys_svc:recsys_dev@localhost:5432/localyoutube?search_path=recsys")
-		catalogURL = env("CATALOG_URL", "http://localhost:8081")
+		catalogURL = env("CATALOG_URL", "http://localhost:8181")
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
