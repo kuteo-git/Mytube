@@ -91,7 +91,7 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 | Downloads | → **Storage** (dung lượng, pinned, sắp bị evict) |
 | Explore / chip filter | → đổ từ **tag & category thật** trong catalog |
 | Your videos, YT Music, YT Kids, footer, Shorts, Live | **BỎ** |
-| Subscribe | Bookmark kênh (P1) → thật khi có auto-follow (P3) |
+| Subscribe | **Thật ngay ở P1**: thêm kênh thành nguồn ingest động, scanner quét như mọi source |
 | Share | Copy link LAN vào clipboard |
 
 ## 6. Recommendation
@@ -197,6 +197,11 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   rồi related qua InnerTube, cuối cùng mới là search. Lý do: cuộn vô tận là yêu cầu, mà 280 video
   thì hết sau ~12 trang. Thứ tự các lớp là có chủ đích — lớp đào sâu không thể hỏng, nên
   InnerTube vỡ thì feed vẫn vô tận, chỉ kém đa dạng.
+- **Nguồn nội dung**: từng chốt "topics.yaml là nguồn duy nhất" → **đảo lại**: có hai nguồn,
+  topics.yaml (curate trước, nằm trong git) và subscription (chọn trong lúc dùng, nằm trong DB).
+  Cả hai đổ vào cùng scanner. Lý do: subscribe một kênh lạ mà không kéo nội dung về thì nó là
+  nút chết — catalog chỉ có 1 video của kênh đó, feed không có gì để đẩy lên.
+  **App không bao giờ tự ghi vào topics.yaml** — file đó là của người dùng.
 - **Phân trang feed**: offset trên bảng xếp hạng vừa rank lại → **snapshot đông cứng theo phiên**
   (memory recsys, TTL 30 phút). Lý do: `recordImpressions` trừ điểm chính những video vừa hiện,
   nên trang sau rank trên bảng đã khác trang trước và sinh ra video trùng.
