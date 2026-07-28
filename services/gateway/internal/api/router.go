@@ -49,6 +49,8 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/feed", g.handleFeed)
 	mux.HandleFunc("GET /api/search", g.handleSearch)
 	mux.HandleFunc("GET /api/suggest", g.handleSuggest)
+	mux.HandleFunc("GET /api/discover", g.handleDiscover)
+	mux.HandleFunc("POST /api/videos/external", g.handleEnsureExternal)
 	mux.HandleFunc("GET /api/topics", g.handleTopics)
 	mux.HandleFunc("POST /api/topics/refresh", g.handleRefreshTopics)
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)

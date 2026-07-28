@@ -33,6 +33,11 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// IngestServiceSearchProcedure is the fully-qualified name of the IngestService's Search RPC.
+	IngestServiceSearchProcedure = "/ingest.v1.IngestService/Search"
+	// IngestServiceEnsureVideoProcedure is the fully-qualified name of the IngestService's EnsureVideo
+	// RPC.
+	IngestServiceEnsureVideoProcedure = "/ingest.v1.IngestService/EnsureVideo"
 	// IngestServiceRefreshProcedure is the fully-qualified name of the IngestService's Refresh RPC.
 	IngestServiceRefreshProcedure = "/ingest.v1.IngestService/Refresh"
 	// IngestServiceGetScanStatusProcedure is the fully-qualified name of the IngestService's
@@ -53,6 +58,12 @@ const (
 
 // IngestServiceClient is a client for the ingest.v1.IngestService service.
 type IngestServiceClient interface {
+	// Searches upstream. Topics decide what the feed offers; search is how the
+	// user goes looking for something the topics were never going to surface.
+	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
+	// Creates the catalog row for a video found by search, so it can be opened
+	// like any other. No media is fetched: pressing play does that.
+	EnsureVideo(context.Context, *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error)
@@ -77,6 +88,18 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	ingestServiceMethods := v1.File_ingest_v1_ingest_proto.Services().ByName("IngestService").Methods()
 	return &ingestServiceClient{
+		search: connect.NewClient[v1.SearchRequest, v1.SearchResponse](
+			httpClient,
+			baseURL+IngestServiceSearchProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("Search")),
+			connect.WithClientOptions(opts...),
+		),
+		ensureVideo: connect.NewClient[v1.EnsureVideoRequest, v1.EnsureVideoResponse](
+			httpClient,
+			baseURL+IngestServiceEnsureVideoProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("EnsureVideo")),
+			connect.WithClientOptions(opts...),
+		),
 		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
 			httpClient,
 			baseURL+IngestServiceRefreshProcedure,
@@ -124,6 +147,8 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
+	search        *connect.Client[v1.SearchRequest, v1.SearchResponse]
+	ensureVideo   *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
 	refresh       *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	getScanStatus *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
 	resolveStream *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
@@ -131,6 +156,16 @@ type ingestServiceClient struct {
 	getJob        *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	listJobs      *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	cancelJob     *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+}
+
+// Search calls ingest.v1.IngestService.Search.
+func (c *ingestServiceClient) Search(ctx context.Context, req *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
+	return c.search.CallUnary(ctx, req)
+}
+
+// EnsureVideo calls ingest.v1.IngestService.EnsureVideo.
+func (c *ingestServiceClient) EnsureVideo(ctx context.Context, req *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error) {
+	return c.ensureVideo.CallUnary(ctx, req)
 }
 
 // Refresh calls ingest.v1.IngestService.Refresh.
@@ -170,6 +205,12 @@ func (c *ingestServiceClient) CancelJob(ctx context.Context, req *connect.Reques
 
 // IngestServiceHandler is an implementation of the ingest.v1.IngestService service.
 type IngestServiceHandler interface {
+	// Searches upstream. Topics decide what the feed offers; search is how the
+	// user goes looking for something the topics were never going to surface.
+	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
+	// Creates the catalog row for a video found by search, so it can be opened
+	// like any other. No media is fetched: pressing play does that.
+	EnsureVideo(context.Context, *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error)
@@ -190,6 +231,18 @@ type IngestServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	ingestServiceMethods := v1.File_ingest_v1_ingest_proto.Services().ByName("IngestService").Methods()
+	ingestServiceSearchHandler := connect.NewUnaryHandler(
+		IngestServiceSearchProcedure,
+		svc.Search,
+		connect.WithSchema(ingestServiceMethods.ByName("Search")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceEnsureVideoHandler := connect.NewUnaryHandler(
+		IngestServiceEnsureVideoProcedure,
+		svc.EnsureVideo,
+		connect.WithSchema(ingestServiceMethods.ByName("EnsureVideo")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceRefreshHandler := connect.NewUnaryHandler(
 		IngestServiceRefreshProcedure,
 		svc.Refresh,
@@ -234,6 +287,10 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case IngestServiceSearchProcedure:
+			ingestServiceSearchHandler.ServeHTTP(w, r)
+		case IngestServiceEnsureVideoProcedure:
+			ingestServiceEnsureVideoHandler.ServeHTTP(w, r)
 		case IngestServiceRefreshProcedure:
 			ingestServiceRefreshHandler.ServeHTTP(w, r)
 		case IngestServiceGetScanStatusProcedure:
@@ -256,6 +313,14 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedIngestServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedIngestServiceHandler struct{}
+
+func (UnimplementedIngestServiceHandler) Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.Search is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) EnsureVideo(context.Context, *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.EnsureVideo is not implemented"))
+}
 
 func (UnimplementedIngestServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.Refresh is not implemented"))

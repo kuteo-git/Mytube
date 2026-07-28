@@ -37,6 +37,26 @@ export function useSearch(query: string) {
   })
 }
 
+/**
+ * Upstream search. Runs on every query, not as a fallback: the library is what
+ * the topics chose to bring in, and searching means looking past that.
+ */
+export function useDiscover(query: string) {
+  return useQuery({
+    queryKey: ['discover', query],
+    queryFn: () => repo.discover(query),
+    enabled: query.trim().length > 0,
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** Creates the catalog row for a search result so the watch page can open it. */
+export function useOpenExternal() {
+  return useMutation({
+    mutationFn: (sourceUrl: string) => repo.ensureExternal(sourceUrl),
+  })
+}
+
 export function useTopics() {
   return useQuery({
     queryKey: ['topics'],

@@ -164,12 +164,24 @@ func (r *Repository) BatchGetVideos(ctx context.Context, videoIDs []string, user
 }
 
 func (r *Repository) SearchVideos(ctx context.Context, query, userID string, page domain.Page) ([]domain.Video, error) {
+	// Two ways to match, because people search for both.
+	//
+	// The tsvector covers title and description. Channel name is matched
+	// separately with ILIKE rather than being folded into the vector: a channel
+	// is not part of the text of a video, and typing one means "show me their
+	// videos", which full-text ranking would bury under incidental mentions.
+	//
 	// websearch_to_tsquery tolerates whatever a user types, unlike to_tsquery.
+	// Both sides are folded so "tinh tế" finds "Tinh te" and the reverse.
 	return r.queryVideos(ctx, videoSelect+`
-		WHERE v.search_tsv @@ websearch_to_tsquery('simple', $2)
-		ORDER BY ts_rank(v.search_tsv, websearch_to_tsquery('simple', $2)) DESC, v.added_at DESC
+		WHERE v.search_tsv @@ websearch_to_tsquery('simple', catalog.immutable_unaccent($2))
+		   OR catalog.immutable_unaccent(lower(c.name)) LIKE catalog.immutable_unaccent(lower($5))
+		ORDER BY
+			ts_rank(v.search_tsv, websearch_to_tsquery('simple', catalog.immutable_unaccent($2))) DESC,
+			(v.media_state = 'READY') DESC,
+			v.added_at DESC
 		LIMIT $3 OFFSET $4`,
-		userID, query, page.Size, page.Offset)
+		userID, query, page.Size, page.Offset, "%"+query+"%")
 }
 
 // Suggest returns topics and channels first, then video titles.
@@ -178,13 +190,15 @@ func (r *Repository) SearchVideos(ctx context.Context, query, userID string, pag
 // destination that always has results behind it, while a title is a single
 // video, so the broader targets belong at the top of the list.
 func (r *Repository) Suggest(ctx context.Context, query string, limit int32) ([]domain.Suggestion, error) {
+	// Folded on both sides: the library holds Vietnamese with and without
+	// diacritics, and people type it both ways.
 	pattern := "%" + query + "%"
 
 	rows, err := r.pool.Query(ctx, `
 		(
 			SELECT topic AS text, 'TOPIC' AS kind, count(*)::int AS video_count, 0 AS rank
 			FROM videos, unnest(topics) AS topic
-			WHERE topic ILIKE $1
+			WHERE catalog.immutable_unaccent(lower(topic)) LIKE catalog.immutable_unaccent(lower($1))
 			GROUP BY topic
 		)
 		UNION ALL
@@ -192,14 +206,14 @@ func (r *Repository) Suggest(ctx context.Context, query string, limit int32) ([]
 			SELECT c.name, 'CHANNEL', count(v.id)::int, 1
 			FROM channels c
 			JOIN videos v ON v.channel_id = c.id
-			WHERE c.name ILIKE $1
+			WHERE catalog.immutable_unaccent(lower(c.name)) LIKE catalog.immutable_unaccent(lower($1))
 			GROUP BY c.name
 		)
 		UNION ALL
 		(
 			SELECT title, 'TITLE', 1, 2
 			FROM videos
-			WHERE title ILIKE $1
+			WHERE catalog.immutable_unaccent(lower(title)) LIKE catalog.immutable_unaccent(lower($1))
 			-- Prefer what the library actually holds: a cached video is
 			-- watchable right now, a queued one has to be fetched first.
 			ORDER BY (media_state = 'READY') DESC, view_count DESC NULLS LAST

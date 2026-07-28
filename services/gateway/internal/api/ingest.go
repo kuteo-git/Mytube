@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -52,6 +53,78 @@ func toJobDTO(j *ingestv1.Job) jobDTO {
 		ErrorMessage:    j.GetErrorMessage(),
 		CreatedAt:       j.GetCreatedAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
 	}
+}
+
+type externalVideoDTO struct {
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	ChannelName     string `json:"channelName"`
+	DurationSeconds int32  `json:"durationSeconds"`
+	ViewCount       int64  `json:"viewCount"`
+	ThumbnailURL    string `json:"thumbnailUrl"`
+	SourceURL       string `json:"sourceUrl"`
+	// True when the video already has a catalog row, which is what decides
+	// whether opening it plays immediately or starts a download.
+	InLibrary bool `json:"inLibrary"`
+}
+
+// handleDiscover searches upstream. It runs on every search, not only when the
+// library comes up empty: topics decide what the feed offers, and searching is
+// how someone deliberately looks past that.
+func (g *Gateway) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"videos": []externalVideoDTO{}})
+		return
+	}
+
+	resp, err := g.ingest.Search(r.Context(), connect.NewRequest(&ingestv1.SearchRequest{
+		Query: query,
+		Limit: intParam(r, "limit", 20),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		out = append(out, externalVideoDTO{
+			ID:              v.GetId(),
+			Title:           v.GetTitle(),
+			ChannelName:     v.GetChannelName(),
+			DurationSeconds: v.GetDurationSeconds(),
+			ViewCount:       v.GetViewCount(),
+			ThumbnailURL:    v.GetThumbnailUrl(),
+			SourceURL:       v.GetSourceUrl(),
+			InLibrary:       v.GetInLibrary(),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
+}
+
+type ensureExternalRequest struct {
+	URL string `json:"url"`
+}
+
+// handleEnsureExternal turns a search result into something the watch page can
+// open. Only metadata is written; the download starts when play is pressed,
+// exactly as for any other video.
+func (g *Gateway) handleEnsureExternal(w http.ResponseWriter, r *http.Request) {
+	var body ensureExternalRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	resp, err := g.ingest.EnsureVideo(r.Context(), connect.NewRequest(&ingestv1.EnsureVideoRequest{
+		Url: body.URL,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"videoId": resp.Msg.GetVideoId()})
 }
 
 type scanStatusDTO struct {

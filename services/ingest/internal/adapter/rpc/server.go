@@ -22,6 +22,45 @@ func NewServer(ingest *usecase.Ingest, scanner *usecase.Scanner) *Server {
 	return &Server{ingest: ingest, scanner: scanner}
 }
 
+func videoToProto(v domain.ExternalVideo) *ingestv1.ExternalVideo {
+	return &ingestv1.ExternalVideo{
+		Id:              v.ID,
+		Title:           v.Title,
+		ChannelId:       v.ChannelID,
+		ChannelName:     v.ChannelName,
+		DurationSeconds: v.DurationSeconds,
+		ViewCount:       v.ViewCount,
+		ThumbnailUrl:    v.ThumbnailURL,
+		SourceUrl:       v.SourceURL,
+		PublishedAt:     timestamppb.New(v.PublishedAt),
+		Description:     v.Description,
+		Topics:          v.Topics,
+		Hashtags:        v.Hashtags,
+		InLibrary:       v.InLibrary,
+	}
+}
+
+func (s *Server) Search(ctx context.Context, req *connect.Request[ingestv1.SearchRequest]) (*connect.Response[ingestv1.SearchResponse], error) {
+	videos, err := s.ingest.Search(ctx, req.Msg.GetQuery(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+
+	out := make([]*ingestv1.ExternalVideo, 0, len(videos))
+	for _, v := range videos {
+		out = append(out, videoToProto(v))
+	}
+	return connect.NewResponse(&ingestv1.SearchResponse{Videos: out}), nil
+}
+
+func (s *Server) EnsureVideo(ctx context.Context, req *connect.Request[ingestv1.EnsureVideoRequest]) (*connect.Response[ingestv1.EnsureVideoResponse], error) {
+	videoID, err := s.ingest.EnsureVideo(ctx, req.Msg.GetUrl())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.EnsureVideoResponse{VideoId: videoID}), nil
+}
+
 func scanToProto(r domain.ScanResult) *ingestv1.ScanStatus {
 	return &ingestv1.ScanStatus{
 		StartedAt:      timestamppb.New(r.StartedAt),

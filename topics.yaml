@@ -16,6 +16,8 @@ topics:
     sources:
       - https://www.youtube.com/@LinusTechTips/videos
       - https://www.youtube.com/@mkbhd/videos
+      # Tinh tế. The @handle does not resolve, so the channel id is used.
+      - https://www.youtube.com/channel/UCyQobySFx_h9oFwsBV0KGdg/videos
 
   - name: Gaming
     sources:

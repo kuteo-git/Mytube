@@ -13,6 +13,13 @@ option go_package = "github.com/lucnguyen/local-youtube/gen/go/ingest/v1;ingestv
 // background job downloads a local copy. Once the copy lands, playback moves to
 // disk and the upstream is never touched again for that video.
 service IngestService {
+  // Searches upstream. Topics decide what the feed offers; search is how the
+  // user goes looking for something the topics were never going to surface.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  // Creates the catalog row for a video found by search, so it can be opened
+  // like any other. No media is fetched: pressing play does that.
+  rpc EnsureVideo(EnsureVideoRequest) returns (EnsureVideoResponse);
+
   // Rescans topics.yaml now instead of waiting for the timer.
   rpc Refresh(RefreshRequest) returns (RefreshResponse);
   rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
@@ -56,6 +63,24 @@ message ExternalVideo {
   repeated string hashtags = 12;
   // True when this id already exists in the local library.
   bool in_library = 13;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SearchResponse {
+  repeated ExternalVideo videos = 1;
+}
+
+message EnsureVideoRequest {
+  string url = 1;
+}
+
+message EnsureVideoResponse {
+  // Catalog id of the video, ready to be opened.
+  string video_id = 1;
 }
 
 message RefreshRequest {}

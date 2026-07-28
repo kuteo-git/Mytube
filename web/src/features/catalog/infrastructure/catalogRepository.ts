@@ -19,6 +19,8 @@ export interface CatalogRepository {
   refreshTopics(): Promise<ScanStatus>
   search(query: string): Promise<Video[]>
   suggest(query: string): Promise<Suggestion[]>
+  discover(query: string): Promise<ExternalVideo[]>
+  ensureExternal(sourceUrl: string): Promise<string>
   getStorage(): Promise<StorageUsage>
 
   /**
@@ -42,6 +44,18 @@ export interface Feed {
 export interface CommentPage {
   comments: Comment[]
   totalCount: number
+}
+
+/** A video found upstream, which may or may not have a catalog row yet. */
+export interface ExternalVideo {
+  id: string
+  title: string
+  channelName: string
+  durationSeconds: number
+  viewCount: number
+  thumbnailUrl: string
+  sourceUrl: string
+  inLibrary: boolean
 }
 
 export interface Suggestion {
@@ -165,6 +179,20 @@ export const httpCatalogRepository: CatalogRepository = {
       `/suggest${query({ q })}`,
     )
     return suggestions
+  },
+
+  async discover(q) {
+    if (!q.trim()) return []
+    const { videos } = await request<{ videos: ExternalVideo[] }>(`/discover${query({ q })}`)
+    return videos
+  },
+
+  async ensureExternal(sourceUrl) {
+    const { videoId } = await request<{ videoId: string }>('/videos/external', {
+      method: 'POST',
+      body: JSON.stringify({ url: sourceUrl }),
+    })
+    return videoId
   },
 
   getStorage() {
