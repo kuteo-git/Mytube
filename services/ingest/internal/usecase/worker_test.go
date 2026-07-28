@@ -42,6 +42,14 @@ func (f *fakeDownloader) Download(context.Context, string, string, int32, func(d
 	return domain.DownloadResult{MediaPath: "vid1/1080p.mp4", SizeBytes: 1234}, nil
 }
 
+func (f *fakeDownloader) ChannelInfo(context.Context, string) (domain.ChannelMetadata, error) {
+	return domain.ChannelMetadata{}, nil
+}
+
+func (f *fakeDownloader) FetchChannelArtwork(context.Context, domain.ChannelMetadata) (string, string) {
+	return "", ""
+}
+
 // fakeLibrary records every media-state write so the test can assert that
 // subtitles were published before the media file existed.
 type fakeLibrary struct {
@@ -57,6 +65,12 @@ func (f *fakeLibrary) UpsertVideo(context.Context, domain.ExternalVideo, string)
 	return nil
 }
 func (f *fakeLibrary) SourceURLFor(context.Context, string) (string, error) { return "", nil }
+func (f *fakeLibrary) UpsertChannelArtwork(context.Context, domain.ChannelMetadata, string, string) error {
+	return nil
+}
+func (f *fakeLibrary) ListSubscribedChannels(context.Context) ([]domain.SubscribedChannel, error) {
+	return nil, nil
+}
 func (f *fakeLibrary) SetMediaState(_ context.Context, _, state, _ string, _ int64, subs []domain.SubtitleTrack) error {
 	f.states = append(f.states, state)
 	f.subtitles = append(f.subtitles, subs)

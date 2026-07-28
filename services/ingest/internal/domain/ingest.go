@@ -64,6 +64,18 @@ type ExternalVideo struct {
 	InLibrary bool
 }
 
+// ChannelMetadata is everything a channel page needs that a flat video listing
+// does not carry. Fetched once per source per scan rather than per video.
+type ChannelMetadata struct {
+	ID              string
+	Name            string
+	Handle          string
+	AvatarURL       string
+	BannerURL       string
+	SubscriberCount int64
+	Verified        bool
+}
+
 // StreamLocation is a short-lived, directly playable upstream URL.
 type StreamLocation struct {
 	URL       string
@@ -109,6 +121,13 @@ type Downloader interface {
 	// an error: a video without captions is a working video.
 	FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) []SubtitleTrack
 	Download(ctx context.Context, videoURL, videoID string, height int32, onProgress func(Progress)) (DownloadResult, error)
+	// ChannelInfo reads a channel's own metadata — artwork, handle, subscriber
+	// count — none of which appears in a flat playlist listing.
+	ChannelInfo(ctx context.Context, channelURL string) (ChannelMetadata, error)
+	// FetchChannelArtwork downloads the avatar and banner and returns their
+	// paths under the media root. A failure to fetch either is decoration lost,
+	// never an error: the returned path is simply empty.
+	FetchChannelArtwork(ctx context.Context, m ChannelMetadata) (avatarPath, bannerPath string)
 }
 
 // JobStore is the ingest-owned persistence port.
@@ -135,6 +154,19 @@ type Library interface {
 	UpsertVideo(ctx context.Context, v ExternalVideo, state string) error
 	SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64, subtitles []SubtitleTrack) error
 	SourceURLFor(ctx context.Context, videoID string) (string, error)
+	// UpsertChannelArtwork records artwork already downloaded to the media root.
+	UpsertChannelArtwork(ctx context.Context, m ChannelMetadata, avatarPath, bannerPath string) error
+	ListSubscribedChannels(ctx context.Context) ([]SubscribedChannel, error)
+}
+
+// SubscribedChannel is a channel a user chose to follow. Subscriptions are a
+// content source alongside topics.yaml: the file is what the owner curated
+// ahead of time, a subscription is what someone chose while using the system.
+// Both feed the same scanner.
+type SubscribedChannel struct {
+	ID     string
+	Handle string
+	Name   string
 }
 
 // RelatedSource is the port over YouTube's watch-next panel. It is deliberately

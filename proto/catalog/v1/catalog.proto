@@ -49,6 +49,7 @@ service CatalogService {
   rpc RecordWatchProgress(RecordWatchProgressRequest) returns (RecordWatchProgressResponse);
   rpc SetReaction(SetReactionRequest) returns (SetReactionResponse);
   rpc SetSubscription(SetSubscriptionRequest) returns (SetSubscriptionResponse);
+  rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
   rpc ListHistory(ListHistoryRequest) returns (ListHistoryResponse);
 
   // Storage. Backs the Storage page and the eviction banner.
@@ -90,6 +91,8 @@ message Channel {
   bool verified = 6;
   // Whether the requesting user follows this channel locally.
   bool subscribed = 7;
+  // Wide header image, path under /media. Empty when the source had none.
+  string banner_path = 8;
 }
 
 message Video {
@@ -395,6 +398,14 @@ message SetSubscriptionRequest {
 }
 
 message SetSubscriptionResponse {}
+
+message ListSubscriptionsRequest {
+  string user_id = 1;
+}
+
+message ListSubscriptionsResponse {
+  repeated Channel channels = 1;
+}
 
 message ListHistoryRequest {
   string user_id = 1;

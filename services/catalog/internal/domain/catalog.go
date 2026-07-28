@@ -36,6 +36,7 @@ type Channel struct {
 	Name            string
 	Handle          string
 	AvatarPath      string
+	BannerPath      string
 	SubscriberCount int64
 	Verified        bool
 	Subscribed      bool
@@ -192,6 +193,7 @@ type Repository interface {
 	RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
+	ListSubscriptions(ctx context.Context, userID string) ([]Channel, error)
 	ListHistory(ctx context.Context, userID string, page Page) ([]Video, error)
 
 	GetStorageUsage(ctx context.Context, budgetBytes int64) (StorageUsage, error)

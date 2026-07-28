@@ -264,14 +264,14 @@ func (r *Repository) GetChannel(ctx context.Context, channelID, userID string) (
 		videoCount int32
 	)
 	err := r.pool.QueryRow(ctx, `
-		SELECT c.id, c.name, c.handle, c.avatar_path, c.subscriber_count, c.verified,
+		SELECT c.id, c.name, c.handle, c.avatar_path, c.banner_path, c.subscriber_count, c.verified,
 		       (s.user_id IS NOT NULL) AS subscribed,
 		       (SELECT count(*) FROM videos v WHERE v.channel_id = c.id) AS video_count
 		FROM channels c
 		LEFT JOIN subscriptions s ON s.channel_id = c.id AND s.user_id = $1
 		WHERE c.id = $2`,
 		userID, channelID,
-	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.SubscriberCount, &c.Verified,
+	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.BannerPath, &c.SubscriberCount, &c.Verified,
 		&c.Subscribed, &videoCount)
 
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -307,18 +307,47 @@ func (r *Repository) ListTopics(ctx context.Context, minVideoCount int32) ([]dom
 // video from a known channel refreshes its details rather than failing.
 func (r *Repository) UpsertChannel(ctx context.Context, c domain.Channel) (domain.Channel, error) {
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO channels (id, name, handle, avatar_path, subscriber_count, verified)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO channels (id, name, handle, avatar_path, banner_path, subscriber_count, verified)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (id) DO UPDATE
 		SET name = EXCLUDED.name,
 		    handle = EXCLUDED.handle,
 		    avatar_path = COALESCE(NULLIF(EXCLUDED.avatar_path, ''), channels.avatar_path),
+		    banner_path = COALESCE(NULLIF(EXCLUDED.banner_path, ''), channels.banner_path),
 		    subscriber_count = EXCLUDED.subscriber_count,
 		    verified = EXCLUDED.verified
-		RETURNING id, name, handle, avatar_path, subscriber_count, verified`,
-		c.ID, c.Name, c.Handle, c.AvatarPath, c.SubscriberCount, c.Verified,
-	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.SubscriberCount, &c.Verified)
+		RETURNING id, name, handle, avatar_path, banner_path, subscriber_count, verified`,
+		c.ID, c.Name, c.Handle, c.AvatarPath, c.BannerPath, c.SubscriberCount, c.Verified,
+	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.BannerPath, &c.SubscriberCount, &c.Verified)
 	return c, err
+}
+
+// ListSubscriptions returns the channels a user follows, most recently
+// subscribed first — the order the sidebar shows them in.
+func (r *Repository) ListSubscriptions(ctx context.Context, userID string) ([]domain.Channel, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT c.id, c.name, c.handle, c.avatar_path, c.banner_path,
+		       c.subscriber_count, c.verified
+		FROM subscriptions s
+		JOIN channels c ON c.id = s.channel_id
+		WHERE s.user_id = $1
+		ORDER BY s.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Channel
+	for rows.Next() {
+		var c domain.Channel
+		if err := rows.Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.BannerPath,
+			&c.SubscriberCount, &c.Verified); err != nil {
+			return nil, err
+		}
+		c.Subscribed = true
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // UpsertVideo preserves fields the ingest worker does not own — media state,

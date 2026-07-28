@@ -82,6 +82,9 @@ const (
 	// CatalogServiceSetSubscriptionProcedure is the fully-qualified name of the CatalogService's
 	// SetSubscription RPC.
 	CatalogServiceSetSubscriptionProcedure = "/catalog.v1.CatalogService/SetSubscription"
+	// CatalogServiceListSubscriptionsProcedure is the fully-qualified name of the CatalogService's
+	// ListSubscriptions RPC.
+	CatalogServiceListSubscriptionsProcedure = "/catalog.v1.CatalogService/ListSubscriptions"
 	// CatalogServiceListHistoryProcedure is the fully-qualified name of the CatalogService's
 	// ListHistory RPC.
 	CatalogServiceListHistoryProcedure = "/catalog.v1.CatalogService/ListHistory"
@@ -127,6 +130,7 @@ type CatalogServiceClient interface {
 	RecordWatchProgress(context.Context, *connect.Request[v1.RecordWatchProgressRequest]) (*connect.Response[v1.RecordWatchProgressResponse], error)
 	SetReaction(context.Context, *connect.Request[v1.SetReactionRequest]) (*connect.Response[v1.SetReactionResponse], error)
 	SetSubscription(context.Context, *connect.Request[v1.SetSubscriptionRequest]) (*connect.Response[v1.SetSubscriptionResponse], error)
+	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	ListHistory(context.Context, *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error)
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
@@ -246,6 +250,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("SetSubscription")),
 			connect.WithClientOptions(opts...),
 		),
+		listSubscriptions: connect.NewClient[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse](
+			httpClient,
+			baseURL+CatalogServiceListSubscriptionsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListSubscriptions")),
+			connect.WithClientOptions(opts...),
+		),
 		listHistory: connect.NewClient[v1.ListHistoryRequest, v1.ListHistoryResponse](
 			httpClient,
 			baseURL+CatalogServiceListHistoryProcedure,
@@ -286,6 +296,7 @@ type catalogServiceClient struct {
 	recordWatchProgress *connect.Client[v1.RecordWatchProgressRequest, v1.RecordWatchProgressResponse]
 	setReaction         *connect.Client[v1.SetReactionRequest, v1.SetReactionResponse]
 	setSubscription     *connect.Client[v1.SetSubscriptionRequest, v1.SetSubscriptionResponse]
+	listSubscriptions   *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
 	listHistory         *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
 	getStorageUsage     *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
 	setPinned           *connect.Client[v1.SetPinnedRequest, v1.SetPinnedResponse]
@@ -376,6 +387,11 @@ func (c *catalogServiceClient) SetSubscription(ctx context.Context, req *connect
 	return c.setSubscription.CallUnary(ctx, req)
 }
 
+// ListSubscriptions calls catalog.v1.CatalogService.ListSubscriptions.
+func (c *catalogServiceClient) ListSubscriptions(ctx context.Context, req *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error) {
+	return c.listSubscriptions.CallUnary(ctx, req)
+}
+
 // ListHistory calls catalog.v1.CatalogService.ListHistory.
 func (c *catalogServiceClient) ListHistory(ctx context.Context, req *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error) {
 	return c.listHistory.CallUnary(ctx, req)
@@ -425,6 +441,7 @@ type CatalogServiceHandler interface {
 	RecordWatchProgress(context.Context, *connect.Request[v1.RecordWatchProgressRequest]) (*connect.Response[v1.RecordWatchProgressResponse], error)
 	SetReaction(context.Context, *connect.Request[v1.SetReactionRequest]) (*connect.Response[v1.SetReactionResponse], error)
 	SetSubscription(context.Context, *connect.Request[v1.SetSubscriptionRequest]) (*connect.Response[v1.SetSubscriptionResponse], error)
+	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	ListHistory(context.Context, *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error)
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
@@ -540,6 +557,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("SetSubscription")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListSubscriptionsHandler := connect.NewUnaryHandler(
+		CatalogServiceListSubscriptionsProcedure,
+		svc.ListSubscriptions,
+		connect.WithSchema(catalogServiceMethods.ByName("ListSubscriptions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceListHistoryHandler := connect.NewUnaryHandler(
 		CatalogServiceListHistoryProcedure,
 		svc.ListHistory,
@@ -594,6 +617,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceSetReactionHandler.ServeHTTP(w, r)
 		case CatalogServiceSetSubscriptionProcedure:
 			catalogServiceSetSubscriptionHandler.ServeHTTP(w, r)
+		case CatalogServiceListSubscriptionsProcedure:
+			catalogServiceListSubscriptionsHandler.ServeHTTP(w, r)
 		case CatalogServiceListHistoryProcedure:
 			catalogServiceListHistoryHandler.ServeHTTP(w, r)
 		case CatalogServiceGetStorageUsageProcedure:
@@ -675,6 +700,10 @@ func (UnimplementedCatalogServiceHandler) SetReaction(context.Context, *connect.
 
 func (UnimplementedCatalogServiceHandler) SetSubscription(context.Context, *connect.Request[v1.SetSubscriptionRequest]) (*connect.Response[v1.SetSubscriptionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetSubscription is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListSubscriptions is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ListHistory(context.Context, *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error) {

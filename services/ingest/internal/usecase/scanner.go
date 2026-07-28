@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,24 +92,38 @@ func (s *Scanner) ScanNow(ctx context.Context) (domain.ScanResult, error) {
 		return result, err
 	}
 
-	for _, topic := range config.Topics {
-		for _, source := range topic.Sources {
-			if ctx.Err() != nil {
-				return result, ctx.Err()
-			}
+	targets := s.sources(ctx, config)
 
-			seen, added, err := s.scanSource(ctx, topic.Name, source, config.PerSourceLimit)
-			result.SourcesScanned++
-			result.VideosSeen += seen
-			result.VideosAdded += added
-
-			if err != nil {
-				// One broken source must not stop the rest: a deleted playlist
-				// should cost that topic its videos, not the whole scan.
-				result.SourcesFailed++
-				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", source, err))
-				s.logger.Warn("scan source", "topic", topic.Name, "source", source, "error", err)
+	// Channel artwork is fetched once per source per scan, ahead of the video
+	// listing: it is decoration, and a failure here must never cost a source
+	// its videos.
+	for _, target := range targets {
+		if meta, err := s.fetch.ChannelInfo(ctx, target.URL); err != nil {
+			s.logger.Warn("channel info", "source", target.URL, "error", err)
+		} else if meta.ID != "" {
+			avatar, banner := s.fetch.FetchChannelArtwork(ctx, meta)
+			if err := s.library.UpsertChannelArtwork(ctx, meta, avatar, banner); err != nil {
+				s.logger.Warn("store channel artwork", "channel", meta.ID, "error", err)
 			}
+		}
+	}
+
+	for _, target := range targets {
+		if ctx.Err() != nil {
+			return result, ctx.Err()
+		}
+
+		seen, added, err := s.scanSource(ctx, target.TopicName, target.URL, config.PerSourceLimit)
+		result.SourcesScanned++
+		result.VideosSeen += seen
+		result.VideosAdded += added
+
+		if err != nil {
+			// One broken source must not stop the rest: a deleted playlist
+			// should cost that topic its videos, not the whole scan.
+			result.SourcesFailed++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", target.URL, err))
+			s.logger.Warn("scan source", "topic", target.TopicName, "source", target.URL, "error", err)
 		}
 	}
 
@@ -139,10 +154,15 @@ func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limi
 		}
 		seen++
 
-		// The topic comes from the source it was found in, never from YouTube's
-		// own categories. Catalog merges topics on conflict, so a video in two
-		// topics accumulates both rather than losing one.
-		v.Topics = []string{topicName}
+		// The topic comes from the source it was found in, never from
+		// YouTube's own categories. An empty topicName marks a subscription:
+		// its videos join the library without being filed under a topic,
+		// because nobody said the channel belongs to one. Catalog merges
+		// topics on conflict, so a video in two topics accumulates both
+		// rather than losing one.
+		if topicName != "" {
+			v.Topics = []string{topicName}
+		}
 
 		// Flat listings omit the channel for some sources; without one the
 		// catalog row cannot be written, so fall back to the source itself.
@@ -168,4 +188,54 @@ func (s *Scanner) scanSource(ctx context.Context, topicName, source string, limi
 	}
 
 	return seen, added, nil
+}
+
+// scanTarget is one thing to scan. An empty TopicName marks a subscription:
+// videos from it join the library without being filed under a topic, because
+// nobody said the channel belongs to one.
+type scanTarget struct {
+	TopicName string
+	URL       string
+}
+
+// sources merges the two content sources this system has.
+//
+// topics.yaml is curated ahead of time and lives in git. Subscriptions are
+// chosen while using the app and live in the database. Merging them here — at
+// the point of scanning, rather than by writing subscriptions back into the
+// file — keeps the file something the owner edits and the app never touches.
+func (s *Scanner) sources(ctx context.Context, config domain.TopicConfig) []scanTarget {
+	var targets []scanTarget
+	for _, topic := range config.Topics {
+		for _, url := range topic.Sources {
+			targets = append(targets, scanTarget{TopicName: topic.Name, URL: url})
+		}
+	}
+
+	channels, err := s.library.ListSubscribedChannels(ctx)
+	if err != nil {
+		// A subscription list that cannot be read must not stop the curated
+		// sources from being scanned.
+		s.logger.Warn("list subscribed channels", "error", err)
+		return targets
+	}
+
+	for _, c := range channels {
+		targets = append(targets, scanTarget{URL: channelVideosURL(c)})
+	}
+	return targets
+}
+
+// channelVideosURL prefers the handle, which is stable and readable. Some
+// channels have none — Tinh tế is the known case in topics.yaml — and those
+// need the channel id form instead.
+func channelVideosURL(c domain.SubscribedChannel) string {
+	if c.Handle != "" {
+		handle := c.Handle
+		if !strings.HasPrefix(handle, "@") {
+			handle = "@" + handle
+		}
+		return "https://www.youtube.com/" + handle + "/videos"
+	}
+	return "https://www.youtube.com/channel/" + c.ID + "/videos"
 }

@@ -91,6 +91,7 @@ func channelToProto(c domain.Channel) *catalogv1.Channel {
 		Name:            c.Name,
 		Handle:          c.Handle,
 		AvatarPath:      c.AvatarPath,
+		BannerPath:      c.BannerPath,
 		SubscriberCount: c.SubscriberCount,
 		Verified:        c.Verified,
 		Subscribed:      c.Subscribed,
@@ -310,6 +311,7 @@ func (s *Server) UpsertChannel(ctx context.Context, req *connect.Request[catalog
 		Name:            in.GetName(),
 		Handle:          in.GetHandle(),
 		AvatarPath:      in.GetAvatarPath(),
+		BannerPath:      in.GetBannerPath(),
 		SubscriberCount: in.GetSubscriberCount(),
 		Verified:        in.GetVerified(),
 	})
@@ -443,6 +445,18 @@ func (s *Server) SetSubscription(ctx context.Context, req *connect.Request[catal
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.SetSubscriptionResponse{}), nil
+}
+
+func (s *Server) ListSubscriptions(ctx context.Context, req *connect.Request[catalogv1.ListSubscriptionsRequest]) (*connect.Response[catalogv1.ListSubscriptionsResponse], error) {
+	channels, err := s.catalog.ListSubscriptions(ctx, req.Msg.GetUserId())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*catalogv1.Channel, 0, len(channels))
+	for _, c := range channels {
+		out = append(out, channelToProto(c))
+	}
+	return connect.NewResponse(&catalogv1.ListSubscriptionsResponse{Channels: out}), nil
 }
 
 func (s *Server) ListHistory(ctx context.Context, req *connect.Request[catalogv1.ListHistoryRequest]) (*connect.Response[catalogv1.ListHistoryResponse], error) {

@@ -7,7 +7,10 @@ package ytdlp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -433,4 +436,106 @@ func subtitleLabel(language string) string {
 	default:
 		return strings.ToUpper(language)
 	}
+}
+
+// ChannelInfo reads a channel's own metadata by asking yt-dlp for the channel
+// URL with no entries at all. `--playlist-items 0` is the cheap way to do it:
+// it returns the container's metadata and skips every video in it.
+func (d *Downloader) ChannelInfo(ctx context.Context, channelURL string) (domain.ChannelMetadata, error) {
+	result, err := ytdlp.New().
+		DumpSingleJSON().
+		FlatPlaylist().
+		PlaylistItems("0").
+		NoWarnings().
+		Run(ctx, channelURL)
+	if err != nil {
+		return domain.ChannelMetadata{}, fmt.Errorf("channel info %q: %w", channelURL, err)
+	}
+
+	var payload struct {
+		ID         string `json:"channel_id"`
+		Uploader   string `json:"uploader"`
+		Channel    string `json:"channel"`
+		UploaderID string `json:"uploader_id"`
+		Followers  int64  `json:"channel_follower_count"`
+		Thumbnails []struct {
+			URL string `json:"url"`
+			ID  string `json:"id"`
+		} `json:"thumbnails"`
+	}
+	if err := json.Unmarshal([]byte(result.Stdout), &payload); err != nil {
+		return domain.ChannelMetadata{}, fmt.Errorf("channel info %q: %w", channelURL, err)
+	}
+
+	name := payload.Channel
+	if name == "" {
+		name = payload.Uploader
+	}
+
+	meta := domain.ChannelMetadata{
+		ID:              payload.ID,
+		Name:            name,
+		Handle:          payload.UploaderID,
+		SubscriberCount: payload.Followers,
+	}
+
+	// yt-dlp labels channel artwork by aspect: "avatar_uncropped" is the round
+	// picture, "banner_uncropped" the wide header. Falling back to the widest
+	// image for the banner is safe; falling back for the avatar is not, because
+	// a wide image in a round frame looks broken.
+	for _, t := range payload.Thumbnails {
+		switch {
+		case strings.HasPrefix(t.ID, "avatar"):
+			meta.AvatarURL = t.URL
+		case strings.HasPrefix(t.ID, "banner"):
+			meta.BannerURL = t.URL
+		}
+	}
+	return meta, nil
+}
+
+// saveChannelImage downloads artwork into the media root and returns its path
+// relative to that root, or "" if there was nothing to fetch. Artwork is
+// optional decoration: a failure here must never fail a scan.
+func (d *Downloader) saveChannelImage(ctx context.Context, url, channelID, kind string) string {
+	if url == "" {
+		return ""
+	}
+
+	dir := filepath.Join(d.mediaRoot, "channels", channelID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return ""
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	name := kind + ".jpg"
+	file, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		return ""
+	}
+	return filepath.Join("channels", channelID, name)
+}
+
+// FetchChannelArtwork downloads the avatar and banner and returns their paths
+// under the media root.
+func (d *Downloader) FetchChannelArtwork(ctx context.Context, m domain.ChannelMetadata) (avatarPath, bannerPath string) {
+	return d.saveChannelImage(ctx, m.AvatarURL, m.ID, "avatar"),
+		d.saveChannelImage(ctx, m.BannerURL, m.ID, "banner")
 }

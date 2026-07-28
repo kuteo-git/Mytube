@@ -49,6 +49,9 @@ func main() {
 		catalogURL = env("CATALOG_URL", "http://localhost:8081")
 		mediaRoot  = env("MEDIA_ROOT", "./media")
 		topicsPath = env("TOPICS_FILE", "./topics.yaml")
+		// Same default as the gateway's devUserID: until identity exists, Phase 1
+		// runs as a single seeded user, and subscriptions are per-user.
+		devUserID = env("DEV_USER_ID", "u_luc")
 	)
 
 	defaultHeight := int32(1080)
@@ -92,7 +95,7 @@ func main() {
 	ingest := usecase.New(
 		downloader,
 		postgres.New(pool),
-		catalogclient.New(catalogHTTP, catalogURL),
+		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		defaultHeight,
 	)
 
@@ -104,7 +107,7 @@ func main() {
 	scanner := usecase.NewScanner(
 		topicfile.New(topicsPath),
 		downloader,
-		catalogclient.New(catalogHTTP, catalogURL),
+		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		logger,
 		12*time.Hour,
 	)
@@ -114,7 +117,7 @@ func main() {
 	expander := usecase.NewExpander(
 		downloader,
 		innertube.New(nil),
-		catalogclient.New(catalogHTTP, catalogURL),
+		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		topicfile.New(topicsPath),
 		store,
 		logger,

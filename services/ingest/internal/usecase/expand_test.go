@@ -27,6 +27,12 @@ func (r *recordingLibrary) SetMediaState(context.Context, string, string, string
 	return nil
 }
 func (r *recordingLibrary) SourceURLFor(context.Context, string) (string, error) { return "", nil }
+func (r *recordingLibrary) UpsertChannelArtwork(context.Context, domain.ChannelMetadata, string, string) error {
+	return nil
+}
+func (r *recordingLibrary) ListSubscribedChannels(context.Context) ([]domain.SubscribedChannel, error) {
+	return nil, nil
+}
 
 type stubCursors struct{ offsets map[string]int32 }
 
@@ -79,6 +85,12 @@ func (d *deepenDownloader) FetchSubtitles(context.Context, string, string, int32
 }
 func (d *deepenDownloader) Download(context.Context, string, string, int32, func(domain.Progress)) (domain.DownloadResult, error) {
 	return domain.DownloadResult{}, nil
+}
+func (d *deepenDownloader) ChannelInfo(context.Context, string) (domain.ChannelMetadata, error) {
+	return domain.ChannelMetadata{}, nil
+}
+func (d *deepenDownloader) FetchChannelArtwork(context.Context, domain.ChannelMetadata) (string, string) {
+	return "", ""
 }
 
 type failingRelated struct{}

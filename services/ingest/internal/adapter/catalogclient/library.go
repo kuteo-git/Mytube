@@ -18,10 +18,16 @@ import (
 
 type Library struct {
 	client catalogv1connect.CatalogServiceClient
+	// userID is used until the identity service exists, same as the gateway's
+	// devUserID — subscriptions are per-user, and Phase 1 has exactly one.
+	userID string
 }
 
-func New(httpClient *http.Client, baseURL string) *Library {
-	return &Library{client: catalogv1connect.NewCatalogServiceClient(httpClient, baseURL)}
+func New(httpClient *http.Client, baseURL, userID string) *Library {
+	return &Library{
+		client: catalogv1connect.NewCatalogServiceClient(httpClient, baseURL),
+		userID: userID,
+	}
 }
 
 var mediaStates = map[string]catalogv1.MediaState{
@@ -111,4 +117,40 @@ func (l *Library) SourceURLFor(ctx context.Context, videoID string) (string, err
 		return "", err
 	}
 	return resp.Msg.GetVideo().GetSourceUrl(), nil
+}
+
+func (l *Library) UpsertChannelArtwork(ctx context.Context, m domain.ChannelMetadata, avatarPath, bannerPath string) error {
+	_, err := l.client.UpsertChannel(ctx, connect.NewRequest(&catalogv1.UpsertChannelRequest{
+		Channel: &catalogv1.Channel{
+			Id:              m.ID,
+			Name:            m.Name,
+			Handle:          m.Handle,
+			AvatarPath:      avatarPath,
+			BannerPath:      bannerPath,
+			SubscriberCount: m.SubscriberCount,
+			Verified:        m.Verified,
+		},
+	}))
+	return err
+}
+
+// ListSubscribedChannels lets the scanner treat subscriptions as a content
+// source alongside topics.yaml.
+func (l *Library) ListSubscribedChannels(ctx context.Context) ([]domain.SubscribedChannel, error) {
+	resp, err := l.client.ListSubscriptions(ctx, connect.NewRequest(&catalogv1.ListSubscriptionsRequest{
+		UserId: l.userID,
+	}))
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]domain.SubscribedChannel, 0, len(resp.Msg.GetChannels()))
+	for _, c := range resp.Msg.GetChannels() {
+		out = append(out, domain.SubscribedChannel{
+			ID:     c.GetId(),
+			Handle: c.GetHandle(),
+			Name:   c.GetName(),
+		})
+	}
+	return out, nil
 }

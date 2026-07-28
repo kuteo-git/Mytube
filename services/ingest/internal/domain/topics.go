@@ -7,7 +7,9 @@ import (
 
 // A Topic is a name plus the YouTube playlists or channels it draws from.
 // Topics are configuration, not user data: they live in topics.yaml and are
-// the only way content enters the system.
+// curated ahead of time. They are one of two content sources — the other is
+// subscriptions, chosen while using the app and stored in the database. Both
+// are scanned the same way.
 type Topic struct {
 	Name    string
 	Sources []string
