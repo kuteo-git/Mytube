@@ -1,9 +1,11 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useUpNext, useVideo } from '@/features/catalog/application/queries'
 import { recordAutoplayHop } from '@/features/watch/application/autoplay'
+import { useQueue } from '@/features/watch/application/queue'
 import { CommentSection } from '@/features/watch/ui/CommentSection'
 import { DescriptionBox } from '@/features/watch/ui/DescriptionBox'
 import { Player } from '@/features/watch/ui/Player'
+import { QueueRail } from '@/features/watch/ui/QueueRail'
 import { UpNextRail } from '@/features/watch/ui/UpNextRail'
 import { VideoActions } from '@/features/watch/ui/VideoActions'
 import { hueFromId } from '@/shared/lib/hue'
@@ -12,8 +14,13 @@ export function WatchPage() {
   const { videoId } = useParams()
   const { data: video, isPending, isError } = useVideo(videoId)
   const { data: upNext } = useUpNext(videoId)
+  const queue = useQueue(videoId)
   const navigate = useNavigate()
-  const next = upNext?.[0]
+
+  // A queue is an explicit instruction — "play this list, in this order" — so
+  // it outranks the recommendation rail, which is only ever a suggestion.
+  const next = queue.next ?? upNext?.[0]
+  const nextInQueue = Boolean(queue.next)
 
   if (isPending) {
     return (
@@ -42,7 +49,9 @@ export function WatchPage() {
             next
               ? () => {
                   recordAutoplayHop()
-                  navigate(`/watch/${next.id}`)
+                  // Staying inside the queue means carrying it along; a
+                  // recommendation is a fresh start with no list.
+                  navigate(`/watch/${next.id}${nextInQueue ? queue.search : ''}`)
                 }
               : undefined
           }
@@ -62,7 +71,18 @@ export function WatchPage() {
       </div>
 
       <div className="w-full shrink-0 min-[1000px]:w-[402px]">
-        <UpNextRail current={video} />
+        {/* The queue replaces the recommendation rail rather than sitting
+            beside it: while playing through a list, what comes next is already
+            decided, and offering a competing list would just be noise. */}
+        {queue.items.length > 0 ? (
+          <QueueRail
+            items={queue.items}
+            currentIndex={queue.currentIndex}
+            search={queue.search}
+          />
+        ) : (
+          <UpNextRail current={video} />
+        )}
       </div>
     </div>
   )

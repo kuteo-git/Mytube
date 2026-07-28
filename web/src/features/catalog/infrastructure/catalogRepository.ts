@@ -41,6 +41,11 @@ export interface CatalogRepository {
   listChannelVideos(channelId: string, pageToken?: string): Promise<ChannelUploads>
   setSubscription(channelId: string, subscribed: boolean): Promise<void>
   listSubscriptions(): Promise<Channel[]>
+
+  /** Videos this viewer has spent the most time on, in order. */
+  listTopPlayed(limit?: number): Promise<Video[]>
+  /** Widely-watched videos filtered to this viewer's taste. */
+  listPopular(limit?: number): Promise<Video[]>
 }
 
 export interface ChannelPage {
@@ -298,5 +303,19 @@ export const httpCatalogRepository: CatalogRepository = {
   async listSubscriptions() {
     const { channels } = await request<{ channels: Channel[] }>('/subscriptions')
     return channels
+  },
+
+  async listTopPlayed(limit) {
+    const { videos } = await request<Feed>(
+      `/collections/top-played${query({ limit: limit ? String(limit) : undefined })}`,
+    )
+    return videos
+  },
+
+  async listPopular(limit) {
+    const { videos } = await request<Feed>(
+      `/collections/popular${query({ limit: limit ? String(limit) : undefined })}`,
+    )
+    return videos
   },
 }

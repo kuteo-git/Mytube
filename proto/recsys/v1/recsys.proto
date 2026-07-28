@@ -18,6 +18,10 @@ service RecommendationService {
   rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
   // Ranked ids for the watch page "Next" rail.
   rpc GetUpNext(GetUpNextRequest) returns (GetUpNextResponse);
+
+  // The videos this user has spent the most time on. Watch signals accumulate
+  // during playback, so this measures time watched, not times opened.
+  rpc GetMostWatched(GetMostWatchedRequest) returns (GetMostWatchedResponse);
   // Behaviour signals, written on every meaningful interaction so the next
   // feed request already reflects them. No batch job in the loop.
   rpc RecordSignal(RecordSignalRequest) returns (RecordSignalResponse);
@@ -61,6 +65,15 @@ message GetFeedResponse {
   // How many ranked videos are left after this page. The gateway uses it to
   // decide when to go looking for more material, before the viewer hits the end.
   int32 remaining_count = 3;
+}
+
+message GetMostWatchedRequest {
+  string user_id = 1;
+  int32 limit = 2;
+}
+
+message GetMostWatchedResponse {
+  repeated RankedVideo videos = 1;
 }
 
 message GetUpNextRequest {

@@ -222,6 +222,32 @@ export function useChannelVideos(channelId: string | undefined, sortToken?: stri
   })
 }
 
+/**
+ * The videos this viewer has spent the most time on. Doubles as a playlist:
+ * the order is the play order.
+ */
+export function useTopPlayed(limit?: number, enabled = true) {
+  return useQuery({
+    queryKey: ['top-played', limit ?? 0],
+    queryFn: () => repo.listTopPlayed(limit),
+    enabled,
+    staleTime: 60_000,
+  })
+}
+
+/**
+ * Widely-watched videos, filtered to this viewer's taste and rotated on a fixed
+ * clock server-side — so a reload does not reshuffle it, but returning later
+ * shows something else.
+ */
+export function usePopular(limit?: number) {
+  return useQuery({
+    queryKey: ['popular', limit ?? 0],
+    queryFn: () => repo.listPopular(limit),
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function useSubscriptions() {
   return useQuery({
     queryKey: ['subscriptions'],

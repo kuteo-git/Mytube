@@ -133,3 +133,38 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 
 	return profile, rows.Err()
 }
+
+// MostWatched ranks by accumulated watch signals.
+//
+// Signals are appended every few seconds of playback rather than once per
+// open, so the count is proportional to time spent. A video watched twice all
+// the way through therefore outranks one opened ten times and abandoned, which
+// is what "played the most" should mean.
+func (s *Store) MostWatched(ctx context.Context, userID string, limit int32) ([]domain.RankedVideo, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT video_id, count(*)::float8 AS weight
+		FROM signals
+		WHERE user_id = $1 AND type = 'WATCH' AND video_id <> ''
+		GROUP BY video_id
+		ORDER BY weight DESC, video_id
+		LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.RankedVideo
+	for rows.Next() {
+		var v domain.RankedVideo
+		if err := rows.Scan(&v.VideoID, &v.Score); err != nil {
+			return nil, err
+		}
+		v.Reason = domain.ReasonRewatch
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}

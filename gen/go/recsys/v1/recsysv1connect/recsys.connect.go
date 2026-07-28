@@ -39,6 +39,9 @@ const (
 	// RecommendationServiceGetUpNextProcedure is the fully-qualified name of the
 	// RecommendationService's GetUpNext RPC.
 	RecommendationServiceGetUpNextProcedure = "/recsys.v1.RecommendationService/GetUpNext"
+	// RecommendationServiceGetMostWatchedProcedure is the fully-qualified name of the
+	// RecommendationService's GetMostWatched RPC.
+	RecommendationServiceGetMostWatchedProcedure = "/recsys.v1.RecommendationService/GetMostWatched"
 	// RecommendationServiceRecordSignalProcedure is the fully-qualified name of the
 	// RecommendationService's RecordSignal RPC.
 	RecommendationServiceRecordSignalProcedure = "/recsys.v1.RecommendationService/RecordSignal"
@@ -53,6 +56,9 @@ type RecommendationServiceClient interface {
 	GetFeed(context.Context, *connect.Request[v1.GetFeedRequest]) (*connect.Response[v1.GetFeedResponse], error)
 	// Ranked ids for the watch page "Next" rail.
 	GetUpNext(context.Context, *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error)
+	// The videos this user has spent the most time on. Watch signals accumulate
+	// during playback, so this measures time watched, not times opened.
+	GetMostWatched(context.Context, *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error)
 	// Behaviour signals, written on every meaningful interaction so the next
 	// feed request already reflects them. No batch job in the loop.
 	RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error)
@@ -83,6 +89,12 @@ func NewRecommendationServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(recommendationServiceMethods.ByName("GetUpNext")),
 			connect.WithClientOptions(opts...),
 		),
+		getMostWatched: connect.NewClient[v1.GetMostWatchedRequest, v1.GetMostWatchedResponse](
+			httpClient,
+			baseURL+RecommendationServiceGetMostWatchedProcedure,
+			connect.WithSchema(recommendationServiceMethods.ByName("GetMostWatched")),
+			connect.WithClientOptions(opts...),
+		),
 		recordSignal: connect.NewClient[v1.RecordSignalRequest, v1.RecordSignalResponse](
 			httpClient,
 			baseURL+RecommendationServiceRecordSignalProcedure,
@@ -102,6 +114,7 @@ func NewRecommendationServiceClient(httpClient connect.HTTPClient, baseURL strin
 type recommendationServiceClient struct {
 	getFeed           *connect.Client[v1.GetFeedRequest, v1.GetFeedResponse]
 	getUpNext         *connect.Client[v1.GetUpNextRequest, v1.GetUpNextResponse]
+	getMostWatched    *connect.Client[v1.GetMostWatchedRequest, v1.GetMostWatchedResponse]
 	recordSignal      *connect.Client[v1.RecordSignalRequest, v1.RecordSignalResponse]
 	recordImpressions *connect.Client[v1.RecordImpressionsRequest, v1.RecordImpressionsResponse]
 }
@@ -114,6 +127,11 @@ func (c *recommendationServiceClient) GetFeed(ctx context.Context, req *connect.
 // GetUpNext calls recsys.v1.RecommendationService.GetUpNext.
 func (c *recommendationServiceClient) GetUpNext(ctx context.Context, req *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error) {
 	return c.getUpNext.CallUnary(ctx, req)
+}
+
+// GetMostWatched calls recsys.v1.RecommendationService.GetMostWatched.
+func (c *recommendationServiceClient) GetMostWatched(ctx context.Context, req *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error) {
+	return c.getMostWatched.CallUnary(ctx, req)
 }
 
 // RecordSignal calls recsys.v1.RecommendationService.RecordSignal.
@@ -132,6 +150,9 @@ type RecommendationServiceHandler interface {
 	GetFeed(context.Context, *connect.Request[v1.GetFeedRequest]) (*connect.Response[v1.GetFeedResponse], error)
 	// Ranked ids for the watch page "Next" rail.
 	GetUpNext(context.Context, *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error)
+	// The videos this user has spent the most time on. Watch signals accumulate
+	// during playback, so this measures time watched, not times opened.
+	GetMostWatched(context.Context, *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error)
 	// Behaviour signals, written on every meaningful interaction so the next
 	// feed request already reflects them. No batch job in the loop.
 	RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error)
@@ -158,6 +179,12 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 		connect.WithSchema(recommendationServiceMethods.ByName("GetUpNext")),
 		connect.WithHandlerOptions(opts...),
 	)
+	recommendationServiceGetMostWatchedHandler := connect.NewUnaryHandler(
+		RecommendationServiceGetMostWatchedProcedure,
+		svc.GetMostWatched,
+		connect.WithSchema(recommendationServiceMethods.ByName("GetMostWatched")),
+		connect.WithHandlerOptions(opts...),
+	)
 	recommendationServiceRecordSignalHandler := connect.NewUnaryHandler(
 		RecommendationServiceRecordSignalProcedure,
 		svc.RecordSignal,
@@ -176,6 +203,8 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 			recommendationServiceGetFeedHandler.ServeHTTP(w, r)
 		case RecommendationServiceGetUpNextProcedure:
 			recommendationServiceGetUpNextHandler.ServeHTTP(w, r)
+		case RecommendationServiceGetMostWatchedProcedure:
+			recommendationServiceGetMostWatchedHandler.ServeHTTP(w, r)
 		case RecommendationServiceRecordSignalProcedure:
 			recommendationServiceRecordSignalHandler.ServeHTTP(w, r)
 		case RecommendationServiceRecordImpressionsProcedure:
@@ -195,6 +224,10 @@ func (UnimplementedRecommendationServiceHandler) GetFeed(context.Context, *conne
 
 func (UnimplementedRecommendationServiceHandler) GetUpNext(context.Context, *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.GetUpNext is not implemented"))
+}
+
+func (UnimplementedRecommendationServiceHandler) GetMostWatched(context.Context, *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.GetMostWatched is not implemented"))
 }
 
 func (UnimplementedRecommendationServiceHandler) RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error) {

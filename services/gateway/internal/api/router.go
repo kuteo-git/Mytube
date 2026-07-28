@@ -70,6 +70,8 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
 	mux.HandleFunc("GET /api/subscriptions", g.handleListSubscriptions)
+	mux.HandleFunc("GET /api/collections/top-played", g.handleTopPlayed)
+	mux.HandleFunc("GET /api/collections/popular", g.handlePopular)
 
 	mux.HandleFunc("GET /api/channels/{id}", g.handleGetChannel)
 	mux.HandleFunc("GET /api/channels/{id}/videos", g.handleChannelVideos)

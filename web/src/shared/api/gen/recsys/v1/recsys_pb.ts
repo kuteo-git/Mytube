@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file recsys/v1/recsys.proto.
  */
 export const file_recsys_v1_recsys: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWNzeXMvdjEvcmVjc3lzLnByb3RvEglyZWNzeXMudjEiXwoLUmFua2VkVmlkZW8SEAoIdmlkZW9faWQYASABKAkSDQoFc2NvcmUYAiABKAISLwoGcmVhc29uGAMgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uIm8KDkdldEZlZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEwoLY2xpZW50X2hvdXIYBSABKAUiawoPR2V0RmVlZFJlc3BvbnNlEiYKBnZpZGVvcxgBIAMoCzIWLnJlY3N5cy52MS5SYW5rZWRWaWRlbxIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSFwoPcmVtYWluaW5nX2NvdW50GAMgASgFImgKEEdldFVwTmV4dFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIYChBjdXJyZW50X3ZpZGVvX2lkGAIgASgJEhYKDmNoYW5uZWxfZmlsdGVyGAMgASgJEhEKCXBhZ2Vfc2l6ZRgEIAEoBSI7ChFHZXRVcE5leHRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8itwEKE1JlY29yZFNpZ25hbFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIjCgR0eXBlGAIgASgOMhUucmVjc3lzLnYxLlNpZ25hbFR5cGUSEAoIdmlkZW9faWQYAyABKAkSDQoFcXVlcnkYBCABKAkSGAoQd2F0Y2hlZF9mcmFjdGlvbhgFIAEoAhIvCgtvY2N1cnJlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiFgoUUmVjb3JkU2lnbmFsUmVzcG9uc2UiPgoYUmVjb3JkSW1wcmVzc2lvbnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEQoJdmlkZW9faWRzGAIgAygJIhsKGVJlY29yZEltcHJlc3Npb25zUmVzcG9uc2Uq3QIKFFJlY29tbWVuZGF0aW9uUmVhc29uEiUKIVJFQ09NTUVOREFUSU9OX1JFQVNPTl9VTlNQRUNJRklFRBAAEisKJ1JFQ09NTUVOREFUSU9OX1JFQVNPTl9DT05USU5VRV9XQVRDSElORxABEigKJFJFQ09NTUVOREFUSU9OX1JFQVNPTl9SRUNFTlRMWV9BRERFRBACEicKI1JFQ09NTUVOREFUSU9OX1JFQVNPTl9ORVZFUl9XQVRDSEVEEAMSLAooUkVDT01NRU5EQVRJT05fUkVBU09OX1NVQlNDUklCRURfQ0hBTk5FTBAEEiEKHVJFQ09NTUVOREFUSU9OX1JFQVNPTl9SRVdBVENIEAUSJgoiUkVDT01NRU5EQVRJT05fUkVBU09OX1NBTUVfQ0hBTk5FTBAGEiUKIVJFQ09NTUVOREFUSU9OX1JFQVNPTl9TSEFSRURfVEFHUxAHKtUBCgpTaWduYWxUeXBlEhsKF1NJR05BTF9UWVBFX1VOU1BFQ0lGSUVEEAASFQoRU0lHTkFMX1RZUEVfV0FUQ0gQARIUChBTSUdOQUxfVFlQRV9MSUtFEAISFwoTU0lHTkFMX1RZUEVfRElTTElLRRADEhkKFVNJR05BTF9UWVBFX1NVQlNDUklCRRAEEhsKF1NJR05BTF9UWVBFX1VOU1VCU0NSSUJFEAUSFgoSU0lHTkFMX1RZUEVfU0VBUkNIEAYSFAoQU0lHTkFMX1RZUEVfU0tJUBAHMtICChVSZWNvbW1lbmRhdGlvblNlcnZpY2USQAoHR2V0RmVlZBIZLnJlY3N5cy52MS5HZXRGZWVkUmVxdWVzdBoaLnJlY3N5cy52MS5HZXRGZWVkUmVzcG9uc2USRgoJR2V0VXBOZXh0EhsucmVjc3lzLnYxLkdldFVwTmV4dFJlcXVlc3QaHC5yZWNzeXMudjEuR2V0VXBOZXh0UmVzcG9uc2USTwoMUmVjb3JkU2lnbmFsEh4ucmVjc3lzLnYxLlJlY29yZFNpZ25hbFJlcXVlc3QaHy5yZWNzeXMudjEuUmVjb3JkU2lnbmFsUmVzcG9uc2USXgoRUmVjb3JkSW1wcmVzc2lvbnMSIy5yZWNzeXMudjEuUmVjb3JkSW1wcmVzc2lvbnNSZXF1ZXN0GiQucmVjc3lzLnYxLlJlY29yZEltcHJlc3Npb25zUmVzcG9uc2VCnwEKDWNvbS5yZWNzeXMudjFCC1JlY3N5c1Byb3RvUAFaPGdpdGh1Yi5jb20vbHVjbmd1eWVuL2xvY2FsLXlvdXR1YmUvZ2VuL2dvL3JlY3N5cy92MTtyZWNzeXN2MaICA1JYWKoCCVJlY3N5cy5WMcoCCVJlY3N5c1xWMeICFVJlY3N5c1xWMVxHUEJNZXRhZGF0YeoCClJlY3N5czo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("ChZyZWNzeXMvdjEvcmVjc3lzLnByb3RvEglyZWNzeXMudjEiXwoLUmFua2VkVmlkZW8SEAoIdmlkZW9faWQYASABKAkSDQoFc2NvcmUYAiABKAISLwoGcmVhc29uGAMgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uIm8KDkdldEZlZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEwoLY2xpZW50X2hvdXIYBSABKAUiawoPR2V0RmVlZFJlc3BvbnNlEiYKBnZpZGVvcxgBIAMoCzIWLnJlY3N5cy52MS5SYW5rZWRWaWRlbxIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSFwoPcmVtYWluaW5nX2NvdW50GAMgASgFIjcKFUdldE1vc3RXYXRjaGVkUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEg0KBWxpbWl0GAIgASgFIkAKFkdldE1vc3RXYXRjaGVkUmVzcG9uc2USJgoGdmlkZW9zGAEgAygLMhYucmVjc3lzLnYxLlJhbmtlZFZpZGVvImgKEEdldFVwTmV4dFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIYChBjdXJyZW50X3ZpZGVvX2lkGAIgASgJEhYKDmNoYW5uZWxfZmlsdGVyGAMgASgJEhEKCXBhZ2Vfc2l6ZRgEIAEoBSI7ChFHZXRVcE5leHRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8itwEKE1JlY29yZFNpZ25hbFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIjCgR0eXBlGAIgASgOMhUucmVjc3lzLnYxLlNpZ25hbFR5cGUSEAoIdmlkZW9faWQYAyABKAkSDQoFcXVlcnkYBCABKAkSGAoQd2F0Y2hlZF9mcmFjdGlvbhgFIAEoAhIvCgtvY2N1cnJlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiFgoUUmVjb3JkU2lnbmFsUmVzcG9uc2UiPgoYUmVjb3JkSW1wcmVzc2lvbnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEQoJdmlkZW9faWRzGAIgAygJIhsKGVJlY29yZEltcHJlc3Npb25zUmVzcG9uc2Uq3QIKFFJlY29tbWVuZGF0aW9uUmVhc29uEiUKIVJFQ09NTUVOREFUSU9OX1JFQVNPTl9VTlNQRUNJRklFRBAAEisKJ1JFQ09NTUVOREFUSU9OX1JFQVNPTl9DT05USU5VRV9XQVRDSElORxABEigKJFJFQ09NTUVOREFUSU9OX1JFQVNPTl9SRUNFTlRMWV9BRERFRBACEicKI1JFQ09NTUVOREFUSU9OX1JFQVNPTl9ORVZFUl9XQVRDSEVEEAMSLAooUkVDT01NRU5EQVRJT05fUkVBU09OX1NVQlNDUklCRURfQ0hBTk5FTBAEEiEKHVJFQ09NTUVOREFUSU9OX1JFQVNPTl9SRVdBVENIEAUSJgoiUkVDT01NRU5EQVRJT05fUkVBU09OX1NBTUVfQ0hBTk5FTBAGEiUKIVJFQ09NTUVOREFUSU9OX1JFQVNPTl9TSEFSRURfVEFHUxAHKtUBCgpTaWduYWxUeXBlEhsKF1NJR05BTF9UWVBFX1VOU1BFQ0lGSUVEEAASFQoRU0lHTkFMX1RZUEVfV0FUQ0gQARIUChBTSUdOQUxfVFlQRV9MSUtFEAISFwoTU0lHTkFMX1RZUEVfRElTTElLRRADEhkKFVNJR05BTF9UWVBFX1NVQlNDUklCRRAEEhsKF1NJR05BTF9UWVBFX1VOU1VCU0NSSUJFEAUSFgoSU0lHTkFMX1RZUEVfU0VBUkNIEAYSFAoQU0lHTkFMX1RZUEVfU0tJUBAHMqkDChVSZWNvbW1lbmRhdGlvblNlcnZpY2USQAoHR2V0RmVlZBIZLnJlY3N5cy52MS5HZXRGZWVkUmVxdWVzdBoaLnJlY3N5cy52MS5HZXRGZWVkUmVzcG9uc2USRgoJR2V0VXBOZXh0EhsucmVjc3lzLnYxLkdldFVwTmV4dFJlcXVlc3QaHC5yZWNzeXMudjEuR2V0VXBOZXh0UmVzcG9uc2USVQoOR2V0TW9zdFdhdGNoZWQSIC5yZWNzeXMudjEuR2V0TW9zdFdhdGNoZWRSZXF1ZXN0GiEucmVjc3lzLnYxLkdldE1vc3RXYXRjaGVkUmVzcG9uc2USTwoMUmVjb3JkU2lnbmFsEh4ucmVjc3lzLnYxLlJlY29yZFNpZ25hbFJlcXVlc3QaHy5yZWNzeXMudjEuUmVjb3JkU2lnbmFsUmVzcG9uc2USXgoRUmVjb3JkSW1wcmVzc2lvbnMSIy5yZWNzeXMudjEuUmVjb3JkSW1wcmVzc2lvbnNSZXF1ZXN0GiQucmVjc3lzLnYxLlJlY29yZEltcHJlc3Npb25zUmVzcG9uc2VCnwEKDWNvbS5yZWNzeXMudjFCC1JlY3N5c1Byb3RvUAFaPGdpdGh1Yi5jb20vbHVjbmd1eWVuL2xvY2FsLXlvdXR1YmUvZ2VuL2dvL3JlY3N5cy92MTtyZWNzeXN2MaICA1JYWKoCCVJlY3N5cy5WMcoCCVJlY3N5c1xWMeICFVJlY3N5c1xWMVxHUEJNZXRhZGF0YeoCClJlY3N5czo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message recsys.v1.RankedVideo
@@ -114,6 +114,45 @@ export const GetFeedResponseSchema: GenMessage<GetFeedResponse> = /*@__PURE__*/
   messageDesc(file_recsys_v1_recsys, 2);
 
 /**
+ * @generated from message recsys.v1.GetMostWatchedRequest
+ */
+export type GetMostWatchedRequest = Message<"recsys.v1.GetMostWatchedRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message recsys.v1.GetMostWatchedRequest.
+ * Use `create(GetMostWatchedRequestSchema)` to create a new message.
+ */
+export const GetMostWatchedRequestSchema: GenMessage<GetMostWatchedRequest> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 3);
+
+/**
+ * @generated from message recsys.v1.GetMostWatchedResponse
+ */
+export type GetMostWatchedResponse = Message<"recsys.v1.GetMostWatchedResponse"> & {
+  /**
+   * @generated from field: repeated recsys.v1.RankedVideo videos = 1;
+   */
+  videos: RankedVideo[];
+};
+
+/**
+ * Describes the message recsys.v1.GetMostWatchedResponse.
+ * Use `create(GetMostWatchedResponseSchema)` to create a new message.
+ */
+export const GetMostWatchedResponseSchema: GenMessage<GetMostWatchedResponse> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 4);
+
+/**
  * @generated from message recsys.v1.GetUpNextRequest
  */
 export type GetUpNextRequest = Message<"recsys.v1.GetUpNextRequest"> & {
@@ -145,7 +184,7 @@ export type GetUpNextRequest = Message<"recsys.v1.GetUpNextRequest"> & {
  * Use `create(GetUpNextRequestSchema)` to create a new message.
  */
 export const GetUpNextRequestSchema: GenMessage<GetUpNextRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 3);
+  messageDesc(file_recsys_v1_recsys, 5);
 
 /**
  * @generated from message recsys.v1.GetUpNextResponse
@@ -162,7 +201,7 @@ export type GetUpNextResponse = Message<"recsys.v1.GetUpNextResponse"> & {
  * Use `create(GetUpNextResponseSchema)` to create a new message.
  */
 export const GetUpNextResponseSchema: GenMessage<GetUpNextResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 4);
+  messageDesc(file_recsys_v1_recsys, 6);
 
 /**
  * @generated from message recsys.v1.RecordSignalRequest
@@ -210,7 +249,7 @@ export type RecordSignalRequest = Message<"recsys.v1.RecordSignalRequest"> & {
  * Use `create(RecordSignalRequestSchema)` to create a new message.
  */
 export const RecordSignalRequestSchema: GenMessage<RecordSignalRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 5);
+  messageDesc(file_recsys_v1_recsys, 7);
 
 /**
  * @generated from message recsys.v1.RecordSignalResponse
@@ -223,7 +262,7 @@ export type RecordSignalResponse = Message<"recsys.v1.RecordSignalResponse"> & {
  * Use `create(RecordSignalResponseSchema)` to create a new message.
  */
 export const RecordSignalResponseSchema: GenMessage<RecordSignalResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 6);
+  messageDesc(file_recsys_v1_recsys, 8);
 
 /**
  * @generated from message recsys.v1.RecordImpressionsRequest
@@ -245,7 +284,7 @@ export type RecordImpressionsRequest = Message<"recsys.v1.RecordImpressionsReque
  * Use `create(RecordImpressionsRequestSchema)` to create a new message.
  */
 export const RecordImpressionsRequestSchema: GenMessage<RecordImpressionsRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 7);
+  messageDesc(file_recsys_v1_recsys, 9);
 
 /**
  * @generated from message recsys.v1.RecordImpressionsResponse
@@ -258,7 +297,7 @@ export type RecordImpressionsResponse = Message<"recsys.v1.RecordImpressionsResp
  * Use `create(RecordImpressionsResponseSchema)` to create a new message.
  */
 export const RecordImpressionsResponseSchema: GenMessage<RecordImpressionsResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 8);
+  messageDesc(file_recsys_v1_recsys, 10);
 
 /**
  * Why a video was surfaced. Sent to the client for debugging and to let the UI
@@ -396,6 +435,17 @@ export const RecommendationService: GenService<{
     methodKind: "unary";
     input: typeof GetUpNextRequestSchema;
     output: typeof GetUpNextResponseSchema;
+  },
+  /**
+   * The videos this user has spent the most time on. Watch signals accumulate
+   * during playback, so this measures time watched, not times opened.
+   *
+   * @generated from rpc recsys.v1.RecommendationService.GetMostWatched
+   */
+  getMostWatched: {
+    methodKind: "unary";
+    input: typeof GetMostWatchedRequestSchema;
+    output: typeof GetMostWatchedResponseSchema;
   },
   /**
    * Behaviour signals, written on every meaningful interaction so the next

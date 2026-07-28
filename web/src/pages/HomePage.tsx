@@ -1,8 +1,15 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { useFeed, useStorage, useTopics } from '@/features/catalog/application/queries'
+import {
+  useFeed,
+  usePopular,
+  useStorage,
+  useTopPlayed,
+  useTopics,
+} from '@/features/catalog/application/queries'
 import { ChipBar } from '@/features/catalog/ui/ChipBar'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
+import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
@@ -19,6 +26,12 @@ export function HomePage() {
     useFeed(active)
   const { data: topics } = useTopics()
   const { data: storage } = useStorage()
+  const { data: topPlayed } = useTopPlayed(25)
+  const { data: popular } = usePopular(12)
+
+  // Both extra rows belong to the unfiltered home. Under a topic the page is
+  // answering a narrower question, and a global mix would be beside the point.
+  const showCollections = active === 'All'
 
   const videos = data?.pages.flatMap((page) => page.videos) ?? []
 
@@ -44,7 +57,25 @@ export function HomePage() {
         </p>
       ) : (
         <>
+          {showCollections && popular && popular.length > 0 && (
+            <section className="pt-3">
+              <h2 className="mb-3 text-lg font-medium">Popular with you</h2>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
+                {popular.map((video) => (
+                  <VideoCard key={video.id} video={video} />
+                ))}
+              </div>
+              <hr className="mt-10 border-0 border-t border-line" />
+            </section>
+          )}
+
           <div className="grid grid-cols-1 gap-x-4 gap-y-10 pt-3 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
+            {/* The mix leads the grid: it is the one entry that is a list
+                rather than a video, and it is what a returning viewer most
+                often wants. */}
+            {showCollections && topPlayed && topPlayed.length > 1 && (
+              <TopPlayedCard videos={topPlayed} />
+            )}
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
               : videos.map((video) => <VideoCard key={video.id} video={video} />)}

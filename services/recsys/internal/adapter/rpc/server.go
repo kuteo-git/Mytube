@@ -80,6 +80,14 @@ func (s *Server) GetUpNext(ctx context.Context, req *connect.Request[recsysv1.Ge
 	return connect.NewResponse(&recsysv1.GetUpNextResponse{Videos: toProto(ranked)}), nil
 }
 
+func (s *Server) GetMostWatched(ctx context.Context, req *connect.Request[recsysv1.GetMostWatchedRequest]) (*connect.Response[recsysv1.GetMostWatchedResponse], error) {
+	ranked, err := s.ranker.MostWatched(ctx, req.Msg.GetUserId(), req.Msg.GetLimit())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&recsysv1.GetMostWatchedResponse{Videos: toProto(ranked)}), nil
+}
+
 func (s *Server) RecordSignal(ctx context.Context, req *connect.Request[recsysv1.RecordSignalRequest]) (*connect.Response[recsysv1.RecordSignalResponse], error) {
 	signal := domain.Signal{
 		UserID:          req.Msg.GetUserId(),

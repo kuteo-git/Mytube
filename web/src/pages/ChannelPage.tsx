@@ -4,6 +4,7 @@ import { useChannel, useChannelVideos } from '@/features/catalog/application/que
 import { ChannelHeader } from '@/features/catalog/ui/ChannelHeader'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
+import { channelQueueSearch } from '@/features/watch/application/queue'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { Pill } from '@/shared/ui/primitives'
 
@@ -82,7 +83,16 @@ export function ChannelPage() {
           <div className="mt-8 grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
             {videosPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
-              : videos.map((video) => <ExternalVideoCard key={video.id} video={video} />)}
+              : videos.map((video) => (
+                  // Opening a video here starts the channel as a queue, in the
+                  // order currently on screen — so "next" is the next video
+                  // down the page rather than an unrelated recommendation.
+                  <ExternalVideoCard
+                    key={video.id}
+                    video={video}
+                    queueSearch={channelId ? channelQueueSearch(channelId, sortToken) : ''}
+                  />
+                ))}
           </div>
 
           <InfiniteList

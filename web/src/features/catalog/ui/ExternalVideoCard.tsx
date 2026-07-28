@@ -14,7 +14,17 @@ import { hueFromId } from '@/shared/lib/hue'
  * channel page, both of which list videos straight from YouTube rather than
  * from the local library.
  */
-export function ExternalVideoCard({ video }: { video: ExternalVideo }) {
+export function ExternalVideoCard({
+  video,
+  queueSearch = '',
+}: {
+  video: ExternalVideo
+  /**
+   * Appended to the watch link so the video opens as part of a list. Without
+   * it the video plays alone and "next" falls back to recommendations.
+   */
+  queueSearch?: string
+}) {
   const navigate = useNavigate()
   const open = useOpenExternal()
 
@@ -25,7 +35,7 @@ export function ExternalVideoCard({ video }: { video: ExternalVideo }) {
         disabled={open.isPending}
         onClick={() =>
           open.mutate(video.sourceUrl, {
-            onSuccess: (videoId) => navigate(`/watch/${videoId}`),
+            onSuccess: (videoId) => navigate(`/watch/${videoId}${queueSearch}`),
           })
         }
         className="block text-left"

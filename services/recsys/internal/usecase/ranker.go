@@ -30,8 +30,8 @@ const (
 	// attention than a preference.
 	weightLikeAffinity = 2.0
 	weightRewatch      = 0.3
-	penaltyImpression      = 2.0
-	penaltyDisliked        = 5.0
+	penaltyImpression  = 2.0
+	penaltyDisliked    = 5.0
 	// Same-channel dominance is what makes the "Next" rail feel coherent.
 	weightSameChannel  = 2.5
 	weightSharedTags   = 1.5
@@ -196,6 +196,11 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	// different question — "what follows this?" — and deliberately keeps its
 	// pure same-channel-first ordering.
 	return applyDiscoveryQuota(ranked), nil
+}
+
+// MostWatched is the "played the most" collection, ordered by time spent.
+func (r *Ranker) MostWatched(ctx context.Context, userID string, limit int32) ([]domain.RankedVideo, error) {
+	return r.store.MostWatched(ctx, userID, limit)
 }
 
 func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelFilter string, pageSize int32) ([]domain.RankedVideo, error) {

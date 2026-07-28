@@ -78,6 +78,11 @@ type SignalStore interface {
 	AppendSignal(ctx context.Context, s Signal) error
 	RecordImpressions(ctx context.Context, userID string, videoIDs []string) error
 	BuildProfile(ctx context.Context, userID string, impressionWindow time.Duration) (UserProfile, error)
+	// MostWatched ranks videos by how much time this user has actually spent on
+	// them. Watch signals are appended on a timer during playback, so counting
+	// them measures time watched rather than times opened — which is the honest
+	// reading of "the ones I play most".
+	MostWatched(ctx context.Context, userID string, limit int32) ([]RankedVideo, error)
 }
 
 // FeatureSource pulls the video projection from the catalog service over RPC.
