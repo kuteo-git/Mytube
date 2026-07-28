@@ -84,13 +84,14 @@ is never touched again for that video.
 
 ## Status
 
-Working end to end: search YouTube from inside the app, queue a download, watch
-progress, and play the result. Ranking reacts to a watch within one request.
+Working: topic scanning from topics.yaml, feed and search with pagination,
+playback with autoplay and subtitles, background download with visible
+progress, and search that always reaches YouTube alongside the library.
 
-Not yet built: the identity service (the gateway trusts an `X-User-Id` header
-and falls back to a seeded account), automatic channel following, LRU eviction
-enforcement, and Caddy in front for TLS on the TV.
+Not built yet: serve-while-downloading (playback still falls back to an
+upstream stream while the copy is fetched), topic affinity and the exploration
+mix in ranking, the eviction sweep, the History/Saved/Storage pages, and a
+Refresh button in the UI. See CLAUDE.md §8b for the ordered backlog.
 
-`db/seed_dev.sql` inserts sample rows whose ids are not real YouTube ids, so
-those entries cannot resolve an upstream stream. `scripts/generate_placeholder_media.sh`
-creates playable files for them.
+There is no identity service: the gateway trusts an `X-User-Id` header and
+falls back to `DEV_USER_ID`.

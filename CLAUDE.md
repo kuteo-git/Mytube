@@ -130,19 +130,66 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 3. **HTTPS trên Smart TV chưa được chứng minh.** Phải thử sớm với TV thật, đừng để tới Phase 3.
 4. **yt-dlp hỏng định kỳ** khi YouTube đổi cơ chế → ingest phải xử lý lỗi tử tế + cho retry.
 
-## 8b. Build status (2026-07-28)
+## 8b. Build status (cập nhật 2026-07-28)
 
-**Done and verified running:** proto schemas (`catalog.v1`, `recsys.v1`) with pinned buf plugins ·
-Postgres with schema-and-role per service · catalog service (15 RPCs) · recsys service (heuristic
-ranking, signals, impressions) · gateway (REST, composes recsys + catalog, dual-writes signals) ·
-web client wired to the gateway, mock data deleted.
+### Chạy được, đã verify bằng request thật
 
-**Also done:** ingest service — YouTube search/preview/playlist, upstream stream resolution,
-download queue on `SKIP LOCKED` with leases and heartbeats; catalog write RPCs; Add-video dialog
-in the UI with live download progress.
+**Hạ tầng:** 4 service (`catalog` 8081 · `recsys` 8082 · `ingest` 8083) + `gateway` 8080 + web 5173.
+Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST ra ngoài.
+`scripts/dev.sh` chạy cả stack. `make check` = buf lint + tsc + go build.
 
-**Not built yet:** identity service — the gateway trusts `X-User-Id` and falls back to
-`DEV_USER_ID`; automatic channel following; enforcement of LRU eviction; Caddy/TLS for the TV.
+**Nội dung:** `topics.yaml` là nguồn duy nhất của feed. Scanner quét mỗi 12 tiếng
+(`POST /api/topics/refresh` để quét ngay). Hiện **280 video / 6 chủ đề / 7 nguồn**,
+quét hết trong ~8 giây, chỉ lấy metadata.
+
+**Phát:** bấm play → `GET /api/videos/{id}/stream` trả `local` hoặc `upstream`,
+đồng thời **tự enqueue tải nền**. Tải xong thì client tự đổi sang bản local.
+Player: autoplay (bị chặn thì muted + nút bật tiếng), click = play/pause,
+`Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC.
+
+**Search:** **luôn** hỏi YouTube song song với thư viện. Trang kết quả 2 khối
+(In your library / On YouTube). Autocomplete từ local (chủ đề → kênh → tiêu đề).
+Bỏ dấu tiếng Việt hai chiều qua `unaccent`. Mở video từ YouTube → ghi metadata
+**không gán chủ đề**, feed vẫn do topics.yaml quyết định.
+
+**Phân trang:** feed + search dùng `useInfiniteQuery`, tự nạp trước 600px, kèm nút
+"Load more" thật cho bàn phím/remote.
+
+### Chưa làm — thứ tự đề xuất khi làm tiếp
+
+1. **Serve-while-downloading (B1, 720p)** — phần khó nhất còn lại. Hiện bấm play vẫn đi
+   đường upstream (~360p) rồi tải nền 1080p. Cần: gateway serve file **đang được ghi**,
+   trả 206 cho phần đã có, chặn seek quá mép buffer. Đổi `DEFAULT_HEIGHT` về 720 và ép
+   yt-dlp lấy progressive format.
+2. **Recsys trộn 55/10/20/15** — hiện mới có affinity theo **kênh**, chưa có affinity theo
+   **chủ đề** và chưa có tỉ lệ khám phá cố định (chống buồng vọng).
+3. **Eviction job** — mới có cột `last_accessed_at` + `pinned` trong DB, **chưa có job nào dọn**.
+   Ngưỡng đã chốt: vượt 20 GiB → xoá LRU không pinned về 16 GiB.
+4. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
+   (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
+   **Đang là link chết trong sidebar.**
+5. **Nút Refresh trong UI** — endpoint + hook `useRefreshTopics` đã có, chưa có nút.
+   Empty state của Home đang nhắc tới nó → **đang nói dối**.
+
+### Quyết định đã bị đảo trong quá trình làm
+
+- **Search**: từng chốt "chỉ tìm local" (Câu 3/12) → **đảo lại**: search luôn hỏi YouTube.
+  Lý do: feed là thứ được phục vụ, search là thứ chủ động đi tìm — không có lý do bó search
+  trong nguồn của feed.
+- **Playlist**: từng định làm bảng `playlists` + watch-later → **bỏ hẳn**. Chủ đề thay thế,
+  "Keep" (pin) là bộ sưu tập cá nhân duy nhất.
+- **`categories` → `topics`**: YouTube chỉ có ~15 category toàn cục, vô dụng để phân loại.
+
+### Bẫy đã gặp, đừng lặp lại
+
+- **Lỗi phụ đề từng giết cả video**: gộp `--write-subs` vào lệnh tải → 429 ở endpoint caption
+  làm yt-dlp exit 1 → mất video đã tải xong. Giờ tách lượt riêng, không được gộp lại.
+- **`--flat-playlist` thiếu rất nhiều field**: không có channel per-entry (dùng `playlist_uploader`),
+  không có view count, không có ngày đăng, không có `thumbnail` (dùng mảng `thumbnails`).
+  **Không được default ngày đăng = now** — nó hiện thành "1 minute ago" trên mọi card.
+- **yt-dlp đặt cùng tên file cho phụ đề người làm và máy làm** → phải chạy 2 lượt mới phân biệt được.
+- **`ffmpeg` nuốt stdin** trong vòng lặp bash → luôn dùng `-nostdin`.
+- **pgx encode nil slice thành NULL** → vi phạm NOT NULL của cột mảng.
 
 ## 9. Câu còn để ngỏ
 - TV nhà là hãng gì? (ảnh hưởng cách xử lý cert)
