@@ -333,6 +333,11 @@ export function useSetSubscription(channelId: string) {
       void queryClient.invalidateQueries({ queryKey: ['channel', channelId] })
       void queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
       void queryClient.invalidateQueries({ queryKey: ['feed'] })
+      // The watch page's button reads the channel off the video, not off the
+      // channel query — so without this it kept saying Subscribe until the
+      // page was reloaded, while the server had already recorded the change.
+      void queryClient.invalidateQueries({ queryKey: ['video'] })
+      void queryClient.invalidateQueries({ queryKey: ['up-next'] })
     },
   })
 }

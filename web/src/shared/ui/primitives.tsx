@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { useState } from 'react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 /**
@@ -62,11 +63,19 @@ export function Avatar({
   hue,
   name,
   size = 36,
+  src,
 }: {
   hue: number
   name: string
   size?: number
+  /** Channel artwork. The lettered circle stands in when there is none. */
+  src?: string
 }) {
+  // The initial is the fallback, not the design: it was showing for every
+  // channel because the picture was never passed in, which made a library of
+  // 287 channels look like a wall of identical coloured discs.
+  const [failed, setFailed] = useState(false)
+
   return (
     <span
       aria-hidden
@@ -76,9 +85,22 @@ export function Avatar({
         background: `hsl(${hue} 45% 38%)`,
         fontSize: size * 0.45,
       }}
-      className="grid shrink-0 place-items-center rounded-full font-medium text-white select-none"
+      className="grid shrink-0 place-items-center overflow-hidden rounded-full font-medium text-white select-none"
     >
-      {name.charAt(0).toUpperCase()}
+      {src && !failed ? (
+        <img
+          src={src}
+          alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        name.charAt(0).toUpperCase()
+      )}
     </span>
   )
 }

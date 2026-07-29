@@ -50,7 +50,12 @@ export function VideoCard({ video }: { video: Video }) {
       </Link>
 
       <div className="flex gap-3">
-        <Avatar hue={hueFromId(video.channel.id)} name={video.channel.name} size={36} />
+        <Avatar
+          hue={hueFromId(video.channel.id)}
+          name={video.channel.name}
+          src={video.channel.avatarPath || undefined}
+          size={36}
+        />
 
         <div className="min-w-0 flex-1">
           <h3 className="clamp-2 text-sm leading-5 font-medium">

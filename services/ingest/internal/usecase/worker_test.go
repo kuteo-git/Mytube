@@ -141,3 +141,5 @@ func TestProcessPublishesSubtitlesBeforeMedia(t *testing.T) {
 		t.Errorf("second write state = %q, want READY", library.states[1])
 	}
 }
+
+func (fakeStore) CancelForVideo(context.Context, string) (int, error) { return 0, nil }

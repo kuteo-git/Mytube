@@ -40,9 +40,15 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
       <SearchBox />
 
       <div className="flex shrink-0 items-center gap-2">
-        <IconButton
-          label={`Downloads: ${active} active, ${failed} failed`}
-          className="relative"
+        {/* The badge counts ingest events, and the Activity page is where those
+            events are listed — so the bell goes there. It had the count but no
+            destination, which made it the one control on this bar that reported
+            something and then refused to explain it. */}
+        <Link
+          to="/activity"
+          aria-label={`Downloads: ${active} active, ${failed} failed`}
+          title={`Downloads: ${active} active, ${failed} failed`}
+          className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-text transition-colors duration-150 ease-out hover:bg-surface-hover"
         >
           <Bell size={22} />
           {pendingIngest > 0 && (
@@ -50,7 +56,7 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
               {pendingIngest > 9 ? '9+' : pendingIngest}
             </span>
           )}
-        </IconButton>
+        </Link>
 
         <button type="button" aria-label="Account" className="ml-1 rounded-full">
           <Avatar hue={210} name="Luc" size={32} />

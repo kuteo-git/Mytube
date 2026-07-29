@@ -25,7 +25,12 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
         <Link to={`/channel/${video.channel.id}`}>
-          <Avatar hue={hueFromId(video.channel.id)} name={video.channel.name} size={40} />
+          <Avatar
+            hue={hueFromId(video.channel.id)}
+            name={video.channel.name}
+            src={video.channel.avatarPath || undefined}
+            size={40}
+          />
         </Link>
         <div>
           <Link to={`/channel/${video.channel.id}`} className="flex items-center gap-1 text-base font-medium">

@@ -40,7 +40,12 @@ export function ChannelHeader({ channel, videoCount }: { channel: Channel; video
             className="h-24 w-24 rounded-full object-cover"
           />
         ) : (
-          <Avatar hue={hueFromId(channel.id)} name={channel.name} size={96} />
+          <Avatar
+            hue={hueFromId(channel.id)}
+            name={channel.name}
+            src={channel.avatarPath || undefined}
+            size={96}
+          />
         )}
 
         <div className="min-w-0">

@@ -84,12 +84,19 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		v.SourceURL = "https://www.youtube.com/watch?v=" + info.ID
 	}
 
-	// Flat listings omit the single "thumbnail" field and only carry the
-	// thumbnails array, ordered smallest first. Fall back to the canonical
-	// still URL, which is derivable from the id and always exists.
-	if v.ThumbnailURL == "" && len(info.Thumbnails) > 0 {
-		v.ThumbnailURL = info.Thumbnails[len(info.Thumbnails)-1].URL
+	// The widest still on offer, in preference to the single "thumbnail" field.
+	//
+	// That field is hqdefault — 480×360 — while the array routinely carries
+	// maxresdefault at 1920×1080. A card on a three-column grid is around 560
+	// points wide and twice that on a retina screen, so the small one arrives
+	// visibly soft; it was chosen only because it happened to be the field with
+	// the obvious name.
+	if best := widestThumbnail(info.Thumbnails); best != "" {
+		v.ThumbnailURL = best
 	}
+	// Flat listings sometimes carry neither. The canonical still is derivable
+	// from the id and exists for every video, which is what makes it a
+	// fallback rather than a guess.
 	if v.ThumbnailURL == "" && info.ID != "" {
 		v.ThumbnailURL = "https://i.ytimg.com/vi/" + info.ID + "/hqdefault.jpg"
 	}
@@ -274,6 +281,39 @@ func (d *Downloader) ResolveStream(ctx context.Context, videoURL string) (domain
 		MimeType:  "video/mp4",
 		ExpiresAt: time.Now().Add(streamTTL),
 	}, nil
+}
+
+// widestThumbnail picks the largest still, preferring JPEG at equal width.
+//
+// The preference is not aesthetic: this is meant to end up on a television
+// browser, and WebP is the format those are least likely to decode — the same
+// reasoning that picks h264 over AV1 for the video itself.
+//
+// Entries whose dimensions yt-dlp did not report are counted as zero rather
+// than skipped, so a list of nothing but unmeasured entries still yields one.
+func widestThumbnail(thumbnails []*ytdlp.ExtractedThumbnail) string {
+	var (
+		best      string
+		bestWidth int
+		bestIsJPG bool
+	)
+	for _, t := range thumbnails {
+		if t == nil || t.URL == "" {
+			continue
+		}
+		width := deref(t.Width)
+		isJPG := !strings.Contains(t.URL, ".webp")
+
+		switch {
+		case best == "":
+		case width > bestWidth:
+		case width == bestWidth && isJPG && !bestIsJPG:
+		default:
+			continue
+		}
+		best, bestWidth, bestIsJPG = t.URL, width, isJPG
+	}
+	return best
 }
 
 // mediaPaths derives the per-video directory and the media file path. Both the

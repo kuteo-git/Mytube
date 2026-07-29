@@ -103,7 +103,12 @@ export function Sidebar({ mini }: { mini: boolean }) {
                     className="h-6 w-6 shrink-0 rounded-full object-cover"
                   />
                 ) : (
-                  <Avatar hue={hueFromId(channel.id)} name={channel.name} size={24} />
+                  <Avatar
+                    hue={hueFromId(channel.id)}
+                    name={channel.name}
+                    src={channel.avatarPath || undefined}
+                    size={24}
+                  />
                 )}
                 <span className="clamp-1 text-sm">{channel.name}</span>
               </NavLink>
