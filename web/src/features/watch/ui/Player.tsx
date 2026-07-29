@@ -303,10 +303,6 @@ export function Player({
   // The catalog row can say READY while the file is missing from disk, for
   // example after a manual cleanup. Trust the element, not the metadata.
   const [loadFailed, setLoadFailed] = useState(false)
-  // Set when the browser refuses to start audible playback. Autoplay policies
-  // require a gesture on the page the video is on, and arriving by navigation
-  // does not count, so the fallback is to start muted and say so.
-  const [autoplayMuted, setAutoplayMuted] = useState(false)
   // Language code of the active caption track, or null for off. Tracks arrive
   // shortly after playback starts, before the media file finishes downloading.
   const [captions, setCaptions] = useState<string | null>(null)
@@ -713,7 +709,6 @@ export function Player({
       setMuted(next === 0)
     }
     // Touching the volume is a gesture, so audible playback is allowed again.
-    setAutoplayMuted(false)
   }
 
   const toggleMute = () => {
@@ -721,7 +716,6 @@ export function Player({
     if (!element) return
     element.muted = !element.muted
     setMuted(element.muted)
-    setAutoplayMuted(false)
   }
 
   // Keyboard control. Space and arrows are the conventions people already know,
@@ -905,17 +899,6 @@ export function Player({
         </div>
       )}
 
-      {autoplayMuted && playable && (
-        <button
-          type="button"
-          onClick={toggleMute}
-          className="absolute top-3 right-3 z-10 flex items-center gap-2 rounded-lg bg-badge px-2.5 py-1.5 text-xs font-medium hover:bg-black/90"
-        >
-          <VolumeX size={14} />
-          Started muted — click for sound
-        </button>
-      )}
-
       {countdown !== null && (
         <div className="absolute inset-0 z-20 grid place-items-center bg-black/75 px-6 text-center">
           <div>
@@ -1023,15 +1006,15 @@ export function Player({
                   // The new source is loaded and positioned: resume tracking.
                   swappingRef.current = false
 
-                  // Start playing on arrival. If the browser refuses audible
-                  // autoplay, retry muted rather than leaving a dead frame, and
-                  // offer the unmute explicitly.
-                  element.play().catch(() => {
-                    element.muted = true
-                    setMuted(true)
-                    setAutoplayMuted(true)
-                    void element.play().catch(() => setAutoplayMuted(false))
-                  })
+                  // Start playing on arrival.
+                  //
+                  // A browser that refuses audible autoplay leaves the video
+                  // paused on its first frame, and the play button is right
+                  // there. The alternative — starting it silently and asking
+                  // to be unmuted — trades a video that obviously has not
+                  // started for one that appears to be playing with no sound,
+                  // which is the more confusing of the two.
+                  void element.play().catch(() => undefined)
                 }}
                 // Only meaningful on the layer being prepared: it means the
                 // replacement has reached its mark and can take over.

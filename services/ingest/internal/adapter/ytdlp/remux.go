@@ -96,10 +96,26 @@ func (d *Downloader) OpenRemux(ctx context.Context, urls []string, startSeconds 
 	}
 	args = append(args,
 		"-c", "copy",
+		// Timestamps come from two separately seeked inputs, so they are
+		// normalised rather than trusted. make_zero rebases them together, and
+		// zeroing the muxer's own delay and preload removes the offset it would
+		// otherwise insert between the streams — the usual cause of audio
+		// running ahead of picture in a piped MP4.
+		"-avoid_negative_ts", "make_zero",
+		"-muxdelay", "0",
+		"-muxpreload", "0",
 		// empty_moov makes the file playable before any fragment is finalised;
 		// frag_keyframe starts a new fragment at each keyframe so playback can
 		// begin at the first one.
 		"-movflags", "frag_keyframe+empty_moov+default_base_moof",
+		// Cut a fragment every second regardless of where keyframes fall.
+		//
+		// Keyframes alone leave them long and irregular — measured between 1.9
+		// and 4.9 seconds on real material — and a browser reading a growing
+		// file progressively has to wait for a whole fragment before it can
+		// present any of it. Short, regular fragments keep audio and video
+		// arriving together instead of in uneven blocks.
+		"-frag_duration", "1000000",
 		"-f", "mp4", "pipe:1")
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", args...)

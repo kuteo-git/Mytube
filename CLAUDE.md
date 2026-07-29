@@ -55,6 +55,14 @@ Media library **tự host** chạy trên Mac M4 tại nhà. `yt-dlp` là **công
 `instant` phát trong ~17ms → dựng `remux` 1080p ở thẻ ẩn, lên khi sẵn sàng → `local` khi tải xong.
 Không transcode, không HLS.
 
+**Cờ ffmpeg chống lệch tiếng/hình (2026-07-29).** Hai input được seek **riêng biệt**, nên
+timestamp phải chuẩn hoá chứ không được tin: `-avoid_negative_ts make_zero` gộp chúng về
+cùng gốc, `-muxdelay 0 -muxpreload 0` bỏ độ trễ muxer tự chèn giữa hai luồng.
+Và `-frag_duration 1000000`: chỉ dùng `frag_keyframe` thì fragment dài **1.9–4.9 giây và
+không đều** (đo thật), mà trình duyệt đọc file đang lớn dần phải đợi trọn một fragment mới
+trình bày được — nên tiếng và hình tới theo từng khối lệch nhau. Cắt đều 1 giây thì fragment
+còn ~0.77s. Sau khi sửa: video và audio cùng `start_time`, trước đó lệch 0.04s.
+
 **Seek ở tầng remux = mở lại luồng.** fMP4 qua pipe không có index nên trình duyệt không seek
 được; player gửi `?t=<giây>` và ffmpeg dùng `-ss` **trước `-i`** (HTTP range seek, không phải
 decode-rồi-bỏ). Đo thật: mở từ đầu 4.4s, seek tới 120s mất **3.0s** — rẻ hơn vì URL đã cache.
@@ -258,7 +266,10 @@ request nào** phải chờ. Cache resolve trong ingest: đo thật **1.85s → 
 **Hai thẻ `<video>`** chồng nhau: nguồn mới nạp và seek sẵn ở thẻ ẩn tại mốc
 `hiện tại + 0.6s`, tới mốc thì hoán đổi opacity. Không chớp đen, không tua lùi. Đổi một thẻ
 tại chỗ chính là thứ gây chớp trước đây.
-Player: autoplay (bị chặn thì muted + nút bật tiếng), click = play/pause,
+Player: autoplay (bị trình duyệt chặn thì **để nguyên ở khung hình đầu**, không tự bật muted —
+một video rõ ràng chưa chạy dễ hiểu hơn một video trông như đang chạy mà không có tiếng),
+điều khiển **tự ẩn sau 3 giây** không rê chuột (hiện lại khi rê/bấm/focus, luôn hiện khi pause
+hoặc đang mở menu), click = play/pause,
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
 được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
 đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).
