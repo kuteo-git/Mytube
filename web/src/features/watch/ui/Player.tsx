@@ -391,6 +391,15 @@ export function Player({
     frontIsARef.current = true
     setFrontIsA(true)
     upgradingToRef.current = undefined
+    // Without this the guard in the upgrade effect would still be holding a
+    // tier from the previous video and block this one's first climb.
+    pendingTierRef.current = undefined
+    setTier(undefined)
+    setOffsetSeconds(0)
+    offsetRef.current = 0
+    positionRef.current = initialPositionRef.current
+    setRemuxFailed(false)
+    setSeeking(false)
   }, [videoId])
 
   // Load the opening source, and afterwards prepare any better one out of sight.
@@ -420,6 +429,17 @@ export function Player({
     // little ahead of it: the mux takes a couple of seconds to produce its
     // first fragment, and opening at the current position would mean handing
     // over to an element that starts before where playback has since reached.
+    // One attempt per tier at a time, keyed on the tier rather than the URL.
+    //
+    // The URL for a muxed stream carries the mark it opens at, and that mark
+    // moves as the video plays. The stream answer is also re-polled every few
+    // seconds while there is no local file, which re-runs this effect. Keyed on
+    // the URL, every poll therefore computed a later mark, saw a different
+    // string, and started the mux again — discarding one that was seconds from
+    // being ready, forever. The visible symptom is a video that never leaves
+    // the low rendition however long it is left alone.
+    if (pendingTierRef.current?.tier.name === wanted.name) return
+
     const startAt =
       wanted.name === 'remux' ? positionRef.current + REMUX_PREPARE_LEAD_SECONDS : 0
     const url = sourceURL(wanted, startAt)
@@ -509,9 +529,15 @@ export function Player({
     // Wait for the playhead to reach the mark the replacement is parked on.
     // requestAnimationFrame rather than timeupdate, which fires only about four
     // times a second — coarse enough to overshoot the mark and jump backwards.
+    // Compared in absolute time, because the two elements need not share a
+    // frame: a muxed stream opened at ten minutes calls that moment zero. The
+    // old comparison of raw currentTimes was only ever right when both offsets
+    // were zero, which stopped being true the moment a third tier existed.
     const waitForMark = () => {
       if (upgradingToRef.current === undefined) return
-      if (current.currentTime >= next.currentTime - 0.05) {
+      const backAbsolute = (pendingTierRef.current?.offset ?? 0) + next.currentTime
+      const frontAbsolute = current.currentTime + offsetRef.current
+      if (frontAbsolute >= backAbsolute - 0.05) {
         commit()
         return
       }
@@ -878,7 +904,14 @@ export function Player({
                       current && !current.paused ? absoluteNow + SWAP_LEAD_SECONDS : absoluteNow
                     const mark = absoluteMark - pendingOffset
 
-                    if (mark <= 0) {
+                    // A stream that cannot be seeked is already parked: it was
+                    // opened at its mark, so its zero *is* where it belongs.
+                    // Trying to position it would either do nothing or, with a
+                    // mark computed in the wrong frame, hand over immediately
+                    // and jump the viewer forward.
+                    if (pendingTierRef.current && !pendingTierRef.current.tier.seekable) {
+                      handoverToBack()
+                    } else if (mark <= 0) {
                       // Nothing has played yet, so both elements already agree
                       // on where they are.
                       handoverToBack()
