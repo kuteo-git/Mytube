@@ -388,6 +388,10 @@ export function Player({
   // taking position as a dependency and restarting on every tick.
   const positionRef = useRef(0)
   const handoverFrameRef = useRef(0)
+  // True while sound is off only because the browser insisted, as opposed to
+  // because the viewer turned it off. The distinction is the whole point: one
+  // should be undone at the first opportunity, the other never.
+  const mutedByPolicyRef = useRef(false)
   const justSwappedRef = useRef(false)
 
   // A fragmented stream declares no total length: its header says only how much
@@ -396,8 +400,12 @@ export function Player({
   // duration are then the same number. The catalog knows the real length, so
   // that is what the bar is drawn against until the complete file takes over.
   const streaming = tier?.name === 'remux'
+  // The catalogue's length is the fallback and, for a stream opened partway
+  // through, the only honest answer: an element that starts at ten minutes
+  // reports only what remains, and a bar drawn against that would say a
+  // half-watched film is barely begun.
   const duration =
-    !streaming && elementDuration > 0 ? elementDuration : durationSeconds
+    !streaming && offsetSeconds === 0 && elementDuration > 0 ? elementDuration : durationSeconds
 
   const playable = Boolean(frontSrc) && !loadFailed
   // Captions no longer wait for the media file: ingest publishes them ahead of
@@ -566,6 +574,16 @@ export function Player({
       // stream nobody is watching.
       const pending = pendingTierRef.current
       const nextOffset = pending?.offset ?? 0
+
+      // Take the incoming element's length with it.
+      //
+      // A handover changes no src, so the element arriving at the front never
+      // fires loadedmetadata again and elementDuration keeps whatever the last
+      // tier reported. Swapping from the muxed stream — whose length is only
+      // however much has been assembled so far — to the finished file therefore
+      // left the seek bar drawn against a few seconds of video instead of the
+      // whole thing.
+      setElementDuration(Number.isFinite(next.duration) ? next.duration : 0)
       resumeAtRef.current = next.currentTime + nextOffset
       positionRef.current = resumeAtRef.current
       offsetRef.current = nextOffset
@@ -623,6 +641,29 @@ export function Player({
     }
     waitForMark()
   }, [front, back, captions, abandonUpgrade])
+
+  // Give the sound back at the first gesture the document gets.
+  //
+  // Any click or key press satisfies the autoplay policy, so there is no need
+  // to ask for one — the next thing the viewer does for their own reasons is
+  // enough. Only unmutes what the policy muted; someone who reached for the
+  // mute button keeps their silence.
+  useEffect(() => {
+    const restore = () => {
+      if (!mutedByPolicyRef.current) return
+      mutedByPolicyRef.current = false
+      const element = front()
+      if (!element) return
+      element.muted = false
+      setMuted(false)
+    }
+    window.addEventListener('pointerdown', restore)
+    window.addEventListener('keydown', restore)
+    return () => {
+      window.removeEventListener('pointerdown', restore)
+      window.removeEventListener('keydown', restore)
+    }
+  }, [front])
 
   // A pending handover must not outlive the video it belongs to.
   useEffect(() => () => window.cancelAnimationFrame(handoverFrameRef.current), [])
@@ -717,6 +758,9 @@ export function Player({
 
   const applyVolume = (next: number) => {
     resetAutoplayChain()
+    // Reaching for the volume is a decision about sound, so the automatic
+    // restore steps aside for the same reason it does for the mute button.
+    mutedByPolicyRef.current = false
     const element = front()
     setVolume(next)
     if (element) {
@@ -730,6 +774,8 @@ export function Player({
   const toggleMute = () => {
     const element = front()
     if (!element) return
+    // A deliberate choice, so the automatic restore must not overrule it.
+    mutedByPolicyRef.current = false
     element.muted = !element.muted
     setMuted(element.muted)
   }
@@ -1042,15 +1088,24 @@ export function Player({
                   // The new source is loaded and positioned: resume tracking.
                   swappingRef.current = false
 
-                  // Start playing on arrival.
+                  // Start playing on arrival, audibly if the browser allows it.
                   //
-                  // A browser that refuses audible autoplay leaves the video
-                  // paused on its first frame, and the play button is right
-                  // there. The alternative — starting it silently and asking
-                  // to be unmuted — trades a video that obviously has not
-                  // started for one that appears to be playing with no sound,
-                  // which is the more confusing of the two.
-                  void element.play().catch(() => undefined)
+                  // It usually will not on a fresh page: audible autoplay needs
+                  // a gesture in the document, and a reload creates a new one,
+                  // so a page opened or refreshed has none to offer. Left at
+                  // that, every reload lands on a paused first frame.
+                  //
+                  // So a refusal falls back to muted — which is always allowed
+                  // — and the sound comes back by itself at the first click or
+                  // key press anywhere on the page. Nothing has to be read or
+                  // pressed to fix it, which is why there is no longer a badge
+                  // asking for one.
+                  element.play().catch(() => {
+                    element.muted = true
+                    setMuted(true)
+                    mutedByPolicyRef.current = true
+                    void element.play().catch(() => undefined)
+                  })
                 }}
                 // Only meaningful on the layer being prepared: it means the
                 // replacement has reached its mark and can take over.
