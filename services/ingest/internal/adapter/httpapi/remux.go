@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 // Remuxer is the part of the downloader that assembles a playable stream from
@@ -81,7 +82,9 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	resolveStart := time.Now()
 	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, height)
+	resolveTook := time.Since(resolveStart)
 	if err != nil {
 		h.logger.Warn("resolve remux urls", "video", videoID, "error", err)
 		http.Error(w, "cannot resolve media", http.StatusBadGateway)
@@ -98,6 +101,13 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	// a process pulling the rest of the video for nothing.
 	defer func() { _ = stream.Close() }()
 
+	// Logged because this is the one request whose cost is a process rather
+	// than a query, and because "did the player even ask for it?" turned out to
+	// be the question that could not be answered from the outside.
+	h.logger.Info("live mux opened",
+		"video", videoID, "height", height, "from", startSeconds,
+		"resolve", resolveTook.Truncate(time.Millisecond))
+
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Cache-Control", "no-store")
 	// Saying so explicitly stops the browser from attempting a range request
@@ -105,7 +115,9 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Accept-Ranges", "none")
 	w.WriteHeader(http.StatusOK)
 
-	if _, err := io.Copy(w, stream); err != nil && ctx.Err() == nil {
+	written, err := io.Copy(w, stream)
+	if err != nil && ctx.Err() == nil {
 		h.logger.Warn("remux stream ended early", "video", videoID, "error", err)
 	}
+	h.logger.Info("live mux closed", "video", videoID, "bytes", written)
 }

@@ -61,13 +61,18 @@ const SWAP_LEAD_SECONDS = 0.6
 /**
  * How far ahead of the playhead a muxed stream is opened.
  *
- * ffmpeg needs a couple of seconds to produce a first fragment — measured at
- * 2.2 on this machine — and the stream begins wherever it was asked to. Opening
- * at the current position would mean waiting for an element that starts behind
- * where playback has meanwhile reached; the handover then has nothing to wait
- * for and jumps backwards. Four seconds covers the mux with room to spare.
+ * It begins wherever it is asked to and takes a while to get there, so the mark
+ * has to be further ahead than the preparation takes — otherwise playback has
+ * already passed it by the time the stream is ready, and the handover either
+ * rewinds or never matches.
+ *
+ * How long it takes depends on the video, which is what made the first guess
+ * wrong. Measured on this library: about 4.4s for a five-minute video, but
+ * 10.8s for a seventy-eight-minute one — 2.8s of that resolving and the rest
+ * inside ffmpeg. Twenty seconds clears the longest case measured with room to
+ * spare, at the cost of the picture staying low for that long.
  */
-const REMUX_PREPARE_LEAD_SECONDS = 4
+const REMUX_PREPARE_LEAD_SECONDS = 20
 
 /**
  * How long a muxed stream may take to become playable before auto gives up.
@@ -76,7 +81,16 @@ const REMUX_PREPARE_LEAD_SECONDS = 4
  * rendition beats a stuttering high one. Only auto gives up; a viewer who
  * pinned 1080p asked for it and keeps it.
  */
-const REMUX_PATIENCE_MS = 20_000
+const REMUX_PATIENCE_MS = 45_000
+
+/**
+ * How far past the mark a handover may still happen.
+ *
+ * Beyond this the replacement is behind the picture and swapping to it would
+ * visibly rewind. Small, because a second of repeated video is already
+ * noticeable on music.
+ */
+const HANDOVER_OVERSHOOT_TOLERANCE = 1
 
 /**
  * The height the full-quality tiers are labelled with when they do not say.
@@ -538,13 +552,22 @@ export function Player({
       const backAbsolute = (pendingTierRef.current?.offset ?? 0) + next.currentTime
       const frontAbsolute = current.currentTime + offsetRef.current
       if (frontAbsolute >= backAbsolute - 0.05) {
+        // Overshooting the mark by more than a moment means the replacement
+        // took longer to prepare than it was given, and handing over would
+        // rewind the viewer by the difference. Better to keep what is playing:
+        // a picture that stays low is a disappointment, one that jumps
+        // backwards is a fault.
+        if (frontAbsolute > backAbsolute + HANDOVER_OVERSHOOT_TOLERANCE) {
+          abandonUpgrade()
+          return
+        }
         commit()
         return
       }
       handoverFrameRef.current = window.requestAnimationFrame(waitForMark)
     }
     waitForMark()
-  }, [front, back, captions])
+  }, [front, back, captions, abandonUpgrade])
 
   // A pending handover must not outlive the video it belongs to.
   useEffect(() => () => window.cancelAnimationFrame(handoverFrameRef.current), [])
