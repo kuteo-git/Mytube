@@ -45,6 +45,7 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		Disliked:          map[string]bool{},
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
+		RecentlyWatched:   map[string]bool{},
 	}
 	if userID == "" {
 		return profile, nil
@@ -130,9 +131,43 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		profile.RecentImpressions[videoID] = true
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return profile, err
+	}
+
+	// Videos this viewer has watched in the last little while.
+	//
+	// Separate from WatchedFraction, which says whether something was ever
+	// watched and says nothing about when. What follows a video has to know
+	// about "just now" specifically: two videos on the same channel with the
+	// same topic each rank first in the other's suggestions, so without this the
+	// pair is a trap — press next twice and you are back where you started.
+	rows, err = s.pool.Query(ctx, `
+		SELECT DISTINCT video_id FROM signals
+		WHERE user_id = $1 AND type = 'WATCH' AND video_id <> ''
+		  AND occurred_at > now() - $2::interval`,
+		userID, recentWatchWindow.String())
+	if err != nil {
+		return profile, err
+	}
+	for rows.Next() {
+		var videoID string
+		if err := rows.Scan(&videoID); err != nil {
+			rows.Close()
+			return profile, err
+		}
+		profile.RecentlyWatched[videoID] = true
+	}
+	rows.Close()
 
 	return profile, rows.Err()
 }
+
+// How recently a video must have been watched to count as "just now".
+//
+// Long enough to cover a sitting, short enough that a video watched this
+// morning is a fair suggestion again this evening.
+const recentWatchWindow = 3 * time.Hour
 
 // MostWatched ranks by accumulated watch signals.
 //

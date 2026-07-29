@@ -209,3 +209,55 @@ type failingRetentionStore struct{ stubStore }
 func (failingRetentionStore) VideoRetention(context.Context) (map[string]float32, error) {
 	return nil, context.DeadlineExceeded
 }
+
+func TestUpNextDoesNotOfferBackSomethingJustWatched(t *testing.T) {
+	// The reported loop, reduced. Two videos on one channel sharing a topic are
+	// each other's strongest match — same-channel and shared-tags together beat
+	// everything else in this function — so pressing next twice returned the
+	// viewer to where they started, forever.
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "a", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "b", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "c", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "d", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+	}
+	profile := emptyProfile()
+	// Arrived at "b" from "a", moments ago.
+	profile.RecentlyWatched["a"] = true
+	profile.RecentlyWatched["b"] = true
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "b", "", 20)
+	if err != nil {
+		t.Fatalf("GetUpNext: %v", err)
+	}
+	if len(ranked) == 0 {
+		t.Fatal("expected suggestions")
+	}
+	if ranked[0].VideoID == "a" {
+		t.Fatal("up-next offered back the video just watched; the loop is still there")
+	}
+}
+
+func TestUpNextStillOffersSomethingWatchedLongAgo(t *testing.T) {
+	// The penalty is about "just now", not about ever. A library this size
+	// cannot afford to retire everything on first viewing.
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "old_favourite", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "current", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+	}
+	profile := emptyProfile()
+	// Watched at some point, but not in this sitting.
+	profile.WatchedFraction["old_favourite"] = 0.99
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20)
+	if err != nil {
+		t.Fatalf("GetUpNext: %v", err)
+	}
+	if len(ranked) != 1 || ranked[0].VideoID != "old_favourite" {
+		t.Fatalf("a video watched long ago was dropped from up-next: %+v", ranked)
+	}
+}

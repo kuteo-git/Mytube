@@ -131,6 +131,15 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
     một video trong feed là từ chối nó**. Phân biệt bằng comma-ok, không phải giá trị 0.
   - **Affinity đọc từ lịch sử xem, không chỉ từ Like.** Thư viện này có 9 like trên
     2.045 tín hiệu xem; đọc sở thích từ Like thôi là gần như không đọc được gì.
+  - **Vừa xem xong ≠ đã từng xem.** `WatchedFraction` chỉ nói *có từng xem chưa*, không
+    nói *khi nào*. Up-next cần đúng cái "vừa nãy": hai video **cùng kênh + cùng chủ đề**
+    là gợi ý mạnh nhất của nhau (`weightSameChannel` 2.5 + `weightSharedTags` 1.5), nên
+    bấm Next hai lần là quay lại chỗ cũ — **vòng lặp 2 bài không thoát được**, đã gặp thật.
+    Thêm `RecentlyWatched` (cửa sổ **3 tiếng**) với `penaltyRecentlyWatched = 8.0` —
+    **cố ý lớn hơn tổng hai trọng số kia**, vì nhỏ hơn thì không gãy được vòng.
+    Sửa ở **server**, không phải ở client: bản trước dựa vào trail trong sessionStorage
+    của trình duyệt, mà một cái vòng lặp cấu trúc thì không nên phụ thuộc vào lưu trữ
+    phía client có hoạt động hay không.
   - **Hạn ngạch theo lý do KHÔNG chống được một kênh chiếm cả trang.** Đo thật:
     44% thời lượng xem dồn vào một kênh → affinity chuẩn hoá thành 1.0 trong khi kênh
     kế chỉ 0.23 → **23/24 video trang đầu là một kênh**, mà mọi hạn ngạch vẫn "đạt".

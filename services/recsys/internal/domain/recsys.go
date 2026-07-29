@@ -69,6 +69,10 @@ type UserProfile struct {
 	Subscribed      map[string]bool
 	// Videos shown recently, suppressed to keep the feed from repeating.
 	RecentImpressions map[string]bool
+	// Videos watched in the last few hours. Distinct from WatchedFraction,
+	// which records whether something was ever watched and not when: deciding
+	// what follows a video needs "just now" specifically.
+	RecentlyWatched map[string]bool
 }
 
 type RankedVideo struct {

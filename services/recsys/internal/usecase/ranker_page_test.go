@@ -38,6 +38,7 @@ func emptyProfile() domain.UserProfile {
 		Disliked:          map[string]bool{},
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
+		RecentlyWatched:   map[string]bool{},
 	}
 }
 

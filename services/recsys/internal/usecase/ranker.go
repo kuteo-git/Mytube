@@ -29,9 +29,9 @@ const (
 	// stay below "continue watching": an unfinished video is a stronger claim on
 	// attention than a preference.
 	weightLikeAffinity = 2.0
-	weightRewatch     = 0.3
-	penaltyImpression = 2.0
-	penaltyDisliked   = 5.0
+	weightRewatch      = 0.3
+	penaltyImpression  = 2.0
+	penaltyDisliked    = 5.0
 	// Opening a video and leaving within the first few per cent is a judgement,
 	// not an absence of one. Before this existed such a video fell through to
 	// "never watched" and collected that bucket's boost, so the surest way to
@@ -50,9 +50,13 @@ const (
 	// unremarked cooking videos should say what one like says.
 	weightTopicAffinity = 1.0
 	// Same-channel dominance is what makes the "Next" rail feel coherent.
-	weightSameChannel  = 2.5
-	weightSharedTags   = 1.5
-	recencyHalfLifeDay = 14.0
+	weightSameChannel = 2.5
+	weightSharedTags  = 1.5
+	// Larger than same-channel and shared-tags together, deliberately. Those
+	// two are what make a pair of videos by one artist each other's top
+	// suggestion, and nothing smaller than their sum can break the loop.
+	penaltyRecentlyWatched = 8.0
+	recencyHalfLifeDay     = 14.0
 )
 
 type Ranker struct {
@@ -316,6 +320,19 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 			// way for a "next" rail to look broken.
 			score -= penaltyBounced
 			reason = domain.ReasonBounced
+		}
+
+		// Anything watched in the last few hours is a bad answer to "what
+		// follows this?", however well it matches.
+		//
+		// Same-channel and shared-topic between them are worth more than four
+		// points here, so two videos by one artist each rank first in the
+		// other's suggestions and pressing next twice returns you to where you
+		// started. Observed on this library as an inescapable two-video loop.
+		// The penalty has to exceed that combined bonus to break it, which is
+		// why it is the largest number in this function.
+		if profile.RecentlyWatched[f.VideoID] {
+			score -= penaltyRecentlyWatched
 		}
 
 		score += weightChannelAffinity * watchAffinity.Channels[f.ChannelID]
