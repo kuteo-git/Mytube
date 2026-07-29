@@ -24,13 +24,23 @@ export function useAutoplayPreference(): [boolean, (next: boolean) => void] {
 }
 
 const CHAIN_KEY = 'autoplay-chain'
-const MAX_CHAIN = 3
 
 /**
- * Counts videos played in an unbroken autoplay chain. The chain is what stops
- * an empty room from downloading all night: after three hops with no human
- * input, the next hop does not happen.
+ * Videos autoplay may chain through with nobody touching anything.
+ *
+ * Was three, which is what an album feels like when it stops after two songs.
+ * The guard exists so an empty room does not download all night, and three was
+ * chosen before eviction was running; now that a sweep caps the library at a
+ * fixed size, the worst an unattended chain can do is churn within that budget
+ * rather than fill the disk. Fifty is long enough to be a listening session and
+ * short enough that a forgotten tab does not run for days.
+ *
+ * Any interaction at all — play, pause, seek, volume, pressing Next — resets
+ * the count, so this only ever limits genuinely unattended playback.
  */
+const MAX_CHAIN = 50
+
+/** Counts videos played in an unbroken autoplay chain. */
 export function autoplayChainLength(): number {
   return Number(window.sessionStorage.getItem(CHAIN_KEY) ?? '0')
 }

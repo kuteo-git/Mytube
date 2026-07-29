@@ -22,7 +22,11 @@ export function UpNextRail({
   const [channelFilter, setChannelFilter] = useState<string | undefined>(undefined)
   const [collapsed, setCollapsed] = useState(false)
   const { data } = useUpNext(current.id, channelFilter)
-  const videos = data?.filter((video) => !exclude.has(video.id))
+  const unseen = data?.filter((video) => !exclude.has(video.id))
+  // Once everything on offer has been played this sitting, showing the list
+  // again beats showing nothing: an empty rail reads as a broken page, and
+  // "next" falls back the same way, so the two still agree about what plays.
+  const videos = unseen && unseen.length > 0 ? unseen : data
 
   return (
     <aside className="flex w-full flex-col gap-3" aria-label="Up next">

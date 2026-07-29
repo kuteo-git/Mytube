@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useUpNext, useVideo } from '@/features/catalog/application/queries'
+import { usePopular, useUpNext, useVideo } from '@/features/catalog/application/queries'
 import { recordAutoplayHop } from '@/features/watch/application/autoplay'
 import { useQueue } from '@/features/watch/application/queue'
-import { useWatchTrail } from '@/features/watch/application/trail'
+import { arrivedByAdvancing, markAdvancedTo, useWatchTrail } from '@/features/watch/application/trail'
 import { CommentSection } from '@/features/watch/ui/CommentSection'
 import { DescriptionBox } from '@/features/watch/ui/DescriptionBox'
 import { Player } from '@/features/watch/ui/Player'
@@ -16,22 +15,37 @@ export function WatchPage() {
   const { videoId } = useParams()
   const { data: video, isPending, isError } = useVideo(videoId)
   const { data: upNext } = useUpNext(videoId)
+  // The last resort behind "next". Cheap and cached, and it is what keeps the
+  // button alive once every suggestion has already been played this sitting.
+  const { data: popular } = usePopular(50)
   const queue = useQueue(videoId)
   const trail = useWatchTrail(videoId)
   const navigate = useNavigate()
 
-  // A queue is an explicit instruction — "play this list, in this order" — so
-  // it outranks the recommendation rail, which is only ever a suggestion.
+  // "Next" must always have an answer.
   //
-  // Without a queue, "next" is the top of the rail — but only counting videos
-  // not already played this sitting. Recommendations point both ways, so the
-  // untrimmed top of the rail is usually the video that was just playing, and
-  // following it walks in a two-video circle.
+  // Each step is a weaker claim than the one above it, and the list only ever
+  // runs out if the library itself holds nothing else. A dead Next button is
+  // worse than a repeat: someone playing music does not want the room to go
+  // quiet because the recommender ran out of ideas it had not already used.
+  //
+  //   1. the queue, when playing through an explicit list
+  //   2. up-next, minus anything already played this sitting — recommendations
+  //      point both ways, so the untrimmed top of the rail is usually the video
+  //      that was just playing, and following it walks in a two-video circle
+  //   3. up-next unfiltered, once every suggestion has been seen
+  //   4. popular, unseen first
+  //   5. popular, anything at all
   const suggested = upNext?.filter((video) => !trail.has(video.id))
-  const next = queue.next ?? suggested?.[0]
+  const next =
+    queue.next ??
+    suggested?.[0] ??
+    upNext?.find((video) => video.id !== videoId) ??
+    popular?.find((video) => !trail.has(video.id) && video.id !== videoId) ??
+    popular?.find((video) => video.id !== videoId)
   const nextInQueue = Boolean(queue.next)
 
-  // The video we arrived at by advancing, rather than by choosing it.
+  // Whether this video was arrived at by advancing rather than by being chosen.
   //
   // Advancing means "play me the next thing", so it starts at the beginning
   // even for a video watched before — dropping someone into the middle of a
@@ -39,15 +53,12 @@ export function WatchPage() {
   // end has its position saved near the end, so resuming would run out almost
   // immediately and advance again, skating through the list.
   //
-  // Deliberately not router state: that lives in history, so a reload or a
-  // back-navigation would replay the fresh start and lose a real position.
-  const [advancedTo, setAdvancedTo] = useState<string | null>(null)
-  useEffect(() => {
-    // Leaving that video for one nobody advanced to ends the exemption, so
-    // returning to it later resumes normally.
-    if (advancedTo && advancedTo !== videoId) setAdvancedTo(null)
-  }, [videoId, advancedTo])
-  const startAtBeginning = advancedTo === videoId
+  // Read from sessionStorage rather than held in state here. Two previous
+  // attempts kept this in React state and both lost it somewhere between the
+  // navigation, the query refetch and the player mounting, in a way that could
+  // not be reproduced by reading the code. A timestamped marker cannot be lost
+  // by any of that, and expires on its own.
+  const startAtBeginning = arrivedByAdvancing(videoId)
 
   if (isPending) {
     return (
@@ -78,7 +89,7 @@ export function WatchPage() {
             next
               ? () => {
                   recordAutoplayHop()
-                  setAdvancedTo(next.id)
+                  markAdvancedTo(next.id)
                   // Staying inside the queue means carrying it along; a
                   // recommendation is a fresh start with no list.
                   navigate(`/watch/${next.id}${nextInQueue ? queue.search : ''}`)

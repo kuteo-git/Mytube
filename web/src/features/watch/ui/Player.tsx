@@ -164,6 +164,11 @@ export function Player({
   // would otherwise overwrite the saved position with 0 and restart the video
   // from the beginning, exactly the bug this is here to prevent.
   const resumeAtRef = useRef(initialPositionSeconds)
+  // The opening position for whichever video is current. Held in a ref so the
+  // reset effect above can read the latest value without taking it as a
+  // dependency; assigned during render, which runs before that effect.
+  const initialPositionRef = useRef(initialPositionSeconds)
+  initialPositionRef.current = initialPositionSeconds
   const swappingRef = useRef(true)
   // One re-resolve is allowed per mounted player. An expired upstream URL is
   // the common failure and it fixes itself; anything that survives a fresh URL
@@ -220,6 +225,13 @@ export function Player({
   // param — so everything the refs and state hold about the old one has to be
   // put back by hand. useLayoutEffect for the same reason as the swap above:
   // it must land before the element can dispatch anything about the new source.
+  //
+  // Keyed on the video alone, deliberately. The starting position is an opening
+  // value, not a live one, and treating it as a dependency made the player
+  // reload itself whenever the catalogue row was refetched — which happens on
+  // its own, because finishing a download invalidates that query and progress
+  // is written back every fifteen seconds. The visible result is a video that
+  // jumps to where it was last saved, part way through watching it.
   useLayoutEffect(() => {
     retriedRef.current = false
     setLoadFailed(false)
@@ -229,8 +241,8 @@ export function Player({
     setBuffered(0)
     // Carrying this over would seek the new video to wherever the previous one
     // was left, which is not a position that means anything here.
-    resumeAtRef.current = initialPositionSeconds
-    setPosition(initialPositionSeconds)
+    resumeAtRef.current = initialPositionRef.current
+    setPosition(initialPositionRef.current)
     // Both elements start empty, and the front one goes back to being A, so a
     // new video never inherits the previous one's half-prepared upgrade.
     setSrcA(undefined)
@@ -238,7 +250,7 @@ export function Player({
     frontIsARef.current = true
     setFrontIsA(true)
     upgradingToRef.current = undefined
-  }, [videoId, initialPositionSeconds])
+  }, [videoId])
 
   // Load the opening source, and afterwards prepare any better one out of sight.
   //
