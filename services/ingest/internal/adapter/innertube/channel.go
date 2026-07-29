@@ -34,6 +34,7 @@ type channelPage struct {
 	sortOrder     []string
 	sortTokens    map[string]string
 	nextPageToken string
+	avatarURL     string
 }
 
 type browseRequest struct {
@@ -133,10 +134,12 @@ func (c *Client) ChannelUploads(ctx context.Context, browseID, pageToken string)
 
 	page := channelPage{sortTokens: map[string]string{}}
 	collectChannelPage(decoded, &page)
+	collectAvatar(decoded, &page)
 
 	out := domain.ChannelUploads{
 		Videos:        page.videos,
 		NextPageToken: page.nextPageToken,
+		AvatarURL:     page.avatarURL,
 	}
 	// Preserve YouTube's own chip order rather than a map's iteration order, so
 	// the control does not reshuffle itself between requests.
@@ -153,6 +156,42 @@ func (c *Client) ChannelUploads(ctx context.Context, browseID, pageToken string)
 // having: the videos, the sort chips, and the token for the next page. The shape
 // is undocumented and deeply nested, so this searches by key rather than
 // asserting a path that a redesign would silently break.
+// collectAvatar picks the channel picture out of the same response.
+//
+// It is already here — the header carries it — and taking it costs nothing,
+// which matters because artwork is otherwise only fetched for the sixty-three
+// channels named in topics.yaml. Everything arriving through search, feed
+// expansion or a video being opened had no picture at all: 63 of 288 channels
+// had one.
+//
+// The largest source wins, and the URL is stored rather than downloaded. That
+// is the same trade already made for video thumbnails: fetching an image for
+// every channel would cost more disk than it is worth, and these are served
+// straight from Google.
+func collectAvatar(node any, page *channelPage) {
+	switch value := node.(type) {
+	case map[string]any:
+		if avatar, ok := value["avatarViewModel"].(map[string]any); ok {
+			if image, ok := avatar["image"].(map[string]any); ok {
+				if sources, ok := image["sources"].([]any); ok && len(sources) > 0 {
+					if last, ok := sources[len(sources)-1].(map[string]any); ok {
+						if url, ok := last["url"].(string); ok && url != "" && page.avatarURL == "" {
+							page.avatarURL = url
+						}
+					}
+				}
+			}
+		}
+		for _, child := range value {
+			collectAvatar(child, page)
+		}
+	case []any:
+		for _, child := range value {
+			collectAvatar(child, page)
+		}
+	}
+}
+
 func collectChannelPage(node any, page *channelPage) {
 	switch v := node.(type) {
 	case map[string]any:

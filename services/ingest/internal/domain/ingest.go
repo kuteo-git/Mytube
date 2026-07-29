@@ -197,6 +197,10 @@ type ChannelUploads struct {
 	Videos        []ExternalVideo
 	SortOptions   []SortOption
 	NextPageToken string
+	// AvatarURL is the channel's picture, taken from the same response rather
+	// than fetched. Empty when the listing came from the flat-playlist
+	// fallback, which carries no header at all.
+	AvatarURL string
 }
 
 // SortOption is one ordering, carrying the opaque token that selects it.

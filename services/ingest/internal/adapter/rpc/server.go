@@ -238,6 +238,7 @@ func (s *Server) ListChannelUploads(ctx context.Context, req *connect.Request[in
 		Videos:        out,
 		SortOptions:   sorts,
 		NextPageToken: uploads.NextPageToken,
+		AvatarUrl:     uploads.AvatarURL,
 	}), nil
 }
 

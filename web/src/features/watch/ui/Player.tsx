@@ -238,6 +238,7 @@ export function Player({
   initialPositionSeconds,
   mediaState,
   subtitles,
+  thumbnailURL,
   nextVideoTitle,
   onPlayNext,
 }: {
@@ -247,6 +248,15 @@ export function Player({
   initialPositionSeconds: number
   mediaState: MediaState
   subtitles: SubtitleTrack[]
+  /**
+   * Shown until the first frame decodes.
+   *
+   * Deliberately the stored URL rather than the upgraded guess used on cards: a
+   * poster has no error event to fall back from, so a maxresdefault that turns
+   * out not to exist would leave the player blank — which is the thing this is
+   * here to prevent.
+   */
+  thumbnailURL?: string
   nextVideoTitle?: string
   onPlayNext?: () => void
 }) {
@@ -1020,6 +1030,10 @@ export function Player({
                 style={{ opacity: isFront ? 1 : 0, pointerEvents: isFront ? undefined : 'none' }}
                 aria-hidden={!isFront}
                 playsInline
+                // Only the visible layer: a poster on the hidden one would be
+                // decoded for nothing, and would flash if the layers swapped
+                // before it had a frame.
+                poster={isFront ? thumbnailURL : undefined}
                 // The layer being prepared has to buffer ahead of being needed;
                 // metadata alone would leave it unable to take over.
                 preload={isFront ? 'metadata' : 'auto'}

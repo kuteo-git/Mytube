@@ -195,6 +195,9 @@ type ListChannelUploadsResponse struct {
 	Videos        []*ExternalVideo       `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
 	SortOptions   []*SortOption          `protobuf:"bytes,2,rep,name=sort_options,json=sortOptions,proto3" json:"sort_options,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// The channel's picture, taken from the same response rather than fetched.
+	// Empty when the listing fell back to a flat playlist, which has no header.
+	AvatarUrl     string `protobuf:"bytes,4,opt,name=avatar_url,json=avatarUrl,proto3" json:"avatar_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -246,6 +249,13 @@ func (x *ListChannelUploadsResponse) GetSortOptions() []*SortOption {
 func (x *ListChannelUploadsResponse) GetNextPageToken() string {
 	if x != nil {
 		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListChannelUploadsResponse) GetAvatarUrl() string {
+	if x != nil {
+		return x.AvatarUrl
 	}
 	return ""
 }
@@ -1914,11 +1924,13 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\n" +
 	"SortOption\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"\xb0\x01\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\xcf\x01\n" +
 	"\x1aListChannelUploadsResponse\x120\n" +
 	"\x06videos\x18\x01 \x03(\v2\x18.ingest.v1.ExternalVideoR\x06videos\x128\n" +
 	"\fsort_options\x18\x02 \x03(\v2\x15.ingest.v1.SortOptionR\vsortOptions\x12&\n" +
-	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"R\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\x12\x1d\n" +
+	"\n" +
+	"avatar_url\x18\x04 \x01(\tR\tavatarUrl\"R\n" +
 	"\x14ExpandLibraryRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12$\n" +
 	"\x0eseed_video_ids\x18\x02 \x03(\tR\fseedVideoIds\":\n" +

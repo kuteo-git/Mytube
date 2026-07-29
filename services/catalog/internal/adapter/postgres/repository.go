@@ -310,12 +310,21 @@ func (r *Repository) UpsertChannel(ctx context.Context, c domain.Channel) (domai
 		INSERT INTO channels (id, name, handle, avatar_path, banner_path, subscriber_count, verified)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (id) DO UPDATE
-		SET name = EXCLUDED.name,
-		    handle = EXCLUDED.handle,
+		-- Every field keeps what it had when the incoming one says nothing.
+		--
+		-- Artwork was already written this way; the rest was not, so a caller
+		-- with only a fragment to contribute — a channel picture discovered
+		-- while listing uploads, say — would blank the name, the handle and the
+		-- subscriber count of every channel it touched. A partial update should
+		-- add what it knows, never erase what it does not.
+		SET name = COALESCE(NULLIF(EXCLUDED.name, ''), channels.name),
+		    handle = COALESCE(NULLIF(EXCLUDED.handle, ''), channels.handle),
 		    avatar_path = COALESCE(NULLIF(EXCLUDED.avatar_path, ''), channels.avatar_path),
 		    banner_path = COALESCE(NULLIF(EXCLUDED.banner_path, ''), channels.banner_path),
-		    subscriber_count = EXCLUDED.subscriber_count,
-		    verified = EXCLUDED.verified
+		    subscriber_count = CASE WHEN EXCLUDED.subscriber_count > 0
+		                            THEN EXCLUDED.subscriber_count
+		                            ELSE channels.subscriber_count END,
+		    verified = channels.verified OR EXCLUDED.verified
 		RETURNING id, name, handle, avatar_path, banner_path, subscriber_count, verified`,
 		c.ID, c.Name, c.Handle, c.AvatarPath, c.BannerPath, c.SubscriberCount, c.Verified,
 	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.BannerPath, &c.SubscriberCount, &c.Verified)

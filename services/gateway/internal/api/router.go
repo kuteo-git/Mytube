@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -486,6 +487,27 @@ func (g *Gateway) handleGetChannel(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// recordChannelAvatar stores a channel picture discovered while listing it.
+//
+// Detached from the request because the listing must not wait on it, and given
+// its own context for the same reason: the request's is cancelled the moment
+// the response is written.
+func (g *Gateway) recordChannelAvatar(channelID, name, handle, avatarURL string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if _, err := g.catalog.UpsertChannel(ctx, connect.NewRequest(&catalogv1.UpsertChannelRequest{
+		Channel: &catalogv1.Channel{
+			Id:         channelID,
+			Name:       name,
+			Handle:     handle,
+			AvatarPath: avatarURL,
+		},
+	})); err != nil {
+		g.logger.Warn("recording channel avatar", "channel", channelID, "error", err)
+	}
+}
+
 func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	channelID := r.PathValue("id")
@@ -524,6 +546,26 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		g.writeErr(w, r, err)
 		return
+	}
+
+	// Record the picture if this channel had none.
+	//
+	// It arrives in the listing already, so this costs nothing beyond the write
+	// — and artwork is otherwise only collected for the channels named in
+	// topics.yaml, which left 225 of 288 with no picture anywhere in the
+	// interface. Not fatal if it fails: a missing avatar falls back to the
+	// lettered circle, which is what it was there for.
+	if avatar := resp.Msg.GetAvatarUrl(); avatar != "" &&
+		channel.Msg.GetChannel().GetAvatarPath() == "" {
+		// The name goes along because catalog requires one — it has no way to
+		// tell a fragment meant to add a picture from a fragment that has lost
+		// everything else.
+		go g.recordChannelAvatar(
+			channelID,
+			channel.Msg.GetChannel().GetName(),
+			channel.Msg.GetChannel().GetHandle(),
+			avatar,
+		)
 	}
 
 	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))

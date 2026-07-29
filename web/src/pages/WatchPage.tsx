@@ -89,6 +89,7 @@ export function WatchPage() {
           }
           mediaState={video.mediaState}
           subtitles={video.subtitles}
+          thumbnailURL={video.thumbnailPath || undefined}
           nextVideoTitle={next?.title}
           onPlayNext={
             next

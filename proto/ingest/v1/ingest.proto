@@ -80,6 +80,9 @@ message ListChannelUploadsResponse {
   repeated ExternalVideo videos = 1;
   repeated SortOption sort_options = 2;
   string next_page_token = 3;
+  // The channel's picture, taken from the same response rather than fetched.
+  // Empty when the listing fell back to a flat playlist, which has no header.
+  string avatar_url = 4;
 }
 
 message ExpandLibraryRequest {
