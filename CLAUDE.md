@@ -375,6 +375,14 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   tiến độ cũng không hiện. Sửa hai chỗ: (a) `List` sắp việc **chưa xong lên trước** rồi
   mới tới recency; (b) **`useStream` tự poll 5 giây/lần khi chưa có `local`** — endpoint
   đó mới là nơi biết "phát bằng gì", nên việc nâng tầng không được phụ thuộc vào hàng đợi.
+- **Đường TẢI XUỐNG không lọc codec, chỉ đường remux có (sửa 2026-07-29)**: `Download`
+  dùng `bestvideo[height<=N]+bestaudio` trần, nên yt-dlp lấy "tốt nhất" = **AV1**.
+  Đo thật trên đĩa: **28 file AV1 + 4 AV1 + 2 VP9, không một file h264 nào**. Trái thẳng
+  quyết định "ưu tiên h264 vì TV cũ" ở mục trên — và trớ trêu là **bản local (thứ thay thế
+  stream) mới là bản có nguy cơ không phát được**, trong khi stream remux thì h264.
+  Giờ `downloadFormat` sao chép đúng `remuxFormat`. Kiểm trên `rYap5zVNYf8`:
+  cũ → `av01` itag 399; mới → `avc1` itag 299, **vẫn 1080p**.
+  **File đã tải trước đây vẫn là AV1** — phải xoá và tải lại mới đổi được.
 - **`watch_ratio` từng bị thổi phồng ngay tại nguồn (sửa 2026-07-29)**: client tính
   `element.currentTime / element.duration`, mà stream remux fMP4 khai báo độ dài **đang lớn
   dần** — nên phân số tiến về 1.0 ngay từ giây đầu. Ca đo được: video 243s xem tới 0:41 bị
