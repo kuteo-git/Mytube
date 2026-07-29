@@ -49,9 +49,17 @@ const (
 	// less. It accumulates across a viewing history, which is the point — fifty
 	// unremarked cooking videos should say what one like says.
 	weightTopicAffinity = 1.0
-	// Same-channel dominance is what makes the "Next" rail feel coherent.
+	// Subject and channel weigh the same, and per shared tag rather than once,
+	// so two videos sharing a topic and a hashtag outrank one merely sharing a
+	// channel.
+	//
+	// CLAUDE.md §6 used to rank channel above subject, and with the cap on how
+	// much of the rail one channel may take, that left the remaining slots going
+	// to whatever general taste preferred — an Entertainment video followed by
+	// six from the viewer's favourite musician. What people mean by "related" is
+	// the subject; the channel is one way of sharing it, not a better one.
 	weightSameChannel = 2.5
-	weightSharedTags  = 1.5
+	weightSharedTags  = 2.5
 	// How much of everything that is not relatedness survives into up-next.
 	//
 	// The feed asks "what should I watch?", where taste and quality should
@@ -260,7 +268,8 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	// Both apply to the feed, which is what someone browses. Up-next is a
 	// different question — "what follows this?" — and deliberately keeps its
 	// pure same-channel-first ordering.
-	return applyChannelDiversity(applyDiscoveryQuota(ranked), channelOf), nil
+	return applyChannelDiversity(applyDiscoveryQuota(ranked), channelOf,
+		maxPerChannelPerWindow, quotaWindow), nil
 }
 
 // MostWatched is the "played the most" collection, ordered by time spent.
@@ -373,7 +382,25 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})
 	}
 
-	return sortAndPage(ranked, pageSize, 0), nil
+	sortRanked(ranked)
+
+	channelOf := make(map[string]string, len(features))
+	for _, f := range features {
+		channelOf[f.VideoID] = f.ChannelID
+	}
+
+	// The rail should stay on the subject without staying on one channel.
+	//
+	// Relatedness puts the current video's own channel above everything else,
+	// which on its own made the rail twenty of twenty from that channel — the
+	// right subject, but a dead end. Capping it lets the other channels covering
+	// the same topic through, which is what "related" ought to have meant.
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 24
+	}
+	// Applied after the sort and in place of sortAndPage, which re-sorts by
+	// score and would put the current channel straight back on top.
+	return capPerChannel(ranked, channelOf, maxPerChannelUpNext, int(pageSize)), nil
 }
 
 // WatchAffinity is what a viewing history says about someone's taste, without

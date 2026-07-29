@@ -158,7 +158,17 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 - **Dislike**: loại khỏi feed và up-next, **vẫn tìm được qua search và trang kênh**.
   Không phải tính năng phải làm — nó đúng sẵn nhờ ranh giới service: catalog không
   nhìn thấy signal của recsys nên không thể lọc theo nó.
-- **`Next` (watch page):** cùng kênh > cùng tag > affinity chung; loại video vừa xem.
+- **`Next` (watch page) — ĐẢO 2026-07-29:** trước là *cùng kênh > cùng tag*. Giờ là
+  **cùng thể loại là chính, kênh chỉ là một cách chia sẻ thể loại đó, không phải cách tốt
+  hơn**: `weightSameChannel = weightSharedTags = 2.5`, cộng **theo từng tag trùng** nên
+  hai video trùng cả topic lẫn hashtag thắng một video chỉ trùng kênh.
+  Kèm **trần cứng 3 video/kênh** trong rail (`capPerChannel`).
+  Lý do đảo: giữ nguyên thứ tự cũ thì rail thành **20/20 một kênh** — đúng chủ đề nhưng
+  là ngõ cụt. Đo sau khi đảo: video *Entertainment* → **20/20 Entertainment qua 9 kênh**;
+  video *Music* → **20/20 Music qua 10 kênh**.
+  `capPerChannel` khác `applyChannelDiversity` (feed) ở chỗ **trần là tuyệt đối**, không
+  dồn phần bị giữ xuống cuối — với rail 20 phần tử thì "dồn xuống cuối" vẫn rơi vào trong
+  trang, và kênh bị chặn lặng lẽ chiếm 8 slot thay vì 3.
   **Thứ tự đó phải được ép bằng trọng số, không phải bằng lời hứa (2026-07-29).** Đo thật:
   xem một video *Entertainment* của kênh game → **20/20 gợi ý là nhạc SOOBIN**, không cùng
   kênh cũng không cùng chủ đề. Ba nguyên nhân cộng lại, mỗi cái tự nó vô hại:

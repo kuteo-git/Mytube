@@ -86,12 +86,60 @@ func applyDiscoveryQuota(ranked []domain.RankedVideo) []domain.RankedVideo {
 	return append(out, other...)
 }
 
-// Most videos from one channel allowed in a single window.
+// Most videos from one channel allowed in a single window of the feed.
 //
 // Three of twenty-four is a visible presence without being the page. A viewer
 // who watches one channel heavily should see it often; they should not have to
 // scroll past it to find out the library contains anything else.
 const maxPerChannelPerWindow = 3
+
+// The same limit for the up-next rail, which is twenty long.
+//
+// Relatedness ranks the channel of the video playing above everything else, so
+// without a cap the rail is that one channel and nothing else — measured at
+// 20 of 20. Capping it keeps the rail on topic while letting other channels
+// covering the same subject in: this library holds 140 Entertainment videos
+// across 26 channels and 218 Music videos across 35, so there is no shortage
+// of material that is related without being identical.
+const maxPerChannelUpNext = 3
+
+// capPerChannel takes the best-scoring videos subject to a hard per-channel
+// limit, and stops.
+//
+// Different from applyChannelDiversity, which reorders an entire ranking and
+// puts what it held back at the end. That is right for a feed, which is scrolled
+// and where nothing may become unreachable. It is wrong for a rail of twenty:
+// the held-back videos land inside the first twenty anyway, and the channel
+// being limited quietly takes eight of the slots instead of three.
+//
+// Here the limit is absolute. A rail shorter than requested is an honest
+// statement that the library holds little else on the subject — and on this
+// library it rarely happens, since Entertainment spans 26 channels and Music 35.
+func capPerChannel(
+	ranked []domain.RankedVideo, channelOf map[string]string, perChannel, limit int,
+) []domain.RankedVideo {
+	if perChannel <= 0 || limit <= 0 {
+		return ranked
+	}
+
+	out := make([]domain.RankedVideo, 0, limit)
+	seen := map[string]int{}
+	for _, video := range ranked {
+		if len(out) >= limit {
+			break
+		}
+		channel := channelOf[video.VideoID]
+		// An unknown channel cannot crowd anything out, so it is never limited.
+		if channel != "" {
+			if seen[channel] >= perChannel {
+				continue
+			}
+			seen[channel]++
+		}
+		out = append(out, video)
+	}
+	return out
+}
 
 // applyChannelDiversity limits how much of any one page a single channel can
 // occupy.
@@ -109,9 +157,9 @@ const maxPerChannelPerWindow = 3
 // Like the reason quota this reorders and never drops: a video pushed out of
 // one window appears in the next, so nothing becomes unreachable by scrolling.
 func applyChannelDiversity(
-	ranked []domain.RankedVideo, channelOf map[string]string,
+	ranked []domain.RankedVideo, channelOf map[string]string, perChannel, window int,
 ) []domain.RankedVideo {
-	if len(ranked) == 0 || len(channelOf) == 0 {
+	if len(ranked) == 0 || len(channelOf) == 0 || perChannel <= 0 || window <= 0 {
 		return ranked
 	}
 
@@ -130,7 +178,7 @@ func applyChannelDiversity(
 		channel := channelOf[video.VideoID]
 		// A video whose channel is unknown cannot crowd a channel out, so it is
 		// never held back.
-		if channel != "" && seen[channel] >= maxPerChannelPerWindow {
+		if channel != "" && seen[channel] >= perChannel {
 			return false
 		}
 		out = append(out, video)
@@ -140,7 +188,7 @@ func applyChannelDiversity(
 	}
 
 	for _, video := range ranked {
-		if inWindow >= quotaWindow {
+		if inWindow >= window {
 			startWindow()
 			// Held-back videos outscore everything still to come, so they lead
 			// the new window.
@@ -150,7 +198,7 @@ func applyChannelDiversity(
 				if !take(held) {
 					deferred = append(deferred, held)
 				}
-				if inWindow >= quotaWindow {
+				if inWindow >= window {
 					break
 				}
 			}

@@ -90,7 +90,7 @@ func TestChannelDiversityReordersAndNeverDrops(t *testing.T) {
 		channelOf[id] = "ch_one"
 	}
 
-	out := applyChannelDiversity(ranked, channelOf)
+	out := applyChannelDiversity(ranked, channelOf, maxPerChannelPerWindow, quotaWindow)
 
 	if len(out) != len(ranked) {
 		t.Fatalf("got %d videos back from %d", len(out), len(ranked))
@@ -120,7 +120,7 @@ func TestChannelDiversityLeavesAnAlreadyVariedPageAlone(t *testing.T) {
 		channelOf[id] = "ch_" + string(rune('a'+i))
 	}
 
-	out := applyChannelDiversity(ranked, channelOf)
+	out := applyChannelDiversity(ranked, channelOf, maxPerChannelPerWindow, quotaWindow)
 	for i := range ranked {
 		if out[i].VideoID != ranked[i].VideoID {
 			t.Fatalf("position %d changed from %q to %q with no channel repeated",
@@ -141,10 +141,68 @@ func TestVideosWithNoKnownChannelAreNeverHeldBack(t *testing.T) {
 		channelOf[id] = ""
 	}
 
-	out := applyChannelDiversity(ranked, channelOf)
+	out := applyChannelDiversity(ranked, channelOf, maxPerChannelPerWindow, quotaWindow)
 	for i := range ranked {
 		if out[i].VideoID != ranked[i].VideoID {
 			t.Fatalf("a video with no known channel was reordered at position %d", i)
 		}
+	}
+}
+
+func TestUpNextDrawsOnSeveralChannelsWithinTheSubject(t *testing.T) {
+	// Relatedness ranks the playing video's own channel above everything else,
+	// which on its own made the rail twenty of twenty from that channel: the
+	// right subject, but a dead end. The library has 26 channels covering
+	// Entertainment and 35 covering Music, so "related" can mean more than
+	// "identical".
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "current", ChannelID: "ch_home", Topics: []string{"Entertainment"}, AddedAt: now},
+	}
+	// Plenty from the current channel, so an uncapped rail would be all of it.
+	for i := 0; i < 20; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:   "home_" + string(rune('a'+i)),
+			ChannelID: "ch_home", Topics: []string{"Entertainment"}, AddedAt: now,
+		})
+	}
+	// Other channels covering the same subject. Ten of them, as the real
+	// library has: 26 channels carry Entertainment and 35 carry Music.
+	for i := 0; i < 30; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:   "peer_" + string(rune('a'+i%26)) + string(rune('a'+i/26)),
+			ChannelID: "ch_peer_" + string(rune('a'+i%10)),
+			Topics:    []string{"Entertainment"}, AddedAt: now,
+		})
+	}
+
+	ranker := NewRanker(
+		stubStore{profile: emptyProfile()},
+		stubFeatures{features: features},
+	)
+	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20)
+	if err != nil {
+		t.Fatalf("GetUpNext: %v", err)
+	}
+
+	channels := map[string]int{}
+	for _, v := range ranked {
+		for _, f := range features {
+			if f.VideoID == v.VideoID {
+				channels[f.ChannelID]++
+				break
+			}
+		}
+	}
+	if channels["ch_home"] > maxPerChannelUpNext {
+		t.Fatalf("the current channel took %d of %d slots, cap is %d",
+			channels["ch_home"], len(ranked), maxPerChannelUpNext)
+	}
+	if len(channels) < 4 {
+		t.Fatalf("up-next drew on only %d channels: %v", len(channels), channels)
+	}
+	// Still on subject: every suggestion shares the topic.
+	if len(ranked) == 0 {
+		t.Fatal("expected suggestions")
 	}
 }
