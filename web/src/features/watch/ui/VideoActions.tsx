@@ -6,6 +6,7 @@ import { useSetReaction, useSetSubscription } from '@/features/catalog/applicati
 import { Avatar } from '@/shared/ui/primitives'
 import { formatCount, formatSubscribers } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 /**
  * Channel row plus the action cluster.
@@ -28,7 +29,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           <Avatar
             hue={hueFromId(video.channel.id)}
             name={video.channel.name}
-            src={video.channel.avatarPath || undefined}
+            src={mediaURL(video.channel.avatarPath)}
             size={40}
           />
         </Link>

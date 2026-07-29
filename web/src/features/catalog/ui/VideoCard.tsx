@@ -7,6 +7,7 @@ import { useStreamPrefetch } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 /**
  * Grid card. No scale or shadow on hover: youtube.com does not do it and a
@@ -53,7 +54,7 @@ export function VideoCard({ video }: { video: Video }) {
         <Avatar
           hue={hueFromId(video.channel.id)}
           name={video.channel.name}
-          src={video.channel.avatarPath || undefined}
+          src={mediaURL(video.channel.avatarPath)}
           size={36}
         />
 

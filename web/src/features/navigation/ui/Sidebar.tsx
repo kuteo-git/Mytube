@@ -1,10 +1,11 @@
 import clsx from 'clsx'
-import { Activity, Bookmark, HardDrive, History, Home, Tag } from 'lucide-react'
+import { Activity, Home, Tag } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useSubscriptions, useTopics } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 type Icon = ComponentType<{ size?: number }>
 
@@ -25,9 +26,6 @@ interface Item {
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
   { icon: Activity, label: 'Activity', to: '/activity' },
-  { icon: History, label: 'History', to: '/history' },
-  { icon: Bookmark, label: 'Saved', to: '/saved' },
-  { icon: HardDrive, label: 'Storage', to: '/storage' },
 ]
 
 function Row({ item, mini }: { item: Item; mini: boolean }) {
@@ -96,20 +94,12 @@ export function Sidebar({ mini }: { mini: boolean }) {
                   )
                 }
               >
-                {channel.avatarPath ? (
-                  <img
-                    src={`/media/${channel.avatarPath}`}
-                    alt=""
-                    className="h-6 w-6 shrink-0 rounded-full object-cover"
-                  />
-                ) : (
-                  <Avatar
-                    hue={hueFromId(channel.id)}
-                    name={channel.name}
-                    src={channel.avatarPath || undefined}
-                    size={24}
-                  />
-                )}
+                <Avatar
+                  hue={hueFromId(channel.id)}
+                  name={channel.name}
+                  src={mediaURL(channel.avatarPath)}
+                  size={24}
+                />
                 <span className="clamp-1 text-sm">{channel.name}</span>
               </NavLink>
             ))}

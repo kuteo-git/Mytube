@@ -3,6 +3,7 @@ import { useSetSubscription } from '../application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { formatSubscribers } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 /**
  * Channel identity, matching the reference layout in Example/channel.png.
@@ -33,20 +34,12 @@ export function ChannelHeader({ channel, videoCount }: { channel: Channel; video
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-4">
-        {channel.avatarPath ? (
-          <img
-            src={`/media/${channel.avatarPath}`}
-            alt=""
-            className="h-24 w-24 rounded-full object-cover"
-          />
-        ) : (
-          <Avatar
-            hue={hueFromId(channel.id)}
-            name={channel.name}
-            src={channel.avatarPath || undefined}
-            size={96}
-          />
-        )}
+        <Avatar
+          hue={hueFromId(channel.id)}
+          name={channel.name}
+          src={mediaURL(channel.avatarPath)}
+          size={96}
+        />
 
         <div className="min-w-0">
           <h1 className="text-2xl font-medium">{channel.name}</h1>

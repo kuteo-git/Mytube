@@ -1,5 +1,6 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import { upgradedThumbnail } from '@/shared/lib/media'
+import { useEffect, useState } from 'react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
 /**
@@ -122,6 +123,24 @@ export function ThumbnailSurface({
   rounded?: string
   children?: ReactNode
 }) {
+  // Try the full-resolution still first, fall back to whatever was stored.
+  //
+  // Most rows still hold hqdefault at 480×360, from before the ingest learned
+  // to pick the largest — and a card is around 560 points wide, twice that on
+  // a retina screen, so they arrive visibly soft. Rewriting the URL upgrades
+  // every one of them without waiting for the library to be scanned again.
+  // maxresdefault does not exist for every video, which is what the fallback
+  // is for; only when both fail does the gradient stand alone.
+  const upgraded = upgradedThumbnail(src)
+  const [stage, setStage] = useState<'upgraded' | 'stored' | 'failed'>(
+    upgraded ? 'upgraded' : 'stored',
+  )
+  useEffect(() => {
+    setStage(upgradedThumbnail(src) ? 'upgraded' : 'stored')
+  }, [src])
+
+  const chosen = stage === 'upgraded' ? upgraded : stage === 'stored' ? src : undefined
+
   return (
     <div
       style={{
@@ -131,16 +150,17 @@ export function ThumbnailSurface({
       }}
       className={clsx('relative aspect-video w-full overflow-hidden', rounded)}
     >
-      {src && (
+      {chosen && (
         <img
-          src={src}
+          // Keyed on the URL so switching to the fallback actually reloads;
+          // React would otherwise reuse the element that had just failed.
+          key={chosen}
+          src={chosen}
           alt={alt ?? ''}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-cover"
-          onError={(e) => {
-            e.currentTarget.style.display = 'none'
-          }}
+          onError={() => setStage((s) => (s === 'upgraded' ? 'stored' : 'failed'))}
         />
       )}
       {children}
