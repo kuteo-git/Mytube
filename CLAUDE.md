@@ -178,6 +178,14 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 2. **Microservices + gRPC với người chưa từng làm gRPC** → P1 chậm hơn monolith đáng kể, thời gian đầu chủ yếu là setup. Đã chấp nhận với giá đã biết. Dùng **ConnectRPC** (curl debug được từng service) thay vì gRPC thuần.
 3. **HTTPS trên Smart TV chưa được chứng minh.** Phải thử sớm với TV thật, đừng để tới Phase 3.
 4. **yt-dlp hỏng định kỳ** khi YouTube đổi cơ chế → ingest phải xử lý lỗi tử tế + cho retry.
+5. **YouTube chặn theo IP nếu bắn quá nhiều full-metadata (ĐÃ XẢY RA 2026-07-29).**
+   Backfill topic chạy 8 luồng song song; tới ~800 video thì mọi full fetch trả về
+   *"Sign in to confirm you're not a bot"*. **Chặn này không giới hạn trong backfill** —
+   nó giết luôn `ResolveStream`, tức là **không phát được video nào chưa tải về đĩa**.
+   Flat listing (đường của scanner) **không** bị ảnh hưởng.
+   Bài học: full metadata fetch là thao tác **đắt và bị đếm**; flat listing thì không.
+   Giờ backfill chạy **1 luồng, cách nhau 4 giây, mặc định 200 video/lượt**, và **tự dừng
+   sau 15 lần hỏng liên tiếp** — cố đấm xuyên qua một cái chặn chỉ làm nó dài thêm.
 
 ## 8b. Build status (cập nhật 2026-07-28)
 
@@ -188,8 +196,12 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST ra ngoài.
 `scripts/dev.sh` chạy cả stack. `make check` = buf lint + tsc + go build.
 
-**Nội dung:** `topics.yaml` là nguồn duy nhất của feed. Scanner quét mỗi 12 tiếng
-(`POST /api/topics/refresh` để quét ngay). Hiện **280 video / 6 chủ đề / 7 nguồn**,
+**Nội dung:** `topics.yaml` là nguồn duy nhất của feed. Scanner quét **mỗi 1 tiếng**
+(đổi từ 12 tiếng ngày 2026-07-29; chỉnh qua `SCAN_INTERVAL`, vd `SCAN_INTERVAL=30m`).
+Chu kỳ này **chính là** độ tươi tối đa của feed — không gì đăng trên YouTube có thể
+xuất hiện ở đây trước khi một lượt quét nhìn thấy nó. Một lượt đi hết 63 nguồn mất
+~3 phút và dùng flat listing (rẻ); thứ đắt là fetch metadata từng video, mà scanner
+cố ý **không** làm (xem §8b). `POST /api/topics/refresh` để quét ngay. Hiện **280 video / 6 chủ đề / 7 nguồn**,
 quét hết trong ~8 giây, chỉ lấy metadata.
 
 **Phát ngay từ giây đầu, seek được ngay (2026-07-29):** bấm play → `/stream` liệt kê nguồn

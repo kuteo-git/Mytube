@@ -67,7 +67,11 @@ func newBackfillIngest(
 		channels:      map[string]domain.ExternalVideo{},
 		missingTopics: refs,
 	}
-	return New(previews, nil, nil, library, 1080, nil), library
+	ingest := New(previews, nil, nil, library, 1080, nil)
+	// The real pass waits four seconds between fetches to stay under YouTube's
+	// bot detection. Tests have no such audience.
+	ingest.backfillDelay = time.Microsecond
+	return ingest, library
 }
 
 func TestBackfillWritesTheYouTubeCategoryAsTheTopic(t *testing.T) {
@@ -175,5 +179,66 @@ func TestBackfillWithNothingToDoIsCheapAndSilent(t *testing.T) {
 	}
 	if len(previews.requested) != 0 {
 		t.Fatalf("fetched %v with nothing to do", previews.requested)
+	}
+}
+
+func TestBackfillStopsWhenEverythingStartsFailing(t *testing.T) {
+	// This is the regression for a real incident. An eight-worker pass fetched
+	// full metadata for eight hundred videos and YouTube began answering every
+	// request on this address with "Sign in to confirm you're not a bot" — a
+	// block that also took out stream resolution, so nothing outside the already
+	// downloaded files could be played. Pushing on through a block only extends
+	// it, so a run of consecutive failures has to end the pass.
+	failing := &previewDownloader{
+		byURL:   map[string]domain.ExternalVideo{},
+		failFor: map[string]bool{},
+	}
+	refs := make([]domain.VideoRef, 0, 200)
+	for i := 0; i < 200; i++ {
+		id := "v" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		refs = append(refs, domain.VideoRef{VideoID: id})
+		failing.failFor["https://www.youtube.com/watch?v="+id] = true
+	}
+	ingest, _ := newBackfillIngest(t, refs, failing)
+
+	result := runBackfillToCompletion(t, ingest, 0)
+
+	if result.Failed > backfillFailureCutoff+backfillConcurrency {
+		t.Fatalf("kept going through %d failures, cutoff is %d",
+			result.Failed, backfillFailureCutoff)
+	}
+	if len(failing.requested) > backfillFailureCutoff+backfillConcurrency {
+		t.Fatalf("made %d requests against a source refusing all of them",
+			len(failing.requested))
+	}
+}
+
+func TestBackfillSuccessResetsTheFailureRun(t *testing.T) {
+	// Dead videos are scattered through any listing. Only an unbroken run means
+	// the source has stopped answering; counting them cumulatively would abandon
+	// a healthy pass partway.
+	previews := &previewDownloader{
+		byURL:   map[string]domain.ExternalVideo{},
+		failFor: map[string]bool{},
+	}
+	refs := make([]domain.VideoRef, 0, 60)
+	for i := 0; i < 60; i++ {
+		id := "v" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		refs = append(refs, domain.VideoRef{VideoID: id})
+		url := "https://www.youtube.com/watch?v=" + id
+		// Every third video is dead — far more than reality, and still not a run.
+		if i%3 == 0 {
+			previews.failFor[url] = true
+		} else {
+			previews.byURL[url] = domain.ExternalVideo{ID: id, Category: "Music"}
+		}
+	}
+	ingest, _ := newBackfillIngest(t, refs, previews)
+
+	result := runBackfillToCompletion(t, ingest, 0)
+
+	if result.Updated+result.Failed != int32(len(refs)) {
+		t.Fatalf("processed %d of %d videos; scattered failures ended the pass early",
+			result.Updated+result.Failed, len(refs))
 	}
 }

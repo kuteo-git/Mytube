@@ -40,6 +40,23 @@ func env(key, fallback string) string {
 	return fallback
 }
 
+// envDuration reads a Go duration ("30m", "2h") from the environment.
+//
+// A bad value falls back rather than refusing to start: the scan interval is a
+// tuning knob, and a typo in it should not take the service that fills the
+// library offline.
+func envDuration(key string, fallback time.Duration) time.Duration {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(raw)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
@@ -108,16 +125,23 @@ func main() {
 
 	go usecase.NewWorker(ingest, logger).Run(ctx)
 
-	// The scanner is what fills the library. Twelve hours between passes keeps
-	// the request rate to the source negligible while still surfacing new
-	// uploads twice a day.
+	// The scanner is what fills the library, and the interval is the whole of
+	// how fresh the feed can be: nothing uploaded to YouTube can appear here
+	// before a pass has seen it.
+	//
+	// Hourly rather than twice a day. A pass walks 63 sources in about three
+	// minutes using flat listings, which are cheap — it is the per-video
+	// metadata fetch that is expensive, and the scanner deliberately does not do
+	// that (see CLAUDE.md §8b). So the cost of an hourly pass is three minutes
+	// of background work per hour, against a worst-case staleness that drops
+	// from twelve hours to one.
 	scanner := usecase.NewScanner(
 		topicfile.New(topicsPath),
 		downloader,
 		channels,
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		logger,
-		12*time.Hour,
+		envDuration("SCAN_INTERVAL", time.Hour),
 	)
 	go scanner.Run(ctx)
 

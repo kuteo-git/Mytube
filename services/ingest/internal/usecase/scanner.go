@@ -52,9 +52,14 @@ func NewScanner(
 	}
 }
 
-// Run scans once at startup, then on the configured interval. Twelve hours is
-// the intended cadence: new uploads do not appear by the minute, and a low rate
-// keeps this from looking like a bot to the source.
+// Run scans once at startup, then on the configured interval.
+//
+// The interval is the whole of how fresh the feed can be — nothing uploaded
+// upstream can appear here before a pass has seen it. Hourly is the default and
+// is affordable because a pass uses flat listings, which are cheap; the
+// expensive part is the per-video metadata fetch, which the scanner
+// deliberately does not do. Going much below an hour buys little, since uploads
+// do not arrive by the minute, and starts to look like a bot to the source.
 func (s *Scanner) Run(ctx context.Context) {
 	if _, err := s.ScanNow(ctx); err != nil {
 		s.logger.Error("initial scan", "error", err)

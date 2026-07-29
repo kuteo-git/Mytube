@@ -8,19 +8,37 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
-// Videos fetched at once. YouTube tolerates this comfortably from one address;
-// the ceiling here is politeness rather than throughput.
+// One video at a time, with a pause between each.
 //
-// Measured on this machine: sequentially a full metadata fetch costs ~2.5s per
-// video, which is why CLAUDE.md §8b removed it from the scan path — 40 new
-// videos turned an 8-second scan into 101 seconds. Eight at a time brings the
-// effective cost to 0.23s, which is what makes a one-off pass over a few
-// thousand videos a coffee break rather than an afternoon.
-const backfillConcurrency = 8
+// An earlier version ran eight concurrently and it worked beautifully for about
+// eight hundred videos, at which point YouTube began answering every full
+// metadata request on this address with "Sign in to confirm you're not a bot".
+// That block is not scoped to the backfill: it takes out stream resolution too,
+// so the cost of being impatient here was that nothing outside the already
+// downloaded files could be played at all.
+//
+// Hence a trickle. A backfill has no deadline — it is filling in metadata for
+// videos nobody is currently waiting on — so there is no reason for it to look
+// like anything other than someone browsing. Serial, spaced out, and slow
+// enough to run for days without being noticed.
+const backfillConcurrency = 1
 
-// How long the whole pass may run before giving up. A backfill is a background
-// convenience; it must not pin a worker forever if YouTube starts refusing.
-const backfillTimeout = 60 * time.Minute
+// Pause between fetches. Roughly a video every four seconds, which is about the
+// rate a person clicking through a channel would produce.
+const backfillDelay = 4 * time.Second
+
+// Videos per pass. Small on purpose: a bounded pass that finishes is worth more
+// than an unbounded one that gets throttled halfway, and the pass selects on
+// "has no topic" so calling it again continues where it stopped.
+const defaultBackfillLimit = 200
+
+// Consecutive failures that end a pass. A rate-limit block presents as every
+// request failing in a row, and pushing through it only lengthens the block.
+// Well above the handful of genuinely dead videos any listing contains.
+const backfillFailureCutoff = 15
+
+// How long a pass may run before giving up.
+const backfillTimeout = 2 * time.Hour
 
 // BackfillResult reports what a pass did, and whether it is still doing it.
 type BackfillResult struct {
@@ -102,22 +120,19 @@ func (s *backfillState) finish(now time.Time) {
 // running it again picks up whatever the last run did not finish, and running
 // it when there is nothing to do costs one listing.
 //
-// It returns as soon as the pass has started, not when it has finished.
+// It returns as soon as the pass has started, not when it has finished. A pass
+// of the default size takes over ten minutes by design (see backfillDelay), and
+// no HTTP request should be held open for that — an earlier synchronous version
+// died on the gateway's own ten-minute client deadline every time, while the
+// work carried on invisibly behind a request that had already reported failure.
+// Progress is polled instead.
 //
-// Finishing takes hours. Measured on this library: a burst of two dozen videos
-// runs at roughly four a second, but sustained the rate settles to about one
-// every four seconds — YouTube throttles, and no amount of concurrency argues
-// with that. Two thousand videos is therefore a couple of hours, and an HTTP
-// request cannot be held open for it: the gateway's client gives ingest ten
-// minutes, which is already generous for everything else it calls. An earlier
-// version of this ran synchronously and every full pass died on that deadline,
-// with the work continuing invisibly on the other side of a request that had
-// already reported failure.
-//
-// So the pass runs on a background context and progress is polled instead. One
-// at a time: a second pass would compete with the first for the same rate limit
-// and finish neither any sooner.
+// One pass at a time: a second would double the request rate against a source
+// that has already demonstrated it is counting.
 func (i *Ingest) BackfillTopics(_ context.Context, limit int32) (BackfillResult, error) {
+	if limit <= 0 {
+		limit = defaultBackfillLimit
+	}
 	if !i.backfill.begin(time.Now()) {
 		// Already running. Reporting the live state rather than an error means
 		// pressing the button twice is harmless and still answers the question
@@ -127,6 +142,15 @@ func (i *Ingest) BackfillTopics(_ context.Context, limit int32) (BackfillResult,
 
 	go i.runBackfill(limit)
 	return i.backfill.snapshot(), nil
+}
+
+// backfillPause is the gap between fetches, overridable so tests do not have to
+// wait out a rate limit that only exists for YouTube's benefit.
+func (i *Ingest) backfillPause() time.Duration {
+	if i.backfillDelay > 0 {
+		return i.backfillDelay
+	}
+	return backfillDelay
 }
 
 // BackfillStatus reports the current or most recent pass.
@@ -152,7 +176,12 @@ func (i *Ingest) runBackfill(limit int32) {
 	}
 
 	i.backfill.setExamined(int32(len(pending)))
-	i.logger.Info("topic backfill starting", "videos", len(pending), "workers", backfillConcurrency)
+	i.logger.Info("topic backfill starting", "videos", len(pending), "every", i.backfillPause())
+
+	// Consecutive failures, used to stop early. A block announces itself as
+	// every request failing at once, and continuing to hammer through it turns
+	// a temporary throttle into a longer one.
+	consecutiveFailures := 0
 
 	work := make(chan domain.VideoRef)
 	var waitGroup sync.WaitGroup
@@ -165,7 +194,26 @@ func (i *Ingest) runBackfill(limit int32) {
 				if ctx.Err() != nil {
 					return
 				}
-				i.backfill.record(i.backfillOne(ctx, ref))
+				ok := i.backfillOne(ctx, ref)
+				i.backfill.record(ok)
+
+				if ok {
+					consecutiveFailures = 0
+				} else {
+					consecutiveFailures++
+					if consecutiveFailures >= backfillFailureCutoff {
+						i.logger.Warn("topic backfill: too many consecutive failures, stopping",
+							"failures", consecutiveFailures)
+						cancel()
+						return
+					}
+				}
+
+				select {
+				case <-time.After(i.backfillPause()):
+				case <-ctx.Done():
+					return
+				}
 			}
 		}()
 	}

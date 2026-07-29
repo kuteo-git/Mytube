@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -24,6 +25,9 @@ type Ingest struct {
 	logger        *slog.Logger
 	resolved      *resolveCache
 	backfill      *backfillState
+	// Gap between backfill fetches. Zero means the package default; tests set
+	// it so they do not wait out a rate limit meant for YouTube.
+	backfillDelay time.Duration
 }
 
 func New(
