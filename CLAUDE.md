@@ -417,6 +417,14 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   phép chia đó âm thầm nói với nó rằng mọi thứ bị bỏ dở sớm đều xuất sắc. Giờ mẫu số lấy từ
   độ dài catalog. **Dữ liệu cũ vẫn còn lệch** — `BuildProfile` lấy `max()` nên giá trị bị
   thổi không tự phai đi.
+- **Trang kênh từng dùng handle thay vì id (sửa 2026-07-29)**: gateway đổi `UC…` id thành
+  `@handle` trước khi gọi `ListChannelUploads`, với lý do ghi trong comment là "YouTube giải
+  handle đáng tin hơn". **Ngược lại**: `UC…` id **chính là** `browseId` của InnerTube, không
+  cần giải; handle cần thêm một bước và bước đó hỏng thật (`@tinhte`, `@guinnessworldrecords`).
+  Hỏng → rơi xuống flat listing → **cả trang kênh không có ngày đăng và view = 0**, trong khi
+  kênh khác đủ cả. Sau khi ưu tiên id: **0/30 → 30/30**.
+  **Còn lại**: scanner vẫn dùng handle vì `topics.yaml` ghi nguồn dạng `youtube.com/@x/videos`,
+  nên video quét về từ những kênh handle-hỏng vẫn thiếu ngày/view.
 - **`--flat-playlist` thiếu rất nhiều field**: không có channel per-entry (dùng `playlist_uploader`),
   không có view count, không có ngày đăng, không có `thumbnail` (dùng mảng `thumbnails`).
   **Không được default ngày đăng = now** — nó hiện thành "1 minute ago" trên mọi card.

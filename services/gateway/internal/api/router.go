@@ -492,8 +492,7 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 
 	// Ask YouTube, not the catalog. A scan only ever brings in the newest few
 	// dozen uploads, so serving this page from the catalog would cap a channel
-	// at that number for reasons the viewer cannot see. The handle is preferred
-	// over the raw id because that is the form YouTube resolves most reliably.
+	// at that number for reasons the viewer cannot see.
 	channel, err := g.catalog.GetChannel(ctx, connect.NewRequest(&catalogv1.GetChannelRequest{
 		ChannelId: channelID,
 		UserId:    g.userID(r),
@@ -503,9 +502,19 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lookup := channel.Msg.GetChannel().GetHandle()
+	// The id, not the handle.
+	//
+	// This used to prefer the handle on the belief that YouTube resolved it
+	// more reliably. The opposite is true: a UC… id *is* an InnerTube browseId
+	// and needs no resolving, while a handle needs a lookup that fails often
+	// enough to matter — measured on @tinhte, where resolution failed and the
+	// listing fell back to a flat playlist. That fallback works, but flat
+	// listings carry neither upload dates nor view counts, so the whole channel
+	// page rendered with no date and zero views on every card while other
+	// channels showed both.
+	lookup := channelID
 	if lookup == "" {
-		lookup = channelID
+		lookup = channel.Msg.GetChannel().GetHandle()
 	}
 
 	resp, err := g.ingest.ListChannelUploads(ctx, connect.NewRequest(&ingestv1.ListChannelUploadsRequest{
