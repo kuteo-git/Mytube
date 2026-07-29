@@ -116,6 +116,16 @@ func (s *Server) GetScanStatus(_ context.Context, _ *connect.Request[ingestv1.Ge
 	}), nil
 }
 
+func (s *Server) CancelVideoDownload(ctx context.Context, req *connect.Request[ingestv1.CancelVideoDownloadRequest]) (*connect.Response[ingestv1.CancelVideoDownloadResponse], error) {
+	cancelled, err := s.ingest.CancelVideoDownload(ctx, req.Msg.GetVideoId())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.CancelVideoDownloadResponse{
+		Cancelled: int32(cancelled),
+	}), nil
+}
+
 func toConnectErr(err error) error {
 	switch {
 	case err == nil:

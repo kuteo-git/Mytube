@@ -293,6 +293,14 @@ source trong topics.yaml (có cursor lưu Postgres để lần sau tiếp tục 
 InnerTube (`/youtubei/v1/next`, tự viết, không có contract) → search theo tên chủ đề. Chỉ một
 lượt expand chạy cùng lúc.
 
+**Huỷ tải khi rời video (2026-07-29).** Bấm play xếp hàng một bản tải để lần sau xem từ đĩa —
+nhưng bản tải mà **không còn ai chờ** thì cũng là request tới YouTube không còn ai chờ, và
+địa chỉ này đã bị chặn một lần vì làm quá nhiều (§8 rủi ro 5). Rời trang watch →
+`POST /api/videos/{id}/download/cancel`. Gắn ở **cleanup của effect** nên phủ cả hai chiều
+rời đi: chuyển sang video kế, và đóng trang.
+**Đánh đổi đã biết:** `NoPart()` đang bật nên yt-dlp **không resume** — huỷ nửa chừng là mất
+sạch phần đã tải, lần sau bắt đầu lại từ 0.
+
 **Eviction:** catalog chạy sweep mỗi giờ (`services/catalog/internal/usecase/evict.go`).
 Vượt 20 GiB → xoá file media của LRU không pinned về 16 GiB, giữ metadata + thumbnail +
 history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.

@@ -45,6 +45,10 @@ service IngestService {
   rpc GetJob(GetJobRequest) returns (GetJobResponse);
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+  // Stops whatever transfer is running for a video. Called when a viewer leaves
+  // the watch page: a copy nobody is waiting for is a request to YouTube nobody
+  // is waiting for either, and too many of those get the address blocked.
+  rpc CancelVideoDownload(CancelVideoDownloadRequest) returns (CancelVideoDownloadResponse);
 
   // Brings new material into the library when the feed is running low. Metadata
   // only: nothing is downloaded until someone presses play.
@@ -259,3 +263,12 @@ message CancelJobRequest {
 }
 
 message CancelJobResponse {}
+
+message CancelVideoDownloadRequest {
+  string video_id = 1;
+}
+
+message CancelVideoDownloadResponse {
+  // How many transfers were stopped. Zero is the ordinary case and not an error.
+  int32 cancelled = 1;
+}

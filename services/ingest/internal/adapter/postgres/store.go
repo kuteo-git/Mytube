@@ -116,6 +116,25 @@ func (s *Store) Cancel(ctx context.Context, jobID string) error {
 	return nil
 }
 
+// CancelForVideo stops whatever transfer is running for a video, if any.
+//
+// By video rather than by job id because that is what the caller knows: the
+// watch page is leaving a video, and has no reason to have learned which job
+// happens to be carrying it.
+//
+// Not finding one is success. Leaving a video whose copy already landed, or
+// which never needed one, is the ordinary case — an error there would make the
+// common path noisy.
+func (s *Store) CancelForVideo(ctx context.Context, videoID string) (int, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE jobs SET state = 'CANCELLED', finished_at = now()
+		WHERE video_id = $1 AND state IN ('QUEUED', 'RUNNING')`, videoID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // Claim takes the oldest queued job. SKIP LOCKED lets several workers run
 // without ever handing the same job to two of them, and the lease means a
 // worker that dies mid-download does not strand its job forever.

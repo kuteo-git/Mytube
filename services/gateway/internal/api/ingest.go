@@ -270,6 +270,23 @@ func toBackfillDTO(msg *ingestv1.BackfillStatus) backfillDTO {
 	return dto
 }
 
+// handleCancelVideoDownload stops the transfer for a video, if one is running.
+//
+// Sent when the watch page is left. The copy exists so the video plays from
+// disk next time, but one nobody is waiting for is a request to YouTube nobody
+// is waiting for either — and this address has already been blocked once for
+// making too many of those.
+func (g *Gateway) handleCancelVideoDownload(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.ingest.CancelVideoDownload(r.Context(), connect.NewRequest(
+		&ingestv1.CancelVideoDownloadRequest{VideoId: r.PathValue("id")},
+	))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int32{"cancelled": resp.Msg.GetCancelled()})
+}
+
 func (g *Gateway) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	resp, err := g.ingest.GetScanStatus(r.Context(), connect.NewRequest(&ingestv1.GetScanStatusRequest{}))
 	if err != nil {

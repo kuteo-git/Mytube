@@ -1813,6 +1813,95 @@ func (*CancelJobResponse) Descriptor() ([]byte, []int) {
 	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{30}
 }
 
+type CancelVideoDownloadRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelVideoDownloadRequest) Reset() {
+	*x = CancelVideoDownloadRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelVideoDownloadRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelVideoDownloadRequest) ProtoMessage() {}
+
+func (x *CancelVideoDownloadRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelVideoDownloadRequest.ProtoReflect.Descriptor instead.
+func (*CancelVideoDownloadRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CancelVideoDownloadRequest) GetVideoId() string {
+	if x != nil {
+		return x.VideoId
+	}
+	return ""
+}
+
+type CancelVideoDownloadResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How many transfers were stopped. Zero is the ordinary case and not an error.
+	Cancelled     int32 `protobuf:"varint,1,opt,name=cancelled,proto3" json:"cancelled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelVideoDownloadResponse) Reset() {
+	*x = CancelVideoDownloadResponse{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelVideoDownloadResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelVideoDownloadResponse) ProtoMessage() {}
+
+func (x *CancelVideoDownloadResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelVideoDownloadResponse.ProtoReflect.Descriptor instead.
+func (*CancelVideoDownloadResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CancelVideoDownloadResponse) GetCancelled() int32 {
+	if x != nil {
+		return x.Cancelled
+	}
+	return 0
+}
+
 var File_ingest_v1_ingest_proto protoreflect.FileDescriptor
 
 const file_ingest_v1_ingest_proto_rawDesc = "" +
@@ -1941,14 +2030,18 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x04jobs\x18\x01 \x03(\v2\x0e.ingest.v1.JobR\x04jobs\")\n" +
 	"\x10CancelJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"\x13\n" +
-	"\x11CancelJobResponse*\x9a\x01\n" +
+	"\x11CancelJobResponse\"7\n" +
+	"\x1aCancelVideoDownloadRequest\x12\x19\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\";\n" +
+	"\x1bCancelVideoDownloadResponse\x12\x1c\n" +
+	"\tcancelled\x18\x01 \x01(\x05R\tcancelled*\x9a\x01\n" +
 	"\bJobState\x12\x19\n" +
 	"\x15JOB_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10JOB_STATE_QUEUED\x10\x01\x12\x15\n" +
 	"\x11JOB_STATE_RUNNING\x10\x02\x12\x17\n" +
 	"\x13JOB_STATE_SUCCEEDED\x10\x03\x12\x14\n" +
 	"\x10JOB_STATE_FAILED\x10\x04\x12\x17\n" +
-	"\x13JOB_STATE_CANCELLED\x10\x052\xff\a\n" +
+	"\x13JOB_STATE_CANCELLED\x10\x052\xe5\b\n" +
 	"\rIngestService\x12=\n" +
 	"\x06Search\x12\x18.ingest.v1.SearchRequest\x1a\x19.ingest.v1.SearchResponse\x12L\n" +
 	"\vEnsureVideo\x12\x1d.ingest.v1.EnsureVideoRequest\x1a\x1e.ingest.v1.EnsureVideoResponse\x12@\n" +
@@ -1960,7 +2053,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06Submit\x12\x18.ingest.v1.SubmitRequest\x1a\x19.ingest.v1.SubmitResponse\x12=\n" +
 	"\x06GetJob\x12\x18.ingest.v1.GetJobRequest\x1a\x19.ingest.v1.GetJobResponse\x12C\n" +
 	"\bListJobs\x12\x1a.ingest.v1.ListJobsRequest\x1a\x1b.ingest.v1.ListJobsResponse\x12F\n" +
-	"\tCancelJob\x12\x1b.ingest.v1.CancelJobRequest\x1a\x1c.ingest.v1.CancelJobResponse\x12R\n" +
+	"\tCancelJob\x12\x1b.ingest.v1.CancelJobRequest\x1a\x1c.ingest.v1.CancelJobResponse\x12d\n" +
+	"\x13CancelVideoDownload\x12%.ingest.v1.CancelVideoDownloadRequest\x1a&.ingest.v1.CancelVideoDownloadResponse\x12R\n" +
 	"\rExpandLibrary\x12\x1f.ingest.v1.ExpandLibraryRequest\x1a .ingest.v1.ExpandLibraryResponse\x12a\n" +
 	"\x12ListChannelUploads\x12$.ingest.v1.ListChannelUploadsRequest\x1a%.ingest.v1.ListChannelUploadsResponseB\x9f\x01\n" +
 	"\rcom.ingest.v1B\vIngestProtoP\x01Z<github.com/lucnguyen/local-youtube/gen/go/ingest/v1;ingestv1\xa2\x02\x03IXX\xaa\x02\tIngest.V1\xca\x02\tIngest\\V1\xe2\x02\x15Ingest\\V1\\GPBMetadata\xea\x02\n" +
@@ -1979,59 +2073,61 @@ func file_ingest_v1_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_ingest_v1_ingest_proto_goTypes = []any{
-	(JobState)(0),                      // 0: ingest.v1.JobState
-	(*ListChannelUploadsRequest)(nil),  // 1: ingest.v1.ListChannelUploadsRequest
-	(*SortOption)(nil),                 // 2: ingest.v1.SortOption
-	(*ListChannelUploadsResponse)(nil), // 3: ingest.v1.ListChannelUploadsResponse
-	(*ExpandLibraryRequest)(nil),       // 4: ingest.v1.ExpandLibraryRequest
-	(*ExpandLibraryResponse)(nil),      // 5: ingest.v1.ExpandLibraryResponse
-	(*ExternalVideo)(nil),              // 6: ingest.v1.ExternalVideo
-	(*SearchRequest)(nil),              // 7: ingest.v1.SearchRequest
-	(*SearchResponse)(nil),             // 8: ingest.v1.SearchResponse
-	(*EnsureVideoRequest)(nil),         // 9: ingest.v1.EnsureVideoRequest
-	(*EnsureVideoResponse)(nil),        // 10: ingest.v1.EnsureVideoResponse
-	(*BackfillTopicsRequest)(nil),      // 11: ingest.v1.BackfillTopicsRequest
-	(*GetBackfillStatusRequest)(nil),   // 12: ingest.v1.GetBackfillStatusRequest
-	(*BackfillStatus)(nil),             // 13: ingest.v1.BackfillStatus
-	(*BackfillTopicsResponse)(nil),     // 14: ingest.v1.BackfillTopicsResponse
-	(*GetBackfillStatusResponse)(nil),  // 15: ingest.v1.GetBackfillStatusResponse
-	(*RefreshRequest)(nil),             // 16: ingest.v1.RefreshRequest
-	(*RefreshResponse)(nil),            // 17: ingest.v1.RefreshResponse
-	(*GetScanStatusRequest)(nil),       // 18: ingest.v1.GetScanStatusRequest
-	(*GetScanStatusResponse)(nil),      // 19: ingest.v1.GetScanStatusResponse
-	(*ScanStatus)(nil),                 // 20: ingest.v1.ScanStatus
-	(*ResolveStreamRequest)(nil),       // 21: ingest.v1.ResolveStreamRequest
-	(*ResolveStreamResponse)(nil),      // 22: ingest.v1.ResolveStreamResponse
-	(*SubmitRequest)(nil),              // 23: ingest.v1.SubmitRequest
-	(*SubmitResponse)(nil),             // 24: ingest.v1.SubmitResponse
-	(*Job)(nil),                        // 25: ingest.v1.Job
-	(*GetJobRequest)(nil),              // 26: ingest.v1.GetJobRequest
-	(*GetJobResponse)(nil),             // 27: ingest.v1.GetJobResponse
-	(*ListJobsRequest)(nil),            // 28: ingest.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),           // 29: ingest.v1.ListJobsResponse
-	(*CancelJobRequest)(nil),           // 30: ingest.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),          // 31: ingest.v1.CancelJobResponse
-	(*timestamppb.Timestamp)(nil),      // 32: google.protobuf.Timestamp
+	(JobState)(0),                       // 0: ingest.v1.JobState
+	(*ListChannelUploadsRequest)(nil),   // 1: ingest.v1.ListChannelUploadsRequest
+	(*SortOption)(nil),                  // 2: ingest.v1.SortOption
+	(*ListChannelUploadsResponse)(nil),  // 3: ingest.v1.ListChannelUploadsResponse
+	(*ExpandLibraryRequest)(nil),        // 4: ingest.v1.ExpandLibraryRequest
+	(*ExpandLibraryResponse)(nil),       // 5: ingest.v1.ExpandLibraryResponse
+	(*ExternalVideo)(nil),               // 6: ingest.v1.ExternalVideo
+	(*SearchRequest)(nil),               // 7: ingest.v1.SearchRequest
+	(*SearchResponse)(nil),              // 8: ingest.v1.SearchResponse
+	(*EnsureVideoRequest)(nil),          // 9: ingest.v1.EnsureVideoRequest
+	(*EnsureVideoResponse)(nil),         // 10: ingest.v1.EnsureVideoResponse
+	(*BackfillTopicsRequest)(nil),       // 11: ingest.v1.BackfillTopicsRequest
+	(*GetBackfillStatusRequest)(nil),    // 12: ingest.v1.GetBackfillStatusRequest
+	(*BackfillStatus)(nil),              // 13: ingest.v1.BackfillStatus
+	(*BackfillTopicsResponse)(nil),      // 14: ingest.v1.BackfillTopicsResponse
+	(*GetBackfillStatusResponse)(nil),   // 15: ingest.v1.GetBackfillStatusResponse
+	(*RefreshRequest)(nil),              // 16: ingest.v1.RefreshRequest
+	(*RefreshResponse)(nil),             // 17: ingest.v1.RefreshResponse
+	(*GetScanStatusRequest)(nil),        // 18: ingest.v1.GetScanStatusRequest
+	(*GetScanStatusResponse)(nil),       // 19: ingest.v1.GetScanStatusResponse
+	(*ScanStatus)(nil),                  // 20: ingest.v1.ScanStatus
+	(*ResolveStreamRequest)(nil),        // 21: ingest.v1.ResolveStreamRequest
+	(*ResolveStreamResponse)(nil),       // 22: ingest.v1.ResolveStreamResponse
+	(*SubmitRequest)(nil),               // 23: ingest.v1.SubmitRequest
+	(*SubmitResponse)(nil),              // 24: ingest.v1.SubmitResponse
+	(*Job)(nil),                         // 25: ingest.v1.Job
+	(*GetJobRequest)(nil),               // 26: ingest.v1.GetJobRequest
+	(*GetJobResponse)(nil),              // 27: ingest.v1.GetJobResponse
+	(*ListJobsRequest)(nil),             // 28: ingest.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),            // 29: ingest.v1.ListJobsResponse
+	(*CancelJobRequest)(nil),            // 30: ingest.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),           // 31: ingest.v1.CancelJobResponse
+	(*CancelVideoDownloadRequest)(nil),  // 32: ingest.v1.CancelVideoDownloadRequest
+	(*CancelVideoDownloadResponse)(nil), // 33: ingest.v1.CancelVideoDownloadResponse
+	(*timestamppb.Timestamp)(nil),       // 34: google.protobuf.Timestamp
 }
 var file_ingest_v1_ingest_proto_depIdxs = []int32{
 	6,  // 0: ingest.v1.ListChannelUploadsResponse.videos:type_name -> ingest.v1.ExternalVideo
 	2,  // 1: ingest.v1.ListChannelUploadsResponse.sort_options:type_name -> ingest.v1.SortOption
-	32, // 2: ingest.v1.ExternalVideo.published_at:type_name -> google.protobuf.Timestamp
+	34, // 2: ingest.v1.ExternalVideo.published_at:type_name -> google.protobuf.Timestamp
 	6,  // 3: ingest.v1.SearchResponse.videos:type_name -> ingest.v1.ExternalVideo
-	32, // 4: ingest.v1.BackfillStatus.started_at:type_name -> google.protobuf.Timestamp
-	32, // 5: ingest.v1.BackfillStatus.finished_at:type_name -> google.protobuf.Timestamp
+	34, // 4: ingest.v1.BackfillStatus.started_at:type_name -> google.protobuf.Timestamp
+	34, // 5: ingest.v1.BackfillStatus.finished_at:type_name -> google.protobuf.Timestamp
 	13, // 6: ingest.v1.BackfillTopicsResponse.status:type_name -> ingest.v1.BackfillStatus
 	13, // 7: ingest.v1.GetBackfillStatusResponse.status:type_name -> ingest.v1.BackfillStatus
 	20, // 8: ingest.v1.RefreshResponse.status:type_name -> ingest.v1.ScanStatus
 	20, // 9: ingest.v1.GetScanStatusResponse.status:type_name -> ingest.v1.ScanStatus
-	32, // 10: ingest.v1.ScanStatus.started_at:type_name -> google.protobuf.Timestamp
-	32, // 11: ingest.v1.ResolveStreamResponse.expires_at:type_name -> google.protobuf.Timestamp
+	34, // 10: ingest.v1.ScanStatus.started_at:type_name -> google.protobuf.Timestamp
+	34, // 11: ingest.v1.ResolveStreamResponse.expires_at:type_name -> google.protobuf.Timestamp
 	25, // 12: ingest.v1.SubmitResponse.job:type_name -> ingest.v1.Job
 	0,  // 13: ingest.v1.Job.state:type_name -> ingest.v1.JobState
-	32, // 14: ingest.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	32, // 15: ingest.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	34, // 14: ingest.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	34, // 15: ingest.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
 	25, // 16: ingest.v1.GetJobResponse.job:type_name -> ingest.v1.Job
 	25, // 17: ingest.v1.ListJobsResponse.jobs:type_name -> ingest.v1.Job
 	7,  // 18: ingest.v1.IngestService.Search:input_type -> ingest.v1.SearchRequest
@@ -2045,23 +2141,25 @@ var file_ingest_v1_ingest_proto_depIdxs = []int32{
 	26, // 26: ingest.v1.IngestService.GetJob:input_type -> ingest.v1.GetJobRequest
 	28, // 27: ingest.v1.IngestService.ListJobs:input_type -> ingest.v1.ListJobsRequest
 	30, // 28: ingest.v1.IngestService.CancelJob:input_type -> ingest.v1.CancelJobRequest
-	4,  // 29: ingest.v1.IngestService.ExpandLibrary:input_type -> ingest.v1.ExpandLibraryRequest
-	1,  // 30: ingest.v1.IngestService.ListChannelUploads:input_type -> ingest.v1.ListChannelUploadsRequest
-	8,  // 31: ingest.v1.IngestService.Search:output_type -> ingest.v1.SearchResponse
-	10, // 32: ingest.v1.IngestService.EnsureVideo:output_type -> ingest.v1.EnsureVideoResponse
-	17, // 33: ingest.v1.IngestService.Refresh:output_type -> ingest.v1.RefreshResponse
-	14, // 34: ingest.v1.IngestService.BackfillTopics:output_type -> ingest.v1.BackfillTopicsResponse
-	15, // 35: ingest.v1.IngestService.GetBackfillStatus:output_type -> ingest.v1.GetBackfillStatusResponse
-	19, // 36: ingest.v1.IngestService.GetScanStatus:output_type -> ingest.v1.GetScanStatusResponse
-	22, // 37: ingest.v1.IngestService.ResolveStream:output_type -> ingest.v1.ResolveStreamResponse
-	24, // 38: ingest.v1.IngestService.Submit:output_type -> ingest.v1.SubmitResponse
-	27, // 39: ingest.v1.IngestService.GetJob:output_type -> ingest.v1.GetJobResponse
-	29, // 40: ingest.v1.IngestService.ListJobs:output_type -> ingest.v1.ListJobsResponse
-	31, // 41: ingest.v1.IngestService.CancelJob:output_type -> ingest.v1.CancelJobResponse
-	5,  // 42: ingest.v1.IngestService.ExpandLibrary:output_type -> ingest.v1.ExpandLibraryResponse
-	3,  // 43: ingest.v1.IngestService.ListChannelUploads:output_type -> ingest.v1.ListChannelUploadsResponse
-	31, // [31:44] is the sub-list for method output_type
-	18, // [18:31] is the sub-list for method input_type
+	32, // 29: ingest.v1.IngestService.CancelVideoDownload:input_type -> ingest.v1.CancelVideoDownloadRequest
+	4,  // 30: ingest.v1.IngestService.ExpandLibrary:input_type -> ingest.v1.ExpandLibraryRequest
+	1,  // 31: ingest.v1.IngestService.ListChannelUploads:input_type -> ingest.v1.ListChannelUploadsRequest
+	8,  // 32: ingest.v1.IngestService.Search:output_type -> ingest.v1.SearchResponse
+	10, // 33: ingest.v1.IngestService.EnsureVideo:output_type -> ingest.v1.EnsureVideoResponse
+	17, // 34: ingest.v1.IngestService.Refresh:output_type -> ingest.v1.RefreshResponse
+	14, // 35: ingest.v1.IngestService.BackfillTopics:output_type -> ingest.v1.BackfillTopicsResponse
+	15, // 36: ingest.v1.IngestService.GetBackfillStatus:output_type -> ingest.v1.GetBackfillStatusResponse
+	19, // 37: ingest.v1.IngestService.GetScanStatus:output_type -> ingest.v1.GetScanStatusResponse
+	22, // 38: ingest.v1.IngestService.ResolveStream:output_type -> ingest.v1.ResolveStreamResponse
+	24, // 39: ingest.v1.IngestService.Submit:output_type -> ingest.v1.SubmitResponse
+	27, // 40: ingest.v1.IngestService.GetJob:output_type -> ingest.v1.GetJobResponse
+	29, // 41: ingest.v1.IngestService.ListJobs:output_type -> ingest.v1.ListJobsResponse
+	31, // 42: ingest.v1.IngestService.CancelJob:output_type -> ingest.v1.CancelJobResponse
+	33, // 43: ingest.v1.IngestService.CancelVideoDownload:output_type -> ingest.v1.CancelVideoDownloadResponse
+	5,  // 44: ingest.v1.IngestService.ExpandLibrary:output_type -> ingest.v1.ExpandLibraryResponse
+	3,  // 45: ingest.v1.IngestService.ListChannelUploads:output_type -> ingest.v1.ListChannelUploadsResponse
+	32, // [32:46] is the sub-list for method output_type
+	18, // [18:32] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name
 	18, // [18:18] is the sub-list for extension extendee
 	0,  // [0:18] is the sub-list for field type_name
@@ -2078,7 +2176,7 @@ func file_ingest_v1_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ingest_v1_ingest_proto_rawDesc), len(file_ingest_v1_ingest_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   31,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

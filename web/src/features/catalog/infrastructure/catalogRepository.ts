@@ -46,6 +46,15 @@ export interface CatalogRepository {
    */
   getStream(videoId: string, prefetch?: boolean): Promise<StreamSources>
   listJobs(activeOnly: boolean): Promise<IngestJob[]>
+  /**
+   * Stops the transfer for a video, if one is running.
+   *
+   * Sent on leaving the watch page. Pressing play schedules a copy so the video
+   * is on disk next time, but a copy nobody is waiting for is a request to
+   * YouTube nobody is waiting for either — and too many of those get the
+   * address blocked.
+   */
+  cancelDownload(videoId: string): Promise<void>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
   setReaction(videoId: string, reaction: ReactionState): Promise<number>
@@ -303,6 +312,13 @@ export const httpCatalogRepository: CatalogRepository = {
   getStream(videoId, prefetch) {
     return request<StreamSources>(
       `/videos/${encodeURIComponent(videoId)}/stream${prefetch ? '?prefetch=1' : ''}`,
+    )
+  },
+
+  async cancelDownload(videoId) {
+    await request<{ cancelled: number }>(
+      `/videos/${encodeURIComponent(videoId)}/download/cancel`,
+      { method: 'POST' },
     )
   },
 

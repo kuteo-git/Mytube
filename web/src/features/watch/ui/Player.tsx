@@ -751,6 +751,26 @@ export function Player({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [playable, toggle, seekBy])
 
+  // Stop the transfer when this video is left.
+  //
+  // Pressing play schedules a copy so the video is on disk next time. But a
+  // copy nobody is waiting for is a request to YouTube nobody is waiting for
+  // either, and this address has already been blocked once for making too many
+  // of those — with the block taking out stream resolution as well, so nothing
+  // outside the already-downloaded files would play at all.
+  //
+  // Cleanup rather than a leave handler, so it covers both directions of
+  // leaving: moving to the next video, and closing the page.
+  useEffect(() => {
+    if (!videoId) return
+    return () => {
+      void repo.cancelDownload(videoId).catch(() => {
+        // A transfer that outlives its viewer is waste, not breakage. Failing
+        // to stop it must not surface anywhere.
+      })
+    }
+  }, [videoId])
+
   // Report progress on a timer and on unmount rather than on every timeupdate,
   // so a watch session costs a handful of requests instead of hundreds.
   useEffect(() => {

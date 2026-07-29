@@ -296,6 +296,30 @@ func (i *Ingest) CancelJob(ctx context.Context, jobID string) error {
 	return i.store.Cancel(ctx, jobID)
 }
 
+// CancelVideoDownload stops any transfer running for a video.
+//
+// Called when a viewer leaves the watch page. Pressing play schedules a copy so
+// the video is there next time, but a copy nobody is waiting for is a request
+// to YouTube nobody is waiting for either — and this library has already been
+// blocked once for making too many of those. A transfer that outlives the
+// interest in it is spend without a reason.
+//
+// Cancelling nothing is success: most departures are from a video that already
+// had its copy, or never needed one.
+func (i *Ingest) CancelVideoDownload(ctx context.Context, videoID string) (int, error) {
+	if videoID == "" {
+		return 0, fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+	cancelled, err := i.store.CancelForVideo(ctx, videoID)
+	if err != nil {
+		return 0, err
+	}
+	if cancelled > 0 {
+		i.logger.Info("download cancelled on leaving", "video", videoID, "jobs", cancelled)
+	}
+	return cancelled, nil
+}
+
 // categoryTopics turns YouTube's own category into the video's topic list.
 // Empty when the category is unknown, which leaves the video's existing topics
 // untouched rather than clearing them.

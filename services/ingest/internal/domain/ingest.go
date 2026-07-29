@@ -142,6 +142,9 @@ type JobStore interface {
 	Get(ctx context.Context, jobID string) (Job, error)
 	List(ctx context.Context, activeOnly bool, limit int32) ([]Job, error)
 	Cancel(ctx context.Context, jobID string) error
+	// CancelForVideo stops any queued or running transfer for a video and
+	// reports how many it stopped. Zero is not an error.
+	CancelForVideo(ctx context.Context, videoID string) (int, error)
 	// Claim atomically takes the oldest queued job and marks it running.
 	// Returns ErrNotFound when the queue is empty.
 	Claim(ctx context.Context, lease time.Duration) (Job, error)

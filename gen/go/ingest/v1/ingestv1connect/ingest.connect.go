@@ -60,6 +60,9 @@ const (
 	IngestServiceListJobsProcedure = "/ingest.v1.IngestService/ListJobs"
 	// IngestServiceCancelJobProcedure is the fully-qualified name of the IngestService's CancelJob RPC.
 	IngestServiceCancelJobProcedure = "/ingest.v1.IngestService/CancelJob"
+	// IngestServiceCancelVideoDownloadProcedure is the fully-qualified name of the IngestService's
+	// CancelVideoDownload RPC.
+	IngestServiceCancelVideoDownloadProcedure = "/ingest.v1.IngestService/CancelVideoDownload"
 	// IngestServiceExpandLibraryProcedure is the fully-qualified name of the IngestService's
 	// ExpandLibrary RPC.
 	IngestServiceExpandLibraryProcedure = "/ingest.v1.IngestService/ExpandLibrary"
@@ -98,6 +101,10 @@ type IngestServiceClient interface {
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// Stops whatever transfer is running for a video. Called when a viewer leaves
+	// the watch page: a copy nobody is waiting for is a request to YouTube nobody
+	// is waiting for either, and too many of those get the address blocked.
+	CancelVideoDownload(context.Context, *connect.Request[v1.CancelVideoDownloadRequest]) (*connect.Response[v1.CancelVideoDownloadResponse], error)
 	// Brings new material into the library when the feed is running low. Metadata
 	// only: nothing is downloaded until someone presses play.
 	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
@@ -184,6 +191,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("CancelJob")),
 			connect.WithClientOptions(opts...),
 		),
+		cancelVideoDownload: connect.NewClient[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse](
+			httpClient,
+			baseURL+IngestServiceCancelVideoDownloadProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("CancelVideoDownload")),
+			connect.WithClientOptions(opts...),
+		),
 		expandLibrary: connect.NewClient[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse](
 			httpClient,
 			baseURL+IngestServiceExpandLibraryProcedure,
@@ -201,19 +214,20 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
-	search             *connect.Client[v1.SearchRequest, v1.SearchResponse]
-	ensureVideo        *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
-	refresh            *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
-	backfillTopics     *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
-	getBackfillStatus  *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
-	getScanStatus      *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
-	resolveStream      *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
-	submit             *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
-	getJob             *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
-	listJobs           *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
-	cancelJob          *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
-	expandLibrary      *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
-	listChannelUploads *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
+	search              *connect.Client[v1.SearchRequest, v1.SearchResponse]
+	ensureVideo         *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
+	refresh             *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
+	backfillTopics      *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
+	getBackfillStatus   *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
+	getScanStatus       *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
+	resolveStream       *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
+	submit              *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
+	getJob              *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	listJobs            *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	cancelJob           *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	cancelVideoDownload *connect.Client[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse]
+	expandLibrary       *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
+	listChannelUploads  *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
 }
 
 // Search calls ingest.v1.IngestService.Search.
@@ -271,6 +285,11 @@ func (c *ingestServiceClient) CancelJob(ctx context.Context, req *connect.Reques
 	return c.cancelJob.CallUnary(ctx, req)
 }
 
+// CancelVideoDownload calls ingest.v1.IngestService.CancelVideoDownload.
+func (c *ingestServiceClient) CancelVideoDownload(ctx context.Context, req *connect.Request[v1.CancelVideoDownloadRequest]) (*connect.Response[v1.CancelVideoDownloadResponse], error) {
+	return c.cancelVideoDownload.CallUnary(ctx, req)
+}
+
 // ExpandLibrary calls ingest.v1.IngestService.ExpandLibrary.
 func (c *ingestServiceClient) ExpandLibrary(ctx context.Context, req *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error) {
 	return c.expandLibrary.CallUnary(ctx, req)
@@ -311,6 +330,10 @@ type IngestServiceHandler interface {
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// Stops whatever transfer is running for a video. Called when a viewer leaves
+	// the watch page: a copy nobody is waiting for is a request to YouTube nobody
+	// is waiting for either, and too many of those get the address blocked.
+	CancelVideoDownload(context.Context, *connect.Request[v1.CancelVideoDownloadRequest]) (*connect.Response[v1.CancelVideoDownloadResponse], error)
 	// Brings new material into the library when the feed is running low. Metadata
 	// only: nothing is downloaded until someone presses play.
 	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
@@ -393,6 +416,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("CancelJob")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceCancelVideoDownloadHandler := connect.NewUnaryHandler(
+		IngestServiceCancelVideoDownloadProcedure,
+		svc.CancelVideoDownload,
+		connect.WithSchema(ingestServiceMethods.ByName("CancelVideoDownload")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceExpandLibraryHandler := connect.NewUnaryHandler(
 		IngestServiceExpandLibraryProcedure,
 		svc.ExpandLibrary,
@@ -429,6 +458,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceListJobsHandler.ServeHTTP(w, r)
 		case IngestServiceCancelJobProcedure:
 			ingestServiceCancelJobHandler.ServeHTTP(w, r)
+		case IngestServiceCancelVideoDownloadProcedure:
+			ingestServiceCancelVideoDownloadHandler.ServeHTTP(w, r)
 		case IngestServiceExpandLibraryProcedure:
 			ingestServiceExpandLibraryHandler.ServeHTTP(w, r)
 		case IngestServiceListChannelUploadsProcedure:
@@ -484,6 +515,10 @@ func (UnimplementedIngestServiceHandler) ListJobs(context.Context, *connect.Requ
 
 func (UnimplementedIngestServiceHandler) CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.CancelJob is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) CancelVideoDownload(context.Context, *connect.Request[v1.CancelVideoDownloadRequest]) (*connect.Response[v1.CancelVideoDownloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.CancelVideoDownload is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error) {
