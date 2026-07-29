@@ -201,11 +201,15 @@ func (g *Gateway) handleRefreshTopics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toScanStatusDTO(resp.Msg.GetStatus()))
 }
 
-// handleBackfillTopics assigns YouTube's category to videos that have none.
+// handleBackfillTopics starts assigning YouTube's category to videos with none.
 //
-// Like a refresh this runs against the request context and answers when it is
-// finished: the caller pressed a button and wants the result, and a pass that
-// vanished into the background would give them no way to tell it worked.
+// Answers as soon as the pass has started, not when it finishes. A full pass
+// runs for hours — YouTube throttles sustained metadata fetches — and no HTTP
+// request survives that: an earlier synchronous version died on the gateway's
+// own ten-minute client deadline every time, while the work carried on
+// invisibly behind a request that had already reported failure. Progress is
+// polled from GET on the same path.
+//
 // `?limit=` bounds a run; the pass selects on "has no topic", so a bounded run
 // is resumed simply by asking again.
 func (g *Gateway) handleBackfillTopics(w http.ResponseWriter, r *http.Request) {
@@ -223,11 +227,42 @@ func (g *Gateway) handleBackfillTopics(w http.ResponseWriter, r *http.Request) {
 		g.writeErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int32{
-		"examined": resp.Msg.GetExamined(),
-		"updated":  resp.Msg.GetUpdated(),
-		"failed":   resp.Msg.GetFailed(),
-	})
+	writeJSON(w, http.StatusOK, toBackfillDTO(resp.Msg.GetStatus()))
+}
+
+// handleBackfillStatus reports the current or most recent pass, for polling.
+func (g *Gateway) handleBackfillStatus(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.ingest.GetBackfillStatus(r.Context(), connect.NewRequest(&ingestv1.GetBackfillStatusRequest{}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toBackfillDTO(resp.Msg.GetStatus()))
+}
+
+type backfillDTO struct {
+	Running    bool   `json:"running"`
+	Examined   int32  `json:"examined"`
+	Updated    int32  `json:"updated"`
+	Failed     int32  `json:"failed"`
+	StartedAt  string `json:"startedAt,omitempty"`
+	FinishedAt string `json:"finishedAt,omitempty"`
+}
+
+func toBackfillDTO(msg *ingestv1.BackfillStatus) backfillDTO {
+	dto := backfillDTO{
+		Running:  msg.GetRunning(),
+		Examined: msg.GetExamined(),
+		Updated:  msg.GetUpdated(),
+		Failed:   msg.GetFailed(),
+	}
+	if ts := msg.GetStartedAt(); ts != nil {
+		dto.StartedAt = ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if ts := msg.GetFinishedAt(); ts != nil {
+		dto.FinishedAt = ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	return dto
 }
 
 func (g *Gateway) handleScanStatus(w http.ResponseWriter, r *http.Request) {

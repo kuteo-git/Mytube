@@ -87,11 +87,27 @@ func (s *Server) BackfillTopics(ctx context.Context, req *connect.Request[ingest
 	if err != nil {
 		return nil, toConnectErr(err)
 	}
-	return connect.NewResponse(&ingestv1.BackfillTopicsResponse{
-		Examined: result.Examined,
-		Updated:  result.Updated,
-		Failed:   result.Failed,
-	}), nil
+	return connect.NewResponse(&ingestv1.BackfillTopicsResponse{Status: backfillToProto(result)}), nil
+}
+
+func (s *Server) GetBackfillStatus(_ context.Context, _ *connect.Request[ingestv1.GetBackfillStatusRequest]) (*connect.Response[ingestv1.GetBackfillStatusResponse], error) {
+	return connect.NewResponse(&ingestv1.GetBackfillStatusResponse{Status: backfillToProto(s.ingest.BackfillStatus())}), nil
+}
+
+func backfillToProto(r usecase.BackfillResult) *ingestv1.BackfillStatus {
+	out := &ingestv1.BackfillStatus{
+		Examined: r.Examined,
+		Updated:  r.Updated,
+		Failed:   r.Failed,
+		Running:  r.Running,
+	}
+	if !r.StartedAt.IsZero() {
+		out.StartedAt = timestamppb.New(r.StartedAt)
+	}
+	if !r.FinishedAt.IsZero() {
+		out.FinishedAt = timestamppb.New(r.FinishedAt)
+	}
+	return out
 }
 
 func (s *Server) GetScanStatus(_ context.Context, _ *connect.Request[ingestv1.GetScanStatusRequest]) (*connect.Response[ingestv1.GetScanStatusResponse], error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
@@ -36,6 +37,26 @@ func (p *previewDownloader) Preview(_ context.Context, url string) (domain.Exter
 	return video, nil
 }
 
+// runBackfillToCompletion starts a pass and waits for it, because the pass is
+// asynchronous by design: a full one runs for hours against YouTube's throttle,
+// far longer than any HTTP request can be held open.
+func runBackfillToCompletion(t *testing.T, ingest *Ingest, limit int32) BackfillResult {
+	t.Helper()
+	if _, err := ingest.BackfillTopics(context.Background(), limit); err != nil {
+		t.Fatalf("BackfillTopics: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		status := ingest.BackfillStatus()
+		if !status.Running {
+			return status
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("backfill did not finish within the deadline")
+	return BackfillResult{}
+}
+
 func newBackfillIngest(
 	t *testing.T, refs []domain.VideoRef, previews *previewDownloader,
 ) (*Ingest, *recordingLibrary) {
@@ -58,10 +79,7 @@ func TestBackfillWritesTheYouTubeCategoryAsTheTopic(t *testing.T) {
 		{VideoID: "abc"}, {VideoID: "def"},
 	}, previews)
 
-	result, err := ingest.BackfillTopics(context.Background(), 0)
-	if err != nil {
-		t.Fatalf("BackfillTopics: %v", err)
-	}
+	result := runBackfillToCompletion(t, ingest, 0)
 	if result.Updated != 2 || result.Failed != 0 {
 		t.Fatalf("updated=%d failed=%d, want 2 and 0", result.Updated, result.Failed)
 	}
@@ -82,9 +100,7 @@ func TestBackfillReconstructsTheWatchURLFromTheVideoID(t *testing.T) {
 	}}
 	ingest, _ := newBackfillIngest(t, []domain.VideoRef{{VideoID: "xyz"}}, previews)
 
-	if _, err := ingest.BackfillTopics(context.Background(), 0); err != nil {
-		t.Fatalf("BackfillTopics: %v", err)
-	}
+	runBackfillToCompletion(t, ingest, 0)
 	if len(previews.requested) != 1 ||
 		previews.requested[0] != "https://www.youtube.com/watch?v=xyz" {
 		t.Fatalf("requested %v", previews.requested)
@@ -100,9 +116,7 @@ func TestBackfillKeepsTheCatalogueIDEvenIfPreviewReportsAnother(t *testing.T) {
 	}}
 	ingest, library := newBackfillIngest(t, []domain.VideoRef{{VideoID: "wanted"}}, previews)
 
-	if _, err := ingest.BackfillTopics(context.Background(), 0); err != nil {
-		t.Fatalf("BackfillTopics: %v", err)
-	}
+	runBackfillToCompletion(t, ingest, 0)
 	if _, ok := library.topics["wanted"]; !ok {
 		t.Fatalf("wrote under the wrong id: %v", library.topics)
 	}
@@ -119,10 +133,7 @@ func TestBackfillSkipsVideosYouTubePublishesNoCategoryFor(t *testing.T) {
 	}}
 	ingest, library := newBackfillIngest(t, []domain.VideoRef{{VideoID: "plain"}}, previews)
 
-	result, err := ingest.BackfillTopics(context.Background(), 0)
-	if err != nil {
-		t.Fatalf("BackfillTopics: %v", err)
-	}
+	result := runBackfillToCompletion(t, ingest, 0)
 	if result.Updated != 0 || result.Failed != 1 {
 		t.Fatalf("updated=%d failed=%d, want 0 and 1", result.Updated, result.Failed)
 	}
@@ -144,10 +155,7 @@ func TestBackfillCarriesOnPastAnUnavailableVideo(t *testing.T) {
 		{VideoID: "gone"}, {VideoID: "good"},
 	}, previews)
 
-	result, err := ingest.BackfillTopics(context.Background(), 0)
-	if err != nil {
-		t.Fatalf("a dead video must not fail the pass: %v", err)
-	}
+	result := runBackfillToCompletion(t, ingest, 0)
 	if result.Examined != 2 || result.Updated != 1 || result.Failed != 1 {
 		t.Fatalf("examined=%d updated=%d failed=%d, want 2, 1, 1",
 			result.Examined, result.Updated, result.Failed)
@@ -161,10 +169,7 @@ func TestBackfillWithNothingToDoIsCheapAndSilent(t *testing.T) {
 	previews := &previewDownloader{byURL: map[string]domain.ExternalVideo{}}
 	ingest, _ := newBackfillIngest(t, nil, previews)
 
-	result, err := ingest.BackfillTopics(context.Background(), 0)
-	if err != nil {
-		t.Fatalf("BackfillTopics: %v", err)
-	}
+	result := runBackfillToCompletion(t, ingest, 0)
 	if result.Examined != 0 || result.Updated != 0 {
 		t.Fatalf("expected an empty result, got %+v", result)
 	}

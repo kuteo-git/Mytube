@@ -43,6 +43,9 @@ const (
 	// IngestServiceBackfillTopicsProcedure is the fully-qualified name of the IngestService's
 	// BackfillTopics RPC.
 	IngestServiceBackfillTopicsProcedure = "/ingest.v1.IngestService/BackfillTopics"
+	// IngestServiceGetBackfillStatusProcedure is the fully-qualified name of the IngestService's
+	// GetBackfillStatus RPC.
+	IngestServiceGetBackfillStatusProcedure = "/ingest.v1.IngestService/GetBackfillStatus"
 	// IngestServiceGetScanStatusProcedure is the fully-qualified name of the IngestService's
 	// GetScanStatus RPC.
 	IngestServiceGetScanStatusProcedure = "/ingest.v1.IngestService/GetScanStatus"
@@ -81,7 +84,11 @@ type IngestServiceClient interface {
 	// in arrives without a topic and stays invisible to topic filters. Fetching
 	// categories during a scan was tried and measured, and made scanning
 	// unusable; this is the same work as a separate pass that runs when asked.
+	// Returns as soon as the pass has started. Finishing takes hours — YouTube
+	// throttles sustained metadata fetches — so progress is polled through
+	// GetBackfillStatus rather than awaited.
 	BackfillTopics(context.Context, *connect.Request[v1.BackfillTopicsRequest]) (*connect.Response[v1.BackfillTopicsResponse], error)
+	GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.GetBackfillStatusResponse], error)
 	GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error)
 	// Resolves a directly playable upstream URL. This is what makes "click and
 	// watch" feel instant; the URL is short-lived and must not be persisted.
@@ -133,6 +140,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceBackfillTopicsProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("BackfillTopics")),
+			connect.WithClientOptions(opts...),
+		),
+		getBackfillStatus: connect.NewClient[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse](
+			httpClient,
+			baseURL+IngestServiceGetBackfillStatusProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("GetBackfillStatus")),
 			connect.WithClientOptions(opts...),
 		),
 		getScanStatus: connect.NewClient[v1.GetScanStatusRequest, v1.GetScanStatusResponse](
@@ -192,6 +205,7 @@ type ingestServiceClient struct {
 	ensureVideo        *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
 	refresh            *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	backfillTopics     *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
+	getBackfillStatus  *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
 	getScanStatus      *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
 	resolveStream      *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
 	submit             *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
@@ -220,6 +234,11 @@ func (c *ingestServiceClient) Refresh(ctx context.Context, req *connect.Request[
 // BackfillTopics calls ingest.v1.IngestService.BackfillTopics.
 func (c *ingestServiceClient) BackfillTopics(ctx context.Context, req *connect.Request[v1.BackfillTopicsRequest]) (*connect.Response[v1.BackfillTopicsResponse], error) {
 	return c.backfillTopics.CallUnary(ctx, req)
+}
+
+// GetBackfillStatus calls ingest.v1.IngestService.GetBackfillStatus.
+func (c *ingestServiceClient) GetBackfillStatus(ctx context.Context, req *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.GetBackfillStatusResponse], error) {
+	return c.getBackfillStatus.CallUnary(ctx, req)
 }
 
 // GetScanStatus calls ingest.v1.IngestService.GetScanStatus.
@@ -278,7 +297,11 @@ type IngestServiceHandler interface {
 	// in arrives without a topic and stays invisible to topic filters. Fetching
 	// categories during a scan was tried and measured, and made scanning
 	// unusable; this is the same work as a separate pass that runs when asked.
+	// Returns as soon as the pass has started. Finishing takes hours — YouTube
+	// throttles sustained metadata fetches — so progress is polled through
+	// GetBackfillStatus rather than awaited.
 	BackfillTopics(context.Context, *connect.Request[v1.BackfillTopicsRequest]) (*connect.Response[v1.BackfillTopicsResponse], error)
+	GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.GetBackfillStatusResponse], error)
 	GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error)
 	// Resolves a directly playable upstream URL. This is what makes "click and
 	// watch" feel instant; the URL is short-lived and must not be persisted.
@@ -326,6 +349,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceBackfillTopicsProcedure,
 		svc.BackfillTopics,
 		connect.WithSchema(ingestServiceMethods.ByName("BackfillTopics")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceGetBackfillStatusHandler := connect.NewUnaryHandler(
+		IngestServiceGetBackfillStatusProcedure,
+		svc.GetBackfillStatus,
+		connect.WithSchema(ingestServiceMethods.ByName("GetBackfillStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceGetScanStatusHandler := connect.NewUnaryHandler(
@@ -386,6 +415,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceRefreshHandler.ServeHTTP(w, r)
 		case IngestServiceBackfillTopicsProcedure:
 			ingestServiceBackfillTopicsHandler.ServeHTTP(w, r)
+		case IngestServiceGetBackfillStatusProcedure:
+			ingestServiceGetBackfillStatusHandler.ServeHTTP(w, r)
 		case IngestServiceGetScanStatusProcedure:
 			ingestServiceGetScanStatusHandler.ServeHTTP(w, r)
 		case IngestServiceResolveStreamProcedure:
@@ -425,6 +456,10 @@ func (UnimplementedIngestServiceHandler) Refresh(context.Context, *connect.Reque
 
 func (UnimplementedIngestServiceHandler) BackfillTopics(context.Context, *connect.Request[v1.BackfillTopicsRequest]) (*connect.Response[v1.BackfillTopicsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.BackfillTopics is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) GetBackfillStatus(context.Context, *connect.Request[v1.GetBackfillStatusRequest]) (*connect.Response[v1.GetBackfillStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.GetBackfillStatus is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) GetScanStatus(context.Context, *connect.Request[v1.GetScanStatusRequest]) (*connect.Response[v1.GetScanStatusResponse], error) {

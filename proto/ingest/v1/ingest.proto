@@ -29,7 +29,11 @@ service IngestService {
   // in arrives without a topic and stays invisible to topic filters. Fetching
   // categories during a scan was tried and measured, and made scanning
   // unusable; this is the same work as a separate pass that runs when asked.
+  // Returns as soon as the pass has started. Finishing takes hours — YouTube
+  // throttles sustained metadata fetches — so progress is polled through
+  // GetBackfillStatus rather than awaited.
   rpc BackfillTopics(BackfillTopicsRequest) returns (BackfillTopicsResponse);
+  rpc GetBackfillStatus(GetBackfillStatusRequest) returns (GetBackfillStatusResponse);
   rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
 
   // Resolves a directly playable upstream URL. This is what makes "click and
@@ -140,13 +144,29 @@ message BackfillTopicsRequest {
   int32 limit = 1;
 }
 
-message BackfillTopicsResponse {
+message GetBackfillStatusRequest {}
+
+// BackfillStatus is the progress of a topic backfill pass, whether it is still
+// running or has finished.
+message BackfillStatus {
+  // Total the pass set out to process. Zero before one has started.
   int32 examined = 1;
   int32 updated = 2;
   // Videos whose metadata could not be fetched: private, removed or
   // region-blocked. Reported rather than retried — asking again will not make
   // them fetchable.
   int32 failed = 3;
+  bool running = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp finished_at = 6;
+}
+
+message BackfillTopicsResponse {
+  BackfillStatus status = 1;
+}
+
+message GetBackfillStatusResponse {
+  BackfillStatus status = 1;
 }
 
 message RefreshRequest {}

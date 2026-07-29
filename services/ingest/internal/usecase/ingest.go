@@ -23,6 +23,7 @@ type Ingest struct {
 	newID         func() string
 	logger        *slog.Logger
 	resolved      *resolveCache
+	backfill      *backfillState
 }
 
 func New(
@@ -45,6 +46,7 @@ func New(
 		newID:         uuid.NewString,
 		logger:        logger,
 		resolved:      newResolveCache(),
+		backfill:      &backfillState{},
 	}
 }
 
