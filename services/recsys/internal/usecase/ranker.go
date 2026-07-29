@@ -52,6 +52,22 @@ const (
 	// Same-channel dominance is what makes the "Next" rail feel coherent.
 	weightSameChannel = 2.5
 	weightSharedTags  = 1.5
+	// How much of everything that is not relatedness survives into up-next.
+	//
+	// The feed asks "what should I watch?", where taste and quality should
+	// dominate. Up-next asks "what follows this?", where they must not: at full
+	// strength, channel affinity plus topic affinity plus retention outweigh a
+	// shared topic, and the rail stops being about the video on screen.
+	//
+	// Retention is damped along with taste, and on this library that matters
+	// more than it looks. It is meant to be a property of the video — how far
+	// the average viewer gets — but averaged across a single user it is that
+	// user's own history again, so leaving it undamped counted the same
+	// preference twice.
+	//
+	// A third leaves these able to order two equally related candidates without
+	// overturning relatedness itself.
+	upNextTasteDamping = 0.35
 	// Larger than same-channel and shared-tags together, deliberately. Those
 	// two are what make a pair of videos by one artist each other's top
 	// suggestion, and nothing smaller than their sum can break the loop.
@@ -310,7 +326,13 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 		fraction, opened := profile.WatchedFraction[f.VideoID]
 		switch {
 		case isContinueWatching(fraction):
-			score += weightContinueWatching
+			// Damped like the rest of the taste terms. An unfinished video is a
+			// strong claim on attention in the feed, where the question is what
+			// to watch; it is a poor answer to what follows the video already
+			// playing. Undamped it outscored same-channel and same-topic
+			// combined, which is how an Entertainment video came to be followed
+			// by four half-watched songs.
+			score += upNextTasteDamping * weightContinueWatching
 			reason = domain.ReasonContinueWatching
 		case isWatched(fraction):
 			// Already-seen videos sink but stay available.
@@ -335,9 +357,18 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 			score -= penaltyRecentlyWatched
 		}
 
-		score += weightChannelAffinity * watchAffinity.Channels[f.ChannelID]
-		score += weightTopicAffinity * watchAffinity.TopicScore(f)
-		score += weightRetention * float64(retention[f.VideoID])
+		// General taste, damped hard.
+		//
+		// This rail answers "what follows this?", and CLAUDE.md §6 fixes the
+		// order it must answer in: same channel, then same tag, then general
+		// affinity. At full weight affinity does not come third — it wins.
+		// Observed: an Entertainment video from a gaming channel offered twenty
+		// consecutive music videos, none sharing its channel or its topic,
+		// purely because that is what this viewer watches most. Damping keeps
+		// taste as the tie-breaker the charter says it is.
+		score += upNextTasteDamping * (weightChannelAffinity*watchAffinity.Channels[f.ChannelID] +
+			weightTopicAffinity*watchAffinity.TopicScore(f) +
+			weightRetention*float64(retention[f.VideoID]))
 
 		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})
 	}
@@ -402,12 +433,21 @@ func buildWatchAffinity(
 }
 
 // TopicScore is how much this viewer's watching argues for a video's topics.
+//
+// The strongest matching topic, not the sum of them. Summing rewards a video
+// for carrying more labels than its neighbours rather than for being a better
+// match: anything tagged both "Music" and "Vietnamese music" collected the
+// affinity twice and outscored an equally well-liked video that happened to
+// carry one topic. Each axis is already normalised to 0..1, and taking the best
+// match keeps this one bounded by that.
 func (a WatchAffinity) TopicScore(f domain.VideoFeatures) float64 {
-	var score float64
+	var best float64
 	for _, topic := range f.Topics {
-		score += a.Topics[strings.ToLower(topic)]
+		if score := a.Topics[strings.ToLower(topic)]; score > best {
+			best = score
+		}
 	}
-	return score
+	return best
 }
 
 // normaliseToUnit divides a map by its largest value, in place.

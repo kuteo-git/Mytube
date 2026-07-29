@@ -261,3 +261,59 @@ func TestUpNextStillOffersSomethingWatchedLongAgo(t *testing.T) {
 		t.Fatalf("a video watched long ago was dropped from up-next: %+v", ranked)
 	}
 }
+
+func TestUpNextPrefersRelatednessOverGeneralTaste(t *testing.T) {
+	// Observed: an Entertainment video from a gaming channel offered twenty
+	// consecutive music videos, none sharing its channel or its topic, purely
+	// because music is what this viewer watches most. CLAUDE.md §6 fixes the
+	// order — same channel, then same tag, then general affinity — and at full
+	// weight affinity did not come third, it won.
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "current", ChannelID: "ch_games", Topics: []string{"Entertainment"}, AddedAt: now},
+		// Shares the current video's topic, from a channel never watched.
+		{VideoID: "related", ChannelID: "ch_other_games", Topics: []string{"Entertainment"}, AddedAt: now},
+		// The viewer's favourite channel and topic, unrelated to what is playing.
+		{VideoID: "favourite", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now},
+		// What builds that taste.
+		{VideoID: "history_1", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "history_2", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now},
+	}
+	profile := profileWith(map[string]float32{"history_1": 1.0, "history_2": 1.0})
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20)
+	if err != nil {
+		t.Fatalf("GetUpNext: %v", err)
+	}
+	if len(ranked) == 0 {
+		t.Fatal("expected suggestions")
+	}
+	if ranked[0].VideoID != "related" {
+		t.Fatalf("up-next led with %q; a video sharing the current topic must beat "+
+			"one that merely matches general taste", ranked[0].VideoID)
+	}
+}
+
+func TestTopicAffinityTakesTheBestMatchNotTheSum(t *testing.T) {
+	// Summing rewards a video for carrying more labels rather than for being a
+	// better match: "Music" plus "Vietnamese music" collected the affinity twice
+	// and outscored an equally well-liked video with one topic.
+	features := []domain.VideoFeatures{
+		{VideoID: "seen", ChannelID: "ch", Topics: []string{"Music", "Vietnamese music"}},
+	}
+	affinity := buildWatchAffinity(features, map[string]float32{"seen": 1.0})
+
+	twoLabels := affinity.TopicScore(domain.VideoFeatures{
+		Topics: []string{"Music", "Vietnamese music"},
+	})
+	oneLabel := affinity.TopicScore(domain.VideoFeatures{Topics: []string{"Music"}})
+
+	if twoLabels > oneLabel {
+		t.Fatalf("two labels scored %.2f against one at %.2f; labels are being counted, "+
+			"not matched", twoLabels, oneLabel)
+	}
+	if twoLabels > 1.0 {
+		t.Fatalf("topic affinity %.2f exceeds the 0..1 each axis is normalised to", twoLabels)
+	}
+}

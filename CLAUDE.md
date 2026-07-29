@@ -158,7 +158,20 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 - **Dislike**: loại khỏi feed và up-next, **vẫn tìm được qua search và trang kênh**.
   Không phải tính năng phải làm — nó đúng sẵn nhờ ranh giới service: catalog không
   nhìn thấy signal của recsys nên không thể lọc theo nó.
-- **`Next` (watch page):** cùng kênh > cùng tag > affinity chung; loại video vừa xem
+- **`Next` (watch page):** cùng kênh > cùng tag > affinity chung; loại video vừa xem.
+  **Thứ tự đó phải được ép bằng trọng số, không phải bằng lời hứa (2026-07-29).** Đo thật:
+  xem một video *Entertainment* của kênh game → **20/20 gợi ý là nhạc SOOBIN**, không cùng
+  kênh cũng không cùng chủ đề. Ba nguyên nhân cộng lại, mỗi cái tự nó vô hại:
+  - `TopicScore` **cộng dồn** qua các chủ đề của một video → video gắn cả `Music` lẫn
+    `Vietnamese music` ăn affinity **hai lần**. Sửa: lấy **chủ đề khớp mạnh nhất**, không cộng.
+  - `weightContinueWatching` (+3.0) ở up-next **lớn hơn cùng-kênh + cùng-chủ-đề** (2.5+1.5).
+    "Xem dở" trả lời câu *"tôi nên xem gì"*, không phải *"cái này tiếp theo là gì"*.
+  - `weightRetention` với **1 user** chính là lịch sử của user đó → đếm sở thích lần hai.
+
+  Sửa chung: ở **up-next**, mọi thứ **không phải quan hệ với video đang xem** (affinity kênh,
+  affinity chủ đề, retention, continue-watching) bị nhân `upNextTasteDamping = 0.35`.
+  Quan hệ đứng đầu, sở thích chỉ phá hoà. Feed **không** damp — ở đó sở thích *nên* thắng.
+  Đánh đổi đã biết: up-next giờ gần như toàn cùng một kênh, đúng như charter chốt.
 
 > **Giới hạn đã ghi nhận:** với ~150 video tự tay import, recommendation chỉ là *sắp xếp lại tủ đồ của chính mình* — không tạo được cảm giác khám phá của YouTube. Muốn có, phải làm feed kéo video ngoài vào (Phase 3).
 
