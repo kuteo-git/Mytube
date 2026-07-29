@@ -344,6 +344,14 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 - **Lỗi phụ đề từng giết cả video**: gộp `--write-subs` vào lệnh tải → 429 ở endpoint caption
   làm yt-dlp exit 1 → mất video đã tải xong. Giờ tách lượt riêng, không được gộp lại.
+- **Nâng chất lượng từng phụ thuộc vào một danh sách bị cắt (sửa 2026-07-29)**: player
+  biết "file local đã về" bằng cách tìm job trong `GET /api/ingest/jobs` — danh sách
+  **mọi** job, giới hạn 50, sắp theo `created_at DESC`. Một loạt job vừa xong (một lần
+  quét, hay vài video mở liên tiếp) đẩy job **đang chạy** rớt khỏi danh sách → player
+  không bao giờ thấy nó xong → **hình kẹt ở 360p cho tới khi reload trang**, và thanh
+  tiến độ cũng không hiện. Sửa hai chỗ: (a) `List` sắp việc **chưa xong lên trước** rồi
+  mới tới recency; (b) **`useStream` tự poll 5 giây/lần khi chưa có `local`** — endpoint
+  đó mới là nơi biết "phát bằng gì", nên việc nâng tầng không được phụ thuộc vào hàng đợi.
 - **`watch_ratio` từng bị thổi phồng ngay tại nguồn (sửa 2026-07-29)**: client tính
   `element.currentTime / element.duration`, mà stream remux fMP4 khai báo độ dài **đang lớn
   dần** — nên phân số tiến về 1.0 ngay từ giây đầu. Ca đo được: video 243s xem tới 0:41 bị

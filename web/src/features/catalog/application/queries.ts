@@ -145,6 +145,15 @@ export function useStream(videoId: string | undefined) {
     enabled: Boolean(videoId),
     staleTime: 5 * 60_000,
     retry: false,
+    // Keep asking until the downloaded file exists, then stop.
+    //
+    // This endpoint is the authority on how a video can be played, so the
+    // upgrade from the low-resolution upstream to the local copy should follow
+    // from asking it — not, as it did, from spotting the download in a capped
+    // list of every job the queue has ever run. A handful of finished jobs
+    // pushed the running one off that list and the picture simply stayed at
+    // 360p, with no way to tell from the page that anything was wrong.
+    refetchInterval: (query) => (query.state.data?.local ? false : 5000),
   })
 }
 

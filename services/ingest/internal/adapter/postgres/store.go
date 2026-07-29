@@ -75,7 +75,16 @@ func (s *Store) List(ctx context.Context, activeOnly bool, limit int32) ([]domai
 	if activeOnly {
 		query += ` WHERE state IN ('QUEUED', 'RUNNING')`
 	}
-	query += ` ORDER BY created_at DESC LIMIT $1`
+	// Unfinished work first, then by recency.
+	//
+	// Recency alone is not enough once the queue has any history. The list is
+	// capped, and a burst of completed jobs — a scan, or several videos opened
+	// in a row — pushes an older running transfer off the end of it. The player
+	// watches this list to know when a copy has landed, so a download that
+	// falls off simply never appears to progress or finish: the picture stays
+	// on the low-resolution upstream until the page is reloaded, which is
+	// exactly how it was found.
+	query += ` ORDER BY (state IN ('QUEUED', 'RUNNING')) DESC, created_at DESC LIMIT $1`
 
 	rows, err := s.pool.Query(ctx, query, limit)
 	if err != nil {
