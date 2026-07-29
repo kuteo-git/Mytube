@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import {
   Captions,
   CaptionsOff,
@@ -91,6 +92,15 @@ const REMUX_PATIENCE_MS = 45_000
  * noticeable on music.
  */
 const HANDOVER_OVERSHOOT_TOLERANCE = 1
+
+/**
+ * How long the controls stay up after the pointer stops moving.
+ *
+ * Three seconds is what youtube.com uses and what people therefore expect. Long
+ * enough to travel from the picture to the seek bar without it vanishing on the
+ * way, short enough that it does not sit over a film.
+ */
+const CONTROLS_IDLE_MS = 3000
 
 /**
  * The height the full-quality tiers are labelled with when they do not say.
@@ -303,6 +313,39 @@ export function Player({
   const [autoplayEnabled, setAutoplayEnabled] = useAutoplayPreference()
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
+
+  // Whether the chrome is on screen.
+  //
+  // Hidden while a video plays undisturbed, as on youtube.com: the controls are
+  // there to be used, and a bar across the picture the whole time is a bar
+  // across the picture the whole time.
+  const [pointerActive, setPointerActive] = useState(true)
+  // Menus keep the chrome up on their own. A viewer who opens the quality menu
+  // and then stops moving the mouse must not have it taken away mid-decision.
+  const [openMenus, setOpenMenus] = useState(0)
+  const hideTimerRef = useRef(0)
+
+  // Menus report opening and closing so the chrome can stay up while one is
+  // in use. Counted rather than a boolean: two menus can be mounted, and the
+  // second closing must not clear a flag the first still needs.
+  const trackMenu = useCallback((open: boolean) => {
+    setOpenMenus((count) => Math.max(0, count + (open ? 1 : -1)))
+  }, [])
+
+  const wakeControls = useCallback(() => {
+    setPointerActive(true)
+    window.clearTimeout(hideTimerRef.current)
+    hideTimerRef.current = window.setTimeout(
+      () => setPointerActive(false),
+      CONTROLS_IDLE_MS,
+    )
+  }, [])
+
+  // Paused counts as attention: nothing is being obscured, and the controls are
+  // the only thing on screen worth looking at.
+  const controlsVisible = pointerActive || !playing || openMenus > 0
+
+  useEffect(() => () => window.clearTimeout(hideTimerRef.current), [])
 
   // Position to restore after the source swaps from upstream to the local copy.
   //
@@ -787,15 +830,34 @@ export function Player({
 
   return (
     <div
-      className="relative aspect-video w-full overflow-hidden rounded-xl bg-black"
+      className={clsx(
+        'group/player relative aspect-video w-full overflow-hidden rounded-xl bg-black',
+        // The cursor goes with the chrome. Leaving an arrow sitting on a film is
+        // the same distraction in miniature.
+        !controlsVisible && 'cursor-none',
+      )}
       style={
         playable
           ? undefined
           : { background: `radial-gradient(120% 90% at 50% 30%, hsl(${hue} 40% 22%), #000 70%)` }
       }
+      onPointerMove={wakeControls}
+      onPointerDown={wakeControls}
+      // Leaving takes the chrome immediately rather than after the delay: the
+      // pointer is demonstrably elsewhere, so there is nothing to wait for.
+      onPointerLeave={() => {
+        window.clearTimeout(hideTimerRef.current)
+        setPointerActive(false)
+      }}
     >
       {tier && tier.name !== 'local' && (
-        <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-badge px-2.5 py-1.5 text-xs font-medium">
+        <div
+          className={clsx(
+            'absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-badge px-2.5 py-1.5 text-xs font-medium',
+            'transition-opacity duration-200 ease-out',
+            controlsVisible ? 'opacity-100' : 'opacity-0',
+          )}
+        >
           {/* States the resolution actually on screen, because it is about to
               change: the opening source is deliberately a low one, and the
               downloaded file replaces it mid-playback. A viewer who sees a soft
@@ -1066,7 +1128,23 @@ export function Player({
         </p>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-2">
+      {/* focus-within, not just the pointer: tabbing to a control has to bring
+          it back, or the chrome becomes unreachable from the keyboard — and the
+          keyboard is what the eventual television remote maps onto. */}
+      <div
+        className={clsx(
+          'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-2',
+          'transition-opacity duration-200 ease-out',
+          'focus-within:pointer-events-auto focus-within:opacity-100',
+          // Invisible does not mean absent: without this, a click where the bar
+          // used to be still lands on whatever button is under the pointer, and
+          // the viewer pauses or mutes something they cannot see. Falling
+          // through to the picture instead makes that click do what a click on
+          // a bare video should — and the container wakes the chrome anyway.
+          controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
+        )}
+        onFocusCapture={wakeControls}
+      >
         <SeekBar
           position={position}
           duration={duration}
@@ -1157,7 +1235,12 @@ export function Player({
           )}
 
           {captionsAvailable && (
-            <CaptionMenu tracks={subtitles} active={captions} onSelect={setCaptions} />
+            <CaptionMenu
+              tracks={subtitles}
+              active={captions}
+              onSelect={setCaptions}
+              onOpenChange={trackMenu}
+            />
           )}
 
           {/* Only offered when there is more than one way to play the video.
@@ -1168,6 +1251,7 @@ export function Player({
               choice={quality}
               options={qualityOptions}
               playingLabel={tierLabel}
+              onOpenChange={trackMenu}
               onSelect={(next) => {
                 // Choosing again is a fresh decision: a viewer who asks for
                 // 1080p after auto gave up on it should get an attempt, not
@@ -1211,14 +1295,25 @@ function QualityMenu({
   options,
   playingLabel,
   onSelect,
+  onOpenChange,
 }: {
   choice: QualityChoice
   options: { value: QualityChoice; label: string }[]
   /** What is on screen right now, shown beside Auto so it is never a mystery. */
   playingLabel: string
   onSelect: (next: QualityChoice) => void
+  /** Lets the player keep its chrome up while this is open. */
+  onOpenChange: (open: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    onOpenChange(open)
+    // Closing on unmount too, or a menu left open while the video changes
+    // would pin the controls on screen for good.
+    return () => {
+      if (open) onOpenChange(false)
+    }
+  }, [open, onOpenChange])
 
   return (
     <div className="relative">
@@ -1264,12 +1359,21 @@ function CaptionMenu({
   tracks,
   active,
   onSelect,
+  onOpenChange,
 }: {
   tracks: SubtitleTrack[]
   active: string | null
   onSelect: (language: string | null) => void
+  /** Lets the player keep its chrome up while this is open. */
+  onOpenChange: (open: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    onOpenChange(open)
+    return () => {
+      if (open) onOpenChange(false)
+    }
+  }, [open, onOpenChange])
   const Icon = active ? Captions : CaptionsOff
 
   return (
