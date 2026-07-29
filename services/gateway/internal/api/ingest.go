@@ -32,15 +32,37 @@ type jobDTO struct {
 	CreatedAt       string  `json:"createdAt"`
 }
 
-type streamDTO struct {
-	// "local" when the file is on disk, "remux" while the copy downloads:
-	// YouTube's only muxed format is capped at 360p, so full resolution before
-	// the download lands means muxing the adaptive streams on the fly.
-	Source    string `json:"source"`
-	URL       string `json:"url"`
-	Height    int32  `json:"height,omitempty"`
-	MimeType  string `json:"mimeType,omitempty"`
+// sourceDTO is one way of playing a video.
+type sourceDTO struct {
+	URL      string `json:"url"`
+	Height   int32  `json:"height,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+	// False only for the muxed-on-the-fly stream, which has no index. The
+	// player uses this to decide whether the seek bar can be trusted.
+	Seekable  bool   `json:"seekable"`
 	ExpiresAt string `json:"expiresAt,omitempty"`
+}
+
+// streamDTO lists every way a video can be played right now, rather than
+// picking one.
+//
+// The gateway used to choose, and could not keep choosing well: the best source
+// depends on how far the viewer has watched and how much has buffered, and only
+// the player knows either. So the gateway states what exists and the player
+// climbs — from an instant low-resolution start to the downloaded file — which
+// is also why one request can answer for the whole session instead of being
+// re-asked at every transition.
+type streamDTO struct {
+	// Progressive upstream, playable and seekable immediately but capped at
+	// 360p by what YouTube still publishes muxed. Absent when the video offers
+	// no progressive format at all.
+	Instant *sourceDTO `json:"instant,omitempty"`
+	// Full resolution, muxed on the fly from the adaptive tracks. No index, so
+	// not seekable. Absent once the local file exists.
+	Remux *sourceDTO `json:"remux,omitempty"`
+	// The downloaded file. Present only once it is on disk; the best source
+	// whenever it is there.
+	Local *sourceDTO `json:"local,omitempty"`
 }
 
 func toJobDTO(j *ingestv1.Job) jobDTO {
@@ -232,12 +254,16 @@ func (g *Gateway) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleStream is the single place the client asks "how do I play this?".
-// Answering here rather than in the browser means the switch from upstream to
-// local copy is invisible to the UI: it just asks again and gets a local path.
+// handleStream lists every way the client could play a video right now.
+//
+// `?prefetch=1` means the viewer has only hovered a card, not pressed play: the
+// upstream URL is resolved and cached so a later press starts instantly, but no
+// download is scheduled. Without that split, drifting the mouse across a feed
+// would fill a disk that has a hard ceiling.
 func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	videoID := r.PathValue("id")
+	prefetch := r.URL.Query().Get("prefetch") == "1"
 
 	video, err := g.catalog.GetVideo(ctx, connect.NewRequest(&catalogv1.GetVideoRequest{
 		VideoId: videoID,
@@ -250,32 +276,57 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	v := video.Msg.GetVideo()
 
 	if v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_READY && v.GetMediaPath() != "" {
-		// Cached. Touching last_accessed_at happens through watch progress, so
-		// the eviction sweep sees actual viewing rather than mere resolution.
+		// On disk: nothing upstream is worth offering beside it. Touching
+		// last_accessed_at happens through watch progress, so the eviction
+		// sweep sees actual viewing rather than mere resolution.
 		writeJSON(w, http.StatusOK, streamDTO{
-			Source:   "local",
-			URL:      "/media/" + v.GetMediaPath(),
-			MimeType: "video/mp4",
+			Local: &sourceDTO{
+				URL:      "/media/" + v.GetMediaPath(),
+				MimeType: "video/mp4",
+				Seekable: true,
+			},
 		})
 		return
 	}
 
 	// Pressing play is what schedules a download. Enqueue is idempotent per
 	// source URL, so repeated resolves attach to the running job.
-	if v.GetSourceUrl() != "" {
+	if !prefetch && v.GetSourceUrl() != "" {
 		go g.ensureDownload(v.GetSourceUrl(), g.userID(r))
 	}
 
-	// Until the copy lands, play a stream muxed on the fly. YouTube's only
-	// directly playable format is itag 18 at 360p; everything above it is
-	// adaptive, so full resolution now means putting video and audio back
-	// together ourselves. Seeking is limited to what has buffered until the
-	// local file arrives — the price of a stream with no index.
-	writeJSON(w, http.StatusOK, streamDTO{
-		Source:   "remux",
-		URL:      "/api/videos/" + url.PathEscape(videoID) + "/remux",
-		MimeType: "video/mp4",
-	})
+	out := streamDTO{
+		// Full resolution before the copy lands means muxing YouTube's separate
+		// video and audio tracks ourselves. No index, so no seeking — which is
+		// why it is the fallback rather than the opening move.
+		Remux: &sourceDTO{
+			URL:      "/api/videos/" + url.PathEscape(videoID) + "/remux",
+			MimeType: "video/mp4",
+			Seekable: false,
+		},
+	}
+
+	// The instant tier: a progressive upstream file the browser can range-request
+	// on its own. Resolution is capped at 360p, and it is offered first anyway —
+	// it starts in milliseconds and seeks properly, and the download that
+	// replaces it usually lands within seconds.
+	if resolved, resolveErr := g.ingest.ResolveStream(ctx, connect.NewRequest(&ingestv1.ResolveStreamRequest{
+		VideoId: videoID,
+	})); resolveErr != nil {
+		// Not every video publishes a progressive format. That is not an error
+		// worth failing the request over — it just means starting at the remux.
+		g.logger.Info("no instant source", "video", videoID, "error", resolveErr)
+	} else {
+		out.Instant = &sourceDTO{
+			URL:       resolved.Msg.GetUrl(),
+			Height:    resolved.Msg.GetHeight(),
+			MimeType:  resolved.Msg.GetMimeType(),
+			Seekable:  true,
+			ExpiresAt: resolved.Msg.GetExpiresAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
+		}
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleRemuxStream proxies the muxed stream from ingest, which owns yt-dlp and

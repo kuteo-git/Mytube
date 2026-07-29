@@ -3,6 +3,7 @@ import { CheckCircle, MoreVertical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
+import { useStreamPrefetch } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
@@ -13,9 +14,20 @@ import { hueFromId } from '@/shared/lib/hue'
  */
 export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
+  const { prefetch, cancel } = useStreamPrefetch()
 
   return (
-    <article className="group flex flex-col gap-3">
+    // Resolving an upstream URL takes over a second, and it is the whole of the
+    // delay before a video starts. Resting on a card is a good enough signal to
+    // spend it here, where nobody is waiting, instead of after the click.
+    // Focus counts too, so a keyboard or a remote gets the same head start.
+    <article
+      className="group flex flex-col gap-3"
+      onPointerEnter={() => prefetch(video.id)}
+      onPointerLeave={cancel}
+      onFocus={() => prefetch(video.id)}
+      onBlur={cancel}
+    >
       <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
         <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailPath} alt={video.title}>
           {video.mediaState === 'DOWNLOADING' && (

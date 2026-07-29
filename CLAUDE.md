@@ -42,13 +42,23 @@ Media library **tự host** chạy trên Mac M4 tại nhà. `yt-dlp` là **công
 
 ## 4. Media pipeline
 
-**Phase 1 (hybrid — chốt lại ngày 2026-07-28):** video chưa có trên đĩa vẫn xem được ngay.
-`GET /api/videos/{id}/stream` trả `local` (file trên đĩa) hoặc `upstream` (URL yt-dlp resolve,
-ngắn hạn) trong lúc job tải nền chạy. Tải xong thì endpoint tự đổi sang `local`.
-Không transcode, không HLS. Player = `<video>` trần.
+**Phase 1 (hybrid — chốt lại lần 3 ngày 2026-07-29):** video chưa có trên đĩa vẫn xem được ngay.
+`GET /api/videos/{id}/stream` **liệt kê** mọi nguồn phát được lúc này thay vì chọn hộ:
 
-> **Giới hạn đã biết:** chỉ progressive (muxed) format mới phát thẳng được, nên lần xem đầu
-> qua upstream thường thấp hơn 1080p. Player có nhãn báo rõ.
+| Nguồn | Là gì | Seek |
+|---|---|---|
+| `local` | file trên đĩa. Có thì không cần nguồn nào khác | ✅ |
+| `instant` | URL progressive thô của YouTube (itag 18, 360p), browser tự range-request | ✅ |
+| `remux` | mux trực tiếp 2 luồng adaptive → fMP4. Chỉ dùng khi video **không có** progressive | ❌ |
+
+Player leo tầng: `instant` phát trong ~17ms → đổi sang `local` khi tải xong.
+Không transcode, không HLS.
+
+`?prefetch=1` = mới rê chuột lên card, chưa bấm play: resolve và cache URL để lần bấm sau
+tức thì, **không** xếp hàng tải. Thiếu vạch này thì lướt feed sẽ làm đầy ổ đĩa có trần cứng.
+
+> **Đánh đổi cố ý:** lần xem đầu là 360p. Đó là giá của "phát ngay + seek được ngay", và nó
+> chỉ kéo dài vài giây (xem số đo ở §8b). Player có nhãn báo rõ đang ở tầng nào.
 
 **Phase 2 (nâng cấp rẻ):** tải thêm rendition 720p **có sẵn của YouTube** + remux `-c copy` sang HLS → ABR thật với CPU ≈ 0.
 > Ghi nhớ: **"không transcode" ≠ "không ABR"**. Cái đắt là *encode lại*; YouTube đã encode sẵn nhiều mức.
@@ -148,8 +158,14 @@ Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST
 (`POST /api/topics/refresh` để quét ngay). Hiện **280 video / 6 chủ đề / 7 nguồn**,
 quét hết trong ~8 giây, chỉ lấy metadata.
 
-**Phát 1080p ngay từ giây đầu (2026-07-28):** bấm play → `GET /api/videos/{id}/stream` trả `local` hoặc `remux`,
-đồng thời **tự enqueue tải nền**. Tải xong thì client tự đổi sang bản local.
+**Phát ngay từ giây đầu, seek được ngay (2026-07-29):** bấm play → `/stream` liệt kê nguồn
+(§4), player phát `instant` trong ~17ms và **tự enqueue tải nền**; tải xong thì đổi sang
+`local`. Rê chuột lên card 250ms → prefetch resolve, nên lúc bấm play thường **không còn
+request nào** phải chờ. Cache resolve trong ingest: đo thật **1.85s → 0.008s**.
+**Seek luôn bật** trừ khi đang ở tầng `remux`.
+**Hai thẻ `<video>`** chồng nhau: nguồn mới nạp và seek sẵn ở thẻ ẩn tại mốc
+`hiện tại + 0.6s`, tới mốc thì hoán đổi opacity. Không chớp đen, không tua lùi. Đổi một thẻ
+tại chỗ chính là thứ gây chớp trước đây.
 Player: autoplay (bị chặn thì muted + nút bật tiếng), click = play/pause,
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
 được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
@@ -180,12 +196,34 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 ### Chưa làm — thứ tự đề xuất khi làm tiếp
 
+1. **Playback chặng 2** (chặng 1 xong 2026-07-29): chèn lại tầng `remux` 1080p vào **giữa**
+   `instant` và `local` — dựng song song ở thẻ ẩn, lên khi sẵn sàng; seek khi đang ở tầng đó
+   = mở lại ffmpeg với `-ss` (chỉ bắn khi **thả tay** khỏi thanh seek, không bắn lúc đang kéo);
+   thêm menu **Auto / 1080p / 360p**, trong đó **ghim là lệnh** — chọn tay thì không tự tụt
+   tầng, Auto thì hụt hơi là về 360p và không thử lại. Chỉ 3 mục: 480p/720p tốn đúng 2.2s
+   ffmpeg như 1080p nên không mua thêm được gì.
 2. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
    **Đang là link chết trong sidebar.**
 
 ### Quyết định đã bị đảo trong quá trình làm
 
+- **"Stream không seek được" → SAI, đã đo lại (2026-07-29)**: mục dưới từng kết luận stream
+  remux "không seek được cho tới khi file local tải xong". Sai. `ffmpeg -ss 120` trên URL
+  adaptive seek bằng HTTP range và ra fragment đầu sau **2.1s** — đắt, không phải bất khả thi.
+  Ghi lại để không ai trích lại câu cũ như một ràng buộc vật lý.
+- **Số đo nền, máy này, mạng này (2026-07-29)** — mọi quyết định playback phải đối chiếu:
+  | | |
+  |---|---|
+  | `yt-dlp -J` một lần (ra **cả** itag18 lẫn adaptive) | 1.37s |
+  | itag 18: TTFB / range | 17ms / `206` — seek native |
+  | remux → fragment đầu | 2.2s (chưa kể resolve) |
+  | **tải trọn 1080p, video 289s/42MB, cold** | **2.3s** |
+  | **tải trọn 1080p, video 850s/67MB, cold** | **7.6s** |
+  | đọc tuần tự 1 kết nối | bị bóp còn 3.15 Mbps (yt-dlp không dính) |
+
+  **Hệ quả**: tải xong toàn bộ file còn **nhanh hơn** remux đẻ ra fragment đầu. Nên remux
+  bị đẩy xuống làm dự phòng cho video không có progressive, không còn là đường chính.
 - **Serve-while-downloading → remux fMP4**: charter từng chốt "gateway serve file **đang được
   ghi**, trả 206 cho phần đã có". **Bất khả thi, đã đo**: tải 1080p là 2 luồng riêng
   (`1080p.f399.mp4` + `1080p.f251.webm`) rồi mới merge — file `1080p.mp4` **không tồn tại**

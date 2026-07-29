@@ -9,9 +9,10 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
+import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
 import { useStream } from '@/features/catalog/application/queries'
 import { useDownloadProgress } from '@/features/catalog/application/download'
 import {
@@ -34,6 +35,49 @@ import { formatDuration } from '@/shared/lib/format'
 const PROGRESS_INTERVAL_MS = 15_000
 const SEEK_STEP_SECONDS = 5
 
+/**
+ * How far ahead of the playhead a replacement source is prepared.
+ *
+ * The new element is loaded and seeked to a mark slightly in the future, then
+ * the swap happens when playback actually reaches that mark. Preparing at the
+ * current position instead would mean jumping backwards by however long the
+ * loading took — a second or two of already-watched video, which on music is
+ * unmissable.
+ */
+const SWAP_LEAD_SECONDS = 0.6
+
+type TierName = 'instant' | 'remux' | 'local'
+
+interface Tier {
+  name: TierName
+  url: string
+  seekable: boolean
+  height?: number
+}
+
+/**
+ * Picks the best available source.
+ *
+ * Order is not preference between equals: the local file is complete and
+ * seekable, the instant upstream is seekable but low resolution, and the muxed
+ * stream is full resolution but cannot be seeked at all and takes seconds to
+ * produce its first frame. Anything seekable beats anything that is not.
+ */
+function pickTier(sources: StreamSources | undefined): Tier | undefined {
+  if (!sources) return undefined
+  if (sources.local) return { name: 'local', url: sources.local.url, seekable: true }
+  if (sources.instant) {
+    return {
+      name: 'instant',
+      url: sources.instant.url,
+      seekable: true,
+      height: sources.instant.height,
+    }
+  }
+  if (sources.remux) return { name: 'remux', url: sources.remux.url, seekable: false }
+  return undefined
+}
+
 export function Player({
   videoId,
   hue,
@@ -53,13 +97,43 @@ export function Player({
   nextVideoTitle?: string
   onPlayNext?: () => void
 }) {
-  const { data: stream, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
+  const { data: sources, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
   // Playing from upstream always schedules a copy, so a job is coming even if
   // the queue has not caught up yet.
-  const download = useDownloadProgress(videoId, stream?.source === 'remux')
+  const download = useDownloadProgress(videoId, Boolean(sources) && !sources?.local)
   const queryClient = useQueryClient()
 
-  const videoRef = useRef<HTMLVideoElement>(null)
+  // The best way to play right now. Local beats everything: it is on disk and
+  // fully seekable. Otherwise the instant upstream, which starts in
+  // milliseconds and seeks properly at the cost of resolution — and only when a
+  // video publishes no progressive format at all does the muxed stream, slow to
+  // start and unseekable, become the opening move.
+  const tier = useMemo(() => pickTier(sources), [sources])
+
+  // Two elements, so a change of source can be prepared out of sight and
+  // switched to at a chosen moment. One element would have to drop what it is
+  // showing in order to load the next thing, which is the black flash.
+  const videoARef = useRef<HTMLVideoElement>(null)
+  const videoBRef = useRef<HTMLVideoElement>(null)
+  // Which element the viewer is watching. Kept in a ref as well as in state:
+  // callbacks below are stable, and would otherwise close over a stale value.
+  const [frontIsA, setFrontIsA] = useState(true)
+  const frontIsARef = useRef(true)
+  const front = useCallback(
+    () => (frontIsARef.current ? videoARef.current : videoBRef.current),
+    [],
+  )
+  const back = useCallback(
+    () => (frontIsARef.current ? videoBRef.current : videoARef.current),
+    [],
+  )
+  // URL loaded in each element. The back one is set only while an upgrade is
+  // being prepared, and cleared afterwards so an abandoned stream is torn down
+  // rather than left pulling bytes.
+  const [srcA, setSrcA] = useState<string | undefined>(undefined)
+  const [srcB, setSrcB] = useState<string | undefined>(undefined)
+  const frontSrc = frontIsA ? srcA : srcB
+  const setBackSrc = frontIsA ? setSrcB : setSrcA
   const [playing, setPlaying] = useState(false)
   const [volume, setVolume] = useState(1)
   const [muted, setMuted] = useState(false)
@@ -95,17 +169,22 @@ export function Player({
   // the common failure and it fixes itself; anything that survives a fresh URL
   // is a real failure and must be shown rather than retried forever.
   const retriedRef = useRef(false)
+  // URL currently being prepared in the hidden element, or undefined when no
+  // upgrade is in flight. Guards against starting the same swap twice.
+  const upgradingToRef = useRef<string | undefined>(undefined)
+  const handoverFrameRef = useRef(0)
+  const justSwappedRef = useRef(false)
 
   // A fragmented stream declares no total length: its header says only how much
   // has been muxed so far, which grows as it plays. Trusting it makes the
   // progress bar read as full from the first second, since position and
   // duration are then the same number. The catalog knows the real length, so
   // that is what the bar is drawn against until the complete file takes over.
-  const streaming = stream?.source === 'remux'
+  const streaming = tier?.name === 'remux'
   const duration =
     !streaming && elementDuration > 0 ? elementDuration : durationSeconds
 
-  const playable = Boolean(stream?.url) && !loadFailed
+  const playable = Boolean(frontSrc) && !loadFailed
   // Captions no longer wait for the media file: ingest publishes them ahead of
   // the transfer, precisely so they are usable during upstream playback.
   const captionsAvailable = subtitles.length > 0
@@ -114,20 +193,28 @@ export function Player({
   // decides which one shows. Driving textTracks directly keeps the button and
   // what is on screen in agreement.
   useEffect(() => {
-    const element = videoRef.current
+    const element = front()
     if (!element) return
     for (let i = 0; i < element.textTracks.length; i++) {
       const track = element.textTracks[i]
       track.mode = track.language === captions ? 'showing' : 'disabled'
     }
-  }, [captions, stream?.url, subtitles.length])
+  }, [captions, frontSrc, frontIsA, front, subtitles.length])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,
   // so the freeze is in place before a reset-to-zero timeupdate can land.
   useLayoutEffect(() => {
+    // A handover is the one case where the front's source changes and there is
+    // nothing to freeze: the element taking over is already loaded and already
+    // sitting at the right position. Freezing here would leave the freeze on
+    // for good, because the loadedmetadata that lifts it has long since fired.
+    if (justSwappedRef.current) {
+      justSwappedRef.current = false
+      return
+    }
     swappingRef.current = true
-  }, [stream?.url])
+  }, [frontSrc])
 
   // Moving to another video keeps this component mounted — same route, new
   // param — so everything the refs and state hold about the old one has to be
@@ -144,7 +231,113 @@ export function Player({
     // was left, which is not a position that means anything here.
     resumeAtRef.current = initialPositionSeconds
     setPosition(initialPositionSeconds)
+    // Both elements start empty, and the front one goes back to being A, so a
+    // new video never inherits the previous one's half-prepared upgrade.
+    setSrcA(undefined)
+    setSrcB(undefined)
+    frontIsARef.current = true
+    setFrontIsA(true)
+    upgradingToRef.current = undefined
   }, [videoId, initialPositionSeconds])
+
+  // Load the opening source, and afterwards prepare any better one out of sight.
+  //
+  // This is the whole of the tier machinery: the front element is never asked
+  // to change what it is playing, because that is precisely what makes the
+  // picture drop out. A replacement is loaded into the hidden element instead,
+  // and the two are exchanged once the replacement is genuinely ready.
+  useEffect(() => {
+    if (!tier) return
+
+    // Nothing playing yet: this is the first source, so it goes straight to the
+    // front. There is no picture to protect.
+    if (!frontSrc) {
+      if (frontIsARef.current) setSrcA(tier.url)
+      else setSrcB(tier.url)
+      return
+    }
+
+    if (tier.url === frontSrc) return
+    // An upgrade to this source is already being prepared.
+    if (upgradingToRef.current === tier.url) return
+
+    upgradingToRef.current = tier.url
+    setBackSrc(tier.url)
+  }, [tier, frontSrc, setBackSrc])
+
+  // Give up on an upgrade and keep playing what already works. Failing to
+  // prepare a better source is not a playback failure — nothing on screen
+  // changes — so it must never surface as one.
+  const abandonUpgrade = useCallback(() => {
+    upgradingToRef.current = undefined
+    window.cancelAnimationFrame(handoverFrameRef.current)
+    if (frontIsARef.current) setSrcB(undefined)
+    else setSrcA(undefined)
+  }, [])
+
+  // Hand over to the prepared element once it can actually play.
+  //
+  // The mark is a moment slightly ahead of the playhead: the replacement is
+  // seeked there and waits, and the exchange happens when playback arrives. So
+  // the viewer never sees a repeated second, and never sees a gap either.
+  const handoverToBack = useCallback(() => {
+    const current = front()
+    const next = back()
+    if (!current || !next || !upgradingToRef.current) return
+
+    const commit = () => {
+      // Carry across everything the viewer set, or the swap would silently undo
+      // their volume, their mute and their subtitles.
+      next.volume = current.volume
+      next.muted = current.muted
+      for (let i = 0; i < next.textTracks.length; i++) {
+        const track = next.textTracks[i]
+        track.mode = track.language === captions ? 'showing' : 'disabled'
+      }
+
+      // Freeze position tracking across the exchange for the same reason a
+      // source change freezes it: the element being left behind will report
+      // times that no longer mean anything.
+      swappingRef.current = true
+      resumeAtRef.current = next.currentTime
+
+      const wasPlaying = !current.paused
+      justSwappedRef.current = true
+      frontIsARef.current = !frontIsARef.current
+      setFrontIsA(frontIsARef.current)
+      upgradingToRef.current = undefined
+
+      if (wasPlaying) void next.play().catch(() => undefined)
+      current.pause()
+      // Dropping the old source releases it — for the muxed stream that is what
+      // kills the ffmpeg process still muxing the rest of the video.
+      if (frontIsARef.current) setSrcB(undefined)
+      else setSrcA(undefined)
+      swappingRef.current = false
+    }
+
+    // Paused: no mark to wait for, so exchange where the viewer is.
+    if (current.paused) {
+      commit()
+      return
+    }
+
+    // Wait for the playhead to reach the mark the replacement is parked on.
+    // requestAnimationFrame rather than timeupdate, which fires only about four
+    // times a second — coarse enough to overshoot the mark and jump backwards.
+    const waitForMark = () => {
+      if (upgradingToRef.current === undefined) return
+      if (current.currentTime >= next.currentTime - 0.05) {
+        commit()
+        return
+      }
+      handoverFrameRef.current = window.requestAnimationFrame(waitForMark)
+    }
+    waitForMark()
+  }, [front, back, captions])
+
+  // A pending handover must not outlive the video it belongs to.
+  useEffect(() => () => window.cancelAnimationFrame(handoverFrameRef.current), [])
 
   useEffect(() => {
     if (countdown === null) return
@@ -159,7 +352,7 @@ export function Player({
 
   const toggle = useCallback(() => {
     resetAutoplayChain()
-    const element = videoRef.current
+    const element = front()
     if (!element) return
     if (element.paused) void element.play()
     else element.pause()
@@ -167,14 +360,14 @@ export function Player({
 
   const seekBy = useCallback((delta: number) => {
     resetAutoplayChain()
-    const element = videoRef.current
+    const element = front()
     if (!element) return
     element.currentTime = Math.max(0, Math.min(element.duration || 0, element.currentTime + delta))
   }, [])
 
   const applyVolume = (next: number) => {
     resetAutoplayChain()
-    const element = videoRef.current
+    const element = front()
     setVolume(next)
     if (element) {
       element.volume = next
@@ -186,7 +379,7 @@ export function Player({
   }
 
   const toggleMute = () => {
-    const element = videoRef.current
+    const element = front()
     if (!element) return
     element.muted = !element.muted
     setMuted(element.muted)
@@ -232,7 +425,7 @@ export function Player({
     if (!playable) return
 
     const report = () => {
-      const element = videoRef.current
+      const element = front()
       if (!element || !element.duration) return
       void repo
         .recordProgress(
@@ -264,13 +457,20 @@ export function Player({
           : { background: `radial-gradient(120% 90% at 50% 30%, hsl(${hue} 40% 22%), #000 70%)` }
       }
     >
-      {stream?.source === 'remux' && (
+      {tier && tier.name !== 'local' && (
         <div className="absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-badge px-2.5 py-1.5 text-xs font-medium">
-          {/* Says "Live" rather than a resolution: the stream is full quality,
-              and what is actually worth warning about is that seeking is
-              limited until the downloaded file takes over. */}
-          <span title="Muxed live — seeking is limited until the download finishes">
-            Live{stream.height ? ` ${stream.height}p` : ''}
+          {/* States the resolution actually on screen, because it is about to
+              change: the opening source is deliberately a low one, and the
+              downloaded file replaces it mid-playback. A viewer who sees a soft
+              picture should be able to tell that it is temporary. */}
+          <span
+            title={
+              tier.name === 'instant'
+                ? 'Playing upstream while the full-quality copy downloads'
+                : 'Muxed live — seeking needs the downloaded file'
+            }
+          >
+            {tier.name === 'instant' ? `${tier.height ?? 360}p` : 'Live'}
           </span>
           {downloading && (
             <>
@@ -327,83 +527,160 @@ export function Player({
       )}
 
       {playable ? (
-        <video
-          ref={videoRef}
-          src={stream?.url}
-          className="h-full w-full cursor-pointer"
-          playsInline
-          preload="metadata"
-          // Clicking the picture toggles playback, the way every video player
-          // on the web behaves.
-          onClick={toggle}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onVolumeChange={(e) => {
-            setVolume(e.currentTarget.volume)
-            setMuted(e.currentTarget.muted)
-          }}
-          onLoadedMetadata={(e) => {
-            const element = e.currentTarget
-            if (Number.isFinite(element.duration)) setElementDuration(element.duration)
+        // Two layers, permanently mounted. Only one is ever visible; the other
+        // is where a better source is quietly loaded and lined up. Both stay in
+        // the tree so that exchanging them is a change of opacity rather than a
+        // teardown, which is what keeps the picture from blinking.
+        <>
+          {([true, false] as const).map((isA) => {
+            const src = isA ? srcA : srcB
+            const isFront = isA === frontIsA
+            return (
+              <video
+                key={isA ? 'a' : 'b'}
+                ref={isA ? videoARef : videoBRef}
+                src={src}
+                className="absolute inset-0 h-full w-full cursor-pointer"
+                // The hidden layer must stay laid out and decoding — display:none
+                // would stop it buffering, which is the entire point of it.
+                style={{ opacity: isFront ? 1 : 0, pointerEvents: isFront ? undefined : 'none' }}
+                aria-hidden={!isFront}
+                playsInline
+                // The layer being prepared has to buffer ahead of being needed;
+                // metadata alone would leave it unable to take over.
+                preload={isFront ? 'metadata' : 'auto'}
+                // Clicking the picture toggles playback, the way every video
+                // player on the web behaves.
+                onClick={isFront ? toggle : undefined}
+                onPlay={isFront ? () => setPlaying(true) : undefined}
+                onPause={isFront ? () => setPlaying(false) : undefined}
+                onVolumeChange={
+                  isFront
+                    ? (e) => {
+                        setVolume(e.currentTarget.volume)
+                        setMuted(e.currentTarget.muted)
+                      }
+                    : undefined
+                }
+                onLoadedMetadata={(e) => {
+                  const element = e.currentTarget
+                  if (!isFront) {
+                    // Park the replacement a moment ahead of the playhead and
+                    // wait there. Seeking is what makes the exchange seamless,
+                    // so a source that cannot seek hands over immediately.
+                    const current = front()
+                    const mark =
+                      current && !current.paused
+                        ? current.currentTime + SWAP_LEAD_SECONDS
+                        : (current?.currentTime ?? 0)
 
-            const resumeAt = resumeAtRef.current
-            if (resumeAt > 0 && resumeAt < element.duration) {
-              element.currentTime = resumeAt
-            }
-            // The new source is loaded and positioned: resume tracking.
-            swappingRef.current = false
+                    if (mark <= 0) {
+                      // Nothing has played yet, so both elements already agree
+                      // on where they are.
+                      handoverToBack()
+                    } else if (Number.isFinite(element.duration) && mark < element.duration) {
+                      element.currentTime = mark
+                    } else {
+                      // The mark is past the end of the video. Handing over now
+                      // would swap in an element still sitting at zero and throw
+                      // the viewer back to the start; there is nothing worth
+                      // upgrading this close to the end anyway.
+                      abandonUpgrade()
+                    }
+                    return
+                  }
 
-            // Start playing on arrival. If the browser refuses audible
-            // autoplay, retry muted rather than leaving a dead frame, and
-            // offer the unmute explicitly.
-            element.play().catch(() => {
-              element.muted = true
-              setMuted(true)
-              setAutoplayMuted(true)
-              void element.play().catch(() => setAutoplayMuted(false))
-            })
-          }}
-          onDurationChange={(e) => {
-            const value = e.currentTarget.duration
-            if (Number.isFinite(value) && value > 0) setElementDuration(value)
-          }}
-          onTimeUpdate={(e) => {
-            setPosition(e.currentTarget.currentTime)
-            // Frozen across a source swap, so the browser's reset to 0 cannot
-            // erase where the viewer actually was.
-            if (!swappingRef.current) resumeAtRef.current = e.currentTarget.currentTime
-          }}
-          onProgress={(e) => {
-            const ranges = e.currentTarget.buffered
-            if (ranges.length > 0) setBuffered(ranges.end(ranges.length - 1))
-          }}
-          onEnded={() => {
-            setPlaying(false)
-            if (!autoplayEnabled || !onPlayNext) return
-            // Three hops with nobody touching anything means nobody is here.
-            if (autoplayChainExhausted()) return
-            setCountdown(5)
-          }}
-          onError={() => {
-            if (retriedRef.current) {
-              setLoadFailed(true)
-              return
-            }
-            retriedRef.current = true
-            void queryClient.invalidateQueries({ queryKey: ['stream', videoId] })
-          }}
-        >
-          {captionsAvailable &&
-            subtitles.map((track) => (
-              <track
-                key={track.language}
-                kind="subtitles"
-                src={track.url}
-                srcLang={track.language}
-                label={track.generated ? `${track.label} (auto)` : track.label}
-              />
-            ))}
-        </video>
+                  if (Number.isFinite(element.duration)) setElementDuration(element.duration)
+
+                  const resumeAt = resumeAtRef.current
+                  if (resumeAt > 0 && resumeAt < element.duration) {
+                    element.currentTime = resumeAt
+                  }
+                  // The new source is loaded and positioned: resume tracking.
+                  swappingRef.current = false
+
+                  // Start playing on arrival. If the browser refuses audible
+                  // autoplay, retry muted rather than leaving a dead frame, and
+                  // offer the unmute explicitly.
+                  element.play().catch(() => {
+                    element.muted = true
+                    setMuted(true)
+                    setAutoplayMuted(true)
+                    void element.play().catch(() => setAutoplayMuted(false))
+                  })
+                }}
+                // Only meaningful on the layer being prepared: it means the
+                // replacement has reached its mark and can take over.
+                onSeeked={isFront ? undefined : () => handoverToBack()}
+                onDurationChange={
+                  isFront
+                    ? (e) => {
+                        const value = e.currentTarget.duration
+                        if (Number.isFinite(value) && value > 0) setElementDuration(value)
+                      }
+                    : undefined
+                }
+                onTimeUpdate={
+                  isFront
+                    ? (e) => {
+                        setPosition(e.currentTarget.currentTime)
+                        // Frozen across a source swap, so the browser's reset to
+                        // 0 cannot erase where the viewer actually was.
+                        if (!swappingRef.current) {
+                          resumeAtRef.current = e.currentTarget.currentTime
+                        }
+                      }
+                    : undefined
+                }
+                onProgress={
+                  isFront
+                    ? (e) => {
+                        const ranges = e.currentTarget.buffered
+                        if (ranges.length > 0) setBuffered(ranges.end(ranges.length - 1))
+                      }
+                    : undefined
+                }
+                onEnded={
+                  isFront
+                    ? () => {
+                        setPlaying(false)
+                        if (!autoplayEnabled || !onPlayNext) return
+                        // Three hops with nobody touching anything means nobody
+                        // is here.
+                        if (autoplayChainExhausted()) return
+                        setCountdown(5)
+                      }
+                    : undefined
+                }
+                onError={() => {
+                  if (!isFront) {
+                    // An upgrade that will not load is not a failure worth
+                    // showing: what is on screen still works. Abandon it.
+                    abandonUpgrade()
+                    return
+                  }
+                  if (retriedRef.current) {
+                    setLoadFailed(true)
+                    return
+                  }
+                  retriedRef.current = true
+                  void queryClient.invalidateQueries({ queryKey: ['stream', videoId] })
+                }}
+              >
+                {captionsAvailable &&
+                  subtitles.map((track) => (
+                    <track
+                      key={track.language}
+                      kind="subtitles"
+                      src={track.url}
+                      srcLang={track.language}
+                      label={track.generated ? `${track.label} (auto)` : track.label}
+                    />
+                  ))}
+              </video>
+            )
+          })}
+        </>
       ) : (
         <p className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-text-2">
           {resolvingStream
@@ -423,14 +700,14 @@ export function Player({
           position={position}
           duration={duration}
           buffered={buffered}
-          // A muxed-on-the-fly stream has no index, so the browser cannot seek
-          // in it at all. Disabling the bar says so plainly instead of leaving
-          // a control that silently does nothing; the downloaded file restores
-          // seeking the moment it lands.
-          disabled={!playable || stream?.source === 'remux'}
+          // Seeking works from the first second now: the opening source is a
+          // progressive file the browser can range-request. Only the muxed
+          // stream — the fallback for videos publishing no progressive format
+          // at all — has no index and cannot be seeked.
+          disabled={!playable || !tier?.seekable}
           onSeek={(next) => {
             setPosition(next)
-            const element = videoRef.current
+            const element = front()
             if (element) element.currentTime = next
           }}
         />
@@ -514,7 +791,7 @@ export function Player({
           <button
             type="button"
             aria-label="Full screen"
-            onClick={() => void videoRef.current?.requestFullscreen?.()}
+            onClick={() => void front()?.requestFullscreen?.()}
             disabled={!playable}
             className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
           >

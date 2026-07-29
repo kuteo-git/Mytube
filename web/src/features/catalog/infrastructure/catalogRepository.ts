@@ -35,11 +35,16 @@ export interface CatalogRepository {
   getStorage(): Promise<StorageUsage>
 
   /**
-   * Asks how to play a video. The answer is either the local file or a
-   * short-lived upstream URL while the copy downloads, so the UI never has to
-   * know which half of the hybrid model it is in.
+   * Lists every way a video can be played right now, best-effort: the local
+   * file if it is on disk, otherwise an instantly playable upstream URL and a
+   * full-resolution stream muxed on demand.
+   *
+   * `prefetch` means the viewer has only hovered, not pressed play: resolve and
+   * cache the upstream URL so a later press is instant, but schedule no
+   * download. The disk has a hard ceiling, and drifting a mouse across a feed
+   * must not fill it.
    */
-  getStream(videoId: string): Promise<StreamSource>
+  getStream(videoId: string, prefetch?: boolean): Promise<StreamSources>
   listJobs(activeOnly: boolean): Promise<IngestJob[]>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
@@ -123,17 +128,37 @@ export interface ScanStatus {
   errors: string[]
 }
 
+/** One way of playing a video. */
 export interface StreamSource {
-  /**
-   * "local" plays the downloaded file. "remux" is a stream muxed on the fly
-   * from YouTube's separate video and audio tracks — full resolution, but with
-   * no index, so it cannot be seeked past what has buffered.
-   */
-  source: 'local' | 'remux'
   url: string
   height?: number
   mimeType?: string
+  /**
+   * False only for the muxed-on-the-fly stream, which carries no index. The
+   * player disables the seek bar rather than offer a control that cannot work.
+   */
+  seekable: boolean
   expiresAt?: string
+}
+
+/**
+ * Every way a video can be played right now.
+ *
+ * The gateway lists rather than chooses, because choosing well needs to know
+ * how far the viewer has watched and how much has buffered — and only the
+ * player knows either.
+ */
+export interface StreamSources {
+  /**
+   * Progressive upstream: starts in milliseconds and seeks properly, but capped
+   * at 360p by what YouTube still publishes muxed. Absent when the video offers
+   * no progressive format.
+   */
+  instant?: StreamSource
+  /** Full resolution, muxed live. Not seekable. Absent once `local` exists. */
+  remux?: StreamSource
+  /** The downloaded file. Present only once on disk, and best whenever it is. */
+  local?: StreamSource
 }
 
 export type JobState = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
@@ -275,8 +300,10 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<StorageUsage>('/storage')
   },
 
-  getStream(videoId) {
-    return request<StreamSource>(`/videos/${encodeURIComponent(videoId)}/stream`)
+  getStream(videoId, prefetch) {
+    return request<StreamSources>(
+      `/videos/${encodeURIComponent(videoId)}/stream${prefetch ? '?prefetch=1' : ''}`,
+    )
   },
 
   async listJobs(activeOnly) {

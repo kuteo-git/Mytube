@@ -22,6 +22,7 @@ type Ingest struct {
 	defaultHeight int32
 	newID         func() string
 	logger        *slog.Logger
+	resolved      *resolveCache
 }
 
 func New(
@@ -43,6 +44,7 @@ func New(
 		defaultHeight: defaultHeight,
 		newID:         uuid.NewString,
 		logger:        logger,
+		resolved:      newResolveCache(),
 	}
 }
 
@@ -204,9 +206,22 @@ func (i *Ingest) Preview(ctx context.Context, url string) (domain.ExternalVideo,
 // ResolveStream returns a directly playable upstream URL for a video that is
 // not on disk yet. This is the half of the hybrid model that makes clicking a
 // result feel immediate; the other half is the background download.
+//
+// The URL is progressive — one file carrying both video and audio — so the
+// browser can range-request it and the viewer can seek freely from the first
+// second. That caps it at whatever muxed rendition YouTube still publishes,
+// which is 360p, and that is the deliberate trade: a seekable 360p picture now
+// beats a sharper one that has to be muxed first and cannot be seeked at all.
+//
+// Cached, because the resolve is the entire startup delay and the answer stays
+// good for hours.
 func (i *Ingest) ResolveStream(ctx context.Context, videoID string) (domain.StreamLocation, error) {
 	if videoID == "" {
 		return domain.StreamLocation{}, fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+
+	if cached, ok := i.resolved.get(videoID); ok {
+		return cached, nil
 	}
 
 	sourceURL, err := i.library.SourceURLFor(ctx, videoID)
@@ -216,7 +231,20 @@ func (i *Ingest) ResolveStream(ctx context.Context, videoID string) (domain.Stre
 	if sourceURL == "" {
 		return domain.StreamLocation{}, fmt.Errorf("video %s has no source url: %w", videoID, domain.ErrNotFound)
 	}
-	return i.downloader.ResolveStream(ctx, sourceURL)
+
+	location, err := i.downloader.ResolveStream(ctx, sourceURL)
+	if err != nil {
+		return domain.StreamLocation{}, err
+	}
+	i.resolved.put(videoID, location)
+	return location, nil
+}
+
+// ForgetResolvedStream drops a cached URL the player could not load. Signed
+// URLs are occasionally revoked before they expire, and without this the cache
+// would keep handing out the dead one until its stated expiry.
+func (i *Ingest) ForgetResolvedStream(videoID string) {
+	i.resolved.forget(videoID)
 }
 
 // Submit resolves metadata immediately so the video appears in the library

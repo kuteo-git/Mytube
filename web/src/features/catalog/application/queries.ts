@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from 'react'
 import {
   useInfiniteQuery,
   useMutation,
@@ -145,6 +146,52 @@ export function useStream(videoId: string | undefined) {
     staleTime: 5 * 60_000,
     retry: false,
   })
+}
+
+/** How long a pointer must rest on a card before it counts as interest. */
+const PREFETCH_HOVER_MS = 250
+
+/**
+ * Resolves a video's upstream URL before anyone asks to play it.
+ *
+ * Resolving costs a yt-dlp process — about 1.4 seconds — and that is the whole
+ * of the delay between pressing play and seeing a picture. Paying it while the
+ * pointer rests on a card moves the wait somewhere nobody is watching.
+ *
+ * Hovering is not playing, so this schedules no download; the gateway is told
+ * as much. The delay keeps a pointer sweeping across a grid from resolving
+ * every card it crosses.
+ */
+export function useStreamPrefetch() {
+  const queryClient = useQueryClient()
+  const timer = useRef<number | undefined>(undefined)
+
+  const cancel = useCallback(() => {
+    window.clearTimeout(timer.current)
+    timer.current = undefined
+  }, [])
+
+  const prefetch = useCallback(
+    (videoId: string) => {
+      cancel()
+      timer.current = window.setTimeout(() => {
+        void queryClient.prefetchQuery({
+          // Same key the player will read, so pressing play finds the answer
+          // already in cache and never issues a request at all.
+          queryKey: ['stream', videoId],
+          queryFn: () => repo.getStream(videoId, true),
+          staleTime: 5 * 60_000,
+        })
+      }, PREFETCH_HOVER_MS)
+    },
+    [cancel, queryClient],
+  )
+
+  // Cancelling on unmount matters: navigating away from a feed must not leave
+  // a timer that resolves a video nobody is looking at any more.
+  useEffect(() => cancel, [cancel])
+
+  return { prefetch, cancel }
 }
 
 /**
