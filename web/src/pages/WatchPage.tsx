@@ -30,18 +30,23 @@ export function WatchPage() {
   // quiet because the recommender ran out of ideas it had not already used.
   //
   //   1. the queue, when playing through an explicit list
-  //   2. up-next, minus anything already played this sitting — recommendations
-  //      point both ways, so the untrimmed top of the rail is usually the video
-  //      that was just playing, and following it walks in a two-video circle
-  //   3. up-next unfiltered, once every suggestion has been seen
-  //   4. popular, unseen first
-  //   5. popular, anything at all
-  const suggested = upNext?.filter((video) => !trail.has(video.id))
+  //   2. the best suggestion not already played this sitting
+  //   3. anything popular not already played this sitting
+  //   4. only now, something already seen
+  //
+  // Every "not already played" option comes before every "already played" one,
+  // and that ordering is the point rather than a preference. An earlier version
+  // put unfiltered suggestions ahead of unseen popular ones, so the moment the
+  // suggestions ran dry it started handing back the video just watched — which
+  // is a loop, reintroduced by the very fallback meant to stop the button dying.
+  // Suggestions are better than popularity, but nothing is worse than going
+  // round in a circle.
+  const unseen = (video: { id: string }) => !trail.has(video.id) && video.id !== videoId
   const next =
     queue.next ??
-    suggested?.[0] ??
+    upNext?.find(unseen) ??
+    popular?.find(unseen) ??
     upNext?.find((video) => video.id !== videoId) ??
-    popular?.find((video) => !trail.has(video.id) && video.id !== videoId) ??
     popular?.find((video) => video.id !== videoId)
   const nextInQueue = Boolean(queue.next)
 

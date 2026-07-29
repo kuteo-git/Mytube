@@ -33,6 +33,15 @@ import { formatDuration } from '@/shared/lib/format'
  * the eventual TV interface possible.
  */
 const PROGRESS_INTERVAL_MS = 15_000
+/**
+ * When the first progress report goes out.
+ *
+ * Long enough not to fire for a video someone opened and closed by accident,
+ * short enough that skipping through a handful of tracks still leaves each of
+ * them on record — which is what the ranker's "watched just now" penalty needs
+ * in order to stop suggesting them straight back.
+ */
+const OPENING_REPORT_MS = 3_000
 const SEEK_STEP_SECONDS = 5
 
 /**
@@ -470,8 +479,18 @@ export function Player({
         })
     }
 
+    // One report shortly after playback starts, before the interval takes over.
+    //
+    // Ranking demotes anything watched in the last few hours, which is what
+    // stops "next" walking in a circle between two videos that are each other's
+    // best match. That guard cannot fire on a video the server has never been
+    // told was watched — and with only a fifteen-second timer, skipping quickly
+    // through a few videos left no trace of any of them, so every one stayed a
+    // perfectly good suggestion to come back to.
+    const opener = window.setTimeout(report, OPENING_REPORT_MS)
     const timer = window.setInterval(report, PROGRESS_INTERVAL_MS)
     return () => {
+      window.clearTimeout(opener)
       window.clearInterval(timer)
       report()
     }
