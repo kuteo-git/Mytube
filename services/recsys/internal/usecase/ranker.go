@@ -226,10 +226,21 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	}
 
 	sortRanked(ranked)
-	// The mix applies to the feed, which is what someone browses. Up-next is a
+
+	channelOf := make(map[string]string, len(features))
+	for _, f := range features {
+		channelOf[f.VideoID] = f.ChannelID
+	}
+
+	// Two different mixes, because they answer different questions. The reason
+	// quota keeps unfamiliar material on the page; the channel cap keeps one
+	// source from being the page. A heavily watched channel satisfies every
+	// reason at once, so the first cannot do the second's job.
+	//
+	// Both apply to the feed, which is what someone browses. Up-next is a
 	// different question — "what follows this?" — and deliberately keeps its
 	// pure same-channel-first ordering.
-	return applyDiscoveryQuota(ranked), nil
+	return applyChannelDiversity(applyDiscoveryQuota(ranked), channelOf), nil
 }
 
 // MostWatched is the "played the most" collection, ordered by time spent.

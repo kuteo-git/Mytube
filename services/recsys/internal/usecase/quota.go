@@ -85,3 +85,82 @@ func applyDiscoveryQuota(ranked []domain.RankedVideo) []domain.RankedVideo {
 	}
 	return append(out, other...)
 }
+
+// Most videos from one channel allowed in a single window.
+//
+// Three of twenty-four is a visible presence without being the page. A viewer
+// who watches one channel heavily should see it often; they should not have to
+// scroll past it to find out the library contains anything else.
+const maxPerChannelPerWindow = 3
+
+// applyChannelDiversity limits how much of any one page a single channel can
+// occupy.
+//
+// The reason quota above cannot do this, and the difference is worth stating
+// because it looked for a long time as though it could. That quota mixes by
+// *why* a video was chosen. A channel a viewer watches heavily produces videos
+// that are simultaneously never-watched, recently-added and from a subscribed
+// channel — so it fills every bucket at once and the mix stays satisfied while
+// the page shows one thing. Measured on this library: 44% of all watch time
+// went to a single channel, its affinity normalised to 1.0 against a runner-up
+// at 0.23, and the resulting front page was 23 of 24 videos from that one
+// channel while every quota was nominally being met.
+//
+// Like the reason quota this reorders and never drops: a video pushed out of
+// one window appears in the next, so nothing becomes unreachable by scrolling.
+func applyChannelDiversity(
+	ranked []domain.RankedVideo, channelOf map[string]string,
+) []domain.RankedVideo {
+	if len(ranked) == 0 || len(channelOf) == 0 {
+		return ranked
+	}
+
+	out := make([]domain.RankedVideo, 0, len(ranked))
+	// Videos held back from the current window, still in score order.
+	var deferred []domain.RankedVideo
+	seen := map[string]int{}
+	inWindow := 0
+
+	startWindow := func() {
+		seen = map[string]int{}
+		inWindow = 0
+	}
+
+	take := func(video domain.RankedVideo) bool {
+		channel := channelOf[video.VideoID]
+		// A video whose channel is unknown cannot crowd a channel out, so it is
+		// never held back.
+		if channel != "" && seen[channel] >= maxPerChannelPerWindow {
+			return false
+		}
+		out = append(out, video)
+		seen[channel]++
+		inWindow++
+		return true
+	}
+
+	for _, video := range ranked {
+		if inWindow >= quotaWindow {
+			startWindow()
+			// Held-back videos outscore everything still to come, so they lead
+			// the new window.
+			remaining := deferred
+			deferred = nil
+			for _, held := range remaining {
+				if !take(held) {
+					deferred = append(deferred, held)
+				}
+				if inWindow >= quotaWindow {
+					break
+				}
+			}
+		}
+		if !take(video) {
+			deferred = append(deferred, video)
+		}
+	}
+
+	// Whatever is still held back goes on the end, in score order. Emitting it
+	// under the cap would need windows nobody is going to scroll to.
+	return append(out, deferred...)
+}

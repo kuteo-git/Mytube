@@ -131,6 +131,13 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
     một video trong feed là từ chối nó**. Phân biệt bằng comma-ok, không phải giá trị 0.
   - **Affinity đọc từ lịch sử xem, không chỉ từ Like.** Thư viện này có 9 like trên
     2.045 tín hiệu xem; đọc sở thích từ Like thôi là gần như không đọc được gì.
+  - **Hạn ngạch theo lý do KHÔNG chống được một kênh chiếm cả trang.** Đo thật:
+    44% thời lượng xem dồn vào một kênh → affinity chuẩn hoá thành 1.0 trong khi kênh
+    kế chỉ 0.23 → **23/24 video trang đầu là một kênh**, mà mọi hạn ngạch vẫn "đạt".
+    Lý do: video của kênh đó **đồng thời** là chưa-xem, mới-thêm và kênh-theo-dõi, nên
+    nó lấp mọi rổ cùng lúc. Phải chặn theo **trục khác**: `applyChannelDiversity`, tối đa
+    **3 video/kênh trong mỗi cửa sổ 24**. Sau khi chặn: kênh áp đảo còn 12%, số kênh trên
+    trang đầu từ 2 → 10. Vẫn chỉ sắp xếp lại, không bỏ video nào.
   - **Giữ chân tính trong recsys**, không hỏi catalog: catalog không biết ai xem bao
     lâu, và ranh giới đó là thứ giữ cho đây là nhiều service chứ không phải một chương
     trình chạy trong bốn process. Phải lấy `max` theo từng người xem **trước** rồi mới
