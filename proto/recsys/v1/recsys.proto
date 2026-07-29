@@ -40,6 +40,9 @@ enum RecommendationReason {
   RECOMMENDATION_REASON_REWATCH = 5;
   RECOMMENDATION_REASON_SAME_CHANNEL = 6;
   RECOMMENDATION_REASON_SHARED_TAGS = 7;
+  // Opened and abandoned within the first moments. Distinct from never having
+  // been watched: the viewer has already answered, and the answer was no.
+  RECOMMENDATION_REASON_BOUNCED = 8;
 }
 
 message RankedVideo {

@@ -17,6 +17,9 @@ type recordingLibrary struct {
 	// channels records the whole video as written, so a test can assert which
 	// channel it was attributed to.
 	channels map[string]domain.ExternalVideo
+	// missingTopics is what ListVideosMissingTopics hands back, so a backfill
+	// test can control exactly which videos a pass sees.
+	missingTopics []domain.VideoRef
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -42,6 +45,9 @@ func (r *recordingLibrary) UpsertChannelArtwork(context.Context, domain.ChannelM
 }
 func (r *recordingLibrary) ListSubscribedChannels(context.Context) ([]domain.SubscribedChannel, error) {
 	return nil, nil
+}
+func (r *recordingLibrary) ListVideosMissingTopics(context.Context, int32) ([]domain.VideoRef, error) {
+	return r.missingTopics, nil
 }
 
 type stubCursors struct{ offsets map[string]int32 }

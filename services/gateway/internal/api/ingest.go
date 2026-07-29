@@ -201,6 +201,35 @@ func (g *Gateway) handleRefreshTopics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toScanStatusDTO(resp.Msg.GetStatus()))
 }
 
+// handleBackfillTopics assigns YouTube's category to videos that have none.
+//
+// Like a refresh this runs against the request context and answers when it is
+// finished: the caller pressed a button and wants the result, and a pass that
+// vanished into the background would give them no way to tell it worked.
+// `?limit=` bounds a run; the pass selects on "has no topic", so a bounded run
+// is resumed simply by asking again.
+func (g *Gateway) handleBackfillTopics(w http.ResponseWriter, r *http.Request) {
+	var limit int32
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = int32(parsed)
+		}
+	}
+
+	resp, err := g.ingest.BackfillTopics(r.Context(), connect.NewRequest(&ingestv1.BackfillTopicsRequest{
+		Limit: limit,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int32{
+		"examined": resp.Msg.GetExamined(),
+		"updated":  resp.Msg.GetUpdated(),
+		"failed":   resp.Msg.GetFailed(),
+	})
+}
+
 func (g *Gateway) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 	resp, err := g.ingest.GetScanStatus(r.Context(), connect.NewRequest(&ingestv1.GetScanStatusRequest{}))
 	if err != nil {

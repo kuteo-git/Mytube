@@ -168,3 +168,46 @@ func (s *Store) MostWatched(ctx context.Context, userID string, limit int32) ([]
 	}
 	return out, rows.Err()
 }
+
+// VideoRetention reports how far the average viewer gets through each video.
+//
+// Computed here rather than asked of catalog, because the watch signals are
+// recsys's own and no service reads another's tables. Catalog does not know
+// how long anything was watched for, and that boundary is what keeps this a
+// set of services rather than one program in four processes.
+//
+// The inner max matters more than it looks. Watch signals are appended on a
+// timer while a video plays, so one viewing leaves a trail of rows climbing
+// from near zero to wherever the viewer stopped. Averaging those rows directly
+// would measure "the average moment at which we happened to take a reading",
+// which is roughly half of every video no matter how good it is. Taking each
+// viewer's furthest point first, then averaging across viewers, measures the
+// thing the name claims.
+func (s *Store) VideoRetention(ctx context.Context) (map[string]float32, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT video_id, avg(furthest)::float4
+		FROM (
+			SELECT video_id, user_id, max(watched_fraction) AS furthest
+			FROM signals
+			WHERE type = 'WATCH' AND video_id <> ''
+			GROUP BY video_id, user_id
+		) per_viewer
+		GROUP BY video_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	retention := map[string]float32{}
+	for rows.Next() {
+		var (
+			videoID string
+			average float32
+		)
+		if err := rows.Scan(&videoID, &average); err != nil {
+			return nil, err
+		}
+		retention[videoID] = average
+	}
+	return retention, rows.Err()
+}

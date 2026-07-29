@@ -27,6 +27,7 @@ var reasons = map[domain.Reason]recsysv1.RecommendationReason{
 	domain.ReasonRewatch:           recsysv1.RecommendationReason_RECOMMENDATION_REASON_REWATCH,
 	domain.ReasonSameChannel:       recsysv1.RecommendationReason_RECOMMENDATION_REASON_SAME_CHANNEL,
 	domain.ReasonSharedTags:        recsysv1.RecommendationReason_RECOMMENDATION_REASON_SHARED_TAGS,
+	domain.ReasonBounced:           recsysv1.RecommendationReason_RECOMMENDATION_REASON_BOUNCED,
 }
 
 var signalTypes = map[recsysv1.SignalType]domain.SignalType{

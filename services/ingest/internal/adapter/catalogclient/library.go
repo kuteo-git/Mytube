@@ -136,6 +136,51 @@ func (l *Library) UpsertChannelArtwork(ctx context.Context, m domain.ChannelMeta
 
 // ListSubscribedChannels lets the scanner treat subscriptions as a content
 // source alongside topics.yaml.
+// ListVideosMissingTopics walks the catalogue projection and returns the videos
+// carrying no topic.
+//
+// Filtered here rather than in catalog because "has no topic" is a question
+// only the backfill asks, and catalog already publishes everything needed to
+// answer it. Adding an RPC for one caller's predicate would widen the contract
+// between the two services for no one else's benefit.
+//
+// Source URLs are not part of the projection, so the caller reconstructs them
+// from the id. Every id in this library is a YouTube id, which is the same
+// assumption the watch page already makes when it opens a video nobody has
+// ingested yet.
+func (l *Library) ListVideosMissingTopics(ctx context.Context, limit int32) ([]domain.VideoRef, error) {
+	const pageSize = 500
+
+	var (
+		refs  []domain.VideoRef
+		token string
+	)
+	for {
+		resp, err := l.client.ListVideoFeatures(ctx, connect.NewRequest(&catalogv1.ListVideoFeaturesRequest{
+			PageSize:  pageSize,
+			PageToken: token,
+		}))
+		if err != nil {
+			return nil, err
+		}
+
+		for _, v := range resp.Msg.GetVideos() {
+			if len(v.GetTopics()) > 0 {
+				continue
+			}
+			refs = append(refs, domain.VideoRef{VideoID: v.GetVideoId()})
+			if limit > 0 && int32(len(refs)) >= limit {
+				return refs, nil
+			}
+		}
+
+		token = resp.Msg.GetNextPageToken()
+		if token == "" {
+			return refs, nil
+		}
+	}
+}
+
 func (l *Library) ListSubscribedChannels(ctx context.Context) ([]domain.SubscribedChannel, error) {
 	resp, err := l.client.ListSubscriptions(ctx, connect.NewRequest(&catalogv1.ListSubscriptionsRequest{
 		UserId: l.userID,

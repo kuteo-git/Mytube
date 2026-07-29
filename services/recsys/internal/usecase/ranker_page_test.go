@@ -14,12 +14,18 @@ func (s stubFeatures) ListVideoFeatures(context.Context) ([]domain.VideoFeatures
 	return s.features, nil
 }
 
-type stubStore struct{ profile domain.UserProfile }
+type stubStore struct {
+	profile   domain.UserProfile
+	retention map[string]float32
+}
 
 func (stubStore) AppendSignal(context.Context, domain.Signal) error         { return nil }
 func (stubStore) RecordImpressions(context.Context, string, []string) error { return nil }
 func (stubStore) MostWatched(context.Context, string, int32) ([]domain.RankedVideo, error) {
 	return nil, nil
+}
+func (s stubStore) VideoRetention(context.Context) (map[string]float32, error) {
+	return s.retention, nil
 }
 func (s stubStore) BuildProfile(context.Context, string, time.Duration) (domain.UserProfile, error) {
 	return s.profile, nil

@@ -339,6 +339,13 @@ export function Player({
   // A pending handover must not outlive the video it belongs to.
   useEffect(() => () => window.cancelAnimationFrame(handoverFrameRef.current), [])
 
+  // Kept in a ref because the progress reporter runs on a timer, from an effect
+  // that must not be torn down and rebuilt every time the duration is refined.
+  const trustedDurationRef = useRef(durationSeconds)
+  useEffect(() => {
+    trustedDurationRef.current = duration
+  }, [duration])
+
   useEffect(() => {
     if (countdown === null) return
     if (countdown <= 0) {
@@ -426,12 +433,25 @@ export function Player({
 
     const report = () => {
       const element = front()
-      if (!element || !element.duration) return
+      if (!element) return
+
+      // The catalogue's duration, not the element's.
+      //
+      // A muxed-on-the-fly stream reports only how much has been assembled so
+      // far, and that number grows as it plays — so dividing by it says the
+      // viewer is nearly finished from the first second onwards. Measured on
+      // this library: a 243-second video watched to 0:41 was recorded as 92%
+      // complete. Ranking treats watch ratio as the signal that a video was
+      // worth opening, so that one division was quietly telling it that
+      // everything abandoned early was excellent.
+      const total = trustedDurationRef.current
+      if (!total) return
+
       void repo
         .recordProgress(
           videoId,
           Math.floor(element.currentTime),
-          element.currentTime / element.duration,
+          Math.min(1, Math.max(0, element.currentTime / total)),
         )
         .catch(() => {
           // Losing a progress ping degrades ranking slightly; never surface it.

@@ -28,6 +28,10 @@ const (
 	ReasonRewatch           Reason = "REWATCH"
 	ReasonSameChannel       Reason = "SAME_CHANNEL"
 	ReasonSharedTags        Reason = "SHARED_TAGS"
+	// ReasonBounced marks a video this viewer opened and left almost at once.
+	// Distinct from never having watched it: the viewer has already answered
+	// the question this video asks, and the answer was no.
+	ReasonBounced Reason = "BOUNCED"
 )
 
 type Signal struct {
@@ -83,6 +87,12 @@ type SignalStore interface {
 	// them measures time watched rather than times opened — which is the honest
 	// reading of "the ones I play most".
 	MostWatched(ctx context.Context, userID string, limit int32) ([]RankedVideo, error)
+	// VideoRetention reports how far the average viewer gets through each
+	// video, across everyone. Unlike the rest of the profile this says nothing
+	// about who is asking — it is a property of the video, and it is what lets
+	// ranking prefer material that holds an audience over material that merely
+	// gets opened.
+	VideoRetention(ctx context.Context) (map[string]float32, error)
 }
 
 // FeatureSource pulls the video projection from the catalog service over RPC.

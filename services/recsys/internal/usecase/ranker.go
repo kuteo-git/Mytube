@@ -29,9 +29,26 @@ const (
 	// stay below "continue watching": an unfinished video is a stronger claim on
 	// attention than a preference.
 	weightLikeAffinity = 2.0
-	weightRewatch      = 0.3
-	penaltyImpression  = 2.0
-	penaltyDisliked    = 5.0
+	weightRewatch     = 0.3
+	penaltyImpression = 2.0
+	penaltyDisliked   = 5.0
+	// Opening a video and leaving within the first few per cent is a judgement,
+	// not an absence of one. Before this existed such a video fell through to
+	// "never watched" and collected that bucket's boost, so the surest way to
+	// keep something in the feed was to reject it. The penalty is smaller than
+	// a dislike, which is deliberate: leaving early is weaker evidence than
+	// saying so, and the video stays reachable by search and on its channel.
+	penaltyBounced = 2.5
+	// How much of a video counts as having given it a chance.
+	bounceThreshold = 0.02
+	// Retention is a fraction, so this is the most a perfectly held video can
+	// gain. Kept below the like weight: what everyone finishes still loses to
+	// what this viewer said they wanted.
+	weightRetention = 1.5
+	// Watching is a weaker statement than liking, so the same topic match earns
+	// less. It accumulates across a viewing history, which is the point — fifty
+	// unremarked cooking videos should say what one like says.
+	weightTopicAffinity = 1.0
 	// Same-channel dominance is what makes the "Next" rail feel coherent.
 	weightSameChannel  = 2.5
 	weightSharedTags   = 1.5
@@ -143,8 +160,16 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 		return nil, err
 	}
 
-	affinity := channelAffinity(features, profile.WatchedFraction)
+	watchAffinity := buildWatchAffinity(features, profile.WatchedFraction)
 	likes := buildLikeAffinity(features, profile.Liked)
+
+	// How well each video holds an audience, across everyone. A blip reading
+	// this must not empty the feed: without it every video simply scores as
+	// though nobody had watched anything, which is where the library started.
+	retention, err := r.store.VideoRetention(ctx)
+	if err != nil {
+		retention = map[string]float32{}
+	}
 
 	now := r.now()
 	ranked := make([]domain.RankedVideo, 0, len(features))
@@ -157,7 +182,10 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 			continue
 		}
 
-		fraction := profile.WatchedFraction[f.VideoID]
+		// Comma-ok, not a bare lookup: a missing key and a fraction of zero are
+		// different facts. One means never opened, the other means opened and
+		// abandoned, and they deserve opposite treatment.
+		fraction, opened := profile.WatchedFraction[f.VideoID]
 		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now)
 		reason := domain.ReasonRecentlyAdded
 
@@ -169,6 +197,10 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 			// Rewatching is allowed but must not crowd out fresh material.
 			score += weightRewatch
 			reason = domain.ReasonRewatch
+		case opened:
+			// Opened and left almost immediately.
+			score -= penaltyBounced
+			reason = domain.ReasonBounced
 		default:
 			score += weightNeverWatched
 			reason = domain.ReasonNeverWatched
@@ -181,8 +213,10 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 			}
 		}
 
-		score += weightChannelAffinity * affinity[f.ChannelID]
+		score += weightChannelAffinity * watchAffinity.Channels[f.ChannelID]
+		score += weightTopicAffinity * watchAffinity.TopicScore(f)
 		score += weightLikeAffinity * likes.Score(f)
+		score += weightRetention * float64(retention[f.VideoID])
 
 		if profile.RecentImpressions[f.VideoID] {
 			score -= penaltyImpression
@@ -213,7 +247,11 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 		return nil, err
 	}
 
-	affinity := channelAffinity(features, profile.WatchedFraction)
+	watchAffinity := buildWatchAffinity(features, profile.WatchedFraction)
+	retention, err := r.store.VideoRetention(ctx)
+	if err != nil {
+		retention = map[string]float32{}
+	}
 
 	var current *domain.VideoFeatures
 	for i := range features {
@@ -254,16 +292,24 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 			}
 		}
 
-		fraction := profile.WatchedFraction[f.VideoID]
-		if isContinueWatching(fraction) {
+		fraction, opened := profile.WatchedFraction[f.VideoID]
+		switch {
+		case isContinueWatching(fraction):
 			score += weightContinueWatching
 			reason = domain.ReasonContinueWatching
-		} else if isWatched(fraction) {
+		case isWatched(fraction):
 			// Already-seen videos sink but stay available.
 			score -= penaltyDisliked / 2
+		case opened:
+			// Offering back something abandoned seconds ago is the most visible
+			// way for a "next" rail to look broken.
+			score -= penaltyBounced
+			reason = domain.ReasonBounced
 		}
 
-		score += weightChannelAffinity * affinity[f.ChannelID]
+		score += weightChannelAffinity * watchAffinity.Channels[f.ChannelID]
+		score += weightTopicAffinity * watchAffinity.TopicScore(f)
+		score += weightRetention * float64(retention[f.VideoID])
 
 		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})
 	}
@@ -271,40 +317,89 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 	return sortAndPage(ranked, pageSize, 0), nil
 }
 
-// channelAffinity turns watch history into a per-channel preference in the 0..1
-// range. It is computed here rather than in the store because only the catalog
-// projection knows which channel a video belongs to — the signal store must
-// never need that fact.
-func channelAffinity(features []domain.VideoFeatures, watched map[string]float32) map[string]float64 {
+// WatchAffinity is what a viewing history says about someone's taste, without
+// them ever pressing a button.
+//
+// Likes already produce a preference, but almost nobody likes anything: this
+// library holds 9 likes against 2,045 watch signals. Reading taste from
+// watching is what makes the feed respond to how the library is actually used
+// rather than to the rare deliberate gesture.
+//
+// Each axis is scaled to 0..1 against its own strongest entry, so the two
+// cannot be compared to each other and neither can run away with the score.
+type WatchAffinity struct {
+	Channels map[string]float64
+	Topics   map[string]float64
+}
+
+// buildWatchAffinity accumulates watched fractions per channel and per topic.
+//
+// Computed here rather than in the store because only the catalog projection
+// knows which channel or topic a video belongs to — the signal store must never
+// need that fact, and asking it to would put a join across a service boundary.
+//
+// Weighting by fraction rather than counting openings is the whole point: a
+// video watched to the end argues for its channel far more than one abandoned
+// after ten seconds, and counting would make those identical.
+func buildWatchAffinity(
+	features []domain.VideoFeatures, watched map[string]float32,
+) WatchAffinity {
+	affinity := WatchAffinity{
+		Channels: map[string]float64{},
+		Topics:   map[string]float64{},
+	}
 	if len(watched) == 0 {
-		return map[string]float64{}
+		return affinity
 	}
 
-	channelOf := make(map[string]string, len(features))
+	byID := make(map[string]domain.VideoFeatures, len(features))
 	for _, f := range features {
-		channelOf[f.VideoID] = f.ChannelID
+		byID[f.VideoID] = f
 	}
 
-	totals := map[string]float64{}
-	var max float64
 	for videoID, fraction := range watched {
-		channelID, ok := channelOf[videoID]
+		feature, ok := byID[videoID]
 		if !ok {
 			continue
 		}
-		totals[channelID] += float64(fraction)
-		if totals[channelID] > max {
-			max = totals[channelID]
+		affinity.Channels[feature.ChannelID] += float64(fraction)
+		for _, topic := range feature.Topics {
+			affinity.Topics[strings.ToLower(topic)] += float64(fraction)
 		}
 	}
 
+	normaliseToUnit(affinity.Channels)
+	normaliseToUnit(affinity.Topics)
+	return affinity
+}
+
+// TopicScore is how much this viewer's watching argues for a video's topics.
+func (a WatchAffinity) TopicScore(f domain.VideoFeatures) float64 {
+	var score float64
+	for _, topic := range f.Topics {
+		score += a.Topics[strings.ToLower(topic)]
+	}
+	return score
+}
+
+// normaliseToUnit divides a map by its largest value, in place.
+//
+// Without it these totals grow without bound as someone keeps watching, and a
+// long-standing viewer's affinity would eventually swamp every other term in
+// the score.
+func normaliseToUnit(totals map[string]float64) {
+	var max float64
+	for _, value := range totals {
+		if value > max {
+			max = value
+		}
+	}
 	if max == 0 {
-		return map[string]float64{}
+		return
 	}
-	for channelID := range totals {
-		totals[channelID] /= max
+	for key := range totals {
+		totals[key] /= max
 	}
-	return totals
 }
 
 func matchesTopic(f domain.VideoFeatures, topic string) bool {

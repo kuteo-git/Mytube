@@ -82,6 +82,18 @@ func (s *Server) Refresh(ctx context.Context, _ *connect.Request[ingestv1.Refres
 	return connect.NewResponse(&ingestv1.RefreshResponse{Status: scanToProto(result)}), nil
 }
 
+func (s *Server) BackfillTopics(ctx context.Context, req *connect.Request[ingestv1.BackfillTopicsRequest]) (*connect.Response[ingestv1.BackfillTopicsResponse], error) {
+	result, err := s.ingest.BackfillTopics(ctx, req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.BackfillTopicsResponse{
+		Examined: result.Examined,
+		Updated:  result.Updated,
+		Failed:   result.Failed,
+	}), nil
+}
+
 func (s *Server) GetScanStatus(_ context.Context, _ *connect.Request[ingestv1.GetScanStatusRequest]) (*connect.Response[ingestv1.GetScanStatusResponse], error) {
 	return connect.NewResponse(&ingestv1.GetScanStatusResponse{
 		Status: scanToProto(s.scanner.LastScan()),

@@ -110,6 +110,33 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 
 - **P1 (đã làm):** grid trộn 30% chưa xem / 25% mới / 20% kênh theo dõi / 15% xem dở /
   10% xem lại; chống lặp impression 24h
+- **Tín hiệu chấm điểm (2026-07-29)** — tất cả đều tất định, **không train gì cả**:
+
+  | Tín hiệu | Cách tính | Trọng số |
+  |---|---|---|
+  | Đang xem dở | `0.02 < fraction <= 0.95` | +3.0 |
+  | Chưa từng mở | video **không có** trong `WatchedFraction` | +1.5 |
+  | **Mở rồi bỏ ngay** | có trong map, `fraction <= 0.02` | **−2.5** |
+  | Kênh theo dõi | | +1.2 |
+  | Mới thêm | `exp(-days/14)` | ×1.0 |
+  | Affinity kênh (từ **xem**) | Σ fraction theo kênh, chuẩn hoá 0..1 | ×1.0 |
+  | Affinity chủ đề (từ **xem**) | Σ fraction theo topic, chuẩn hoá 0..1 | ×1.0 |
+  | Affinity từ **like** | topic 1.0 / kênh 0.8 / hashtag 0.5 | ×2.0 |
+  | **Giữ chân toàn cục** | `avg(max(fraction) per viewer)` | ×1.5 |
+  | Đã hiện trong 24h | | −2.0 |
+
+  Ba điểm đáng ghi:
+  - **`BOUNCED` là một Reason riêng.** Trước đây `fraction <= 0.02` rơi vào nhánh
+    `default` và được cộng +1.5 y như chưa xem — tức là **cách chắc chắn nhất để giữ
+    một video trong feed là từ chối nó**. Phân biệt bằng comma-ok, không phải giá trị 0.
+  - **Affinity đọc từ lịch sử xem, không chỉ từ Like.** Thư viện này có 9 like trên
+    2.045 tín hiệu xem; đọc sở thích từ Like thôi là gần như không đọc được gì.
+  - **Giữ chân tính trong recsys**, không hỏi catalog: catalog không biết ai xem bao
+    lâu, và ranh giới đó là thứ giữ cho đây là nhiều service chứ không phải một chương
+    trình chạy trong bốn process. Phải lấy `max` theo từng người xem **trước** rồi mới
+    trung bình — tín hiệu WATCH được ghi theo nhịp trong lúc phát, nên trung bình thẳng
+    trên các dòng sẽ đo "thời điểm trung bình ta lấy mẫu", tức khoảng nửa video bất kể
+    hay dở.
 - **Like:** cộng affinity theo topic 1.0 / kênh 0.8 / hashtag 0.5, cộng dồn qua từng like.
   Đưa lên P1 vì like mà không đổi gì thì là nút chết.
 - **Dislike**: loại khỏi feed và up-next, **vẫn tìm được qua search và trang kênh**.
@@ -257,6 +284,15 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   trang kênh) và worker tải video. Đánh đổi: video chưa ai mở thì chưa có topic.
   **Đã thử cách khác và bỏ**: từng cho scan tự fetch category từng video mới. Đo thật:
   scan 8 giây → 101 giây cho 40 video mới; với 55 kênh subscribe thì thành ~73 phút. Không đáng.
+  **Bổ sung 2026-07-29 — không đảo quyết định trên, mà bù cho hệ quả của nó**: vì scan
+  không gán topic nên 2.337/3.092 video (¾ thư viện) không có topic, và chúng gần như vô
+  hình với chip lọc lẫn với nửa "chủ đề" của affinity. Thêm `BackfillTopics`
+  (`POST /api/topics/backfill`, tuỳ chọn `?limit=`): **một lượt riêng, chạy khi được gọi**,
+  8 luồng song song. Đo thật: 0,32s/video → ~12 phút cho cả thư viện, so với ~96 phút nếu
+  chạy tuần tự. Lượt này tự nối tiếp được vì nó chọn theo "chưa có topic".
+  An toàn nhờ chính upsert của catalog: `media_state`, `media_path`, `added_at` **không**
+  nằm trong `DO UPDATE SET`, và `topics` thì hợp nhất chứ không thay thế — nên backfill
+  không thể hạ cấp video đã tải hay xoá topic do topics.yaml gán.
 - **Trang kênh**: từng đọc từ catalog local (`ListChannelVideos`) → **đảo lại**: đọc **live từ
   YouTube**, phân trang theo offset (`ListChannelUploads`). Lý do: scan chỉ mang về ~40 video mới
   nhất, nên trang kênh đọc catalog sẽ bị chặn ở con số đó vì lý do người xem không nhìn thấy.
@@ -280,6 +316,13 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 - **Lỗi phụ đề từng giết cả video**: gộp `--write-subs` vào lệnh tải → 429 ở endpoint caption
   làm yt-dlp exit 1 → mất video đã tải xong. Giờ tách lượt riêng, không được gộp lại.
+- **`watch_ratio` từng bị thổi phồng ngay tại nguồn (sửa 2026-07-29)**: client tính
+  `element.currentTime / element.duration`, mà stream remux fMP4 khai báo độ dài **đang lớn
+  dần** — nên phân số tiến về 1.0 ngay từ giây đầu. Ca đo được: video 243s xem tới 0:41 bị
+  ghi là **92% hoàn thành**. Vì ranking coi watch_ratio là bằng chứng "video đáng mở", một
+  phép chia đó âm thầm nói với nó rằng mọi thứ bị bỏ dở sớm đều xuất sắc. Giờ mẫu số lấy từ
+  độ dài catalog. **Dữ liệu cũ vẫn còn lệch** — `BuildProfile` lấy `max()` nên giá trị bị
+  thổi không tự phai đi.
 - **`--flat-playlist` thiếu rất nhiều field**: không có channel per-entry (dùng `playlist_uploader`),
   không có view count, không có ngày đăng, không có `thumbnail` (dùng mảng `thumbnails`).
   **Không được default ngày đăng = now** — nó hiện thành "1 minute ago" trên mọi card.

@@ -22,6 +22,14 @@ service IngestService {
 
   // Rescans topics.yaml now instead of waiting for the timer.
   rpc Refresh(RefreshRequest) returns (RefreshResponse);
+
+  // Assigns YouTube's own category to videos that have none.
+  //
+  // Scans use flat listings, which carry no category, so everything they bring
+  // in arrives without a topic and stays invisible to topic filters. Fetching
+  // categories during a scan was tried and measured, and made scanning
+  // unusable; this is the same work as a separate pass that runs when asked.
+  rpc BackfillTopics(BackfillTopicsRequest) returns (BackfillTopicsResponse);
   rpc GetScanStatus(GetScanStatusRequest) returns (GetScanStatusResponse);
 
   // Resolves a directly playable upstream URL. This is what makes "click and
@@ -123,6 +131,22 @@ message EnsureVideoRequest {
 message EnsureVideoResponse {
   // Catalog id of the video, ready to be opened.
   string video_id = 1;
+}
+
+message BackfillTopicsRequest {
+  // Most videos to process in this pass. Zero means every video that needs it.
+  // The pass selects on "has no topic", so a bounded run is resumable simply by
+  // running it again.
+  int32 limit = 1;
+}
+
+message BackfillTopicsResponse {
+  int32 examined = 1;
+  int32 updated = 2;
+  // Videos whose metadata could not be fetched: private, removed or
+  // region-blocked. Reported rather than retried — asking again will not make
+  // them fetchable.
+  int32 failed = 3;
 }
 
 message RefreshRequest {}
