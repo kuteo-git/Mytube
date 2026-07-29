@@ -49,10 +49,24 @@ Media library **tự host** chạy trên Mac M4 tại nhà. `yt-dlp` là **công
 |---|---|---|
 | `local` | file trên đĩa. Có thì không cần nguồn nào khác | ✅ |
 | `instant` | URL progressive thô của YouTube (itag 18, 360p), browser tự range-request | ✅ |
-| `remux` | mux trực tiếp 2 luồng adaptive → fMP4. Chỉ dùng khi video **không có** progressive | ❌ |
+| `remux` | mux trực tiếp 2 luồng adaptive → fMP4, 1080p | ⚠️ mở lại |
 
-Player leo tầng: `instant` phát trong ~17ms → đổi sang `local` khi tải xong.
+**Chặng 2 xong 2026-07-29 — player leo đủ 3 tầng:**
+`instant` phát trong ~17ms → dựng `remux` 1080p ở thẻ ẩn, lên khi sẵn sàng → `local` khi tải xong.
 Không transcode, không HLS.
+
+**Seek ở tầng remux = mở lại luồng.** fMP4 qua pipe không có index nên trình duyệt không seek
+được; player gửi `?t=<giây>` và ffmpeg dùng `-ss` **trước `-i`** (HTTP range seek, không phải
+decode-rồi-bỏ). Đo thật: mở từ đầu 4.4s, seek tới 120s mất **3.0s** — rẻ hơn vì URL đã cache.
+Chỉ bắn khi **thả tay** khỏi thanh seek; kéo thì chỉ số chạy. Có nhãn "Seeking…" vì 3 giây
+mà hình vẫn đứng yên thì trông như bị lơ.
+
+**Toàn bộ vị trí là tuyệt đối.** Luồng remux mở tại mốc nào thì tự cho mình bắt đầu từ 0, nên
+mọi thứ ngoài thẻ video làm việc với `offset + currentTime`.
+
+**Menu Auto / 1080p / 360p** — chỉ hiện mục video thật sự phục vụ được. **Ghim là lệnh**:
+chọn tay thì không tự leo cũng không tự tụt. Auto mà remux không kịp trong 20s thì bỏ, về
+360p và **không thử lại cho video đó** — mạng vừa không kham nổi thì lần hai cũng vậy.
 
 `?prefetch=1` = mới rê chuột lên card, chưa bấm play: resolve và cache URL để lần bấm sau
 tức thì, **không** xếp hàng tải. Thiếu vạch này thì lướt feed sẽ làm đầy ổ đĩa có trần cứng.
@@ -274,13 +288,7 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 ### Chưa làm — thứ tự đề xuất khi làm tiếp
 
-1. **Playback chặng 2** (chặng 1 xong 2026-07-29): chèn lại tầng `remux` 1080p vào **giữa**
-   `instant` và `local` — dựng song song ở thẻ ẩn, lên khi sẵn sàng; seek khi đang ở tầng đó
-   = mở lại ffmpeg với `-ss` (chỉ bắn khi **thả tay** khỏi thanh seek, không bắn lúc đang kéo);
-   thêm menu **Auto / 1080p / 360p**, trong đó **ghim là lệnh** — chọn tay thì không tự tụt
-   tầng, Auto thì hụt hơi là về 360p và không thử lại. Chỉ 3 mục: 480p/720p tốn đúng 2.2s
-   ffmpeg như 1080p nên không mua thêm được gì.
-2. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
+1. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
    **Đang là link chết trong sidebar.**
 

@@ -14,7 +14,7 @@ import (
 // YouTube's separate video and audio files.
 type Remuxer interface {
 	ResolveRemuxURLs(ctx context.Context, videoURL string, height int32) ([]string, error)
-	OpenRemux(ctx context.Context, urls []string) (io.ReadCloser, error)
+	OpenRemux(ctx context.Context, urls []string, startSeconds float64) (io.ReadCloser, error)
 }
 
 // SourceLookup turns a local video id back into its upstream URL.
@@ -30,7 +30,14 @@ type Handler struct {
 }
 
 func NewHandler(remux Remuxer, sources SourceLookup, defaultHeight int32, logger *slog.Logger) *Handler {
-	return &Handler{remux: remux, sources: sources, defaultHeight: defaultHeight, logger: logger}
+	// Wrapped so that seeking — which reopens the mux, and may do so several
+	// times a minute — does not re-run yt-dlp each time.
+	return &Handler{
+		remux:         newCachedRemuxURLs(remux),
+		sources:       sources,
+		defaultHeight: defaultHeight,
+		logger:        logger,
+	}
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {
@@ -40,10 +47,14 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 // handleRemux streams a video at full resolution, muxed on the fly.
 //
 // Deliberately not a range server. The stream has no known length and no index,
-// so it is served as one continuous body: the browser treats it as unseekable
-// and plays it from the start, which is exactly right for a first viewing while
-// the real file downloads in the background. Advertising range support here
-// would invite seeks that cannot be honoured.
+// so it is served as one continuous body and the browser treats it as
+// unseekable — which is correct, because it is.
+//
+// Seeking is done by asking again. `?t=` opens a fresh mux from that offset, so
+// the player performs a seek by replacing the stream rather than by moving
+// within it. That costs a couple of seconds and a new ffmpeg, which is why the
+// player only asks once the viewer has let go of the scrub bar rather than
+// while they are dragging it.
 func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	videoID := r.PathValue("videoId")
@@ -61,6 +72,15 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Where to start. Anything unparseable is treated as the beginning: a
+	// mangled timestamp should play the video, not fail the request.
+	var startSeconds float64
+	if raw := r.URL.Query().Get("t"); raw != "" {
+		if v, convErr := strconv.ParseFloat(raw, 64); convErr == nil && v > 0 {
+			startSeconds = v
+		}
+	}
+
 	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, height)
 	if err != nil {
 		h.logger.Warn("resolve remux urls", "video", videoID, "error", err)
@@ -68,7 +88,7 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stream, err := h.remux.OpenRemux(ctx, urls)
+	stream, err := h.remux.OpenRemux(ctx, urls, startSeconds)
 	if err != nil {
 		h.logger.Warn("open remux", "video", videoID, "error", err)
 		http.Error(w, "cannot open stream", http.StatusBadGateway)

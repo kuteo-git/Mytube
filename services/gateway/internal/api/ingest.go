@@ -32,6 +32,11 @@ type jobDTO struct {
 	CreatedAt       string  `json:"createdAt"`
 }
 
+// The resolution the muxed stream is assembled at. Fixed rather than
+// negotiated: ingest has one configured height, and telling the client a
+// different number would put a wrong label on the picture.
+const remuxHeight = 1080
+
 // sourceDTO is one way of playing a video.
 type sourceDTO struct {
 	URL      string `json:"url"`
@@ -364,7 +369,11 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		// video and audio tracks ourselves. No index, so no seeking — which is
 		// why it is the fallback rather than the opening move.
 		Remux: &sourceDTO{
-			URL:      "/api/videos/" + url.PathEscape(videoID) + "/remux",
+			URL:    "/api/videos/" + url.PathEscape(videoID) + "/remux",
+			Height: remuxHeight,
+			// Not seekable in the sense the browser means it: there is no index
+			// to move within. The player seeks by asking for the stream again
+			// from a new offset, which is why it needs to know the difference.
 			MimeType: "video/mp4",
 			Seekable: false,
 		},
@@ -398,8 +407,16 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 // video, and holding it in memory to forward it would be pointless.
 func (g *Gateway) handleRemuxStream(w http.ResponseWriter, r *http.Request) {
 	target := g.ingestBaseURL + "/stream/" + url.PathEscape(r.PathValue("id"))
-	if h := r.URL.Query().Get("height"); h != "" {
-		target += "?height=" + url.QueryEscape(h)
+	// height picks the rendition; t is where to start. The second is how the
+	// player seeks in a stream that cannot be seeked: it asks for a new one.
+	forwarded := url.Values{}
+	for _, name := range []string{"height", "t"} {
+		if v := r.URL.Query().Get(name); v != "" {
+			forwarded.Set(name, v)
+		}
+	}
+	if len(forwarded) > 0 {
+		target += "?" + forwarded.Encode()
 	}
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)

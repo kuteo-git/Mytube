@@ -4,6 +4,7 @@ import {
   Maximize,
   Pause,
   Play,
+  Settings,
   SkipForward,
   Volume1,
   Volume2,
@@ -15,10 +16,12 @@ import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
 import { useStream } from '@/features/catalog/application/queries'
 import { useDownloadProgress } from '@/features/catalog/application/download'
+import type { QualityChoice } from '@/features/watch/application/autoplay'
 import {
   autoplayChainExhausted,
   resetAutoplayChain,
   useAutoplayPreference,
+  useQualityPreference,
 } from '@/features/watch/application/autoplay'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
@@ -55,36 +58,143 @@ const SEEK_STEP_SECONDS = 5
  */
 const SWAP_LEAD_SECONDS = 0.6
 
+/**
+ * How far ahead of the playhead a muxed stream is opened.
+ *
+ * ffmpeg needs a couple of seconds to produce a first fragment — measured at
+ * 2.2 on this machine — and the stream begins wherever it was asked to. Opening
+ * at the current position would mean waiting for an element that starts behind
+ * where playback has meanwhile reached; the handover then has nothing to wait
+ * for and jumps backwards. Four seconds covers the mux with room to spare.
+ */
+const REMUX_PREPARE_LEAD_SECONDS = 4
+
+/**
+ * How long a muxed stream may take to become playable before auto gives up.
+ *
+ * Past this it is not going to keep up with playback either, and a smooth low
+ * rendition beats a stuttering high one. Only auto gives up; a viewer who
+ * pinned 1080p asked for it and keeps it.
+ */
+const REMUX_PATIENCE_MS = 20_000
+
+/**
+ * The height the full-quality tiers are labelled with when they do not say.
+ *
+ * The local file and the muxed stream are both produced at the configured
+ * download height, and neither carries it in the stream answer.
+ */
+const remuxLabelHeight = 1080
+
 type TierName = 'instant' | 'remux' | 'local'
 
 interface Tier {
   name: TierName
+  /** Without any offset. `sourceURL` below adds one for the muxed stream. */
   url: string
+  /** True when the browser can seek within it by itself. */
   seekable: boolean
   height?: number
 }
 
 /**
- * Picks the best available source.
+ * Where the video actually starts, for a tier opened at an offset.
  *
- * Order is not preference between equals: the local file is complete and
- * seekable, the instant upstream is seekable but low resolution, and the muxed
- * stream is full resolution but cannot be seeked at all and takes seconds to
- * produce its first frame. Anything seekable beats anything that is not.
+ * Only the muxed stream has one. It carries no index, so seeking means asking
+ * for a fresh mux beginning at the mark — and the element then believes it is
+ * at zero. Everything the viewer sees has to add this back, or a video seeked
+ * to ten minutes reports itself as just beginning.
  */
-function pickTier(sources: StreamSources | undefined): Tier | undefined {
-  if (!sources) return undefined
-  if (sources.local) return { name: 'local', url: sources.local.url, seekable: true }
+function sourceURL(tier: Tier, offsetSeconds: number): string {
+  if (tier.name !== 'remux' || offsetSeconds <= 0) return tier.url
+  return `${tier.url}?t=${offsetSeconds.toFixed(3)}`
+}
+
+/**
+ * Every way this video can be played, best first.
+ *
+ * Order is not preference between equals. The local file is complete and
+ * seekable; the muxed stream is the same resolution but has no index, so
+ * seeking it means reopening it; the instant upstream seeks freely but is
+ * whatever low rendition YouTube still publishes muxed.
+ */
+function availableTiers(sources: StreamSources | undefined): Tier[] {
+  if (!sources) return []
+  const tiers: Tier[] = []
+  if (sources.local) {
+    tiers.push({ name: 'local', url: sources.local.url, seekable: true })
+  }
+  if (sources.remux) {
+    tiers.push({
+      name: 'remux',
+      url: sources.remux.url,
+      seekable: false,
+      height: sources.remux.height,
+    })
+  }
   if (sources.instant) {
-    return {
+    tiers.push({
       name: 'instant',
       url: sources.instant.url,
       seekable: true,
       height: sources.instant.height,
-    }
+    })
   }
-  if (sources.remux) return { name: 'remux', url: sources.remux.url, seekable: false }
-  return undefined
+  return tiers
+}
+
+/**
+ * The tier to open first.
+ *
+ * Always the one that starts fastest, which is the instant upstream — the whole
+ * point of the design is that pressing play produces a picture immediately and
+ * the quality arrives afterwards. The muxed stream is the opening move only for
+ * videos that publish no progressive rendition at all, where there is nothing
+ * faster to fall back to.
+ */
+function openingTier(tiers: Tier[], choice: QualityChoice): Tier | undefined {
+  if (tiers.length === 0) return undefined
+  const local = tiers.find((t) => t.name === 'local')
+  if (local) return local
+  if (choice === 'high') {
+    return tiers.find((t) => t.name === 'remux') ?? tiers[0]
+  }
+  return tiers.find((t) => t.name === 'instant') ?? tiers[0]
+}
+
+/**
+ * The tier the player should be moving towards, or undefined when it is already
+ * on the best one available.
+ *
+ * Pinning is a command, not a preference: a viewer who picked 360p keeps it
+ * even once the download lands, and one who picked 1080p keeps it even if the
+ * connection is struggling. Only "auto" climbs, and only "auto" retreats.
+ */
+function targetTier(
+  tiers: Tier[], current: TierName | undefined, choice: QualityChoice, remuxFailed: boolean,
+): Tier | undefined {
+  if (tiers.length === 0) return undefined
+
+  let wanted: Tier | undefined
+  switch (choice) {
+    case 'low':
+      wanted = tiers.find((t) => t.name === 'instant') ?? tiers.find((t) => t.name === 'local')
+      break
+    case 'high':
+      wanted = tiers.find((t) => t.name === 'local') ?? tiers.find((t) => t.name === 'remux')
+      break
+    default:
+      // Auto: the local file whenever it exists, otherwise full resolution
+      // muxed live — unless that has already been tried and could not keep up,
+      // in which case a smooth low rendition beats a stuttering high one.
+      wanted =
+        tiers.find((t) => t.name === 'local') ??
+        (remuxFailed ? undefined : tiers.find((t) => t.name === 'remux')) ??
+        tiers.find((t) => t.name === 'instant')
+  }
+
+  if (!wanted || wanted.name === current) return undefined
+  return wanted
 }
 
 export function Player({
@@ -112,12 +222,26 @@ export function Player({
   const download = useDownloadProgress(videoId, Boolean(sources) && !sources?.local)
   const queryClient = useQueryClient()
 
-  // The best way to play right now. Local beats everything: it is on disk and
-  // fully seekable. Otherwise the instant upstream, which starts in
-  // milliseconds and seeks properly at the cost of resolution — and only when a
-  // video publishes no progressive format at all does the muxed stream, slow to
-  // start and unseekable, become the opening move.
-  const tier = useMemo(() => pickTier(sources), [sources])
+  const tiers = useMemo(() => availableTiers(sources), [sources])
+  const [quality, setQuality] = useQualityPreference()
+  // Set once the muxed stream has been tried and could not keep up. Auto does
+  // not try again for this video: the connection that could not sustain it a
+  // minute ago is unlikely to have changed, and a second failed attempt is
+  // another few seconds of stalling to find that out.
+  const [remuxFailed, setRemuxFailed] = useState(false)
+  // Which tier the front element is playing, and where in the video that
+  // element's zero is. Only the muxed stream has a non-zero offset.
+  const [tier, setTier] = useState<Tier | undefined>(undefined)
+  const [offsetSeconds, setOffsetSeconds] = useState(0)
+  const offsetRef = useRef(0)
+  offsetRef.current = offsetSeconds
+  // Read by seekTo, which is a stable callback and would otherwise close over
+  // whichever tier was current when it was created.
+  const tierRef = useRef<Tier | undefined>(undefined)
+  tierRef.current = tier
+  // True while a muxed stream is being reopened at a new mark. The picture is
+  // still the old one, so this is what tells the viewer the seek was heard.
+  const [seeking, setSeeking] = useState(false)
 
   // Two elements, so a change of source can be prepared out of sight and
   // switched to at a chosen moment. One element would have to drop what it is
@@ -142,6 +266,7 @@ export function Player({
   const [srcA, setSrcA] = useState<string | undefined>(undefined)
   const [srcB, setSrcB] = useState<string | undefined>(undefined)
   const frontSrc = frontIsA ? srcA : srcB
+  const backSrc = frontIsA ? srcB : srcA
   const setBackSrc = frontIsA ? setSrcB : setSrcA
   const [playing, setPlaying] = useState(false)
   const [volume, setVolume] = useState(1)
@@ -186,6 +311,13 @@ export function Player({
   // URL currently being prepared in the hidden element, or undefined when no
   // upgrade is in flight. Guards against starting the same swap twice.
   const upgradingToRef = useRef<string | undefined>(undefined)
+  // The tier the hidden element is preparing, and the offset it was opened at.
+  // Applied to the visible state only once the handover actually happens.
+  const pendingTierRef = useRef<{ tier: Tier; offset: number } | undefined>(undefined)
+  // Absolute position in the video, offset included. Read by the effect that
+  // opens a muxed stream, which needs to know where the viewer is without
+  // taking position as a dependency and restarting on every tick.
+  const positionRef = useRef(0)
   const handoverFrameRef = useRef(0)
   const justSwappedRef = useRef(false)
 
@@ -268,28 +400,47 @@ export function Player({
   // picture drop out. A replacement is loaded into the hidden element instead,
   // and the two are exchanged once the replacement is genuinely ready.
   useEffect(() => {
-    if (!tier) return
-
-    // Nothing playing yet: this is the first source, so it goes straight to the
-    // front. There is no picture to protect.
+    // Nothing playing yet: open the fastest tier straight into the front
+    // element. There is no picture to protect, and the point of the design is
+    // that this happens immediately.
     if (!frontSrc) {
-      if (frontIsARef.current) setSrcA(tier.url)
-      else setSrcB(tier.url)
+      const opening = openingTier(tiers, quality)
+      if (!opening) return
+      setTier(opening)
+      setOffsetSeconds(0)
+      if (frontIsARef.current) setSrcA(sourceURL(opening, 0))
+      else setSrcB(sourceURL(opening, 0))
       return
     }
 
-    if (tier.url === frontSrc) return
-    // An upgrade to this source is already being prepared.
-    if (upgradingToRef.current === tier.url) return
+    const wanted = targetTier(tiers, tier?.name, quality, remuxFailed)
+    if (!wanted) return
 
-    upgradingToRef.current = tier.url
-    setBackSrc(tier.url)
-  }, [tier, frontSrc, setBackSrc])
+    // The muxed stream has to be opened where the viewer already is, and a
+    // little ahead of it: the mux takes a couple of seconds to produce its
+    // first fragment, and opening at the current position would mean handing
+    // over to an element that starts before where playback has since reached.
+    const startAt =
+      wanted.name === 'remux' ? positionRef.current + REMUX_PREPARE_LEAD_SECONDS : 0
+    const url = sourceURL(wanted, startAt)
+    if (upgradingToRef.current === url) return
+
+    upgradingToRef.current = url
+    pendingTierRef.current = { tier: wanted, offset: wanted.name === 'remux' ? startAt : 0 }
+    setBackSrc(url)
+  }, [tiers, tier, quality, remuxFailed, frontSrc, setBackSrc])
 
   // Give up on an upgrade and keep playing what already works. Failing to
   // prepare a better source is not a playback failure — nothing on screen
   // changes — so it must never surface as one.
   const abandonUpgrade = useCallback(() => {
+    // A muxed stream that could not be prepared is not tried again in auto: the
+    // connection that failed it will not have changed, and a second attempt is
+    // more seconds of stalling to learn the same thing. A viewer who pinned
+    // 1080p is not overruled — targetTier ignores this for them.
+    if (pendingTierRef.current?.tier.name === 'remux') setRemuxFailed(true)
+    pendingTierRef.current = undefined
+    setSeeking(false)
     upgradingToRef.current = undefined
     window.cancelAnimationFrame(handoverFrameRef.current)
     if (frontIsARef.current) setSrcB(undefined)
@@ -320,7 +471,19 @@ export function Player({
       // source change freezes it: the element being left behind will report
       // times that no longer mean anything.
       swappingRef.current = true
-      resumeAtRef.current = next.currentTime
+
+      // The incoming tier's frame becomes the current one, and only now — a
+      // handover that never happened must not leave the offset pointing at a
+      // stream nobody is watching.
+      const pending = pendingTierRef.current
+      const nextOffset = pending?.offset ?? 0
+      resumeAtRef.current = next.currentTime + nextOffset
+      positionRef.current = resumeAtRef.current
+      offsetRef.current = nextOffset
+      setOffsetSeconds(nextOffset)
+      if (pending) setTier(pending.tier)
+      pendingTierRef.current = undefined
+      setSeeking(false)
 
       const wasPlaying = !current.paused
       justSwappedRef.current = true
@@ -360,6 +523,20 @@ export function Player({
   // A pending handover must not outlive the video it belongs to.
   useEffect(() => () => window.cancelAnimationFrame(handoverFrameRef.current), [])
 
+  // Give up on a muxed stream that is taking too long to become playable.
+  //
+  // Without this the rail waits indefinitely on a connection that cannot
+  // sustain the mux, and the viewer sits on the low rendition with no
+  // indication that anything is being attempted or has failed. Only auto gives
+  // up; a viewer who pinned 1080p asked for it.
+  useEffect(() => {
+    if (!backSrc || quality === 'high') return
+    const timer = window.setTimeout(() => {
+      if (pendingTierRef.current?.tier.name === 'remux') abandonUpgrade()
+    }, REMUX_PATIENCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [backSrc, quality, abandonUpgrade])
+
   // Kept in a ref because the progress reporter runs on a timer, from an effect
   // that must not be torn down and rebuilt every time the duration is refined.
   const trustedDurationRef = useRef(durationSeconds)
@@ -386,12 +563,53 @@ export function Player({
     else element.pause()
   }, [])
 
-  const seekBy = useCallback((delta: number) => {
-    resetAutoplayChain()
-    const element = front()
-    if (!element) return
-    element.currentTime = Math.max(0, Math.min(element.duration || 0, element.currentTime + delta))
-  }, [])
+  /**
+   * Moves to an absolute position, however the current tier allows it.
+   *
+   * A seekable tier is a plain assignment. The muxed stream has no index, so
+   * the only way to move within it is to open a new one starting there — the
+   * picture is replaced rather than repositioned, which costs a couple of
+   * seconds and is why this is never called while a scrub handle is being
+   * dragged.
+   */
+  const seekTo = useCallback(
+    (absolute: number) => {
+      resetAutoplayChain()
+      const element = front()
+      if (!element) return
+
+      const target = Math.max(0, absolute)
+      setPosition(target)
+      positionRef.current = target
+      resumeAtRef.current = target
+
+      if (tierRef.current?.seekable !== false) {
+        element.currentTime = Math.max(0, target - offsetRef.current)
+        return
+      }
+
+      const currentTier = tierRef.current
+      if (!currentTier) return
+      // Reopening is a source change, so it goes through the same hidden-element
+      // handover as everything else: the picture only leaves once the
+      // replacement can actually play.
+      const url = sourceURL(currentTier, target)
+      if (upgradingToRef.current === url) return
+      upgradingToRef.current = url
+      pendingTierRef.current = { tier: currentTier, offset: target }
+      setSeeking(true)
+      if (frontIsARef.current) setSrcB(url)
+      else setSrcA(url)
+    },
+    [front],
+  )
+
+  const seekBy = useCallback(
+    (delta: number) => {
+      seekTo(positionRef.current + delta)
+    },
+    [seekTo],
+  )
 
   const applyVolume = (next: number) => {
     resetAutoplayChain()
@@ -496,6 +714,25 @@ export function Player({
     }
   }, [videoId, playable])
 
+  // What is on screen, named the way a viewer would name it.
+  const tierLabel = (() => {
+    if (!tier) return ''
+    if (tier.name === 'local') return `${remuxLabelHeight}p`
+    if (tier.name === 'remux') return `${tier.height ?? remuxLabelHeight}p`
+    return `${tier.height ?? 360}p`
+  })()
+
+  // Only the choices this video can actually honour. A menu entry that cannot
+  // be delivered is worse than one that is missing.
+  const qualityOptions = useMemo(() => {
+    const options: { value: QualityChoice; label: string }[] = [{ value: 'auto', label: 'Auto' }]
+    const high = tiers.find((t) => t.name === 'local' || t.name === 'remux')
+    if (high) options.push({ value: 'high', label: `${high.height ?? remuxLabelHeight}p` })
+    const low = tiers.find((t) => t.name === 'instant')
+    if (low) options.push({ value: 'low', label: `${low.height ?? 360}p` })
+    return options
+  }, [tiers])
+
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
 
@@ -517,11 +754,12 @@ export function Player({
           <span
             title={
               tier.name === 'instant'
-                ? 'Playing upstream while the full-quality copy downloads'
-                : 'Muxed live — seeking needs the downloaded file'
+                ? 'Playing upstream while a better source is prepared'
+                : 'Muxed live — seeking reopens the stream, so it takes a moment'
             }
           >
-            {tier.name === 'instant' ? `${tier.height ?? 360}p` : 'Live'}
+            {tierLabel}
+            {tier.name === 'remux' && ' · live'}
           </span>
           {downloading && (
             <>
@@ -544,6 +782,15 @@ export function Player({
               </span>
             </>
           )}
+        </div>
+      )}
+
+      {/* Reopening a muxed stream at a new mark takes a couple of seconds, and
+          the old picture stays on screen throughout. Without this the seek
+          looks like it was ignored. */}
+      {seeking && (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-black/40">
+          <span className="rounded-lg bg-badge px-3 py-2 text-sm font-medium">Seeking…</span>
         </div>
       )}
 
@@ -620,10 +867,16 @@ export function Player({
                     // wait there. Seeking is what makes the exchange seamless,
                     // so a source that cannot seek hands over immediately.
                     const current = front()
-                    const mark =
-                      current && !current.paused
-                        ? current.currentTime + SWAP_LEAD_SECONDS
-                        : (current?.currentTime ?? 0)
+                    // The mark is absolute; the element being prepared measures
+                    // from its own offset, so the two frames have to be lined up
+                    // before either can be compared with the other.
+                    const pendingOffset = pendingTierRef.current?.offset ?? 0
+                    const absoluteNow = current
+                      ? current.currentTime + offsetRef.current
+                      : positionRef.current
+                    const absoluteMark =
+                      current && !current.paused ? absoluteNow + SWAP_LEAD_SECONDS : absoluteNow
+                    const mark = absoluteMark - pendingOffset
 
                     if (mark <= 0) {
                       // Nothing has played yet, so both elements already agree
@@ -643,7 +896,9 @@ export function Player({
 
                   if (Number.isFinite(element.duration)) setElementDuration(element.duration)
 
-                  const resumeAt = resumeAtRef.current
+                  // resumeAtRef is absolute; the element is not. A muxed stream
+                  // opened at ten minutes needs to be told zero, not ten.
+                  const resumeAt = resumeAtRef.current - offsetRef.current
                   if (resumeAt > 0 && resumeAt < element.duration) {
                     element.currentTime = resumeAt
                   }
@@ -674,11 +929,18 @@ export function Player({
                 onTimeUpdate={
                   isFront
                     ? (e) => {
-                        setPosition(e.currentTarget.currentTime)
+                        // Absolute position in the video. A muxed stream opened
+                        // at a mark believes it starts at zero, so everything
+                        // outside the element works in offset + currentTime or
+                        // a video seeked to ten minutes reports itself as just
+                        // beginning.
+                        const absolute = e.currentTarget.currentTime + offsetRef.current
+                        setPosition(absolute)
+                        positionRef.current = absolute
                         // Frozen across a source swap, so the browser's reset to
                         // 0 cannot erase where the viewer actually was.
                         if (!swappingRef.current) {
-                          resumeAtRef.current = e.currentTarget.currentTime
+                          resumeAtRef.current = absolute
                         }
                       }
                     : undefined
@@ -687,7 +949,9 @@ export function Player({
                   isFront
                     ? (e) => {
                         const ranges = e.currentTarget.buffered
-                        if (ranges.length > 0) setBuffered(ranges.end(ranges.length - 1))
+                        if (ranges.length > 0) {
+                          setBuffered(ranges.end(ranges.length - 1) + offsetRef.current)
+                        }
                       }
                     : undefined
                 }
@@ -756,11 +1020,12 @@ export function Player({
           // stream — the fallback for videos publishing no progressive format
           // at all — has no index and cannot be seeked.
           disabled={!playable || !tier?.seekable}
-          onSeek={(next) => {
-            setPosition(next)
-            const element = front()
-            if (element) element.currentTime = next
-          }}
+          // While dragging, only the number moves; the stream is asked for once
+          // the handle is released. On a tier that cannot be seeked each of
+          // these would otherwise kill an ffmpeg and start another, dozens of
+          // times across one drag.
+          onScrub={(next) => setPosition(next)}
+          onSeek={seekTo}
         />
 
         <div className="flex items-center gap-2 py-1.5 text-white">
@@ -839,6 +1104,24 @@ export function Player({
             <CaptionMenu tracks={subtitles} active={captions} onSelect={setCaptions} />
           )}
 
+          {/* Only offered when there is more than one way to play the video.
+              A quality menu over a single source would be a control that
+              cannot do anything. */}
+          {qualityOptions.length > 1 && (
+            <QualityMenu
+              choice={quality}
+              options={qualityOptions}
+              playingLabel={tierLabel}
+              onSelect={(next) => {
+                // Choosing again is a fresh decision: a viewer who asks for
+                // 1080p after auto gave up on it should get an attempt, not
+                // the memory of the last failure.
+                setRemuxFailed(false)
+                setQuality(next)
+              }}
+            />
+          )}
+
           <button
             type="button"
             aria-label="Full screen"
@@ -858,6 +1141,69 @@ export function Player({
  * Caption picker. Rendered only when tracks exist, so the control never appears
  * as something that does nothing — an upstream stream has no caption files.
  */
+/**
+ * Auto, and whichever fixed choices the video can actually offer.
+ *
+ * Three entries at most, because there are only three distinct ways to play
+ * anything here: the downloaded file, the same resolution muxed live, and the
+ * low progressive rendition. Offering 480p and 720p as well would cost the same
+ * ffmpeg as 1080p and give a worse picture for it — see the grilling notes in
+ * CLAUDE.md §8b.
+ */
+function QualityMenu({
+  choice,
+  options,
+  playingLabel,
+  onSelect,
+}: {
+  choice: QualityChoice
+  options: { value: QualityChoice; label: string }[]
+  /** What is on screen right now, shown beside Auto so it is never a mystery. */
+  playingLabel: string
+  onSelect: (next: QualityChoice) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Quality"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+      >
+        <Settings size={22} />
+      </button>
+
+      {open && (
+        <ul className="absolute right-0 bottom-11 min-w-44 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg">
+          {options.map((option) => (
+            <li key={option.value}>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(option.value)
+                  setOpen(false)
+                }}
+                className={
+                  'flex w-full items-center justify-between gap-4 px-4 py-2 text-left transition-colors duration-150 ease-out hover:bg-surface-hover ' +
+                  (choice === option.value ? 'font-medium' : '')
+                }
+              >
+                <span>{option.label}</span>
+                {option.value === 'auto' && choice === 'auto' && (
+                  <span className="text-xs text-text-2">{playingLabel}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function CaptionMenu({
   tracks,
   active,
@@ -936,12 +1282,16 @@ function SeekBar({
   duration,
   buffered,
   disabled,
+  onScrub,
   onSeek,
 }: {
   position: number
   duration: number
   buffered: number
   disabled: boolean
+  /** Called continuously while dragging. Moves the readout, nothing else. */
+  onScrub: (next: number) => void
+  /** Called once, when the handle is released or a key press lands. */
   onSeek: (next: number) => void
 }) {
   const safeDuration = Math.max(duration, 1)
@@ -963,7 +1313,14 @@ function SeekBar({
         max={safeDuration}
         step={0.1}
         value={position}
-        onChange={(e) => onSeek(Number(e.target.value))}
+        // Dragging and committing are separate events, because on a muxed
+        // stream committing means killing an ffmpeg and starting another. A
+        // range input fires change continuously while dragging; the seek itself
+        // waits for the pointer or key to be released.
+        onChange={(e) => onScrub(Number(e.target.value))}
+        onPointerUp={(e) => onSeek(Number(e.currentTarget.value))}
+        onKeyUp={(e) => onSeek(Number(e.currentTarget.value))}
+        onBlur={(e) => onSeek(Number(e.currentTarget.value))}
         disabled={disabled}
         aria-label="Seek"
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"

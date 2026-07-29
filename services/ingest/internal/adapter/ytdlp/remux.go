@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/lrstanley/go-ytdlp"
@@ -71,9 +72,20 @@ func (d *Downloader) ResolveRemuxURLs(ctx context.Context, videoURL string, heig
 // OpenRemux starts ffmpeg and returns its output. The caller must Close the
 // stream, which is what kills ffmpeg when a viewer navigates away — without
 // that, every abandoned video would leave a process pulling bytes forever.
-func (d *Downloader) OpenRemux(ctx context.Context, urls []string) (io.ReadCloser, error) {
+// startSeconds is where the stream should begin. Seeking works by opening a
+// fresh mux from a new offset, because a piped fragmented MP4 carries no index
+// for a player to seek within — see CLAUDE.md §8b. `-ss` before `-i` makes
+// ffmpeg do it as an HTTP range request rather than by decoding and discarding,
+// which is what keeps it about as cheap as opening at zero.
+func (d *Downloader) OpenRemux(ctx context.Context, urls []string, startSeconds float64) (io.ReadCloser, error) {
 	args := []string{"-hide_banner", "-loglevel", "error"}
 	for _, u := range urls {
+		if startSeconds > 0 {
+			// Per input, and before -i. After -i it becomes an output seek:
+			// ffmpeg would read and throw away everything up to the mark, which
+			// on an hour-long video is minutes of work for a viewer waiting.
+			args = append(args, "-ss", strconv.FormatFloat(startSeconds, 'f', 3, 64))
+		}
 		// Reconnect flags matter more here than for a file: these are signed
 		// CDN URLs being read for the length of a whole video.
 		args = append(args,
