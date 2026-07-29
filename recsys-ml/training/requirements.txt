@@ -1,0 +1,38 @@
+# Training pipeline dependencies.
+#
+# Pinned to the versions actually resolved and run on the target machine:
+# macOS 15 on Apple silicon (M4), Python 3.14.6, Homebrew Python.
+#
+# System dependency, not installable by pip — LightGBM's shared library links
+# against the OpenMP runtime and fails to load without it:
+#
+#     brew install libomp
+#
+# Then:
+#
+#     python3 -m venv .venv
+#     .venv/bin/pip install -r training/requirements.txt
+#
+# Note on torch: the 2.5.x line has no wheels for Python 3.14. If you pin an
+# older Python, re-resolve rather than forcing these versions — the constraint
+# is the interpreter, not the pipeline.
+
+# --- core numerics -----------------------------------------------------------
+numpy==2.5.1
+pandas==3.0.5
+pyarrow==25.0.0            # parquet reader/writer for the event log and embeddings
+
+# --- candidate generation ----------------------------------------------------
+torch==2.13.0              # MPS backend; see PYTORCH_ENABLE_MPS_FALLBACK in two_tower_model.py
+
+# --- ranking -----------------------------------------------------------------
+lightgbm==4.7.0            # needs `brew install libomp`
+
+# --- ONNX export -------------------------------------------------------------
+onnx==1.22.0
+onnxmltools==1.16.0        # convert_lightgbm
+
+# --- verification ------------------------------------------------------------
+# Lets the exported graphs be smoke-tested from Python before the Go service
+# ever sees them, which is much the faster way to find a bad export.
+onnxruntime==1.28.0
