@@ -96,11 +96,19 @@ export function useRefreshTopics() {
   })
 }
 
+/**
+ * The video the watch page is showing. Falls back to writing its metadata when
+ * the library has never seen it, so a queue can walk into a channel's back
+ * catalogue without every hop having to be ingested up front.
+ */
 export function useVideo(id: string | undefined) {
   return useQuery({
     queryKey: ['video', id],
-    queryFn: () => repo.getVideo(id!),
+    queryFn: () => repo.getVideoEnsuring(id!),
     enabled: Boolean(id),
+    // The fallback already covers the one error worth retrying; anything left
+    // is a real failure, and retrying it would re-run a slow upstream fetch.
+    retry: false,
   })
 }
 

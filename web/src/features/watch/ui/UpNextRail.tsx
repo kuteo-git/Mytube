@@ -7,10 +7,22 @@ import { Pill, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 
-export function UpNextRail({ current }: { current: Video }) {
+export function UpNextRail({
+  current,
+  exclude,
+}: {
+  current: Video
+  /**
+   * Videos already played this sitting. Filtered out rather than merely
+   * skipped by "next", so the button and the top of this list always name the
+   * same video — a rail whose first row is not what plays next is a lie.
+   */
+  exclude: ReadonlySet<string>
+}) {
   const [channelFilter, setChannelFilter] = useState<string | undefined>(undefined)
   const [collapsed, setCollapsed] = useState(false)
-  const { data: videos } = useUpNext(current.id, channelFilter)
+  const { data } = useUpNext(current.id, channelFilter)
+  const videos = data?.filter((video) => !exclude.has(video.id))
 
   return (
     <aside className="flex w-full flex-col gap-3" aria-label="Up next">

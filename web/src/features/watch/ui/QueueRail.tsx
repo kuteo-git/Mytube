@@ -2,6 +2,9 @@ import clsx from 'clsx'
 import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import type { QueueItem } from '@/features/watch/application/queue'
+import { ThumbnailSurface } from '@/shared/ui/primitives'
+import { formatDuration } from '@/shared/lib/format'
+import { hueFromId } from '@/shared/lib/hue'
 
 /**
  * The list being played through, beside the player.
@@ -52,15 +55,37 @@ export function QueueRail({
               >
                 <span
                   className={clsx(
-                    'w-5 shrink-0 pt-0.5 text-right text-xs tabular-nums',
+                    'w-5 shrink-0 self-center text-right text-xs tabular-nums',
                     active ? 'text-text' : 'text-text-2',
                   )}
                 >
                   {active ? '▶' : index + 1}
                 </span>
-                <span className={clsx('clamp-2 text-sm leading-5', active && 'font-medium')}>
-                  {item.title}
-                </span>
+                {/* Same anatomy as every other row on the page — thumbnail,
+                    duration, title, channel — so a queue does not read as a
+                    different kind of list from the one it was opened from. */}
+                <div className="w-[100px] shrink-0">
+                  <ThumbnailSurface
+                    hue={hueFromId(item.id)}
+                    src={item.thumbnailUrl}
+                    alt={item.title}
+                    rounded="rounded-lg"
+                  >
+                    {item.durationSeconds > 0 && (
+                      <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">
+                        {formatDuration(item.durationSeconds)}
+                      </span>
+                    )}
+                  </ThumbnailSurface>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={clsx('clamp-2 text-sm leading-5', active && 'font-medium')}>
+                    {item.title}
+                  </p>
+                  {item.channelName && (
+                    <p className="clamp-1 mt-1 text-xs text-text-2">{item.channelName}</p>
+                  )}
+                </div>
               </Link>
             </li>
           )

@@ -14,6 +14,15 @@ import type {
 export interface CatalogRepository {
   listFeed(topic: string, pageToken?: string): Promise<Feed>
   getVideo(id: string): Promise<Video>
+  /**
+   * The video, creating its catalog row first if it has none.
+   *
+   * A queue is a channel's uploads read live from YouTube, so most of what it
+   * lists has never been ingested. Opening one from a card writes the row
+   * before navigating, but arriving by "next", by a queue link or by a pasted
+   * URL does not — and those must not land on "Video not found".
+   */
+  getVideoEnsuring(id: string): Promise<Video>
   listUpNext(currentVideoId: string, channelFilter?: string): Promise<Video[]>
   listComments(videoId: string): Promise<CommentPage>
   listTopics(): Promise<Topic[]>
@@ -191,6 +200,22 @@ export const httpCatalogRepository: CatalogRepository = {
 
   getVideo(id) {
     return request<Video>(`/videos/${encodeURIComponent(id)}`)
+  },
+
+  async getVideoEnsuring(id) {
+    try {
+      return await request<Video>(`/videos/${encodeURIComponent(id)}`)
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 404) throw error
+      // The id is a YouTube id everywhere it can reach this point, so the
+      // watch URL is reconstructable and no caller has to carry a source URL
+      // through a queue or a shared link just to make this work.
+      await request<{ videoId: string }>('/videos/external', {
+        method: 'POST',
+        body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${id}` }),
+      })
+      return await request<Video>(`/videos/${encodeURIComponent(id)}`)
+    }
   },
 
   async listUpNext(currentVideoId, channelFilter) {

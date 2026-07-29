@@ -129,14 +129,22 @@ export function Player({
     swappingRef.current = true
   }, [stream?.url])
 
-  useEffect(() => {
+  // Moving to another video keeps this component mounted — same route, new
+  // param — so everything the refs and state hold about the old one has to be
+  // put back by hand. useLayoutEffect for the same reason as the swap above:
+  // it must land before the element can dispatch anything about the new source.
+  useLayoutEffect(() => {
     retriedRef.current = false
     setLoadFailed(false)
     // Otherwise the previous video's length would draw this one's progress bar
     // until the element got around to reporting its own.
     setElementDuration(0)
     setBuffered(0)
-  }, [videoId])
+    // Carrying this over would seek the new video to wherever the previous one
+    // was left, which is not a position that means anything here.
+    resumeAtRef.current = initialPositionSeconds
+    setPosition(initialPositionSeconds)
+  }, [videoId, initialPositionSeconds])
 
   useEffect(() => {
     if (countdown === null) return
