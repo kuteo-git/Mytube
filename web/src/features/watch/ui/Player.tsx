@@ -103,6 +103,16 @@ const HANDOVER_OVERSHOOT_TOLERANCE = 1
 const CONTROLS_IDLE_MS = 3000
 
 /**
+ * How many times auto will try the muxed stream before settling for the low
+ * rendition.
+ *
+ * More than one because a single aborted fetch is not evidence the connection
+ * cannot carry it; few, because one that genuinely cannot will fail every time
+ * and each attempt spends seconds muxing a stream nobody ends up watching.
+ */
+const MAX_REMUX_ATTEMPTS = 3
+
+/**
  * The height the full-quality tiers are labelled with when they do not say.
  *
  * The local file and the muxed stream are both produced at the configured
@@ -248,11 +258,17 @@ export function Player({
 
   const tiers = useMemo(() => availableTiers(sources), [sources])
   const [quality, setQuality] = useQualityPreference()
-  // Set once the muxed stream has been tried and could not keep up. Auto does
-  // not try again for this video: the connection that could not sustain it a
-  // minute ago is unlikely to have changed, and a second failed attempt is
-  // another few seconds of stalling to find that out.
-  const [remuxFailed, setRemuxFailed] = useState(false)
+  // How many times the muxed stream has been attempted and abandoned.
+  //
+  // One failure used to be final, and that was too brittle by half: a single
+  // aborted fetch — observed as a connection the browser dropped 115ms after
+  // the server began writing, having read nothing — turned the tier off for the
+  // rest of the video. Transient failures are exactly what a retry is for. The
+  // limit exists because a connection that genuinely cannot sustain the mux
+  // will fail every time, and each attempt costs seconds of a stream nobody
+  // watches.
+  const [remuxAttempts, setRemuxAttempts] = useState(0)
+  const remuxFailed = remuxAttempts >= MAX_REMUX_ATTEMPTS
   // Which tier the front element is playing, and where in the video that
   // element's zero is. Only the muxed stream has a non-zero offset.
   const [tier, setTier] = useState<Tier | undefined>(undefined)
@@ -451,7 +467,7 @@ export function Player({
     setOffsetSeconds(0)
     offsetRef.current = 0
     positionRef.current = initialPositionRef.current
-    setRemuxFailed(false)
+    setRemuxAttempts(0)
     setSeeking(false)
   }, [videoId])
 
@@ -511,7 +527,7 @@ export function Player({
     // connection that failed it will not have changed, and a second attempt is
     // more seconds of stalling to learn the same thing. A viewer who pinned
     // 1080p is not overruled — targetTier ignores this for them.
-    if (pendingTierRef.current?.tier.name === 'remux') setRemuxFailed(true)
+    if (pendingTierRef.current?.tier.name === 'remux') setRemuxAttempts((n) => n + 1)
     pendingTierRef.current = undefined
     setSeeking(false)
     upgradingToRef.current = undefined
@@ -1259,7 +1275,10 @@ export function Player({
                 // Choosing again is a fresh decision: a viewer who asks for
                 // 1080p after auto gave up on it should get an attempt, not
                 // the memory of the last failure.
-                setRemuxFailed(false)
+                // Choosing again is a fresh decision, so the attempt count
+                // starts over: someone asking for 1080p after auto gave up
+                // should get a try, not the memory of the last failure.
+                setRemuxAttempts(0)
                 setQuality(next)
               }}
             />
