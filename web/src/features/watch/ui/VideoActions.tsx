@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
-import { useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
+import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { formatCount, formatSubscribers } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
@@ -21,6 +21,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   const reaction = video.userState?.reaction ?? 'NONE'
   const setReaction = useSetReaction(video.id)
   const setSubscription = useSetSubscription(video.channel.id)
+  const setPinned = useSetPinned()
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -87,7 +88,11 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           label="Share"
           onClick={() => void navigator.clipboard?.writeText(window.location.href)}
         />
-        <ActionPill icon={<Bookmark size={20} />} label="Keep" />
+        <ActionPill
+          icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
+          label={video.pinned ? 'Kept' : 'Keep'}
+          onClick={() => setPinned.mutate({ videoId: video.id, pinned: !video.pinned })}
+        />
 
         <button
           type="button"

@@ -94,6 +94,9 @@ const (
 	// CatalogServiceSetPinnedProcedure is the fully-qualified name of the CatalogService's SetPinned
 	// RPC.
 	CatalogServiceSetPinnedProcedure = "/catalog.v1.CatalogService/SetPinned"
+	// CatalogServiceListPinnedVideosProcedure is the fully-qualified name of the CatalogService's
+	// ListPinnedVideos RPC.
+	CatalogServiceListPinnedVideosProcedure = "/catalog.v1.CatalogService/ListPinnedVideos"
 )
 
 // CatalogServiceClient is a client for the catalog.v1.CatalogService service.
@@ -135,6 +138,9 @@ type CatalogServiceClient interface {
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error)
+	// Videos the viewer has chosen to keep. "Saved" is the browsing view; pinning
+	// is also the mechanism that protects a video from eviction.
+	ListPinnedVideos(context.Context, *connect.Request[v1.ListPinnedVideosRequest]) (*connect.Response[v1.ListPinnedVideosResponse], error)
 }
 
 // NewCatalogServiceClient constructs a client for the catalog.v1.CatalogService service. By
@@ -274,6 +280,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("SetPinned")),
 			connect.WithClientOptions(opts...),
 		),
+		listPinnedVideos: connect.NewClient[v1.ListPinnedVideosRequest, v1.ListPinnedVideosResponse](
+			httpClient,
+			baseURL+CatalogServiceListPinnedVideosProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListPinnedVideos")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -300,6 +312,7 @@ type catalogServiceClient struct {
 	listHistory         *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
 	getStorageUsage     *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
 	setPinned           *connect.Client[v1.SetPinnedRequest, v1.SetPinnedResponse]
+	listPinnedVideos    *connect.Client[v1.ListPinnedVideosRequest, v1.ListPinnedVideosResponse]
 }
 
 // GetVideo calls catalog.v1.CatalogService.GetVideo.
@@ -407,6 +420,11 @@ func (c *catalogServiceClient) SetPinned(ctx context.Context, req *connect.Reque
 	return c.setPinned.CallUnary(ctx, req)
 }
 
+// ListPinnedVideos calls catalog.v1.CatalogService.ListPinnedVideos.
+func (c *catalogServiceClient) ListPinnedVideos(ctx context.Context, req *connect.Request[v1.ListPinnedVideosRequest]) (*connect.Response[v1.ListPinnedVideosResponse], error) {
+	return c.listPinnedVideos.CallUnary(ctx, req)
+}
+
 // CatalogServiceHandler is an implementation of the catalog.v1.CatalogService service.
 type CatalogServiceHandler interface {
 	// Reads
@@ -446,6 +464,9 @@ type CatalogServiceHandler interface {
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error)
+	// Videos the viewer has chosen to keep. "Saved" is the browsing view; pinning
+	// is also the mechanism that protects a video from eviction.
+	ListPinnedVideos(context.Context, *connect.Request[v1.ListPinnedVideosRequest]) (*connect.Response[v1.ListPinnedVideosResponse], error)
 }
 
 // NewCatalogServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -581,6 +602,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("SetPinned")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListPinnedVideosHandler := connect.NewUnaryHandler(
+		CatalogServiceListPinnedVideosProcedure,
+		svc.ListPinnedVideos,
+		connect.WithSchema(catalogServiceMethods.ByName("ListPinnedVideos")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/catalog.v1.CatalogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CatalogServiceGetVideoProcedure:
@@ -625,6 +652,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceGetStorageUsageHandler.ServeHTTP(w, r)
 		case CatalogServiceSetPinnedProcedure:
 			catalogServiceSetPinnedHandler.ServeHTTP(w, r)
+		case CatalogServiceListPinnedVideosProcedure:
+			catalogServiceListPinnedVideosHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -716,4 +745,8 @@ func (UnimplementedCatalogServiceHandler) GetStorageUsage(context.Context, *conn
 
 func (UnimplementedCatalogServiceHandler) SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetPinned is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListPinnedVideos(context.Context, *connect.Request[v1.ListPinnedVideosRequest]) (*connect.Response[v1.ListPinnedVideosResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListPinnedVideos is not implemented"))
 }

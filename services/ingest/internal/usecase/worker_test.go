@@ -71,7 +71,7 @@ func (f *fakeLibrary) UpsertChannelArtwork(context.Context, domain.ChannelMetada
 func (f *fakeLibrary) ListSubscribedChannels(context.Context) ([]domain.SubscribedChannel, error) {
 	return nil, nil
 }
-func (f *fakeLibrary) ListVideosMissingTopics(context.Context, int32) ([]domain.VideoRef, error) {
+func (f *fakeLibrary) ListVideosNeedingBackfill(context.Context, int32) ([]domain.VideoRef, error) {
 	return nil, nil
 }
 func (f *fakeLibrary) SetMediaState(_ context.Context, _, state, _ string, _ int64, subs []domain.SubtitleTrack) error {

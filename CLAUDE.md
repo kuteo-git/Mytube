@@ -307,9 +307,69 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
 ### Chưa làm — thứ tự đề xuất khi làm tiếp
 
-1. **3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
+(Nội dung bên dưới đã lỗi thời sau session 2026-07-31; xem mục mới bên dưới.)
+
+1. ~~**3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
    (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
-   **Đang là link chết trong sidebar.**
+   **Đang là link chết trong sidebar.**~~ **ĐÃ LÀM 2026-07-31.**
+
+### Đã làm 2026-07-31 — session "nine bugs" follow-up
+
+#### 3 trang mới
+| Trang | Thành phần |
+|---|---|
+| `/history` | `HistoryPage.tsx` — infinite scroll `GET /api/history`, grid `VideoCard` |
+| `/saved` | `SavedPage.tsx` — infinite scroll `GET /api/pinned` (pinned videos), grid `VideoCard` |
+| `/storage` | `StoragePage.tsx` — stats cards (`usedBytes`/`budgetBytes`/etc.) + eviction candidates grid with inline Pin/Unpin |
+
+#### Sidebar
+- Thêm 3 link: `Bookmark` → `/saved`, `Clock` → `/history`, `HardDrive` → `/storage`
+
+#### Backend mới
+- `POST /api/videos/{id}/pinned` — REST route cho `SetPinned` RPC (trước đó RPC có nhưng chưa expose)
+- `ListPinnedVideos` RPC — thêm proto → domain → postgres repo → use case → RPC server → gateway `GET /api/pinned`
+
+#### Keep/Pin UI
+- `VideoActions.tsx`: nút "Keep"/"Kept" đã có onClick gọi `useSetPinned`, bookmark fill khi pinned
+- `VideoCard.tsx`: nút ⋮ mở dropdown menu "Keep"/"Unkeep"
+- `StorageBanner.tsx`: nút "Manage storage" dead link → `<Link to="/storage">`
+
+#### Cải thiện feed ranking (`ranker.go`)
+- **Lọc FAILED**: `f.MediaState == "MEDIA_STATE_FAILED"` → skip
+- **Lọc EVICTED**: `f.MediaState == "MEDIA_STATE_EVICTED"` → skip
+- **Lọc 85%+ watched**: `fraction >= 0.85` → skip (giữ trong up-next, chỉ lọc ở Home)
+- **Penalty publishedAt**: `score *= exp(-days/365)` với 365-day half-life; nếu >1yr thì trừ thêm -4.0 flat. **Đã lỗi thời: giờ hard filter skip toàn bộ video >1yr, dùng AddedAt fallback khi không có PublishedAt (2026-07-31).** Xem session "old videos" follow-up.
+
+#### Cải thiện "Popular with you" (`collections.go`)
+- **Chỉ READY**: lọc `dto.MediaState != "READY"`
+- **Composite hot score**: `viewCount × recencyMultiplier(addedAt, <30d) × log2(duration+1) × exp(-pubDays/365)` — thay vì chỉ sort theo view_count
+- **Recency decay**: addedAt 0→30 ngày: 1.0→0.3; publishedAt dùng exponential decay 365-day half-life
+
+#### YouTube topic injection (`HomePage.tsx`)
+- Khi browse topic (không phải "All"), gọi `useDiscover(topicName, 6)` → hiện row "From YouTube · {topic}" dùng `ExternalVideoCard`
+
+#### Superpowers plugin
+- Thêm `"plugin": ["superpowers@git+https://github.com/obra/superpowers.git"]` vào `~/.config/opencode/opencode.json` (global)
+
+### Đã làm 2026-07-31 — session "old videos" follow-up
+
+#### Hard filter homepage videos >1yr (`ranker.go`)
+- **`maxPublishedAgeDays = 365`** (constant at `ranker.go:132`): hard filter trong `rankAll` — skip video published >365 ngày trước. Penalty cũ (multiplicative + -4.0 flat) không đủ vì `applyDiscoveryQuota` xếp lại theo reason bucket bất kể absolute score.
+- **Epoch detection**: `hasPub = !PublishedAt.IsZero() && PublishedAt.Unix() > 0` — protobuf decode nil `Timestamp` thành `1970-01-01T00:00:00Z`, **KHÔNG** phải Go zero time (`0001-01-01`). `IsZero()` trả false cho epoch, thành ra `20665 days > 365` filter hết toàn bộ video (3567/3722). Dùng `Unix() > 0` để bắt cả hai trường hợp.
+- **AddedAt fallback**: video không có `PublishedAt` (824 video, do flat-listing scan không trả) thì dùng `AddedAt` làm proxy.
+
+#### Backfill mở rộng: điền `published_at` cho video thiếu
+- **`server.go:288` bug**: `ListVideoFeatures` RPC không populate `PublishedAt` vào proto response → ingest client không thấy field này. Fix: thêm `if !f.PublishedAt.IsZero() { feat.PublishedAt = timestamppb.New(f.PublishedAt) }`.
+- **Rename `ListVideosMissingTopics` → `ListVideosNeedingBackfill`**: thay vì chỉ chọn video thiếu topic, giờ chọn video thiếu topic **hoặc** thiếu `published_at` (có topic từ `topics.yaml` nhưng chưa có date).
+- **`VideoRef.MissingPublishedAt`**: flag để `backfillOne` biết video này cần date chứ không cần topic → bỏ qua `preview.Category == ""` check, luôn upsert để ghi date.
+- **Không đổi proto hay endpoint**: `POST /api/topics/backfill` vẫn hoạt động như cũ, chỉ rộng hơn.
+- **824 video thiếu date** cần ~55 phút chạy backfill (1 luồng, 4s giữa các call).
+
+#### Bugfix ingest service stale binary
+- Binary `/tmp/local-youtube/ingest` compile trước commit port-change (17:54 vs 18:03 Jul 28), default catalog URL = `:8081` thay vì `:8181` → "connection refused". Rebuild + restart.
+
+#### Bugfix gateway missing MEDIA_ROOT
+- Gateway chạy không có env `MEDIA_ROOT`, default về `./media` thay vì `/Volumes/Data2/Youtube` → `/media/...` trả 404. Restart với `MEDIA_ROOT=/Volumes/Data2/Youtube`.
 
 ### Quyết định đã bị đảo trong quá trình làm
 

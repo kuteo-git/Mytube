@@ -1,5 +1,6 @@
 import { Info, X } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { formatBytes } from '@/shared/lib/format'
 
 /**
@@ -29,12 +30,12 @@ export function StorageBanner({
           {formatBytes(budgetBytes)}). The least recently watched videos will be removed from
           disk automatically; their metadata and history are kept.
         </p>
-        <button
-          type="button"
-          className="mt-2 text-sm font-medium text-link hover:underline"
+        <Link
+          to="/storage"
+          className="mt-2 inline-block text-sm font-medium text-link hover:underline"
         >
           Manage storage
-        </button>
+        </Link>
       </div>
       <button
         type="button"

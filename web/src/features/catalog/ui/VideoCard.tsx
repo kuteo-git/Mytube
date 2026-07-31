@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import { CheckCircle, MoreVertical } from 'lucide-react'
+import { Bookmark, CheckCircle, MoreVertical } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
-import { useStreamPrefetch } from '../application/queries'
+import { useSetPinned, useStreamPrefetch } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
@@ -16,6 +17,19 @@ import { mediaURL } from '@/shared/lib/media'
 export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [menuOpen])
 
   return (
     // Resolving an upstream URL takes over a second, and it is the whole of the
@@ -71,19 +85,25 @@ export function VideoCard({ video }: { video: Video }) {
           <p className="text-xs text-text-2">{describeVideo(video)}</p>
         </div>
 
-        <button
-          type="button"
-          aria-label="More options"
-          className={clsx(
-            'h-9 w-9 shrink-0 rounded-full transition-opacity duration-150 ease-out',
-            // Revealed on hover like youtube.com, but also on keyboard focus so
-            // the action stays reachable without a pointer (TV remote, Phase 3).
-            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-            'grid place-items-center hover:bg-surface-hover',
-          )}
-        >
-          <MoreVertical size={20} />
-        </button>
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            aria-label="More options"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+            className={clsx(
+              'h-9 w-9 shrink-0 rounded-full transition-opacity duration-150 ease-out',
+              // Revealed on hover like youtube.com, but also on keyboard focus so
+              // the action stays reachable without a pointer (TV remote, Phase 3).
+              'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+              'grid place-items-center hover:bg-surface-hover',
+              menuOpen && 'opacity-100 bg-surface-hover',
+            )}
+          >
+            <MoreVertical size={20} />
+          </button>
+          {menuOpen && <CardMenu video={video} close={() => setMenuOpen(false)} />}
+        </div>
       </div>
     </article>
   )
@@ -113,5 +133,27 @@ export function VideoCardSkeleton() {
         </div>
       </div>
     </div>
+  )
+}
+
+function CardMenu({ video, close }: { video: Video; close: () => void }) {
+  const setPinned = useSetPinned()
+
+  return (
+    <ul className="absolute right-0 bottom-10 z-10 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
+      <li>
+        <button
+          type="button"
+          onClick={() => {
+            setPinned.mutate({ videoId: video.id, pinned: !video.pinned })
+            close()
+          }}
+          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+        >
+          <Bookmark size={16} fill={video.pinned ? 'currentColor' : 'none'} />
+          {video.pinned ? 'Unkeep' : 'Keep'}
+        </button>
+      </li>
+    </ul>
   )
 }

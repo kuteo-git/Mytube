@@ -166,17 +166,18 @@ type Library interface {
 	// UpsertChannelArtwork records artwork already downloaded to the media root.
 	UpsertChannelArtwork(ctx context.Context, m ChannelMetadata, avatarPath, bannerPath string) error
 	ListSubscribedChannels(ctx context.Context) ([]SubscribedChannel, error)
-	// ListVideosMissingTopics returns videos the catalogue holds with no topic
-	// assigned. A scan cannot supply one — flat listings carry no category — so
-	// this is how the backfill finds its work.
-	ListVideosMissingTopics(ctx context.Context, limit int32) ([]VideoRef, error)
+// ListVideosNeedingBackfill returns videos the catalogue holds with either no
+// topic assigned or no published_at. A scan cannot supply either — flat listings
+// carry no category or date — so this is how the backfill finds its work.
+	ListVideosNeedingBackfill(ctx context.Context, limit int32) ([]VideoRef, error)
 }
 
-// VideoRef is the little a backfill needs to know about a video: which one, and
-// where to fetch it from.
+// VideoRef is the little a backfill needs to know about a video: which one,
+// where to fetch it from, and which field it is missing.
 type VideoRef struct {
-	VideoID   string
-	SourceURL string
+	VideoID           string
+	SourceURL         string
+	MissingPublishedAt bool // true when the video has topics but no published_at
 }
 
 // SubscribedChannel is a channel a user chose to follow. Subscriptions are a

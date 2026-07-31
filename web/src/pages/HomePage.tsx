@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
+  useDiscover,
   useFeed,
   usePopular,
   useStorage,
@@ -8,6 +9,7 @@ import {
   useTopics,
 } from '@/features/catalog/application/queries'
 import { ChipBar } from '@/features/catalog/ui/ChipBar'
+import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
@@ -28,6 +30,10 @@ export function HomePage() {
   const { data: storage } = useStorage()
   const { data: topPlayed } = useTopPlayed(25)
   const { data: popular } = usePopular(12)
+  // When browsing a topic, also show what YouTube has for it. The library is
+  // what the topics chose to bring in; YouTube search stretches past that.
+  const isTopic = active !== 'All'
+  const { data: youtubeVideos } = useDiscover(isTopic ? active : '', 6)
 
   // Both extra rows belong to the unfiltered home. Under a topic the page is
   // answering a narrower question, and a global mix would be beside the point.
@@ -46,7 +52,22 @@ export function HomePage() {
       )}
 
       {topicName ? (
-        <h1 className="py-4 text-2xl font-bold">{topicName}</h1>
+        <>
+          <h1 className="py-4 text-2xl font-bold">{topicName}</h1>
+          {youtubeVideos && youtubeVideos.length > 0 && (
+            <section className="mb-6">
+              <h2 className="mb-3 text-lg font-medium">
+                From YouTube &middot; {topicName}
+              </h2>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-6 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
+                {youtubeVideos.map((video) => (
+                  <ExternalVideoCard key={video.id} video={video} />
+                ))}
+              </div>
+              <hr className="mt-8 border-0 border-t border-line" />
+            </section>
+          )}
+        </>
       ) : (
         <ChipBar categories={chips} active={active} onSelect={setSelected} />
       )}

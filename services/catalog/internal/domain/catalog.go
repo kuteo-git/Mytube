@@ -198,4 +198,5 @@ type Repository interface {
 
 	GetStorageUsage(ctx context.Context, budgetBytes int64) (StorageUsage, error)
 	SetPinned(ctx context.Context, videoID string, pinned bool) error
+	ListPinnedVideos(ctx context.Context, userID string, page Page) ([]Video, error)
 }

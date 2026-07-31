@@ -20,7 +20,7 @@ web/            Vite + React client.
 db/             Bootstrap and development seeds.
 ```
 
-Ports: gateway `8080`, catalog `8081`, recsys `8082`, ingest `8083`, Vite `5173`.
+Ports: gateway `8180`, catalog `8181`, recsys `8182`, ingest `8183`, Vite `5173`.
 
 ## First run
 
@@ -42,56 +42,123 @@ cd web && npm install && cd ..
 ## Day to day
 
 ```bash
-scripts/dev.sh     # builds and starts catalog, recsys, gateway, then Vite
+scripts/dev.sh     # builds and starts catalog, recsys, ingest, gateway, then Vite
 make check         # buf lint + tsc + go build
 make proto         # regenerate after editing a .proto
 ```
 
-## Service boundaries
+### Health check
 
-Two rules make the split real rather than decorative:
-
-1. **No service reads another service's tables.** Each owns a Postgres schema
-   with its own role, and the roles have no cross-schema grants. Recsys keeps
-   its own copy of behaviour signals instead of reading catalog's history.
-2. **Ranking and data are separate.** `recsys.GetFeed` returns ordered video ids
-   plus a reason; the gateway hydrates them with `catalog.BatchGetVideos`, which
-   preserves the requested order. Catalog never ranks; recsys never stores
-   titles.
-
-Everything internal speaks ConnectRPC, so any service can be exercised with
-curl:
+After making any service changes, verify the stack is healthy:
 
 ```bash
-curl -X POST http://localhost:8081/catalog.v1.CatalogService/GetVideo \
-  -H 'Content-Type: application/json' -d '{"videoId":"v1","userId":"u_luc"}'
+scripts/check.sh
 ```
+
+This confirms all 4 services are listening, `MEDIA_ROOT` is set on the gateway,
+media files serve correctly, the feed returns videos, ingest is reachable, and
+Postgres is accepting connections.
+
+### Restarting individual services
+
+After rebuilding a service binary, restart it manually (outside `scripts/dev.sh`):
+
+```bash
+# catalog
+MEDIA_ROOT=/Volumes/Data2/Youtube nohup /tmp/local-youtube/catalog > /tmp/local-youtube/catalog.log 2>&1 &
+
+# recsys
+nohup /tmp/local-youtube/recsys > /tmp/local-youtube/recsys.log 2>&1 &
+
+# ingest
+MEDIA_ROOT=/Volumes/Data2/Youtube nohup /tmp/local-youtube/ingest > /tmp/local-youtube/ingest.log 2>&1 &
+
+# gateway (MUST include MEDIA_ROOT or /media paths 404)
+MEDIA_ROOT=/Volumes/Data2/Youtube nohup /tmp/local-youtube/gateway > /tmp/local-youtube/gateway.log 2>&1 &
+```
+
+## Key APIs
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/feed?pageSize=24` | GET | Homepage feed (ranked, paginated) |
+| `/api/videos/{id}/stream` | GET | Playback sources (local / instant / remux) |
+| `/api/videos/{id}/download` | POST | Enqueue background download |
+| `/api/videos/{id}/pinned` | POST | Toggle "Keep" (pin) |
+| `/api/search?q=...` | GET | Search (local library + YouTube) |
+| `/api/topics/refresh` | POST | Force a scan now (resets the 1-hour interval) |
+| `/api/topics/backfill` | POST | Fill in missing metadata (topics + published_at) |
+| `/api/topics/backfill` | GET | Backfill progress (running, examined, updated, failed) |
+| `/api/history` | GET | Watched history (infinite scroll) |
+| `/api/pinned` | GET | Pinned (kept) videos |
+| `/api/ingest/jobs` | GET | Download queue status |
+| `/api/ingest/storage` | GET | Disk usage and eviction candidates |
+
+### Backfill
+
+Videos discovered via flat-listing scans arrive without a `published_at` date
+or a YouTube category (topic). The backfill fetches full metadata one video
+at a time and writes both fields back:
+
+```bash
+# Fill 200 videos at a time (default). Takes ~55 min for 800+ videos.
+curl -X POST http://localhost:8180/api/topics/backfill
+
+# Or with a custom limit
+curl -X POST 'http://localhost:8180/api/topics/backfill?limit=50'
+
+# Check progress
+curl http://localhost:8180/api/topics/backfill
+```
+
+Rate-limited to 1 thread with 4 seconds between calls. Resumable: run again and
+it picks up whatever the last pass did not finish. Auto-stops after 15 consecutive
+failures to avoid prolonging a YouTube rate-limit block.
+
+Videos that already have both topics and a published date are skipped, so
+re-running the backfill is safe and cheap (one listing call to confirm nothing
+needs work).
 
 ## Playback model
 
 A video that is not on disk yet is still watchable. `GET /api/videos/{id}/stream`
-answers with one of two things:
+lists every playable source right now instead of picking one:
 
-- `local` — the file under `MEDIA_ROOT`, served with range requests.
-- `upstream` — a short-lived URL resolved through yt-dlp, used while the
-  background download runs.
+| Source | Description | Seek |
+|---|---|---|
+| `local` | File on disk, served with range requests | yes |
+| `instant` | YouTube progressive URL (itag 18, 360p) | yes |
+| `remux` | ffmpeg muxing adaptive streams to fMP4 (1080p) | re-open stream |
 
-Only progressive (muxed) formats can be resolved for instant playback, because a
-bare `<video>` element cannot play adaptive streams. In practice that means the
-first watch is lower quality than the copy that lands afterwards; the player
-labels it. Once the download finishes the endpoint returns `local` and upstream
-is never touched again for that video.
+The player climbs the tiers automatically: play `instant` in ~17ms, load `remux`
+1080p in a hidden element and swap when ready, switch to `local` when the
+download finishes. No transcode — `-c copy` throughout.
+
+## Service boundaries
+
+1. **No service reads another service's tables.** Each owns a Postgres schema
+   with its own role, and the roles have no cross-schema grants.
+2. **Ranking and data are separate.** `recsys.GetFeed` returns ordered video ids
+   plus a reason; the gateway hydrates them with `catalog.BatchGetVideos`, which
+   preserves the requested order. Catalog never ranks; recsys never stores titles.
+
+## Ranking
+
+The homepage feed hard-filters videos older than 1 year (`maxPublishedAgeDays = 365`).
+When `published_at` is unknown (flat-listing scans don't return it), `added_at`
+is used as a fallback. Run the backfill to populate real dates.
+
+Within the 1-year window the feed mixes: 30% never-watched, 25% recently added,
+20% subscribed channels, 15% continue-watching, 10% rewatched — with channel
+diversity (max 3 videos per channel per 24-slot window).
 
 ## Status
 
-Working: topic scanning from topics.yaml, feed and search with pagination,
-playback with autoplay and subtitles, background download with visible
-progress, and search that always reaches YouTube alongside the library.
+Working: scan from `topics.yaml` and subscriptions (1-hour interval), feed and
+search with infinite scroll, playback with autoplay and subtitles, background
+download with progress, search that reaches YouTube alongside the library,
+history/saved/storage pages, eviction sweep, hard filter for >1yr videos on
+the homepage, backfill for missing metadata.
 
-Not built yet: serve-while-downloading (playback still falls back to an
-upstream stream while the copy is fetched), topic affinity and the exploration
-mix in ranking, the eviction sweep, the History/Saved/Storage pages, and a
-Refresh button in the UI. See CLAUDE.md §8b for the ordered backlog.
-
-There is no identity service: the gateway trusts an `X-User-Id` header and
-falls back to `DEV_USER_ID`.
+See [CLAUDE.md](CLAUDE.md) for the full development history, known traps, and
+Phase 2/3 plans.

@@ -123,8 +123,41 @@ func recencyBoost(addedAt time.Time, now time.Time) float64 {
 	return math.Exp(-days / recencyHalfLifeDay)
 }
 
+const publishedHalfLifeDay = 365
+
+// maxPublishedAgeDays is a hard filter: videos published (or, when the date is
+// unknown, added to the library) more than this many days ago do not appear on
+// the home page. A penalty is not enough because quota reordering (§quota.go)
+// slots them by reason regardless of absolute score.
+const maxPublishedAgeDays = 365
+
+// publishedAgePenalty penalises videos that were old when they entered the
+// library. A video published five years ago on YouTube is not bad content, but
+// it should not crowd out something uploaded last week just because they were
+// both imported on the same day.
+func publishedAgePenalty(publishedAt, addedAt, now time.Time) float64 {
+	if publishedAt.IsZero() {
+		if addedAt.IsZero() {
+			return 1.0
+		}
+		days := now.Sub(addedAt).Hours() / 24
+		if days < 0 {
+			days = 0
+		}
+		return math.Exp(-days / publishedHalfLifeDay)
+	}
+	days := now.Sub(publishedAt).Hours() / 24
+	if days < 0 {
+		days = 0
+	}
+	p := math.Exp(-days / publishedHalfLifeDay)
+	return p
+}
+
 func isContinueWatching(fraction float32) bool { return fraction > 0.02 && fraction <= 0.95 }
 func isWatched(fraction float32) bool          { return fraction > 0.95 }
+
+const watchedEnoughThreshold = 0.85
 
 // FeedPage is one slice of a frozen feed ordering, plus what the caller needs
 // to ask for the next one and to know how close the feed is to running out.
@@ -209,11 +242,24 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 		if profile.Disliked[f.VideoID] {
 			continue
 		}
+		if f.MediaState == "MEDIA_STATE_FAILED" {
+			continue
+		}
+		if f.MediaState == "MEDIA_STATE_EVICTED" {
+			continue
+		}
 
-		// Comma-ok, not a bare lookup: a missing key and a fraction of zero are
-		// different facts. One means never opened, the other means opened and
-		// abandoned, and they deserve opposite treatment.
 		fraction, opened := profile.WatchedFraction[f.VideoID]
+		if opened && fraction >= watchedEnoughThreshold {
+			continue
+		}
+		hasPub := !f.PublishedAt.IsZero() && f.PublishedAt.Unix() > 0
+		if hasPub && now.Sub(f.PublishedAt).Hours()/24 > maxPublishedAgeDays {
+			continue
+		}
+		if !hasPub && !f.AddedAt.IsZero() && now.Sub(f.AddedAt).Hours()/24 > maxPublishedAgeDays {
+			continue
+		}
 		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now)
 		reason := domain.ReasonRecentlyAdded
 
@@ -248,6 +294,11 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 
 		if profile.RecentImpressions[f.VideoID] {
 			score -= penaltyImpression
+		}
+
+		score *= publishedAgePenalty(f.PublishedAt, f.AddedAt, now)
+		if !f.PublishedAt.IsZero() && now.Sub(f.PublishedAt) > 365*24*time.Hour {
+			score -= 4.0
 		}
 
 		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})

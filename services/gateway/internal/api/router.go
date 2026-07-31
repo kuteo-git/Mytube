@@ -72,6 +72,8 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/download/cancel", g.handleCancelVideoDownload)
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)
+	mux.HandleFunc("GET /api/pinned", g.handlePinned)
+	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
 	mux.HandleFunc("GET /api/subscriptions", g.handleListSubscriptions)
 	mux.HandleFunc("GET /api/collections/top-played", g.handleTopPlayed)
@@ -417,6 +419,43 @@ func (g *Gateway) handleHistory(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toVideoDTO(v))
 	}
 	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+}
+
+func (g *Gateway) handlePinned(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListPinnedVideos(r.Context(), connect.NewRequest(&catalogv1.ListPinnedVideosRequest{
+		UserId:    g.userID(r),
+		PageSize:  intParam(r, "pageSize", 24),
+		PageToken: r.URL.Query().Get("pageToken"),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]videoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		out = append(out, toVideoDTO(v))
+	}
+	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+}
+
+func (g *Gateway) handleSetPinned(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Pinned bool `json:"pinned"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	if _, err := g.catalog.SetPinned(r.Context(), connect.NewRequest(&catalogv1.SetPinnedRequest{
+		VideoId: r.PathValue("id"),
+		Pinned:  body.Pinned,
+	})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (g *Gateway) handleStorage(w http.ResponseWriter, r *http.Request) {

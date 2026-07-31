@@ -5,8 +5,11 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './app/AppShell'
 import { ActivityPage } from './pages/ActivityPage'
 import { ChannelPage } from './pages/ChannelPage'
+import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
+import { SavedPage } from './pages/SavedPage'
 import { SearchResultsPage } from './pages/SearchResultsPage'
+import { StoragePage } from './pages/StoragePage'
 import { WatchPage } from './pages/WatchPage'
 import './index.css'
 
@@ -24,6 +27,9 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/topic/:topicName" element={<HomePage />} />
             <Route path="/results" element={<SearchResultsPage />} />
             <Route path="/activity" element={<ActivityPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/saved" element={<SavedPage />} />
+            <Route path="/storage" element={<StoragePage />} />
             <Route path="/channel/:channelId" element={<ChannelPage />} />
             <Route path="/watch/:videoId" element={<WatchPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

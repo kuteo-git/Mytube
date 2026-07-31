@@ -285,6 +285,9 @@ func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[cat
 			DurationSeconds: f.DurationSeconds,
 			MediaState:      mediaStates[f.MediaState],
 		})
+		if !f.PublishedAt.IsZero() {
+			out[len(out)-1].PublishedAt = timestamppb.New(f.PublishedAt)
+		}
 	}
 	return connect.NewResponse(&catalogv1.ListVideoFeaturesResponse{
 		Videos:        out,
@@ -495,4 +498,16 @@ func (s *Server) SetPinned(ctx context.Context, req *connect.Request[catalogv1.S
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.SetPinnedResponse{}), nil
+}
+
+func (s *Server) ListPinnedVideos(ctx context.Context, req *connect.Request[catalogv1.ListPinnedVideosRequest]) (*connect.Response[catalogv1.ListPinnedVideosResponse], error) {
+	offset := decodePageToken(req.Msg.GetPageToken())
+	vs, err := s.catalog.ListPinnedVideos(ctx, req.Msg.GetUserId(), req.Msg.GetPageSize(), offset)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ListPinnedVideosResponse{
+		Videos:        videosToProto(vs),
+		NextPageToken: nextPageToken(offset, req.Msg.GetPageSize(), len(vs)),
+	}), nil
 }

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, Home, Tag } from 'lucide-react'
+import { Activity, Bookmark, Clock, HardDrive, Home, Tag } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useSubscriptions, useTopics } from '@/features/catalog/application/queries'
@@ -25,6 +25,9 @@ interface Item {
  */
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
+  { icon: Bookmark, label: 'Saved', to: '/saved' },
+  { icon: Clock, label: 'History', to: '/history' },
+  { icon: HardDrive, label: 'Storage', to: '/storage' },
   { icon: Activity, label: 'Activity', to: '/activity' },
 ]
 

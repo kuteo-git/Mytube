@@ -136,19 +136,19 @@ func (l *Library) UpsertChannelArtwork(ctx context.Context, m domain.ChannelMeta
 
 // ListSubscribedChannels lets the scanner treat subscriptions as a content
 // source alongside topics.yaml.
-// ListVideosMissingTopics walks the catalogue projection and returns the videos
-// carrying no topic.
+// ListVideosNeedingBackfill walks the catalogue projection and returns videos
+// that are missing either topics or published_at.
 //
-// Filtered here rather than in catalog because "has no topic" is a question
-// only the backfill asks, and catalog already publishes everything needed to
-// answer it. Adding an RPC for one caller's predicate would widen the contract
-// between the two services for no one else's benefit.
+// Filtered here rather than in catalog because the predicate is a question only
+// the backfill asks, and catalog already publishes everything needed to answer
+// it. Adding an RPC for one caller's predicate would widen the contract between
+// the two services for no one else's benefit.
 //
 // Source URLs are not part of the projection, so the caller reconstructs them
 // from the id. Every id in this library is a YouTube id, which is the same
 // assumption the watch page already makes when it opens a video nobody has
 // ingested yet.
-func (l *Library) ListVideosMissingTopics(ctx context.Context, limit int32) ([]domain.VideoRef, error) {
+func (l *Library) ListVideosNeedingBackfill(ctx context.Context, limit int32) ([]domain.VideoRef, error) {
 	const pageSize = 500
 
 	var (
@@ -165,10 +165,16 @@ func (l *Library) ListVideosMissingTopics(ctx context.Context, limit int32) ([]d
 		}
 
 		for _, v := range resp.Msg.GetVideos() {
-			if len(v.GetTopics()) > 0 {
+			hasTopics := len(v.GetTopics()) > 0
+			hasPub := v.GetPublishedAt() != nil
+			if hasTopics && hasPub {
 				continue
 			}
-			refs = append(refs, domain.VideoRef{VideoID: v.GetVideoId()})
+			ref := domain.VideoRef{VideoID: v.GetVideoId()}
+			if hasTopics {
+				ref.MissingPublishedAt = true
+			}
+			refs = append(refs, ref)
 			if limit > 0 && int32(len(refs)) >= limit {
 				return refs, nil
 			}

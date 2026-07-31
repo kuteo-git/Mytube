@@ -243,6 +243,36 @@ export function useStorage() {
   })
 }
 
+export function useHistory() {
+  return useInfiniteQuery({
+    queryKey: ['history'],
+    queryFn: ({ pageParam }) => repo.listHistory(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+  })
+}
+
+export function useSaved() {
+  return useInfiniteQuery({
+    queryKey: ['pinned'],
+    queryFn: ({ pageParam }) => repo.listPinned(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+  })
+}
+
+export function useSetPinned() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ videoId, pinned }: { videoId: string; pinned: boolean }) =>
+      repo.setPinned(videoId, pinned),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['pinned'] })
+      void queryClient.invalidateQueries({ queryKey: ['video'] })
+    },
+  })
+}
+
 /**
  * Reacting changes both the like count and, through the recorded signal, the
  * next feed — so the feed cache is invalidated alongside the video itself.

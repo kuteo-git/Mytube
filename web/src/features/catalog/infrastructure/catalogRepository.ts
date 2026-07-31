@@ -33,6 +33,11 @@ export interface CatalogRepository {
   discover(query: string, limit: number): Promise<ExternalVideo[]>
   ensureExternal(sourceUrl: string): Promise<string>
   getStorage(): Promise<StorageUsage>
+  /** Videos the viewer has pinned as worth keeping. */
+  listPinned(pageToken?: string): Promise<Feed>
+  setPinned(videoId: string, pinned: boolean): Promise<void>
+  /** Every video the viewer has watched, most recent first. */
+  listHistory(pageToken?: string): Promise<Feed>
 
   /**
    * Lists every way a video can be played right now, best-effort: the local
@@ -307,6 +312,21 @@ export const httpCatalogRepository: CatalogRepository = {
 
   getStorage() {
     return request<StorageUsage>('/storage')
+  },
+
+  listPinned(pageToken) {
+    return request<Feed>(`/pinned${query({ pageToken })}`)
+  },
+
+  async setPinned(videoId, pinned) {
+    await request<void>(`/videos/${encodeURIComponent(videoId)}/pinned`, {
+      method: 'POST',
+      body: JSON.stringify({ pinned }),
+    })
+  },
+
+  listHistory(pageToken) {
+    return request<Feed>(`/history${query({ pageToken })}`)
   },
 
   getStream(videoId, prefetch) {

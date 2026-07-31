@@ -258,6 +258,14 @@ func (r *Repository) ListHistory(ctx context.Context, userID string, page domain
 		userID, page.Size, page.Offset)
 }
 
+func (r *Repository) ListPinnedVideos(ctx context.Context, userID string, page domain.Page) ([]domain.Video, error) {
+	return r.queryVideos(ctx, videoSelect+`
+		WHERE v.pinned = true
+		ORDER BY v.added_at DESC
+		LIMIT $2 OFFSET $3`,
+		userID, page.Size, page.Offset)
+}
+
 func (r *Repository) GetChannel(ctx context.Context, channelID, userID string) (domain.Channel, int32, error) {
 	var (
 		c          domain.Channel

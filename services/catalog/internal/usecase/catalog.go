@@ -261,3 +261,10 @@ func (c *Catalog) SetPinned(ctx context.Context, videoID string, pinned bool) er
 	}
 	return c.repo.SetPinned(ctx, videoID, pinned)
 }
+
+func (c *Catalog) ListPinnedVideos(ctx context.Context, userID string, size, offset int32) ([]domain.Video, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	return c.repo.ListPinnedVideos(ctx, userID, clampPage(size, offset))
+}

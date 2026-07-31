@@ -165,7 +165,7 @@ func (i *Ingest) runBackfill(limit int32) {
 	defer cancel()
 	defer func() { i.backfill.finish(time.Now()) }()
 
-	pending, err := i.library.ListVideosMissingTopics(ctx, limit)
+	pending, err := i.library.ListVideosNeedingBackfill(ctx, limit)
 	if err != nil {
 		i.logger.Error("topic backfill: list videos", "error", err)
 		return
@@ -233,11 +233,11 @@ func (i *Ingest) runBackfill(limit int32) {
 		"took", time.Since(final.StartedAt).Truncate(time.Second))
 }
 
-// backfillOne fetches one video's metadata and writes its category back.
+// backfillOne fetches one video's metadata and writes the missing fields back.
 //
 // Returns false for anything that could not be updated. A video that is private
 // or removed is not an error worth failing the pass over — it is simply a video
-// that will never have a category.
+// that will never have the missing data.
 func (i *Ingest) backfillOne(ctx context.Context, ref domain.VideoRef) bool {
 	sourceURL := ref.SourceURL
 	if sourceURL == "" {
@@ -249,17 +249,21 @@ func (i *Ingest) backfillOne(ctx context.Context, ref domain.VideoRef) bool {
 		i.logger.Debug("topic backfill: preview failed", "video", ref.VideoID, "error", err)
 		return false
 	}
-	if preview.Category == "" {
-		// Fetched fine, but YouTube publishes no category for it. Writing an
-		// empty topic list would be indistinguishable from not having tried.
-		return false
-	}
 
-	// The id from the catalogue wins. Preview resolves the URL itself and a
-	// redirect could return a different one, which would create a second row
-	// rather than updating the one that needed a topic.
 	preview.ID = ref.VideoID
-	preview.Topics = categoryTopics(preview)
+
+	if ref.MissingPublishedAt {
+		// Video has topics — we only need published_at. Even with no category
+		// from YouTube, the preview already gave us the date and UpsertVideo
+		// writes it via COALESCE.
+	} else {
+		if preview.Category == "" {
+			// Fetched fine, but YouTube publishes no category for it. Writing an
+			// empty topic list would be indistinguishable from not having tried.
+			return false
+		}
+		preview.Topics = categoryTopics(preview)
+	}
 
 	// Upsert preserves media_state, media_path and added_at, and unions topics
 	// rather than replacing them — so this cannot demote a downloaded video or

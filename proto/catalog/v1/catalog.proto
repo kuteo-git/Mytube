@@ -55,6 +55,9 @@ service CatalogService {
   // Storage. Backs the Storage page and the eviction banner.
   rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse);
   rpc SetPinned(SetPinnedRequest) returns (SetPinnedResponse);
+  // Videos the viewer has chosen to keep. "Saved" is the browsing view; pinning
+  // is also the mechanism that protects a video from eviction.
+  rpc ListPinnedVideos(ListPinnedVideosRequest) returns (ListPinnedVideosResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -442,3 +445,14 @@ message SetPinnedRequest {
 }
 
 message SetPinnedResponse {}
+
+message ListPinnedVideosRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListPinnedVideosResponse {
+  repeated Video videos = 1;
+  string next_page_token = 2;
+}
