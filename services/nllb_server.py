@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-MODEL_NAME = os.environ.get("NLLB_MODEL", "facebook/nllb-200-distilled-1.3B")
+MODEL_NAME = os.environ.get("NLLB_MODEL", "facebook/nllb-200-distilled-600M")
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 PORT = int(os.environ.get("NLLB_PORT", "8005"))
 
