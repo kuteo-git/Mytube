@@ -25,7 +25,7 @@ import {
   useAutoplayPreference,
   useQualityPreference,
 } from '@/features/watch/application/autoplay'
-import { hasVietnameseSubs, tickNarration, resetNarration } from '@/features/watch/application/narration'
+import { hasVietnameseSubs, tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
 
@@ -335,8 +335,15 @@ export function Player({
   // Language code of the active caption track, or null for off. Tracks arrive
   // shortly after playback starts, before the media file finishes downloading.
   const [captions, setCaptions] = useState<string | null>(null)
+  const captionsRef = useRef<string | null>(null)
   const [narrationOn, setNarrationOn] = useState(false)
+  const narrationOnRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
+  // Keep refs synchronised so callbacks that are intentionally stable (empty
+  // dependency arrays) never read a stale closure value — particularly
+  // handoverToBack, which copies text track modes across the swap.
+  useEffect(() => { captionsRef.current = captions }, [captions])
+  useEffect(() => { narrationOnRef.current = narrationOn }, [narrationOn])
   const [autoplayEnabled, setAutoplayEnabled] = useAutoplayPreference()
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -463,6 +470,18 @@ export function Player({
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
+
+  // When narration is turned on, fetch and parse the Vietnamese VTT directly.
+  // We cannot rely on the browser's TextTrack API because React adds <track>
+  // elements via the DOM rather than static HTML, and some browsers never
+  // initialise the backing TextTrack (readyState stays undefined).
+  useEffect(() => {
+    if (!narrationOn) return
+    const viSub = subtitles.find(
+      (s) => s.language === 'vi' || s.language === 'vie',
+    )
+    if (viSub) loadViSubtitles(viSub.url)
+  }, [narrationOn, subtitles])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,
@@ -611,7 +630,15 @@ export function Player({
       next.muted = current.muted
       for (let i = 0; i < next.textTracks.length; i++) {
         const track = next.textTracks[i]
-        track.mode = track.language === captions ? 'showing' : 'disabled'
+        const isVi = track.language === 'vi' || track.language === 'vie'
+        // Never disable the Vietnamese track when narration is on: the
+        // browser would cancel the VTT load and the viewer would lose the
+        // thuyết minh audio mid-sentence during the upgrade.
+        if (isVi && narrationOnRef.current) {
+          track.mode = 'hidden'
+          continue
+        }
+        track.mode = track.language === captionsRef.current ? 'showing' : 'disabled'
       }
 
       // Freeze position tracking across the exchange for the same reason a
@@ -1391,10 +1418,14 @@ export function Player({
                 // Create + resume AudioContext during the user gesture so the
                 // browser allows audible playback. The tick loop (requestAnimationFrame)
                 // runs too late for the autoplay policy.
-                if (!narrationOn && !audioCtxRef.current) {
-                  const ctx = new AudioContext()
-                  if (ctx.state === 'suspended') ctx.resume()
-                  audioCtxRef.current = ctx
+                if (!narrationOn) {
+                  if (!audioCtxRef.current) {
+                    audioCtxRef.current = new AudioContext()
+                  }
+                  // Always try to resume — may be suspended if the page lost
+                  // focus or the context was idle too long.
+                  const ctx = audioCtxRef.current
+                  if (ctx.state === 'suspended') void ctx.resume()
                 }
                 setNarrationOn((o) => !o)
               }}
