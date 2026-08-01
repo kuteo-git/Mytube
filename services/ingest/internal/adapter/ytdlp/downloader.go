@@ -415,6 +415,7 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 	return domain.DownloadResult{
 		MediaPath: filepath.Join(videoID, filepath.Base(target)),
 		SizeBytes: info.Size(),
+		Subtitles: collectSubtitles(dir, videoID, true),
 	}, nil
 }
 
