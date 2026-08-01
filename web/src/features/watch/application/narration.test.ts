@@ -27,6 +27,11 @@ function groupCuesForTranslation(cues: CueText[]): CueText[] {
       const after = buf[idx + 1]
       if (ch === '.' && before && /\d/.test(before) && after && /\d/.test(after)) continue
       if (after && after !== ' ') continue
+      // Don't split on comma if the text before it is too short.
+      if (ch === ',') {
+        const wordsBefore = buf.slice(0, idx).trim().split(/\s+/)
+        if (wordsBefore.length <= 2) continue
+      }
       lastEnd = idx + 1
     }
 
@@ -78,6 +83,40 @@ describe('groupCuesForTranslation', () => {
     const result = groupCuesForTranslation(cues)
     expect(result).toHaveLength(1)
     expect(result[0].text).toBe('version 2.5 is faster now.')
+  })
+
+  it('does not split comma when preceding text is 1-2 words', () => {
+    const cues: CueText[] = [
+      { start: 0, end: 1, text: 'Then,' },
+      { start: 1, end: 2, text: 'how are you.' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    // "Then," is only 1 word → don't split → join with next
+    expect(result).toHaveLength(1)
+    expect(result[0].text).toBe('Then, how are you.')
+  })
+
+  it('splits comma when preceding text has 3+ words', () => {
+    const cues: CueText[] = [
+      { start: 0, end: 1, text: 'new DeepSeek style moment,' },
+      { start: 1, end: 2, text: 'Kimmy' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    expect(result).toHaveLength(2)
+    expect(result[0].text).toBe('new DeepSeek style moment,')
+    expect(result[1].text).toBe('Kimmy')
+  })
+
+  it('"But, at this moment, ..." skips first comma, splits at second', () => {
+    const cues: CueText[] = [
+      { start: 0, end: 1, text: 'But, at this moment,' },
+      { start: 1, end: 2, text: 'we must act now.' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    // "But," is 1 word → skip first comma. "at this moment," is 3 words → split.
+    expect(result).toHaveLength(2)
+    expect(result[0].text).toBe('But, at this moment,')
+    expect(result[1].text).toBe('we must act now.')
   })
 
   it('single cue without punctuation stays as-is', () => {

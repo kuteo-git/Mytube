@@ -200,7 +200,9 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
       buf += (buf ? ' ' : '') + cues[j].text
       bufEnd = cues[j].end
 
-      // Find the last clause boundary in buf, skipping digit.digit patterns.
+      // Find the last clause boundary in buf, skipping digit.digit patterns
+      // and commas where the preceding text is too short to stand alone
+      // ("Then, how are you" → don't split; "moment, Kimmy" → split).
       let lastEnd = -1
       const re = /[.!?,]/g
       let m: RegExpExecArray | null
@@ -213,6 +215,11 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
         if (ch === '.' && before && /\d/.test(before) && after && /\d/.test(after)) continue
         // Clause-ending punctuation must be followed by space or end-of-string.
         if (after && after !== ' ') continue
+        // Don't split on comma if the text before it is too short.
+        if (ch === ',') {
+          const wordsBefore = buf.slice(0, idx).trim().split(/\s+/)
+          if (wordsBefore.length <= 2) continue
+        }
         lastEnd = idx + 1
       }
 
@@ -352,9 +359,13 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   // TTS at 2.5× video volume so the voice cuts through even when ducked.
   _masterGain.gain.setValueAtTime(video.volume * 2.5, ctx.currentTime)
 
-  // When the viewer seeks (forward or backward), restart the 5 s warm-start
-  // window from the new position and unmark cues that are now in the future.
+  // When the viewer seeks (forward or backward), stop all currently playing
+  // clips, restart the 5 s warm-start window, and unmark future cues.
   if (Math.abs(now - _lastTime) > 0.5) {
+    for (const src of _activeSources) {
+      try { src.stop() } catch { /* already stopped */ }
+    }
+    _activeSources.clear()
     _skipUntil = now + 5
     let unmarked = 0
     for (const idx of _played) {

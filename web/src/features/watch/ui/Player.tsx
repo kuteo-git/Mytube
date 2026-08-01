@@ -482,6 +482,15 @@ export function Player({
     return () => cancelAnimationFrame(frame)
   }, [captions, frontSrc, frontIsA, front, subtitles.length])
 
+  // Create AudioContext when narration activates.  Must happen here — not just
+  // in onClick — because narrationOn can be restored from localStorage on page
+  // load without any user gesture.
+  useEffect(() => {
+    if (narrationOn && !audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext()
+    }
+  }, [narrationOn])
+
   // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
   // TTS audio and plays clips at their scheduled times through Web Audio API.
   useEffect(() => {
@@ -494,7 +503,11 @@ export function Player({
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(frame)
+      resetNarration()
+      audioCtxRef.current?.suspend()
+    }
   }, [narrationOn, front])
 
   // Restore stored volume/muted on the video element, and duck the video
