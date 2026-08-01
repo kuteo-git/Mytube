@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import {
   Captions,
   CaptionsOff,
+  Headphones,
   Maximize,
   Pause,
   Play,
@@ -24,6 +25,7 @@ import {
   useAutoplayPreference,
   useQualityPreference,
 } from '@/features/watch/application/autoplay'
+import { hasVietnameseSubs, tickNarration, resetNarration } from '@/features/watch/application/narration'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
 
@@ -333,6 +335,8 @@ export function Player({
   // Language code of the active caption track, or null for off. Tracks arrive
   // shortly after playback starts, before the media file finishes downloading.
   const [captions, setCaptions] = useState<string | null>(null)
+  const [narrationOn, setNarrationOn] = useState(false)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const [autoplayEnabled, setAutoplayEnabled] = useAutoplayPreference()
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -425,6 +429,9 @@ export function Player({
   // Captions no longer wait for the media file: ingest publishes them ahead of
   // the transfer, precisely so they are usable during upstream playback.
   const captionsAvailable = subtitles.length > 0
+  // Narration is available when there are Vietnamese subtitles. We don't know
+  // until the <track> elements load, so we check via hasVietnameseSubs().
+  const narrationAvailable = subtitles.some((s) => s.language === 'vi' || s.language === 'vie')
 
   // <track> elements are declarative but their display is not: the browser
   // decides which one shows. Driving textTracks directly keeps the button and
@@ -437,6 +444,25 @@ export function Player({
       track.mode = track.language === captions ? 'showing' : 'disabled'
     }
   }, [captions, frontSrc, frontIsA, front, subtitles.length])
+
+  // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
+  // TTS audio and plays clips at their scheduled times through Web Audio API.
+  useEffect(() => {
+    if (!narrationOn) return
+    let frame = 0
+    const tick = () => {
+      const el = front()
+      if (!el) { frame = requestAnimationFrame(tick); return }
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      tickNarration(el, audioCtxRef.current)
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [narrationOn, front])
+
+  // Reset narration state when moving to a new video.
+  useEffect(() => { resetNarration() }, [videoId])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,
@@ -1353,6 +1379,22 @@ export function Player({
               onSelect={setCaptions}
               onOpenChange={trackMenu}
             />
+          )}
+
+          {narrationAvailable && (
+            <button
+              type="button"
+              aria-label={narrationOn ? 'Turn off narration' : 'Turn on Vietnamese narration'}
+              aria-pressed={narrationOn}
+              onClick={() => setNarrationOn((o) => !o)}
+              className={`p-2 rounded-full transition-colors duration-150 ease-out ${
+                narrationOn
+                  ? 'text-brand hover:bg-brand/10'
+                  : 'text-text-2 hover:text-text hover:bg-surface-hover'
+              }`}
+            >
+              <Headphones size={20} />
+            </button>
           )}
 
           {/* Only offered when there is more than one way to play the video.
