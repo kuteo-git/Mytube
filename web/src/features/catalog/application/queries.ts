@@ -276,6 +276,16 @@ export function useSetPinned() {
   })
 }
 
+export function useNotInterested() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (videoId: string) => repo.recordNotInterested(videoId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['feed'] })
+    },
+  })
+}
+
 /**
  * Reacting changes both the like count and, through the recorded signal, the
  * next feed — so the feed cache is invalidated alongside the video itself.

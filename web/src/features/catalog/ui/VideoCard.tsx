@@ -1,10 +1,10 @@
 import clsx from 'clsx'
-import { Bookmark, CheckCircle, MoreVertical } from 'lucide-react'
+import { Bookmark, CheckCircle, EyeOff, MoreVertical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
-import { useSetPinned, useStreamPrefetch } from '../application/queries'
+import { useNotInterested, useSetPinned, useStreamPrefetch } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
@@ -37,7 +37,7 @@ export function VideoCard({ video }: { video: Video }) {
     // spend it here, where nobody is waiting, instead of after the click.
     // Focus counts too, so a keyboard or a remote gets the same head start.
     <article
-      className="group flex flex-col gap-3"
+      className="group flex flex-col gap-3 rounded-xl ring-1 ring-transparent transition-shadow duration-200 ease-out hover:shadow-lg hover:shadow-black/10 hover:ring-line"
       onPointerEnter={() => prefetch(video.id)}
       onPointerLeave={cancel}
       onFocus={() => prefetch(video.id)}
@@ -143,6 +143,7 @@ export function VideoCardSkeleton() {
 
 function CardMenu({ video, close }: { video: Video; close: () => void }) {
   const setPinned = useSetPinned()
+  const notInterested = useNotInterested()
 
   return (
     <ul className="absolute right-0 bottom-10 z-10 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
@@ -157,6 +158,19 @@ function CardMenu({ video, close }: { video: Video; close: () => void }) {
         >
           <Bookmark size={16} fill={video.pinned ? 'currentColor' : 'none'} />
           {video.pinned ? 'Unkeep' : 'Keep'}
+        </button>
+      </li>
+      <li>
+        <button
+          type="button"
+          onClick={() => {
+            notInterested.mutate(video.id)
+            close()
+          }}
+          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+        >
+          <EyeOff size={16} />
+          Not interested
         </button>
       </li>
     </ul>

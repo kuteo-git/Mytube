@@ -74,6 +74,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/pinned", g.handlePinned)
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
+	mux.HandleFunc("POST /api/videos/{id}/not-interested", g.handleNotInterested)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
 	mux.HandleFunc("GET /api/subscriptions", g.handleListSubscriptions)
 	mux.HandleFunc("GET /api/collections/top-played", g.handleTopPlayed)
@@ -455,6 +456,13 @@ func (g *Gateway) handleSetPinned(w http.ResponseWriter, r *http.Request) {
 		g.writeErr(w, r, err)
 		return
 	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleNotInterested(w http.ResponseWriter, r *http.Request) {
+	userID := g.userID(r)
+	videoID := r.PathValue("id")
+	go g.recordSignal(userID, recsysv1.SignalType_SIGNAL_TYPE_DISLIKE, videoID, "", 0)
 	w.WriteHeader(http.StatusNoContent)
 }
 
