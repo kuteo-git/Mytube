@@ -24,8 +24,7 @@ topics:
       - https://www.youtube.com/@IGN/videos
 
   - name: Music
-    sources:
-      - https://www.youtube.com/@NoCopyrightSounds/videos
+    sources: []
 
   - name: Vietnamese music
     sources:

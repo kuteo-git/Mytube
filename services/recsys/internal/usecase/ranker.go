@@ -248,11 +248,25 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	now := r.now()
 	ranked := make([]domain.RankedVideo, 0, len(features))
 
+	// Count dislikes per channel. Three or more disliked videos from an
+	// unsubscribed channel suppress the whole channel — its remaining videos
+	// are skipped. Subscribed channels are immune: following a channel is a
+	// deliberate statement that overrides passive dislike.
+	dislikedPerChannel := map[string]int{}
+	for _, f := range features {
+		if profile.Disliked[f.VideoID] {
+			dislikedPerChannel[f.ChannelID]++
+		}
+	}
+
 	for _, f := range features {
 		if !matchesTopic(f, topic) {
 			continue
 		}
 		if profile.Disliked[f.VideoID] {
+			continue
+		}
+		if dislikedPerChannel[f.ChannelID] >= 3 && !profile.Subscribed[f.ChannelID] {
 			continue
 		}
 		if f.MediaState == "MEDIA_STATE_FAILED" {
