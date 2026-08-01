@@ -1060,6 +1060,7 @@ export function Player({
       onPointerLeave={() => {
         window.clearTimeout(hideTimerRef.current)
         setPointerActive(false)
+        setOpenMenus(0) // dismiss menus so controls can hide
       }}
     >
       {tier && tier.name !== 'local' && (
@@ -1565,17 +1566,22 @@ function QualityMenu({
   onOpenChange: (open: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     onOpenChange(open)
-    // Closing on unmount too, or a menu left open while the video changes
-    // would pin the controls on screen for good.
-    return () => {
-      if (open) onOpenChange(false)
-    }
+    return () => { if (open) onOpenChange(false) }
   }, [open, onOpenChange])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         aria-label="Quality"
@@ -1627,16 +1633,23 @@ function CaptionMenu({
   onOpenChange: (open: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     onOpenChange(open)
-    return () => {
-      if (open) onOpenChange(false)
-    }
+    return () => { if (open) onOpenChange(false) }
   }, [open, onOpenChange])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
   const Icon = active ? Captions : CaptionsOff
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         aria-label="Subtitles"

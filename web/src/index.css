@@ -62,6 +62,12 @@
     color: inherit;
     text-decoration: none;
   }
+
+  /* YouTube VTT auto-captions carry align:start position:0% which pushes
+     cues to the bottom-left.  The only reliable way to centre them across
+     browsers is to strip those settings from the VTT before serving it.
+     See services/gateway/internal/api/router.go — the /media/ handler
+     intercepts *.vtt requests and removes align/position from each cue. */
 }
 
 @layer utilities {
