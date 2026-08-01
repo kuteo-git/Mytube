@@ -180,6 +180,57 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     cues.push({ start, end, text })
   }
 
+  // Group consecutive cues until a sentence/clause boundary so the
+  // translation model (NLLB-200 600M) has full-sentence context.
+  // Periods, exclamation/question marks end a group; commas keep it open.
+  if (_sourceLang === 'en') {
+    // Only treat . ! ? as sentence-ending when preceded by a letter,
+    // not a digit (avoids splitting on "2.5", "3.14", etc.).
+    // Accumulate cues and split at every . ! ? , boundary.  Each clause
+    // keeps the original cue timing: start of first cue, end of last cue
+    // that contributed text to this clause.
+    //
+    // The boundary check excludes number.decimal patterns like "2.5" or
+    // "version 3.0" — the period there is not a clause boundary.
+    const grouped: CueText[] = []
+    let buf = ''
+    let bufStart = 0
+    let bufEnd = 0
+    for (let j = 0; j < cues.length; j++) {
+      if (!buf) { bufStart = cues[j].start }
+      buf += (buf ? ' ' : '') + cues[j].text
+      bufEnd = cues[j].end
+
+      // Find the last clause boundary in buf, skipping digit.digit patterns.
+      let lastEnd = -1
+      const re = /[.!?,]/g
+      let m: RegExpExecArray | null
+      while ((m = re.exec(buf)) !== null) {
+        const ch = m[0]
+        const idx = m.index
+        const before = buf[idx - 1]
+        const after = buf[idx + 1]
+        // Skip decimal points: "2.5", "3.14"
+        if (ch === '.' && before && /\d/.test(before) && after && /\d/.test(after)) continue
+        // Clause-ending punctuation must be followed by space or end-of-string.
+        if (after && after !== ' ') continue
+        lastEnd = idx + 1
+      }
+
+      if (lastEnd > 0) {
+        const clause = buf.slice(0, lastEnd).trim()
+        if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
+        buf = buf.slice(lastEnd).trim()
+        bufStart = bufEnd
+      }
+    }
+    if (buf.trim()) {
+      grouped.push({ start: bufStart, end: bufEnd, text: buf.trim() })
+    }
+    cues.length = 0
+    cues.push(...grouped)
+  }
+
   // YouTube emits progressively-accumulating cues where each tagged cue
   // repeats all previous words plus one new phrase.  Strip the shared prefix
   // so each cue speaks only what it adds.
