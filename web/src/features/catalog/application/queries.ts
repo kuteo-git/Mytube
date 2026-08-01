@@ -276,12 +276,49 @@ export function useSetPinned() {
   })
 }
 
+const HIDDEN_KEY = 'yt-hidden-videos'
+
+function loadHidden(): Set<string> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY)
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
+  } catch { return new Set() }
+}
+
+function persistHidden(videoId: string) {
+  const set = loadHidden()
+  set.add(videoId)
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])) } catch { /* quota */ }
+}
+
+/** Videos the viewer has hidden this session and across refreshes. */
+export function hiddenVideoIDs(): Set<string> {
+  return loadHidden()
+}
+
 export function useNotInterested() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (videoId: string) => repo.recordNotInterested(videoId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['feed'] })
+    onMutate: (videoId) => {
+      // Persist across refreshes — the server signal is fire-and-forget and
+      // may not have committed before the next page load.
+      persistHidden(videoId)
+
+      // Remove instantly from every cached feed page.
+      queryClient.setQueriesData<InfiniteFeed>(
+        { queryKey: ['feed'] },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              videos: page.videos.filter((v) => v.id !== videoId),
+            })),
+          }
+        },
+      )
     },
   })
 }

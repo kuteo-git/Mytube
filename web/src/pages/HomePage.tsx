@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
+  hiddenVideoIDs,
   useDiscover,
   useFeed,
   usePopular,
@@ -99,7 +100,9 @@ export function HomePage() {
             )}
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
-              : videos.map((video) => <VideoCard key={video.id} video={video} />)}
+              : videos
+                  .filter((v) => !hiddenVideoIDs().has(v.id))
+                  .map((video) => <VideoCard key={video.id} video={video} />)}
           </div>
 
           <InfiniteList

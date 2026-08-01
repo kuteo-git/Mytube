@@ -18,10 +18,7 @@ export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [hidden, setHidden] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-
-  if (hidden) return null
 
   useEffect(() => {
     if (!menuOpen) return
@@ -110,7 +107,7 @@ export function VideoCard({ video }: { video: Video }) {
           >
             <MoreVertical size={20} />
           </button>
-          {menuOpen && <CardMenu video={video} close={() => setMenuOpen(false)} onHidden={() => setHidden(true)} />}
+          {menuOpen && <CardMenu video={video} close={() => setMenuOpen(false)} />}
         </div>
       </div>
     </article>
@@ -144,7 +141,7 @@ export function VideoCardSkeleton() {
   )
 }
 
-function CardMenu({ video, close, onHidden }: { video: Video; close: () => void; onHidden: () => void }) {
+function CardMenu({ video, close }: { video: Video; close: () => void }) {
   const setPinned = useSetPinned()
   const notInterested = useNotInterested()
 
@@ -168,7 +165,6 @@ function CardMenu({ video, close, onHidden }: { video: Video; close: () => void;
           type="button"
           onClick={() => {
             notInterested.mutate(video.id)
-            onHidden()
             close()
           }}
           className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
