@@ -10,10 +10,14 @@ import { QueueRail } from '@/features/watch/ui/QueueRail'
 import { UpNextRail } from '@/features/watch/ui/UpNextRail'
 import { VideoActions } from '@/features/watch/ui/VideoActions'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 export function WatchPage() {
   const { videoId } = useParams()
   const { data: video, isPending, isError } = useVideo(videoId)
+  if (video && video.subtitles.length > 0) {
+    console.log('[WatchPage] subtitles:', video.subtitles.length, 'mediaState:', video.mediaState)
+  }
   const { data: upNext } = useUpNext(videoId)
   // The last resort behind "next". Cheap and cached, and it is what keeps the
   // button alive once every suggestion has already been played this sitting.
@@ -89,7 +93,7 @@ export function WatchPage() {
           }
           mediaState={video.mediaState}
           subtitles={video.subtitles}
-          thumbnailURL={video.thumbnailPath || undefined}
+          thumbnailURL={mediaURL(video.thumbnailPath) || undefined}
           nextVideoTitle={next?.title}
           onPlayNext={
             next

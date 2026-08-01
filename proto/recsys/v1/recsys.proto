@@ -43,6 +43,9 @@ enum RecommendationReason {
   // Opened and abandoned within the first moments. Distinct from never having
   // been watched: the viewer has already answered, and the answer was no.
   RECOMMENDATION_REASON_BOUNCED = 8;
+  // Outside the viewer's affinity — unwatched channel, unfamiliar topic.
+  // Reserved a small quota to prevent the feed converging on the familiar.
+  RECOMMENDATION_REASON_DISCOVERY = 9;
 }
 
 message RankedVideo {

@@ -44,10 +44,15 @@ export function VideoCard({ video }: { video: Video }) {
       onBlur={cancel}
     >
       <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
-        <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailPath} alt={video.title}>
+        <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title}>
           {video.mediaState === 'DOWNLOADING' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
               Downloading…
+            </span>
+          )}
+          {video.mediaState === 'QUEUED' && (
+            <span className="absolute top-2 left-2 rounded bg-surface/85 px-1.5 py-0.5 text-xs text-text-2">
+              Streaming
             </span>
           )}
           <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">

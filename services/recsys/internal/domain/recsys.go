@@ -32,6 +32,10 @@ const (
 	// Distinct from never having watched it: the viewer has already answered
 	// the question this video asks, and the answer was no.
 	ReasonBounced Reason = "BOUNCED"
+	// ReasonDiscovery is for videos outside the viewer's affinity — unwatched
+	// channels, unfamiliar topics. Reserving a quota for them keeps the feed
+	// from converging entirely on what is already known.
+	ReasonDiscovery Reason = "DISCOVERY"
 )
 
 type Signal struct {

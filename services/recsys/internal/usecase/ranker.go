@@ -20,11 +20,16 @@ const (
 	impressionWindow = 24 * time.Hour
 
 	// Score weights. Kept as named constants so tuning is a readable diff.
-	weightContinueWatching = 3.0
+	// Continue-watching is a claim on attention, not a claim on the first page.
+	// Halved from 3.0 because even with the quota at 10% the old weight made
+	// partially-watched videos dominate every bucket they fell into.
+	weightContinueWatching = 1.5
 	weightNeverWatched     = 1.5
 	weightSubscribed       = 1.2
 	weightRecentlyAdded    = 1.0
-	weightChannelAffinity  = 1.0
+	// Raised from 1.0 because affinity is now multiplicative: these weights set
+	// how fast the multiplier climbs as a viewer watches a channel or topic.
+	weightChannelAffinity = 2.0
 	// Likes are a deliberate statement and outweigh passive watch affinity, but
 	// stay below "continue watching": an unfinished video is a stronger claim on
 	// attention than a preference.
@@ -48,7 +53,7 @@ const (
 	// Watching is a weaker statement than liking, so the same topic match earns
 	// less. It accumulates across a viewing history, which is the point — fifty
 	// unremarked cooking videos should say what one like says.
-	weightTopicAffinity = 1.0
+	weightTopicAffinity = 2.0
 	// Subject and channel weigh the same, and per shared tag rather than once,
 	// so two videos sharing a topic and a hashtag outrank one merely sharing a
 	// channel.
@@ -80,7 +85,15 @@ const (
 	// two are what make a pair of videos by one artist each other's top
 	// suggestion, and nothing smaller than their sum can break the loop.
 	penaltyRecentlyWatched = 8.0
-	recencyHalfLifeDay     = 14.0
+	recencyHalfLifeDay     = 5.0 // was 14.0: fresher turnover, fed by grilling session 2026-08-01
+	// Base score added to discovery videos so they compete within their quota
+	// bucket despite having no affinity signal. Kept below weightNeverWatched
+	// so the never-watched bucket still prefers videos the viewer might like.
+	weightDiscoveryBase = 0.8
+	// Combined watch-based affinity (channel + topic, normalised 0..1) below
+	// which a video from an unsubscribed channel is classified as discovery.
+	// 0.15 means "essentially no meaningful connection to anything watched."
+	discoveryAffinityThreshold = 0.15
 )
 
 type Ranker struct {
@@ -287,8 +300,32 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 			}
 		}
 
-		score += weightChannelAffinity * watchAffinity.Channels[f.ChannelID]
-		score += weightTopicAffinity * watchAffinity.TopicScore(f)
+		// Affinity is multiplicative, not additive. Additive affinity gave a
+		// video from an unwatched channel ~3.0 and an affinity-matched video
+		// ~5.5 — a 1.8× gap too narrow to survive quota interleaving, where
+		// each bucket picks independently. Multiplicative runs 0.5× to 2.5×,
+		// which is a 5× gap: enough that affinity content dominates its bucket
+		// and discovery stays in its own.
+		//
+		// Only watch-based affinity goes in the multiplier — channels and
+		// topics, both normalised 0..1. Likes stay additive: they are rare
+		// (9 vs 2,045 watch signals in this library) and already weight 2.0.
+		channelAff := watchAffinity.Channels[f.ChannelID]
+		topicAff := watchAffinity.TopicScore(f)
+		combinedAffinity := (weightChannelAffinity*channelAff + weightTopicAffinity*topicAff) /
+			(weightChannelAffinity + weightTopicAffinity)
+		affinityMultiplier := 0.5 + 2.0*combinedAffinity
+
+		// Discovery: outside the viewer's affinity and not a channel they
+		// chose to follow. Gets a dedicated reason so the quota (12%) can
+		// reserve a small window for unfamiliar material.
+		if combinedAffinity < discoveryAffinityThreshold && !profile.Subscribed[f.ChannelID] {
+			reason = domain.ReasonDiscovery
+			score += weightDiscoveryBase
+		}
+
+		score *= affinityMultiplier
+
 		score += weightLikeAffinity * likes.Score(f)
 		score += weightRetention * float64(retention[f.VideoID])
 

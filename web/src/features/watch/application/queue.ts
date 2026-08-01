@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useChannel, useChannelVideos, useTopPlayed } from '@/features/catalog/application/queries'
+import { mediaURL } from '@/shared/lib/media'
 
 /**
  * The playback queue: an ordered list the watch page is playing through.
@@ -97,7 +98,7 @@ export function useQueue(currentVideoId: string | undefined): Queue {
         id: v.id,
         title: v.title,
         channelName: v.channel.name,
-        thumbnailUrl: v.thumbnailPath,
+        thumbnailUrl: mediaURL(v.thumbnailPath) ?? '',
         durationSeconds: v.durationSeconds,
       }))
     }

@@ -207,6 +207,13 @@ func (s *Scanner) scanSource(
 			continue
 		}
 
+		// Download the thumbnail locally so the frontend never depends on
+		// YouTube's CDN. A failure here is decoration lost: UpsertVideo still
+		// gets the remote URL as a fallback.
+		if local := s.fetch.SaveThumbnail(ctx, v.ThumbnailURL, v.ID); local != "" {
+			v.ThumbnailURL = local
+		}
+
 		// QUEUED means "known, not on disk". The feed can rank it; pressing
 		// play is what turns it into a download.
 		if err := s.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
@@ -235,8 +242,12 @@ func (s *Scanner) scanSource(
 func applyOwner(v *domain.ExternalVideo, owner domain.ChannelMetadata, fromPlaylist bool) {
 	authoritative := !fromPlaylist && owner.ID != ""
 
-	if v.ChannelID == "" || authoritative {
-		if owner.ID != "" {
+	// The listing often supplies a handle ("@mkbhd") where an id belongs.
+	// Treat it as empty so the owner can fill in the real UC... id.
+	broken := strings.HasPrefix(v.ChannelID, "@")
+
+	if v.ChannelID == "" || broken || authoritative {
+		if owner.ID != "" && !strings.HasPrefix(owner.ID, "@") {
 			v.ChannelID = owner.ID
 		}
 	}

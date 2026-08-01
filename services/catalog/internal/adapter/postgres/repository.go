@@ -6,6 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -460,9 +464,7 @@ func (r *Repository) SetMediaState(ctx context.Context, videoID string, state do
 func (r *Repository) loadSubtitles(ctx context.Context, videos []domain.Video) error {
 	ids := make([]string, 0, len(videos))
 	for _, v := range videos {
-		if v.MediaState == domain.MediaReady {
-			ids = append(ids, v.ID)
-		}
+		ids = append(ids, v.ID)
 	}
 	if len(ids) == 0 {
 		return nil
@@ -746,6 +748,137 @@ func (r *Repository) ListEvictionCandidates(ctx context.Context, _ int64) ([]dom
 
 // MarkEvicted keeps everything except the bytes: the row, the thumbnail and the
 // history survive so the video can offer to fetch itself again.
+// NormaliseChannelIDs fixes videos whose channel_id is an @handle rather than
+// the canonical UC… id. Flat playlist listings sometimes return the handle form,
+// and scanning from two different source types (channel vs playlist) creates two
+// channel rows for one real channel. Run once at startup; cheap enough to repeat
+// because there are few duplicate channels in a library of this size.
+func (r *Repository) NormaliseChannelIDs(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `
+		WITH bad AS (
+			SELECT id, name FROM catalog.channels WHERE id LIKE '@%'
+		),
+		good AS (
+			SELECT id, name FROM catalog.channels WHERE id NOT LIKE '@%'
+		),
+		remap AS (
+			SELECT b.id AS old_id, g.id AS new_id
+			FROM bad b
+			JOIN good g ON LOWER(g.name) = LOWER(b.name)
+		)
+		UPDATE catalog.videos v
+		SET channel_id = r.new_id
+		FROM remap r
+		WHERE v.channel_id = r.old_id
+	`)
+	if err != nil {
+		return fmt.Errorf("normalise channel ids: update videos: %w", err)
+	}
+
+	// Clean up orphaned @handle channels that no longer have any videos.
+	_, err = r.pool.Exec(ctx, `
+		DELETE FROM catalog.channels
+		WHERE id LIKE '@%'
+		  AND NOT EXISTS (SELECT 1 FROM catalog.videos WHERE channel_id = channels.id)
+	`)
+	if err != nil {
+		return fmt.Errorf("normalise channel ids: delete orphan channels: %w", err)
+	}
+
+	// Strip sqp and rs query parameters from thumbnail URLs. yt-dlp's listings
+	// carry them by default, and they sometimes cause YouTube to serve a generic
+	// grey placeholder instead of the real still.
+	_, err = r.pool.Exec(ctx, `
+		UPDATE catalog.videos
+		SET thumbnail_path = substring(thumbnail_path from '^[^?]+')
+		WHERE thumbnail_path LIKE '%?sqp=%'
+		   OR thumbnail_path LIKE '%?rs=%'
+	`)
+	if err != nil {
+		return fmt.Errorf("normalise channel ids: strip thumbnail params: %w", err)
+	}
+	return nil
+}
+
+// DownloadMissingThumbnails fetches thumbnails for videos that still reference
+// a remote URL. Each thumbnail is a few kilobytes; the whole pass is cheap and
+// ensures the frontend never depends on YouTube's CDN.
+func (r *Repository) DownloadMissingThumbnails(ctx context.Context) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, thumbnail_path FROM catalog.videos
+		WHERE thumbnail_path LIKE 'https://i.ytimg.com/%'
+	`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	type row struct{ id, url string }
+	var videos []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.url); err != nil {
+			continue
+		}
+		videos = append(videos, r)
+	}
+
+	thumbDir := filepath.Join(r.mediaRoot, "thumbnails")
+	_ = os.MkdirAll(thumbDir, 0o755)
+
+	// Try these in order: maxresdefault (1920×1080), sddefault (640×480),
+	// then whatever is already stored (usually hqdefault at 480×360).
+	candidates := func(videoID, storedURL string) []string {
+		// Derive clean URLs from the stored one so we don't carry over any
+		// query params the normalisation step might have missed.
+		return []string{
+			"https://i.ytimg.com/vi/" + videoID + "/maxresdefault.jpg",
+			"https://i.ytimg.com/vi/" + videoID + "/sddefault.jpg",
+			storedURL,
+		}
+	}
+
+	for _, v := range videos {
+		var downloaded bool
+		for _, url := range candidates(v.id, v.url) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if err != nil {
+				continue
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				continue
+			}
+			if resp.StatusCode != http.StatusOK {
+				resp.Body.Close()
+				continue
+			}
+
+			dst := filepath.Join(thumbDir, v.id+".jpg")
+			file, err := os.Create(dst)
+			if err != nil {
+				resp.Body.Close()
+				continue
+			}
+			if _, err := io.Copy(file, resp.Body); err != nil {
+				file.Close()
+				resp.Body.Close()
+				continue
+			}
+			file.Close()
+			resp.Body.Close()
+			downloaded = true
+			break
+		}
+
+		if downloaded {
+			_, _ = r.pool.Exec(ctx, `
+				UPDATE catalog.videos SET thumbnail_path = $1 WHERE id = $2
+			`, filepath.Join("thumbnails", v.id+".jpg"), v.id)
+		}
+	}
+}
+
 func (r *Repository) MarkEvicted(ctx context.Context, videoID string) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE videos

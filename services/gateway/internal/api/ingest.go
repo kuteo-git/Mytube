@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -68,6 +69,10 @@ type streamDTO struct {
 	// The downloaded file. Present only once it is on disk; the best source
 	// whenever it is there.
 	Local *sourceDTO `json:"local,omitempty"`
+	// When every source is unavailable — membership, age restriction, geo-block,
+	// or YouTube outage — this carries the yt-dlp error so the player can tell
+	// the viewer why rather than sitting blank.
+	StreamError string `json:"streamError,omitempty"`
 }
 
 func toJobDTO(j *ingestv1.Job) jobDTO {
@@ -406,6 +411,18 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		// Not every video publishes a progressive format. That is not an error
 		// worth failing the request over — it just means starting at the remux.
 		g.logger.Info("no instant source", "video", videoID, "error", resolveErr)
+			// When no local copy exists and the instant URL is gone, the
+			// remux is the only path. If ResolveStream failed because YouTube
+			// blocked access, the remux fails too. Tell the player why.
+			if out.Local == nil {
+				// Strip the gRPC framing ("internal: ") from the yt-dlp message
+				// so the player shows a readable reason instead of a stack trace.
+				msg := resolveErr.Error()
+				if code := connect.CodeOf(resolveErr).String(); code != "" {
+					msg = strings.TrimPrefix(msg, code+": ")
+				}
+				out.StreamError = msg
+			}
 	} else {
 		out.Instant = &sourceDTO{
 			URL:       resolved.Msg.GetUrl(),

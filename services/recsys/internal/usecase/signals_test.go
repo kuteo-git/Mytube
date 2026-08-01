@@ -63,8 +63,8 @@ func TestBouncedVideoScoresBelowOneNeverOpened(t *testing.T) {
 	if bounced.Reason != domain.ReasonBounced {
 		t.Fatalf("reason = %q, want %q", bounced.Reason, domain.ReasonBounced)
 	}
-	if fresh.Reason != domain.ReasonNeverWatched {
-		t.Fatalf("reason = %q, want %q", fresh.Reason, domain.ReasonNeverWatched)
+	if fresh.Reason != domain.ReasonDiscovery {
+		t.Fatalf("reason = %q, want %q", fresh.Reason, domain.ReasonDiscovery)
 	}
 }
 

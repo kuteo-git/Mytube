@@ -85,6 +85,20 @@ func main() {
 	}
 
 	repo := postgres.New(pool, mediaRoot)
+
+	// Fix videos whose channel_id is an @handle instead of the canonical UC… id.
+	// Flat playlist listings sometimes return the handle form, and scanning from
+	// both a channel source and a playlist source creates two channel rows for
+	// one real channel.
+	if err := repo.NormaliseChannelIDs(ctx); err != nil {
+		logger.Warn("normalising channel ids", "error", err)
+	}
+
+	// Download thumbnails for videos that still reference a remote URL.
+	// Run in the background so it never delays startup; each thumbnail is
+	// a few kilobytes, and YouTube rate-limiting is the only real cost.
+	go repo.DownloadMissingThumbnails(ctx)
+
 	server := rpc.NewServer(usecase.NewCatalog(repo, budgetBytes))
 
 	evictor := usecase.NewEvictor(repo, mediaRoot, highWatermark, lowWatermark, logger)

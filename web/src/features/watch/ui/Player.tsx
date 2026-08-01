@@ -418,6 +418,9 @@ export function Player({
     !streaming && offsetSeconds === 0 && elementDuration > 0 ? elementDuration : durationSeconds
 
   const playable = Boolean(frontSrc) && !loadFailed
+  if (subtitles.length > 0) {
+    console.log('[Player] subtitles available:', subtitles.length, 'mediaState:', mediaState)
+  }
   // Captions no longer wait for the media file: ingest publishes them ahead of
   // the transfer, precisely so they are usable during upstream playback.
   const captionsAvailable = subtitles.length > 0
@@ -1210,9 +1213,11 @@ export function Player({
               ? 'The stream could not be loaded.'
               : mediaState === 'EVICTED'
                 ? 'The media file was removed to reclaim disk space, and upstream has nothing directly playable. Re-download it to watch again.'
-                : streamFailed
-                  ? 'Nothing playable is available yet. The download has to finish first.'
-                  : 'No media file available yet.'}
+                : sources?.streamError
+                  ? sources.streamError
+                  : streamFailed
+                    ? 'Nothing playable is available yet. The download has to finish first.'
+                    : 'No media file available yet.'}
         </p>
       )}
 

@@ -4,6 +4,7 @@ import type { Video } from '../domain/video'
 import { topPlayedQueueSearch } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 /**
  * The most-played collection, presented as a stack of cards the way youtube.com
@@ -36,7 +37,7 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
             aria-hidden
             className="absolute inset-x-1.5 top-1 h-2 rounded-t-lg bg-white/25"
           />
-          <ThumbnailSurface hue={hueFromId(lead.id)} src={lead.thumbnailPath} alt="">
+          <ThumbnailSurface hue={hueFromId(lead.id)} src={mediaURL(lead.thumbnailPath)} alt="">
             <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5 rounded bg-badge px-2 py-1 text-xs font-medium">
               <ListVideo size={14} />
               Mix

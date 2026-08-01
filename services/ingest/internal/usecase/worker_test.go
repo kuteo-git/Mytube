@@ -50,6 +50,8 @@ func (f *fakeDownloader) FetchChannelArtwork(context.Context, domain.ChannelMeta
 	return "", ""
 }
 
+func (f *fakeDownloader) SaveThumbnail(ctx context.Context, url, videoID string) string { return "" }
+
 // fakeLibrary records every media-state write so the test can assert that
 // subtitles were published before the media file existed.
 type fakeLibrary struct {

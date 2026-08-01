@@ -38,6 +38,9 @@ const (
 	// Opened and abandoned within the first moments. Distinct from never having
 	// been watched: the viewer has already answered, and the answer was no.
 	RecommendationReason_RECOMMENDATION_REASON_BOUNCED RecommendationReason = 8
+	// Outside the viewer's affinity — unwatched channel, unfamiliar topic.
+	// Reserved a small quota to prevent the feed converging on the familiar.
+	RecommendationReason_RECOMMENDATION_REASON_DISCOVERY RecommendationReason = 9
 )
 
 // Enum value maps for RecommendationReason.
@@ -52,6 +55,7 @@ var (
 		6: "RECOMMENDATION_REASON_SAME_CHANNEL",
 		7: "RECOMMENDATION_REASON_SHARED_TAGS",
 		8: "RECOMMENDATION_REASON_BOUNCED",
+		9: "RECOMMENDATION_REASON_DISCOVERY",
 	}
 	RecommendationReason_value = map[string]int32{
 		"RECOMMENDATION_REASON_UNSPECIFIED":        0,
@@ -63,6 +67,7 @@ var (
 		"RECOMMENDATION_REASON_SAME_CHANNEL":       6,
 		"RECOMMENDATION_REASON_SHARED_TAGS":        7,
 		"RECOMMENDATION_REASON_BOUNCED":            8,
+		"RECOMMENDATION_REASON_DISCOVERY":          9,
 	}
 )
 
@@ -823,7 +828,7 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\x18RecordImpressionsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tvideo_ids\x18\x02 \x03(\tR\bvideoIds\"\x1b\n" +
-	"\x19RecordImpressionsResponse*\x80\x03\n" +
+	"\x19RecordImpressionsResponse*\xa5\x03\n" +
 	"\x14RecommendationReason\x12%\n" +
 	"!RECOMMENDATION_REASON_UNSPECIFIED\x10\x00\x12+\n" +
 	"'RECOMMENDATION_REASON_CONTINUE_WATCHING\x10\x01\x12(\n" +
@@ -833,7 +838,8 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\x1dRECOMMENDATION_REASON_REWATCH\x10\x05\x12&\n" +
 	"\"RECOMMENDATION_REASON_SAME_CHANNEL\x10\x06\x12%\n" +
 	"!RECOMMENDATION_REASON_SHARED_TAGS\x10\a\x12!\n" +
-	"\x1dRECOMMENDATION_REASON_BOUNCED\x10\b*\xd5\x01\n" +
+	"\x1dRECOMMENDATION_REASON_BOUNCED\x10\b\x12#\n" +
+	"\x1fRECOMMENDATION_REASON_DISCOVERY\x10\t*\xd5\x01\n" +
 	"\n" +
 	"SignalType\x12\x1b\n" +
 	"\x17SIGNAL_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +

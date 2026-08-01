@@ -101,6 +101,13 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		v.ThumbnailURL = "https://i.ytimg.com/vi/" + info.ID + "/hqdefault.jpg"
 	}
 
+	// yt-dlp's thumbnail URLs carry sqp and rs query parameters that sometimes
+	// cause YouTube to serve a generic grey placeholder instead of the real
+	// still. The canonical URL without parameters always works.
+	if idx := strings.IndexByte(v.ThumbnailURL, '?'); idx >= 0 {
+		v.ThumbnailURL = v.ThumbnailURL[:idx]
+	}
+
 	// yt-dlp returns free-form tags; keep only the hashtag-looking ones so the
 	// UI does not fill up with noise.
 	for _, tag := range info.Tags {
@@ -599,6 +606,66 @@ func (d *Downloader) saveChannelImage(ctx context.Context, url, channelID, kind 
 	}
 	return filepath.Join("channels", channelID, name)
 }
+// saveThumbnail downloads the best available thumbnail for a video.
+// Tries maxresdefault (1920×1080), then sddefault (640×480), then the
+// URL passed in (usually hqdefault at 480×360). Cards are ~560 px wide
+// and twice that on retina — the larger stills are the difference between
+// sharp and soft.
+func (d *Downloader) saveThumbnail(ctx context.Context, url, videoID string) string {
+	if videoID == "" {
+		return ""
+	}
+
+	dir := filepath.Join(d.mediaRoot, "thumbnails")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return ""
+	}
+
+	candidates := []string{
+		"https://i.ytimg.com/vi/" + videoID + "/maxresdefault.jpg",
+		"https://i.ytimg.com/vi/" + videoID + "/sddefault.jpg",
+	}
+	if url != "" {
+		candidates = append(candidates, url)
+	}
+
+	for _, u := range candidates {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			continue
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			continue
+		}
+
+		dst := filepath.Join(dir, videoID+".jpg")
+		file, err := os.Create(dst)
+		if err != nil {
+			resp.Body.Close()
+			continue
+		}
+		if _, err := io.Copy(file, resp.Body); err != nil {
+			file.Close()
+			resp.Body.Close()
+			continue
+		}
+		file.Close()
+		resp.Body.Close()
+		return filepath.Join("thumbnails", videoID+".jpg")
+	}
+	return ""
+}
+
+// SaveThumbnail is the domain adapter.
+func (d *Downloader) SaveThumbnail(ctx context.Context, url, videoID string) string {
+	return d.saveThumbnail(ctx, url, videoID)
+}
+
 
 // FetchChannelArtwork downloads the avatar and banner and returns their paths
 // under the media root.

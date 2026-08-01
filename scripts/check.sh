@@ -39,6 +39,22 @@ else
 fi
 
 echo ""
+echo "=== ingest MEDIA_ROOT ==="
+ipid=$(lsof -i :8183 2>/dev/null | grep LISTEN | awk '{print $2}' | head -1)
+if [ -z "$ipid" ]; then
+  fail "ingest not running, cannot check MEDIA_ROOT"
+else
+  imedia=$(ps eww -p "$ipid" 2>/dev/null | tr ' ' '\n' | grep '^MEDIA_ROOT=' | cut -d= -f2)
+  if [ -z "$imedia" ]; then
+    fail "MEDIA_ROOT not set (defaults to ./media — files go to wrong place!)"
+  elif [ "$imedia" = "/Volumes/Data2/Youtube" ]; then
+    pass "MEDIA_ROOT=$imedia"
+  else
+    fail "MEDIA_ROOT=$imedia (expected /Volumes/Data2/Youtube)"
+  fi
+fi
+
+echo ""
 echo "=== media serving ==="
 test_file=$(ls /Volumes/Data2/Youtube/*/1080p.mp4 2>/dev/null | head -1)
 if [ -z "$test_file" ]; then

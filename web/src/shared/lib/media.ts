@@ -20,23 +20,3 @@ export function mediaURL(reference: string | undefined): string | undefined {
   if (reference.startsWith('/')) return reference
   return `/media/${reference}`
 }
-
-/**
- * The highest-resolution still YouTube publishes for a video, derived from any
- * of its thumbnail URLs.
- *
- * The catalogue holds whatever the ingest picked at the time, and for
- * everything scanned before the selection was fixed that is hqdefault — 480×360
- * against a card around 560 points wide, twice that on a retina screen.
- * Rewriting the URL upgrades those without waiting for every row to be scanned
- * again.
- *
- * maxresdefault does not exist for every video, which is why this is only worth
- * doing where there is something to fall back to.
- */
-export function upgradedThumbnail(url: string | undefined): string | undefined {
-  if (!url) return undefined
-  const match = /^https:\/\/i\.ytimg\.com\/vi(?:_webp)?\/([\w-]+)\//.exec(url)
-  if (!match) return undefined
-  return `https://i.ytimg.com/vi/${match[1]}/maxresdefault.jpg`
-}

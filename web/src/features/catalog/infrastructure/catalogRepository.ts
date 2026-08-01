@@ -173,6 +173,9 @@ export interface StreamSources {
   remux?: StreamSource
   /** The downloaded file. Present only once on disk, and best whenever it is. */
   local?: StreamSource
+  /** When every source is unavailable — membership, age restriction, geo-block —
+   *  this carries the yt-dlp error so the player can tell the viewer why. */
+  streamError?: string
 }
 
 export type JobState = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'

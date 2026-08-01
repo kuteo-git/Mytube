@@ -6,6 +6,7 @@ import { useUpNext } from '@/features/catalog/application/queries'
 import { Pill, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
+import { mediaURL } from '@/shared/lib/media'
 
 export function UpNextRail({
   current,
@@ -105,7 +106,7 @@ function SuggestionRow({ video }: { video: Video }) {
       <div className="w-[168px] shrink-0">
         <ThumbnailSurface
           hue={hueFromId(video.id)}
-          src={video.thumbnailPath}
+          src={mediaURL(video.thumbnailPath)}
           alt={video.title}
           rounded="rounded-lg"
         >

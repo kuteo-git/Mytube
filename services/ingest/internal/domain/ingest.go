@@ -134,6 +134,9 @@ type Downloader interface {
 	// paths under the media root. A failure to fetch either is decoration lost,
 	// never an error: the returned path is simply empty.
 	FetchChannelArtwork(ctx context.Context, m ChannelMetadata) (avatarPath, bannerPath string)
+	// SaveThumbnail downloads a video thumbnail into the media root and
+	// returns its relative path, or "" on failure.
+	SaveThumbnail(ctx context.Context, url, videoID string) string
 }
 
 // JobStore is the ingest-owned persistence port.

@@ -112,6 +112,8 @@ func (d *deepenDownloader) FetchChannelArtwork(context.Context, domain.ChannelMe
 	return "", ""
 }
 
+func (d *deepenDownloader) SaveThumbnail(ctx context.Context, url, videoID string) string { return "" }
+
 type failingRelated struct{}
 
 func (failingRelated) Related(context.Context, string) ([]domain.ExternalVideo, error) {

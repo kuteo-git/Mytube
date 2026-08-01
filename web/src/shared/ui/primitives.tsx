@@ -1,7 +1,5 @@
 import clsx from 'clsx'
-import { upgradedThumbnail } from '@/shared/lib/media'
-import { useEffect, useState } from 'react'
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { type ButtonHTMLAttributes, type ReactNode, useState } from 'react'
 
 /**
  * Shared primitives. Every interactive element here is reachable by keyboard,
@@ -123,23 +121,12 @@ export function ThumbnailSurface({
   rounded?: string
   children?: ReactNode
 }) {
-  // Try the full-resolution still first, fall back to whatever was stored.
-  //
-  // Most rows still hold hqdefault at 480×360, from before the ingest learned
-  // to pick the largest — and a card is around 560 points wide, twice that on
-  // a retina screen, so they arrive visibly soft. Rewriting the URL upgrades
-  // every one of them without waiting for the library to be scanned again.
-  // maxresdefault does not exist for every video, which is what the fallback
-  // is for; only when both fail does the gradient stand alone.
-  const upgraded = upgradedThumbnail(src)
-  const [stage, setStage] = useState<'upgraded' | 'stored' | 'failed'>(
-    upgraded ? 'upgraded' : 'stored',
-  )
-  useEffect(() => {
-    setStage(upgradedThumbnail(src) ? 'upgraded' : 'stored')
-  }, [src])
-
-  const chosen = stage === 'upgraded' ? upgraded : stage === 'stored' ? src : undefined
+  // The stored URL as-is. We deliberately do not try to rewrite it to
+  // maxresdefault here, because YouTube returns a valid JPEG even for 404s, so
+  // <img onError> never fires and the fallback never runs — the user is left
+  // staring at a grey placeholder. The ingest picks the widest still available
+  // at scan time, so the stored URL is already the best we know exists.
+  const [failed, setFailed] = useState(false)
 
   return (
     <div
@@ -150,17 +137,14 @@ export function ThumbnailSurface({
       }}
       className={clsx('relative aspect-video w-full overflow-hidden', rounded)}
     >
-      {chosen && (
+      {src && !failed && (
         <img
-          // Keyed on the URL so switching to the fallback actually reloads;
-          // React would otherwise reuse the element that had just failed.
-          key={chosen}
-          src={chosen}
+          src={src}
           alt={alt ?? ''}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-cover"
-          onError={() => setStage((s) => (s === 'upgraded' ? 'stored' : 'failed'))}
+          onError={() => setFailed(true)}
         />
       )}
       {children}

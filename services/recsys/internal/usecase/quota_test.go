@@ -63,15 +63,24 @@ func TestQuotaDropsNothing(t *testing.T) {
 }
 
 func TestQuotaFallsBackToScoreWhenABucketIsEmpty(t *testing.T) {
-	// A brand-new user has nothing watched, so four of the five buckets are
-	// empty. The page must still fill.
+	// A brand-new user has nothing watched, so most buckets are empty.
+	// The page must still fill, and no videos are dropped.
 	ranked := repeated(domain.ReasonNeverWatched, 30, "nw")
 
 	got := applyDiscoveryQuota(ranked)
 	if len(got) != 30 {
 		t.Fatalf("got %d, want 30", len(got))
 	}
-	if got[0].VideoID != "nwa" {
-		t.Errorf("highest-scoring video should still lead, got %s", got[0].VideoID)
+	// Shuffling within buckets means the first video is not guaranteed to be the
+	// highest-scoring. But every video must still be present.
+	seen := map[string]bool{}
+	for _, v := range got {
+		if seen[v.VideoID] {
+			t.Fatalf("video %s appeared twice", v.VideoID)
+		}
+		seen[v.VideoID] = true
+	}
+	if len(seen) != 30 {
+		t.Fatalf("only %d unique videos in the result", len(seen))
 	}
 }

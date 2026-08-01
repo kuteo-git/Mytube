@@ -1,6 +1,11 @@
 package usecase
 
-import "github.com/lucnguyen/local-youtube/services/recsys/internal/domain"
+import (
+	"math/rand"
+	"time"
+
+	"github.com/lucnguyen/local-youtube/services/recsys/internal/domain"
+)
 
 // The mix, fixed by CLAUDE.md §6 P2.
 //
@@ -17,10 +22,12 @@ var quotaBuckets = []struct {
 	share  float64
 }{
 	{domain.ReasonNeverWatched, 0.30},
-	{domain.ReasonRecentlyAdded, 0.25},
 	{domain.ReasonSubscribedChannel, 0.20},
-	{domain.ReasonContinueWatching, 0.15},
-	{domain.ReasonRewatch, 0.10},
+	{domain.ReasonRecentlyAdded, 0.15},  // was 0.25
+	{domain.ReasonDiscovery, 0.12},       // NEW — bounded window for unfamiliar content
+	{domain.ReasonContinueWatching, 0.10}, // was 0.15
+	{domain.ReasonRewatch, 0.08},         // was 0.10
+	// Sum: 0.95 — remaining 5% fills from Bounced and other un-bucketed reasons
 }
 
 // quotaWindow is the span the ratios apply over. Matching the default page size
@@ -47,6 +54,15 @@ func applyDiscoveryQuota(ranked []domain.RankedVideo) []domain.RankedVideo {
 		}
 		other = append(other, v)
 	}
+
+	// Shuffle each reason bucket so the feed looks different on each refresh.
+	// Seeded by the minute so it changes often enough to feel dynamic without
+	// flipping every request.
+	rng := rand.New(rand.NewSource(time.Now().Truncate(time.Minute).UnixNano()))
+	for _, bucket := range quotaBuckets {
+		shuffleSlice(byReason[bucket.reason], rng)
+	}
+	shuffleSlice(other, rng)
 
 	out := make([]domain.RankedVideo, 0, len(ranked))
 	for len(out) < len(ranked) {
@@ -211,4 +227,11 @@ func applyChannelDiversity(
 	// Whatever is still held back goes on the end, in score order. Emitting it
 	// under the cap would need windows nobody is going to scroll to.
 	return append(out, deferred...)
+}
+
+// shuffleSlice randomly reorders a slice using the provided source.
+func shuffleSlice(s []domain.RankedVideo, rng *rand.Rand) {
+	rng.Shuffle(len(s), func(i, j int) {
+		s[i], s[j] = s[j], s[i]
+	})
 }

@@ -107,9 +107,12 @@ export function useVideo(id: string | undefined) {
     queryKey: ['video', id],
     queryFn: () => repo.getVideoEnsuring(id!),
     enabled: Boolean(id),
-    // The fallback already covers the one error worth retrying; anything left
-    // is a real failure, and retrying it would re-run a slow upstream fetch.
     retry: false,
+    // Poll while the video is downloading so subtitles appear as soon as the
+    // worker publishes them — FetchSubtitles runs before the media download
+    // and subtitles land while mediaState is still DOWNLOADING.
+    refetchInterval: (query) =>
+      query.state.data?.mediaState !== 'READY' ? 3000 : false,
   })
 }
 
