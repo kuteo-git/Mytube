@@ -91,3 +91,72 @@ describe('groupCuesForTranslation', () => {
     expect(result[0].end).toBe(2)
   })
 })
+
+// ---- warm-start skip logic --------------------------------------------------
+
+function applyWarmStartSkip(
+  cues: CueText[],
+  now: number,
+  skipUntil: number,
+): Set<number> {
+  const played = new Set<number>()
+  if (skipUntil > 0) {
+    for (let i = 0; i < cues.length; i++) {
+      if (cues[i].start < skipUntil) played.add(i)
+    }
+  }
+  return played
+}
+
+describe('warm-start skip', () => {
+  it('skips cues before now+5 on first tick', () => {
+    const cues: CueText[] = [
+      { start: 0, end: 2, text: 'hello' },
+      { start: 3, end: 5, text: 'world' },
+      { start: 6, end: 8, text: 'this' },
+      { start: 9, end: 11, text: 'is cool' },
+    ]
+    // User is at 4s, warm-start skips before 9s
+    const played = applyWarmStartSkip(cues, 4, 9)
+    expect(played.has(0)).toBe(true)  // start=0 < 9 → skipped
+    expect(played.has(1)).toBe(true)  // start=3 < 9 → skipped
+    expect(played.has(2)).toBe(true)  // start=6 < 9 → skipped
+    expect(played.has(3)).toBe(false) // start=9 >= 9 → NOT skipped
+  })
+
+  it('no skip when skipUntil <= 0', () => {
+    const cues: CueText[] = [
+      { start: 0, end: 2, text: 'hello' },
+    ]
+    expect(applyWarmStartSkip(cues, 0, -1).size).toBe(0)
+    expect(applyWarmStartSkip(cues, 0, 0).size).toBe(0)
+  })
+
+  it('resets skip window on forward seek', () => {
+    const cues: CueText[] = [
+      { start: 10, end: 12, text: 'a' },
+      { start: 13, end: 15, text: 'b' },
+      { start: 20, end: 22, text: 'c' },
+      { start: 25, end: 27, text: 'd' },
+    ]
+    // User seeks from 5s to 15s (jump > 0.5s) → skipUntil = 15 + 5 = 20
+    const played = applyWarmStartSkip(cues, 15, 20)
+    expect(played.has(0)).toBe(true)  // start=10 < 20 → skipped
+    expect(played.has(1)).toBe(true)  // start=13 < 20 → skipped
+    expect(played.has(2)).toBe(false) // start=20 >= 20 → NOT skipped
+    expect(played.has(3)).toBe(false) // start=25 >= 20 → NOT skipped
+  })
+
+  it('resets skip window on backward seek', () => {
+    const cues: CueText[] = [
+      { start: 5, end: 7, text: 'x' },
+      { start: 10, end: 12, text: 'y' },
+      { start: 15, end: 17, text: 'z' },
+    ]
+    // User seeks backward from 20s to 8s → skipUntil = 8 + 5 = 13
+    const played = applyWarmStartSkip(cues, 8, 13)
+    expect(played.has(0)).toBe(true)  // start=5 < 13 → skipped
+    expect(played.has(1)).toBe(true)  // start=10 < 13 → skipped
+    expect(played.has(2)).toBe(false) // start=15 >= 13 → NOT skipped
+  })
+})

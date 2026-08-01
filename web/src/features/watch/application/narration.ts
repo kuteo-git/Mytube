@@ -181,9 +181,8 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
   }
 
   // Group consecutive cues until a sentence/clause boundary so the
-  // translation model (NLLB-200 600M) has full-sentence context.
-  // Periods, exclamation/question marks end a group; commas keep it open.
-  if (_sourceLang === 'en') {
+  // Split cues at clause/sentence boundaries for cleaner TTS pacing.
+  if (_sourceLang === 'en' || _sourceLang === 'vi') {
     // Only treat . ! ? as sentence-ending when preceded by a letter,
     // not a digit (avoids splitting on "2.5", "3.14", etc.).
     // Accumulate cues and split at every . ! ? , boundary.  Each clause
@@ -267,6 +266,7 @@ let _cues: CueText[] | null = null
 let _cuesURL = ''
 let _cuesPromise: Promise<void> | null = null
 let _sourceLang = 'vi' // 'vi' = cues are Vietnamese, 'en' = need translation
+let _skipUntil = -1       // skip all cues before this video time (5s warm-start)
 const _played = new Set<number>()
 let _lastLog = 0
 
@@ -292,6 +292,7 @@ export function loadViSubtitles(url: string, lang = 'vi') {
   _cuesURL = url
   _sourceLang = lang
   _cues = null
+  _skipUntil = -1
   _played.clear()
   _hadCues = false
   _lastTime = 0
@@ -318,6 +319,18 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const now = video.currentTime
   const cues = _cues ?? []
 
+  // On first tick with cues, skip the first 5 s so the narration starts
+  // smoothly instead of racing to catch up with in-progress cues.
+  if (_skipUntil < 0 && cues.length > 0) {
+    _skipUntil = now + 5
+    console.log('[narration] warm-start — skipping cues before', _skipUntil.toFixed(1) + 's')
+  }
+  if (_skipUntil > 0) {
+    for (let i = 0; i < cues.length; i++) {
+      if (cues[i].start < _skipUntil) _played.add(i)
+    }
+  }
+
   // FIXME: pause is unreliable — sources already scheduled via src.start(when)
   // may still fire, and _activeSources tracking has race conditions with the
   // async TTS fetch.  Ideally the Player should call ctx.suspend() / ctx.resume()
@@ -339,15 +352,16 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   // TTS at 2.5× video volume so the voice cuts through even when ducked.
   _masterGain.gain.setValueAtTime(video.volume * 2.5, ctx.currentTime)
 
-  // When the viewer seeks backward, unmark cues that are now in the future
-  // so they can be played again.
-  if (now < _lastTime - 0.5) {
+  // When the viewer seeks (forward or backward), restart the 5 s warm-start
+  // window from the new position and unmark cues that are now in the future.
+  if (Math.abs(now - _lastTime) > 0.5) {
+    _skipUntil = now + 5
     let unmarked = 0
     for (const idx of _played) {
       const cue = cues[idx]
       if (cue && now <= cue.end + 1) { _played.delete(idx); unmarked++ }
     }
-    if (unmarked) console.log('[narration] seek backward — unmarked %d cues', unmarked)
+    if (unmarked) console.log('[narration] seek — warm-start at', _skipUntil.toFixed(1) + 's, unmarked %d cues', unmarked)
   }
   _lastTime = now
 
@@ -452,6 +466,7 @@ export function resetNarration() {
   _cuesPromise = null
   _hadCues = false
   _lastTime = 0
+  _skipUntil = -1
   _prevEnd = 0
   _prevGain = null
   _masterGain = null
