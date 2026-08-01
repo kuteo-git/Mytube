@@ -91,6 +91,14 @@ function cleanCueText(raw: string): string {
     return `\x00${placeholders.length - 1}\x00`
   })
 
+  // Decode HTML entities first so &gt;&gt; → >> is caught by the >> removal below.
+  s = s
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+
   s = s
     // Remove WebVTT angle-bracket tags: <c>, </c>, <00:00:00.000>
     .replace(/<[^>]+>/g, '')
@@ -101,12 +109,6 @@ function cleanCueText(raw: string): string {
     .replace(/>>\s*/g, '')
     // Strip music notes and other non-speech symbols the TTS would spell out
     .replace(/[♪♫♬→←↑↓↔«»""''„‚]/g, '')
-    // HTML entities
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
     .trim()
 
   // Collapse multiple spaces into one.
@@ -354,8 +356,11 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
 
       const dur = buf.duration
       let when = ctx.currentTime + Math.max(0, start - video.currentTime)
-      // Insert a pause after the previous clip so the narration breathes.
-      if (when < _prevEnd + GAP_BETWEEN_CLIPS) {
+      // Only add a gap when the previous clip has already finished — if
+      // they overlap let ducking handle the transition.  This avoids the
+      // accumulating drift that would happen if we unconditionally pushed
+      // `when` forward.
+      if (_prevEnd > 0 && when >= _prevEnd && when < _prevEnd + GAP_BETWEEN_CLIPS) {
         when = _prevEnd + GAP_BETWEEN_CLIPS
       }
       const clipEnd = when + dur
