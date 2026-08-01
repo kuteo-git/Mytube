@@ -12,23 +12,41 @@ const TTS_VOICE = 'Ngọc Linh'
 // Audio cache
 // ---------------------------------------------------------------------------
 
-const _cache = new Map<string, Promise<AudioBuffer>>()
+const _cache = new Map<string, AudioBuffer>()
+const _active = new Map<string, Promise<AudioBuffer>>()
+const MAX_CONCURRENT = 2
 
-function fetchTTS(ctx: AudioContext, text: string): Promise<AudioBuffer> {
+async function fetchTTS(ctx: AudioContext, text: string): Promise<AudioBuffer> {
   const cached = _cache.get(text)
   if (cached) return cached
-  const p = fetch('/api/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voice: TTS_VOICE }),
-  })
-    .then((r) => {
-      if (!r.ok) throw new Error(`tts ${r.status}`)
-      return r.arrayBuffer()
+
+  const inflight = _active.get(text)
+  if (inflight) return inflight
+
+  // Wait if too many requests are already in flight.
+  while (_active.size >= MAX_CONCURRENT) {
+    await Promise.race(_active.values()).catch(() => {})
+  }
+
+  const p = (async () => {
+    const resp = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: TTS_VOICE }),
     })
-    .then((wav) => ctx.decodeAudioData(wav))
-  _cache.set(text, p)
-  return p
+    if (!resp.ok) throw new Error(`tts ${resp.status}`)
+    const wav = await resp.arrayBuffer()
+    const buf = await ctx.decodeAudioData(wav)
+    _cache.set(text, buf)
+    return buf
+  })()
+
+  _active.set(text, p)
+  try {
+    return await p
+  } finally {
+    _active.delete(text)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -68,6 +86,8 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const now = video.currentTime
   const cues = vietnameseCues(video)
 
+  if (cues.length === 0) return // tracks not loaded yet
+
   for (let i = 0; i < cues.length; i++) {
     if (_played.has(i)) continue
     const cue = cues[i]
@@ -87,6 +107,10 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
 
     fetchTTS(ctx, cue.text)
       .then((buf) => {
+        // AudioContext may be suspended by browser autoplay policy — a
+        // click on the narration button counts as a user gesture, so by
+        // the time the first clip arrives it should be running.
+        if (ctx.state === 'suspended') ctx.resume()
         const src = ctx.createBufferSource()
         src.buffer = buf
         src.connect(ctx.destination)

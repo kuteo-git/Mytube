@@ -154,6 +154,10 @@ func (r *Repository) BatchGetVideos(ctx context.Context, videoIDs []string, user
 		return nil, err
 	}
 
+	if err := r.loadSubtitles(ctx, videos); err != nil {
+		return nil, err
+	}
+
 	byID := make(map[string]domain.Video, len(videos))
 	for _, v := range videos {
 		byID[v.ID] = v
