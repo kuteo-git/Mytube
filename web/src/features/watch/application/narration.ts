@@ -187,6 +187,10 @@ let _lastLog = 0
 // Track the previous clip so we can duck it when a new one starts before it ends.
 let _prevEnd = 0           // ctx.currentTime when the last scheduled clip ends
 let _prevGain: GainNode | null = null
+
+// Master gain that follows the video element's volume so the TTS narration
+// rises and falls with the video audio rather than sitting at a fixed level.
+let _masterGain: GainNode | null = null
 let _hadCues = false
 let _lastTime = 0
 
@@ -203,6 +207,7 @@ export function loadViSubtitles(url: string) {
   _lastTime = 0
   _prevEnd = 0
   _prevGain = null
+  _masterGain = null
   _cuesPromise = fetchAndParseVTT(url)
     .then((cues) => {
       _cues = cues
@@ -222,12 +227,23 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const now = video.currentTime
   const cues = _cues ?? []
 
-  // Browser may suspend the AudioContext after a period without user
-  // interaction — check every tick so we recover quickly.
-  if (ctx.state === 'suspended') {
-    console.log('[narration] AudioContext suspended — resuming')
-    void ctx.resume()
+  // When the video is paused the viewer has stepped away — silence the
+  // narration so it doesn't keep talking to an empty room.
+  if (video.paused) {
+    if (ctx.state === 'running') void ctx.suspend()
+    return
   }
+  // Resume if the user just pressed play after a pause.
+  if (ctx.state === 'suspended') void ctx.resume()
+
+  // Lazy-init + sync master gain to the video volume so the TTS narration
+  // tracks the viewer's volume control instead of playing at a fixed level.
+  if (!_masterGain) {
+    _masterGain = ctx.createGain()
+    _masterGain.connect(ctx.destination)
+  }
+  // Boost TTS above video volume so the narration cuts through the film audio.
+  _masterGain.gain.setValueAtTime(video.volume * 2.5, ctx.currentTime)
 
   // When the viewer seeks backward, unmark cues that are now in the future
   // so they can be played again.
@@ -308,7 +324,7 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
       gain.gain.setValueAtTime(1, when + Math.max(0, dur - fadeSec))
       gain.gain.linearRampToValueAtTime(0, when + dur)
       src.connect(gain)
-      gain.connect(ctx.destination)
+      gain.connect(_masterGain!)
 
       src.start(when)
 
@@ -329,6 +345,7 @@ export function resetNarration() {
   _lastTime = 0
   _prevEnd = 0
   _prevGain = null
+  _masterGain = null
 }
 
 export function hasVietnameseSubs(video: HTMLVideoElement): boolean {
