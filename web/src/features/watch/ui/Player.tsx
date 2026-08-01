@@ -141,7 +141,8 @@ interface Tier {
  */
 function sourceURL(tier: Tier, offsetSeconds: number): string {
   if (tier.name !== 'remux' || offsetSeconds <= 0) return tier.url
-  return `${tier.url}?t=${offsetSeconds.toFixed(3)}`
+  // Cache-bust so the browser never serves a stale stream when seeking.
+  return `${tier.url}?t=${offsetSeconds.toFixed(3)}&_=${Date.now()}`
 }
 
 /**
@@ -565,7 +566,17 @@ export function Player({
   const handoverToBack = useCallback(() => {
     const current = front()
     const next = back()
-    if (!current || !next || !upgradingToRef.current) return
+    if (!current || !next) return
+    // When the replacement was opened at a substantially different offset
+    // than the current stream, this is a seek rather than an upgrade. The
+    // playhead will never catch the new stream — it starts at a different
+    // moment entirely — so commit as soon as there is data to show.
+    const isSeek =
+      pendingTierRef.current !== undefined &&
+      Math.abs(pendingTierRef.current.offset - offsetRef.current) > 1
+    // upgradingToRef may have been cleared before onLoadedMetadata fires,
+    // so for seeks we use pendingTierRef as the signal instead.
+    if (!upgradingToRef.current && !isSeek) return
 
     const commit = () => {
       // Carry across everything the viewer set, or the swap would silently undo
@@ -635,6 +646,14 @@ export function Player({
     // were zero, which stopped being true the moment a third tier existed.
     const waitForMark = () => {
       if (upgradingToRef.current === undefined) return
+      if (isSeek) {
+        if (next.buffered.length > 0 && next.buffered.end(0) >= 0.5) {
+          commit()
+          return
+        }
+        handoverFrameRef.current = window.requestAnimationFrame(waitForMark)
+        return
+      }
       const backAbsolute = (pendingTierRef.current?.offset ?? 0) + next.currentTime
       const frontAbsolute = current.currentTime + offsetRef.current
       if (frontAbsolute >= backAbsolute - 0.05) {
