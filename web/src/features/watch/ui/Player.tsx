@@ -454,7 +454,11 @@ export function Player({
   const captionsAvailable = subtitles.length > 0
   // Narration is available when there are Vietnamese subtitles. We don't know
   // until the <track> elements load, so we check via hasVietnameseSubs().
-  const narrationAvailable = subtitles.some((s) => s.language === 'vi' || s.language === 'vie')
+  // Narration is available when there are Vietnamese or English subtitles.
+  // English cues are translated via NLLB-200 before TTS.
+  const narrationAvailable = subtitles.some(
+    (s) => s.language === 'vi' || s.language === 'vie' || s.language === 'en' || s.language === 'eng',
+  )
 
   // <track> elements are created synchronously by React, but the browser
   // initialises the backing TextTrack objects asynchronously (microtask).
@@ -513,16 +517,18 @@ export function Player({
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
 
-  // When narration is turned on, fetch and parse the Vietnamese VTT directly.
-  // We cannot rely on the browser's TextTrack API because React adds <track>
-  // elements via the DOM rather than static HTML, and some browsers never
-  // initialise the backing TextTrack (readyState stays undefined).
+  // When narration is turned on, fetch and parse the best available VTT:
+  // Vietnamese first, then English (which will be translated via NLLB-200).
   useEffect(() => {
     if (!narrationOn) return
     const viSub = subtitles.find(
       (s) => s.language === 'vi' || s.language === 'vie',
     )
-    if (viSub) loadViSubtitles(viSub.url)
+    if (viSub) { loadViSubtitles(viSub.url, 'vi'); return }
+    const enSub = subtitles.find(
+      (s) => s.language === 'en' || s.language === 'eng',
+    )
+    if (enSub) loadViSubtitles(enSub.url, 'en')
   }, [narrationOn, subtitles])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits

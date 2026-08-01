@@ -12,15 +12,33 @@ const PREFETCH_SEC = 8
 const MAX_CONCURRENT = 2
 const DEFAULT_SPEED = 1.2 // VieNeu-TTS reads slightly slow; 1.2× sounds natural
 const MAX_SPEED = 2.0     // ffmpeg atempo is pitch-preserving — 2.0× is fast but clear
+const GAP_BETWEEN_CLIPS = 0.25 // pause between sentences (seconds)
 
 // ---- cache ------------------------------------------------------------------
 const _cache = new Map<string, AudioBuffer>()
 const _active = new Map<string, Promise<AudioBuffer>>()
+const _tlCache = new Map<string, string>() // EN text → VI translation
 
 async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise<AudioBuffer> {
-  // Cache key must include speed — same text at 1.1× and 1.4× produce
-  // different audio from the server (ffmpeg atempo).
-  const cacheKey = `${text}@@${speed.toFixed(2)}`
+  // Translate EN → VI when the source subtitle is English.
+  let viText = text
+  if (_sourceLang === 'en') {
+    const cached = _tlCache.get(text)
+    if (cached) { viText = cached }
+    else {
+      const resp = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, src: 'eng_Latn', tgt: 'vie_Latn' }),
+      })
+      if (resp.ok) {
+        const { translated } = await resp.json() as { translated: string }
+        if (translated) { _tlCache.set(text, translated); viText = translated }
+      }
+    }
+  }
+
+  const cacheKey = `${viText}@@${speed.toFixed(2)}`
   const c = _cache.get(cacheKey)
   if (c) return c
   const inflight = _active.get(cacheKey)
@@ -32,7 +50,7 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     const resp = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: TTS_VOICE, speed }),
+      body: JSON.stringify({ text: viText, voice: TTS_VOICE, speed }),
     })
     if (!resp.ok) throw new Error(`tts ${resp.status}`)
     const buf = await ctx.decodeAudioData(await resp.arrayBuffer())
@@ -76,10 +94,11 @@ function cleanCueText(raw: string): string {
   s = s
     // Remove WebVTT angle-bracket tags: <c>, </c>, <00:00:00.000>
     .replace(/<[^>]+>/g, '')
-    // Remove [square-bracket] non-emotion descriptions
-    .replace(/\[[^\]]*\]/g, '')
-    // Remove leading >> (used for speaker indicators in some formats)
-    .replace(/^>>\s*/gm, '')
+    // Remove [square-bracket] descriptions — including malformed ones where
+    // the closing bracket is missing (YouTube auto-captions often have these).
+    .replace(/\[[^\]]*\]?/g, '')
+    // Remove >> speaker indicators anywhere in the text.
+    .replace(/>>\s*/g, '')
     // Strip music notes and other non-speech symbols the TTS would spell out
     .replace(/[♪♫♬→←↑↓↔«»""''„‚]/g, '')
     // HTML entities
@@ -194,6 +213,7 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
 let _cues: CueText[] | null = null
 let _cuesURL = ''
 let _cuesPromise: Promise<void> | null = null
+let _sourceLang = 'vi' // 'vi' = cues are Vietnamese, 'en' = need translation
 const _played = new Set<number>()
 let _lastLog = 0
 
@@ -214,9 +234,10 @@ let _lastTime = 0
  * Kick off a VTT fetch + parse.  Safe to call multiple times — subsequent
  * calls for the same URL are no-ops; a new URL resets state.
  */
-export function loadViSubtitles(url: string) {
+export function loadViSubtitles(url: string, lang = 'vi') {
   if (url === _cuesURL && _cues !== null) return
   _cuesURL = url
+  _sourceLang = lang
   _cues = null
   _played.clear()
   _hadCues = false
@@ -310,9 +331,13 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     //  3. The browser plays at 1.0× — no chipmunk, no overlap.
     ;(async () => {
       let buf = await fetchTTS(ctx, text, DEFAULT_SPEED)
-      if (video.paused) return // user paused while TTS was fetching
+      if (video.paused) return
       if (buf.duration > slot) {
-        const needed = Math.min(buf.duration / slot, MAX_SPEED)
+        // buf.duration is already sped up by DEFAULT_SPEED (1.2×).  To
+        // compute the rate that would bring the *natural* duration down to
+        // `slot`, multiply the ratio by DEFAULT_SPEED.
+        const natural = buf.duration * DEFAULT_SPEED
+        const needed = Math.min(natural / slot, MAX_SPEED)
         if (needed > DEFAULT_SPEED + 0.02) {
           buf = await fetchTTS(ctx, text, needed)
           if (video.paused) return
@@ -328,7 +353,11 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
       src.buffer = buf
 
       const dur = buf.duration
-      const when = ctx.currentTime + Math.max(0, start - video.currentTime)
+      let when = ctx.currentTime + Math.max(0, start - video.currentTime)
+      // Insert a pause after the previous clip so the narration breathes.
+      if (when < _prevEnd + GAP_BETWEEN_CLIPS) {
+        when = _prevEnd + GAP_BETWEEN_CLIPS
+      }
       const clipEnd = when + dur
 
       // If the previous clip is still playing when this one starts, quickly
