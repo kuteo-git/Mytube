@@ -10,7 +10,7 @@
 const TTS_VOICE = 'Ngọc Linh'
 const PREFETCH_SEC = 8
 const MAX_CONCURRENT = 2
-const DEFAULT_SPEED = 1.1 // VieNeu-TTS reads slightly slow; 1.1× sounds natural
+const DEFAULT_SPEED = 1.2 // VieNeu-TTS reads slightly slow; 1.2× sounds natural
 const MAX_SPEED = 2.0     // ffmpeg atempo is pitch-preserving — 2.0× is fast but clear
 
 // ---- cache ------------------------------------------------------------------
