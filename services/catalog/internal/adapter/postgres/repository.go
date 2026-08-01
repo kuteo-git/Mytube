@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -826,21 +827,33 @@ func (r *Repository) DownloadMissingThumbnails(ctx context.Context) {
 	thumbDir := filepath.Join(r.mediaRoot, "thumbnails")
 	_ = os.MkdirAll(thumbDir, 0o755)
 
-	// Try these in order: maxresdefault (1920×1080), sddefault (640×480),
-	// then whatever is already stored (usually hqdefault at 480×360).
+	// Try these in order: hq720 (1280×720 — available for nearly all HD
+	// videos), maxresdefault (1920×1080 — rare), sddefault (640×480), then
+	// the stored URL (usually hqdefault at 480×360).
 	candidates := func(videoID, storedURL string) []string {
-		// Derive clean URLs from the stored one so we don't carry over any
-		// query params the normalisation step might have missed.
 		return []string{
+			"https://i.ytimg.com/vi/" + videoID + "/hq720.jpg",
 			"https://i.ytimg.com/vi/" + videoID + "/maxresdefault.jpg",
 			"https://i.ytimg.com/vi/" + videoID + "/sddefault.jpg",
 			storedURL,
 		}
 	}
 
+	// Download four at a time so the whole pass finishes in seconds rather
+	// than minutes. Each thumbnail is a few kilobytes; YouTube rate-limiting
+	// is the only constraint, and four concurrent fetches is well under it.
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+
 	for _, v := range videos {
-		var downloaded bool
-		for _, url := range candidates(v.id, v.url) {
+		wg.Add(1)
+		go func(v row) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			downloaded := false
+			for _, url := range candidates(v.id, v.url) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			if err != nil {
 				continue
@@ -876,7 +889,9 @@ func (r *Repository) DownloadMissingThumbnails(ctx context.Context) {
 				UPDATE catalog.videos SET thumbnail_path = $1 WHERE id = $2
 			`, filepath.Join("thumbnails", v.id+".jpg"), v.id)
 		}
+	}(v)
 	}
+	wg.Wait()
 }
 
 func (r *Repository) MarkEvicted(ctx context.Context, videoID string) error {
