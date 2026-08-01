@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle, Loader2, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Loader2, RefreshCw, X } from 'lucide-react'
 import {
+  useCancelJob,
   useIngestJobs,
   useRefreshTopics,
   useScanStatus,
@@ -23,6 +24,7 @@ export function ActivityPage() {
   const { data: jobs, isPending: jobsPending } = useIngestJobs(false)
   const { data: scan } = useScanStatus()
   const refresh = useRefreshTopics()
+  const cancelJob = useCancelJob()
 
   const failed = (jobs ?? []).filter((j) => j.state === 'FAILED')
   const active = (jobs ?? []).filter((j) => j.state === 'RUNNING' || j.state === 'QUEUED')
@@ -96,10 +98,21 @@ export function ActivityPage() {
           <JobGroup title="In progress" tone="active">
             {active.map((job) => (
               <li key={job.id} className="rounded-xl bg-surface p-4">
-                <p className="flex items-center gap-2 text-sm font-medium">
-                  <Loader2 size={14} className="animate-spin" />
-                  {job.title || job.sourceUrl}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-medium min-w-0">
+                    <Loader2 size={14} className="animate-spin shrink-0" />
+                    <span className="truncate">{job.title || job.sourceUrl}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => cancelJob.mutate(job.id)}
+                    disabled={cancelJob.isPending}
+                    className="shrink-0 rounded-full p-1.5 text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover hover:text-text disabled:opacity-50"
+                    aria-label="Cancel download"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
                 <p className="mt-1 text-xs text-text-2 tabular-nums">
                   {Math.round(job.progress * 100)}%
                 </p>

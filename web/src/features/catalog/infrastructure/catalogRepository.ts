@@ -60,6 +60,7 @@ export interface CatalogRepository {
    * address blocked.
    */
   cancelDownload(videoId: string): Promise<void>
+  cancelJob(jobId: string): Promise<void>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
   setReaction(videoId: string, reaction: ReactionState): Promise<number>
