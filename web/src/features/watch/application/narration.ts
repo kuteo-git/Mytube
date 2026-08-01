@@ -90,3 +90,11 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
 }
 
 export function resetNarration() { _played.clear() }
+
+export function hasVietnameseSubs(video: HTMLVideoElement): boolean {
+  for (let i = 0; i < video.textTracks.length; i++) {
+    const t = video.textTracks[i]
+    if (t.language === 'vi' || t.language === 'vie') return true
+  }
+  return false
+}

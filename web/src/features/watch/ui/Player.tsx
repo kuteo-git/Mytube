@@ -1244,6 +1244,7 @@ export function Player({
                       src={track.url}
                       srcLang={track.language}
                       label={track.generated ? `${track.label} (auto)` : track.label}
+                      default={track.language === 'vi' || track.language === 'vie'}
                     />
                   ))}
               </video>
