@@ -196,8 +196,8 @@ describe('warm-start skip', () => {
     ]
     // User seeks backward from 30s to 8s → skipUntil = 8 + 10 = 18
     const played = applyWarmStartSkip(cues, 8, 18)
-    expect(played.has(0)).toBe(true)  // start=5 < 13 → skipped
-    expect(played.has(1)).toBe(true)  // start=10 < 13 → skipped
-    expect(played.has(2)).toBe(false) // start=15 >= 13 → NOT skipped
+    expect(played.has(0)).toBe(true)  // start=5 < 18 → skipped
+    expect(played.has(1)).toBe(true)  // start=10 < 18 → skipped
+    expect(played.has(2)).toBe(true)  // start=15 < 18 → skipped
   })
 })

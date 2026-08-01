@@ -215,10 +215,11 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
         if (ch === '.' && before && /\d/.test(before) && after && /\d/.test(after)) continue
         // Clause-ending punctuation must be followed by space or end-of-string.
         if (after && after !== ' ') continue
-        // Don't split on comma if the text before it is too short.
+        // Don't split on comma if either side is too short to stand alone.
         if (ch === ',') {
-          const wordsBefore = buf.slice(0, idx).trim().split(/\s+/)
-          if (wordsBefore.length <= 2) continue
+          const wordsBefore = buf.slice(0, idx).trim().split(/\s+/).length
+          const wordsAfter = buf.slice(idx + 1).trim().split(/\s+/).length
+          if (wordsBefore <= 2 || wordsAfter <= 2) continue
         }
         lastEnd = idx + 1
       }
