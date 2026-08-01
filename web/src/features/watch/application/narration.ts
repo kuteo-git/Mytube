@@ -223,6 +223,12 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
         lastEnd = idx + 1
       }
 
+      // If no punctuation found but the buffer is getting long, force a split.
+      if (lastEnd < 0) {
+        const words = buf.trim().split(/\s+/)
+        if (words.length >= 15) lastEnd = buf.length
+      }
+
       if (lastEnd > 0) {
         const clause = buf.slice(0, lastEnd).trim()
         if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
