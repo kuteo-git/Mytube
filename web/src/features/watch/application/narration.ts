@@ -262,8 +262,8 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     _masterGain = ctx.createGain()
     _masterGain.connect(ctx.destination)
   }
-  // TTS at 2× video volume so the voice cuts through even when ducked.
-  _masterGain.gain.setValueAtTime(video.volume * 2, ctx.currentTime)
+  // TTS at 2.5× video volume so the voice cuts through even when ducked.
+  _masterGain.gain.setValueAtTime(video.volume * 2.5, ctx.currentTime)
 
   // When the viewer seeks backward, unmark cues that are now in the future
   // so they can be played again.
