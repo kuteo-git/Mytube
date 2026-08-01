@@ -226,6 +226,16 @@ export function useIngestJobs(activeOnly = false, forcePoll = false) {
   })
 }
 
+export function useCancelJob() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (jobId: string) => repo.cancelJob(jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ingest-jobs'] })
+    },
+  })
+}
+
 /**
  * Result of the most recent topic scan. Scans are manual or twelve-hourly, so
  * this does not poll; the Activity page refetches it when the user asks.

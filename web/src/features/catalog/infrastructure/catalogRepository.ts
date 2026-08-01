@@ -345,6 +345,10 @@ export const httpCatalogRepository: CatalogRepository = {
     )
   },
 
+  async cancelJob(jobId: string) {
+    await request<void>(`/ingest/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
+  },
+
   async listJobs(activeOnly) {
     const { jobs } = await request<{ jobs: IngestJob[] }>(
       `/ingest/jobs${query({ activeOnly: activeOnly ? 'true' : undefined })}`,

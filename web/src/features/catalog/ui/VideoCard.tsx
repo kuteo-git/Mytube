@@ -37,7 +37,7 @@ export function VideoCard({ video }: { video: Video }) {
     // spend it here, where nobody is waiting, instead of after the click.
     // Focus counts too, so a keyboard or a remote gets the same head start.
     <article
-      className="group flex flex-col gap-3 rounded-xl p-1 transition-all duration-200 ease-out hover:scale-[1.02] hover:shadow-xl hover:shadow-black/15 hover:ring-1 hover:ring-white/10"
+      className="group flex flex-col gap-3 rounded-xl ring-1 ring-transparent transition-shadow duration-200 ease-out hover:shadow-lg hover:shadow-black/10 hover:ring-line"
       onPointerEnter={() => prefetch(video.id)}
       onPointerLeave={cancel}
       onFocus={() => prefetch(video.id)}
