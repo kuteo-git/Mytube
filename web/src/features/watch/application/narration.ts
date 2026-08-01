@@ -188,6 +188,9 @@ let _lastLog = 0
 let _prevEnd = 0           // ctx.currentTime when the last scheduled clip ends
 let _prevGain: GainNode | null = null
 
+// Active sources — so we can stop them when the video is paused.
+const _activeSources = new Set<AudioBufferSourceNode>()
+
 // Master gain that follows the video element's volume so the TTS narration
 // rises and falls with the video audio rather than sitting at a fixed level.
 let _masterGain: GainNode | null = null
@@ -208,6 +211,7 @@ export function loadViSubtitles(url: string) {
   _prevEnd = 0
   _prevGain = null
   _masterGain = null
+  _activeSources.clear()
   _cuesPromise = fetchAndParseVTT(url)
     .then((cues) => {
       _cues = cues
@@ -227,14 +231,17 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const now = video.currentTime
   const cues = _cues ?? []
 
-  // When the video is paused the viewer has stepped away — silence the
-  // narration so it doesn't keep talking to an empty room.
+  // FIXME: pause is unreliable — sources already scheduled via src.start(when)
+  // may still fire, and _activeSources tracking has race conditions with the
+  // async TTS fetch.  Ideally the Player should call ctx.suspend() / ctx.resume()
+  // from its own pause/play handlers, not from inside the rAF tick.
   if (video.paused) {
-    if (ctx.state === 'running') void ctx.suspend()
+    for (const src of _activeSources) {
+      try { src.stop() } catch { /* already stopped */ }
+    }
+    _activeSources.clear()
     return
   }
-  // Resume if the user just pressed play after a pause.
-  if (ctx.state === 'suspended') void ctx.resume()
 
   // Lazy-init + sync master gain to the video volume so the TTS narration
   // tracks the viewer's volume control instead of playing at a fixed level.
@@ -242,8 +249,8 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     _masterGain = ctx.createGain()
     _masterGain.connect(ctx.destination)
   }
-  // Boost TTS above video volume so the narration cuts through the film audio.
-  _masterGain.gain.setValueAtTime(video.volume * 2.5, ctx.currentTime)
+  // TTS at 2× video volume so the voice cuts through even when ducked.
+  _masterGain.gain.setValueAtTime(video.volume * 2, ctx.currentTime)
 
   // When the viewer seeks backward, unmark cues that are now in the future
   // so they can be played again.
@@ -290,10 +297,12 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     //  3. The browser plays at 1.0× — no chipmunk, no overlap.
     ;(async () => {
       let buf = await fetchTTS(ctx, text, DEFAULT_SPEED)
+      if (video.paused) return // user paused while TTS was fetching
       if (buf.duration > slot) {
         const needed = Math.min(buf.duration / slot, MAX_SPEED)
         if (needed > DEFAULT_SPEED + 0.02) {
           buf = await fetchTTS(ctx, text, needed)
+          if (video.paused) return
         }
       }
 
@@ -327,6 +336,8 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
       gain.connect(_masterGain!)
 
       src.start(when)
+      _activeSources.add(src)
+      src.onended = () => { _activeSources.delete(src) }
 
       _prevEnd = Math.max(_prevEnd, clipEnd)
       _prevGain = gain
@@ -346,6 +357,12 @@ export function resetNarration() {
   _prevEnd = 0
   _prevGain = null
   _masterGain = null
+  _activeSources.clear()
+}
+
+/** Whether TTS is currently speaking (cues loaded and being played). */
+export function isNarrationActive(): boolean {
+  return _cues !== null && _cues.length > 0 && _played.size > 0
 }
 
 export function hasVietnameseSubs(video: HTMLVideoElement): boolean {

@@ -322,8 +322,11 @@ export function Player({
   const backSrc = frontIsA ? srcB : srcA
   const setBackSrc = frontIsA ? setSrcB : setSrcA
   const [playing, setPlaying] = useState(false)
-  const [volume, setVolume] = useState(1)
-  const [muted, setMuted] = useState(false)
+  const [volume, setVolume] = useState(() => {
+    const v = window.localStorage.getItem('yt-player-volume')
+    return v !== null ? parseFloat(v) : 1
+  })
+  const [muted, setMuted] = useState(() => window.localStorage.getItem('yt-player-muted') === '1')
   const [position, setPosition] = useState(initialPositionSeconds)
   const [buffered, setBuffered] = useState(0)
   // Duration reported by the media element. Only meaningful once the whole
@@ -334,9 +337,18 @@ export function Player({
   const [loadFailed, setLoadFailed] = useState(false)
   // Language code of the active caption track, or null for off. Tracks arrive
   // shortly after playback starts, before the media file finishes downloading.
-  const [captions, setCaptions] = useState<string | null>(null)
+  const [captions, setCaptionsRaw] = useState<string | null>(
+    () => window.localStorage.getItem('yt-player-captions') || null,
+  )
+  const setCaptions = useCallback((next: string | null) => {
+    if (next) window.localStorage.setItem('yt-player-captions', next)
+    else window.localStorage.removeItem('yt-player-captions')
+    setCaptionsRaw(next)
+  }, [])
   const captionsRef = useRef<string | null>(null)
-  const [narrationOn, setNarrationOn] = useState(false)
+  const [narrationOn, setNarrationOn] = useState(
+    () => window.localStorage.getItem('yt-narration-on') === '1',
+  )
   const narrationOnRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
   // Keep refs synchronised so callbacks that are intentionally stable (empty
@@ -414,6 +426,10 @@ export function Player({
   // because the viewer turned it off. The distinction is the whole point: one
   // should be undone at the first opportunity, the other never.
   const mutedByPolicyRef = useRef(false)
+  // The volume we last set programmatically (for ducking).  When the browser
+  // fires onVolumeChange asynchronously, comparing against this value tells us
+  // whether the event came from our own effect or from a real user interaction.
+  const lastSetVolumeRef = useRef(-1)
   const justSwappedRef = useRef(false)
 
   // A fragmented stream declares no total length: its header says only how much
@@ -440,16 +456,26 @@ export function Player({
   // until the <track> elements load, so we check via hasVietnameseSubs().
   const narrationAvailable = subtitles.some((s) => s.language === 'vi' || s.language === 'vie')
 
-  // <track> elements are declarative but their display is not: the browser
-  // decides which one shows. Driving textTracks directly keeps the button and
-  // what is on screen in agreement.
-  useEffect(() => {
+  // <track> elements are created synchronously by React, but the browser
+  // initialises the backing TextTrack objects asynchronously (microtask).
+  // useLayoutEffect runs before that — textTracks.length is 0 on first fire.
+  // Poll with rAF until the tracks are ready, then apply the stored preference.
+  useLayoutEffect(() => {
     const element = front()
     if (!element) return
-    for (let i = 0; i < element.textTracks.length; i++) {
-      const track = element.textTracks[i]
-      track.mode = track.language === captions ? 'showing' : 'disabled'
+    let frame = 0
+    const apply = () => {
+      if (element.textTracks.length === 0) {
+        frame = requestAnimationFrame(apply)
+        return
+      }
+      for (let i = 0; i < element.textTracks.length; i++) {
+        const track = element.textTracks[i]
+        track.mode = track.language === captionsRef.current ? 'showing' : 'disabled'
+      }
     }
+    frame = requestAnimationFrame(apply)
+    return () => cancelAnimationFrame(frame)
   }, [captions, frontSrc, frontIsA, front, subtitles.length])
 
   // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
@@ -459,14 +485,30 @@ export function Player({
     let frame = 0
     const tick = () => {
       const el = front()
-      if (!el) { frame = requestAnimationFrame(tick); return }
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      if (!el || !audioCtxRef.current) { frame = requestAnimationFrame(tick); return }
       tickNarration(el, audioCtxRef.current)
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [narrationOn, front])
+
+  // Restore stored volume/muted on the video element, and duck the video
+  // audio when narration is active so the TTS voice is clearly audible.
+  // Duck video audio while narration is active so the TTS voice is clear.
+  // Only applies when the video actually has Vietnamese subtitles — otherwise
+  // narrationOn could be stuck true from localStorage with no button to turn
+  // it off, permanently halving the volume.
+  const NARRATION_DUCK = 0.2
+  const ducking = narrationOn && narrationAvailable
+  useEffect(() => {
+    const el = front()
+    if (!el) return
+    const target = ducking ? volume * NARRATION_DUCK : volume
+    lastSetVolumeRef.current = target
+    el.muted = muted
+    el.volume = target
+  }, [volume, muted, ducking, frontSrc])
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
@@ -848,6 +890,8 @@ export function Player({
     mutedByPolicyRef.current = false
     const element = front()
     setVolume(next)
+    window.localStorage.setItem('yt-player-volume', String(next))
+    window.localStorage.setItem('yt-player-muted', next === 0 ? '1' : '0')
     if (element) {
       element.volume = next
       element.muted = next === 0
@@ -863,6 +907,7 @@ export function Player({
     mutedByPolicyRef.current = false
     element.muted = !element.muted
     setMuted(element.muted)
+    window.localStorage.setItem('yt-player-muted', element.muted ? '1' : '0')
   }
 
   // Keyboard control. Space and arrows are the conventions people already know,
@@ -1120,8 +1165,16 @@ export function Player({
                 onVolumeChange={
                   isFront
                     ? (e) => {
+                        // The browser dispatches volumechange asynchronously,
+                        // so a boolean guard in the effect is already cleared
+                        // by the time this fires.  Compare the element's
+                        // current volume against the value we last set: if
+                        // they match, this is our own ducking/restore event.
+                        if (e.currentTarget.volume === lastSetVolumeRef.current) return
                         setVolume(e.currentTarget.volume)
                         setMuted(e.currentTarget.muted)
+                        window.localStorage.setItem('yt-player-volume', String(e.currentTarget.volume))
+                        window.localStorage.setItem('yt-player-muted', e.currentTarget.muted ? '1' : '0')
                       }
                     : undefined
                 }
@@ -1271,7 +1324,6 @@ export function Player({
                       src={track.url}
                       srcLang={track.language}
                       label={track.generated ? `${track.label} (auto)` : track.label}
-                      default={track.language === 'vi' || track.language === 'vie'}
                     />
                   ))}
               </video>
@@ -1422,12 +1474,14 @@ export function Player({
                   if (!audioCtxRef.current) {
                     audioCtxRef.current = new AudioContext()
                   }
-                  // Always try to resume — may be suspended if the page lost
-                  // focus or the context was idle too long.
-                  const ctx = audioCtxRef.current
-                  if (ctx.state === 'suspended') void ctx.resume()
+                  void audioCtxRef.current.resume()
                 }
-                setNarrationOn((o) => !o)
+                setNarrationOn((o) => {
+                  const next = !o
+                  window.localStorage.setItem('yt-narration-on', next ? '1' : '0')
+                  console.log('[narration] toggle', o, '->', next)
+                  return next
+                })
               }}
               className={`p-2 rounded-full transition-colors duration-150 ease-out ${
                 narrationOn
