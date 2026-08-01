@@ -1386,7 +1386,17 @@ export function Player({
               type="button"
               aria-label={narrationOn ? 'Turn off narration' : 'Turn on Vietnamese narration'}
               aria-pressed={narrationOn}
-              onClick={() => setNarrationOn((o) => !o)}
+              onClick={() => {
+                // Create + resume AudioContext during the user gesture so the
+                // browser allows audible playback. The tick loop (requestAnimationFrame)
+                // runs too late for the autoplay policy.
+                if (!narrationOn && !audioCtxRef.current) {
+                  const ctx = new AudioContext()
+                  if (ctx.state === 'suspended') ctx.resume()
+                  audioCtxRef.current = ctx
+                }
+                setNarrationOn((o) => !o)
+              }}
               className={`p-2 rounded-full transition-colors duration-150 ease-out ${
                 narrationOn
                   ? 'text-brand hover:bg-brand/10'

@@ -1,33 +1,22 @@
 /**
  * Vietnamese TTS narration overlay.
- *
- * Reads cues from a VTT text track (loaded as <track> on the video element),
- * calls POST /api/tts for each cue, and plays the resulting WAV through the
- * Web Audio API in sync with the video.
  */
-
 const TTS_VOICE = 'Ngọc Linh'
-
-// ---------------------------------------------------------------------------
-// Audio cache
-// ---------------------------------------------------------------------------
-
-const _cache = new Map<string, AudioBuffer>()
-const _active = new Map<string, Promise<AudioBuffer>>()
+const PREFETCH_SEC = 8
 const MAX_CONCURRENT = 2
 
-async function fetchTTS(ctx: AudioContext, text: string): Promise<AudioBuffer> {
-  const cached = _cache.get(text)
-  if (cached) return cached
+// ---- cache ------------------------------------------------------------------
+const _cache = new Map<string, AudioBuffer>()
+const _active = new Map<string, Promise<AudioBuffer>>()
 
+async function fetchTTS(ctx: AudioContext, text: string): Promise<AudioBuffer> {
+  const c = _cache.get(text)
+  if (c) return c
   const inflight = _active.get(text)
   if (inflight) return inflight
-
-  // Wait if too many requests are already in flight.
   while (_active.size >= MAX_CONCURRENT) {
     await Promise.race(_active.values()).catch(() => {})
   }
-
   const p = (async () => {
     const resp = await fetch('/api/tts', {
       method: 'POST',
@@ -35,103 +24,69 @@ async function fetchTTS(ctx: AudioContext, text: string): Promise<AudioBuffer> {
       body: JSON.stringify({ text, voice: TTS_VOICE }),
     })
     if (!resp.ok) throw new Error(`tts ${resp.status}`)
-    const wav = await resp.arrayBuffer()
-    const buf = await ctx.decodeAudioData(wav)
+    const buf = await ctx.decodeAudioData(await resp.arrayBuffer())
     _cache.set(text, buf)
     return buf
   })()
-
   _active.set(text, p)
-  try {
-    return await p
-  } finally {
-    _active.delete(text)
-  }
+  try { return await p } finally { _active.delete(text) }
 }
 
-// ---------------------------------------------------------------------------
-// Cue extraction from the browser's VTT text track
-// ---------------------------------------------------------------------------
+// ---- cue extraction ---------------------------------------------------------
 
-interface CueText {
-  start: number
-  end: number
-  text: string
-}
+interface CueText { start: number; end: number; text: string }
 
-function vietnameseCues(video: HTMLVideoElement): CueText[] {
-  const cues: CueText[] = []
+function viCues(video: HTMLVideoElement): CueText[] {
+  const out: CueText[] = []
   for (let i = 0; i < video.textTracks.length; i++) {
     const t = video.textTracks[i]
     if (t.language !== 'vi' && t.language !== 'vie') continue
     if (t.mode === 'disabled') t.mode = 'hidden'
-    if (!t.cues) continue
+    if (t.readyState !== 2 || !t.cues) continue
     for (let j = 0; j < t.cues.length; j++) {
       const c = t.cues[j] as VTTCue
       const text = (c.text || '').trim()
-      if (!text) continue
-      cues.push({ start: c.startTime, end: c.endTime, text })
+      if (!text || !isFinite(c.startTime) || !isFinite(c.endTime)) continue
+      out.push({ start: c.startTime, end: c.endTime, text })
     }
   }
-  return cues
+  return out
 }
 
-// ---------------------------------------------------------------------------
-// Scheduling loop (called from requestAnimationFrame)
-// ---------------------------------------------------------------------------
-
-const _played = new Set<number>() // cue indices already played/skipped
+// ---- scheduling -------------------------------------------------------------
+const _played = new Set<number>()
+let _lastLog = 0
 
 export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const now = video.currentTime
-  const cues = vietnameseCues(video)
+  const cues = viCues(video)
 
-  if (cues.length === 0) return // tracks not loaded yet
+  const t = Date.now()
+  if (t - _lastLog > 2000) {
+    _lastLog = t
+    console.log('[narration] cues=', cues.length, 'played=', _played.size, 'ctx=', ctx.state)
+  }
 
   for (let i = 0; i < cues.length; i++) {
     if (_played.has(i)) continue
-    const cue = cues[i]
+    const { start, end, text } = cues[i]
 
-    // Skip cues already in the past (by >200ms so we don't skip one that
-    // just barely became due this tick).
-    if (now > cue.endTime + 0.2) {
-      _played.add(i)
-      continue
-    }
+    // Past this cue — skip.
+    if (now > end + 1) { _played.add(i); continue }
 
-    // Not yet due — prefetch and wait.
-    if (cue.startTime - now > 0.3) continue
+    // Too far ahead — wait.
+    if (start - now > PREFETCH_SEC) continue
 
-    // This cue is due. Mark it so we never double-fire it.
     _played.add(i)
-
-    fetchTTS(ctx, cue.text)
-      .then((buf) => {
-        // AudioContext may be suspended by browser autoplay policy — a
-        // click on the narration button counts as a user gesture, so by
-        // the time the first clip arrives it should be running.
-        if (ctx.state === 'suspended') ctx.resume()
-        const src = ctx.createBufferSource()
-        src.buffer = buf
-        src.connect(ctx.destination)
-        const delay = Math.max(0, cue.startTime - ctx.currentTime)
-        const duration = Math.max(0, cue.endTime - cue.startTime)
-        src.start(ctx.currentTime + delay, 0, duration)
-      })
-      .catch(() => {}) // one bad cue shouldn't break the rest
+    fetchTTS(ctx, text).then((buf) => {
+      if (ctx.state === 'suspended') ctx.resume()
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.connect(ctx.destination)
+      const when = ctx.currentTime + Math.max(0, start - video.currentTime)
+      src.start(when, 0, Math.max(0.5, end - start))
+    }).catch(() => {})
   }
 }
 
-/** Reset played-cue state when a new video loads. */
-export function resetNarration() {
-  _played.clear()
-}
-
-/** Whether the video has a Vietnamese subtitle track. */
-export function hasVietnameseSubs(video: HTMLVideoElement): boolean {
-  for (let i = 0; i < video.textTracks.length; i++) {
-    const t = video.textTracks[i]
-    if (t.language === 'vi' || t.language === 'vie') return true
-  }
-  return false
-}
+export function resetNarration() { _played.clear() }
