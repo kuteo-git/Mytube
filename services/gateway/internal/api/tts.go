@@ -37,7 +37,7 @@ func (g *Gateway) handleTTS(w http.ResponseWriter, r *http.Request) {
 
 	// Forward to VieNeu-TTS (running on the same machine, port 8004 is the
 	// dedicated narration instance with the "update" checkpoint).
-	ttsURL := "http://localhost:8004/tts"
+	ttsURL := "http://localhost:8002/tts"
 	payload, _ := json.Marshal(map[string]string{
 		"input":   req.Text,
 		"voice":   req.Voice,

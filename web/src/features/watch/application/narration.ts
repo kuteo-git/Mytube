@@ -57,16 +57,26 @@ function parseVTTTime(raw: string): number {
   return h * 3600 + m * 60 + s
 }
 
-/** Strip WebVTT tags and clean up artefacts the TTS would read aloud:
- *  - <c>, </c>, timestamp tags
- *  - [Âm nhạc], [Cười], [Tiếng gió] — sound-effect descriptions
- *  - >>, ♪, ♫ — music notes and other non-speech glyphs
- *  - HTML entities */
+/** Strip WebVTT tags and clean up artefacts the TTS would read aloud.
+ *
+ *  [cười], [thở dài], [hắng giọng] are KEPT — the new VieNeu-TTS server
+ *  on port 8002 handles emotion tags natively (sigh, laugh, throat-clear).
+ *  Other [square-bracket] descriptions like [Âm nhạc], [Tiếng gió] are
+ *  still removed because they are not speech. */
 function cleanCueText(raw: string): string {
-  let s = raw
+  const EMOTION_TAGS = /\[(cười|thở dài|hắng giọng)\]/gi
+  const placeholders: string[] = []
+
+  // Save emotion tags before cleaning.
+  let s = raw.replace(EMOTION_TAGS, (match) => {
+    placeholders.push(match)
+    return `\x00${placeholders.length - 1}\x00`
+  })
+
+  s = s
     // Remove WebVTT angle-bracket tags: <c>, </c>, <00:00:00.000>
     .replace(/<[^>]+>/g, '')
-    // Remove [square-bracket] sound-effect descriptions
+    // Remove [square-bracket] non-emotion descriptions
     .replace(/\[[^\]]*\]/g, '')
     // Remove leading >> (used for speaker indicators in some formats)
     .replace(/^>>\s*/gm, '')
@@ -82,6 +92,9 @@ function cleanCueText(raw: string): string {
 
   // Collapse multiple spaces into one.
   s = s.replace(/\s{2,}/g, ' ')
+
+  // Restore emotion tags.
+  s = s.replace(/\x00(\d+)\x00/g, (_, i) => placeholders[+i] || '')
 
   return s
 }
