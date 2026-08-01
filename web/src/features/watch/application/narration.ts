@@ -164,11 +164,13 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     }
     i++
 
-    // YouTube tagged cues carry the previous clean sentence on line 1 and the
-    // new tagged sentence on line 2.  Joining both would repeat every word
-    // ("Xin chào… Xin chào…Xin chúc mừng…").  Only the last line — the one
-    // with <c> tags — contains the words this cue actually adds.
-    const rawText = payloadLines[payloadLines.length - 1] || ''
+    // YouTube auto-captions carry the previous sentence on line 1 and the
+    // new tagged sentence on line 2.  Manual captions have all content spread
+    // across multiple lines.  Detect by checking for <c> tags.
+    const hasTags = payloadLines.some((l) => l.includes('<c>'))
+    const rawText = hasTags
+      ? payloadLines[payloadLines.length - 1] || ''  // auto-caption: last line only
+      : payloadLines.join(' ')                        // manual: join all lines
     const text = cleanCueText(rawText)
     if (!text) continue
 
@@ -213,6 +215,11 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
         const after = buf[idx + 1]
         // Skip decimal points: "2.5", "3.14"
         if (ch === '.' && before && /\d/.test(before) && after && /\d/.test(after)) continue
+        // Skip abbreviations: "Dr.", "Mr.", "Mrs.", "DR."
+        if (ch === '.' && before && /[A-Za-z]/.test(before) && after === ' ') {
+          const wordBefore = buf.slice(0, idx).split(/\s+/).pop() || ''
+          if (/^(Dr|Mr|Mrs|Ms|DR|Prof|Sr|Jr|vs|etc)$/i.test(wordBefore)) continue
+        }
         // Clause-ending punctuation must be followed by space or end-of-string.
         if (after && after !== ' ') continue
         // Don't split on comma if either side is too short to stand alone.
@@ -227,7 +234,7 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
       // If no punctuation found but the buffer is getting long, force a split.
       if (lastEnd < 0) {
         const words = buf.trim().split(/\s+/)
-        if (words.length >= 15) lastEnd = buf.length
+        if (words.length >= 30) lastEnd = buf.length
       }
 
       if (lastEnd > 0) {

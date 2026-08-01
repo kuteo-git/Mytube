@@ -12,9 +12,9 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, MarianMTModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-MODEL_NAME = os.environ.get("NLLB_MODEL", "Helsinki-NLP/opus-mt-en-vi")
+MODEL_NAME = os.environ.get("NLLB_MODEL", "facebook/nllb-200-distilled-600M")
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 PORT = int(os.environ.get("NLLB_PORT", "8005"))
 
@@ -40,12 +40,14 @@ async def translate(req: Request):
     src_lang = body.get("src", "eng_Latn")
     tgt_lang = body.get("tgt", "vie_Latn")
 
+    tokenizer.src_lang = src_lang
     inputs = tokenizer(text, return_tensors="pt").to(DEVICE)
 
     t0 = time.perf_counter()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
+            forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang),
             max_new_tokens=min(256, max(32, int(len(text.split()) * 3))),
             num_beams=4,
         )

@@ -26,6 +26,10 @@ function groupCuesForTranslation(cues: CueText[]): CueText[] {
       const before = buf[idx - 1]
       const after = buf[idx + 1]
       if (ch === '.' && before && /\d/.test(before) && after && /\d/.test(after)) continue
+      if (ch === '.' && before && /[A-Za-z]/.test(before) && after === ' ') {
+        const wordBefore = buf.slice(0, idx).split(/\s+/).pop() || ''
+        if (/^(Dr|Mr|Mrs|Ms|DR|Prof|Sr|Jr|vs|etc)$/i.test(wordBefore)) continue
+      }
       if (after && after !== ' ') continue
       // Don't split on comma if the text before it is too short.
       if (ch === ',') {
@@ -117,6 +121,18 @@ describe('groupCuesForTranslation', () => {
     expect(result).toHaveLength(2)
     expect(result[0].text).toBe('But, at this moment,')
     expect(result[1].text).toBe('we must act now.')
+  })
+
+  it('skips abbreviation periods: Dr., Mr., DR., etc.', () => {
+    const cues: CueText[] = [
+      { start: 0, end: 2, text: 'DR. TYSON: From the' },
+      { start: 2, end: 4, text: 'American Museum of Natural' },
+      { start: 4, end: 6, text: 'History in New York City.' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    // "DR." is abbreviation, "City." is sentence end — 1 group
+    expect(result).toHaveLength(1)
+    expect(result[0].text).toBe('DR. TYSON: From the American Museum of Natural History in New York City.')
   })
 
   it('single cue without punctuation stays as-is', () => {
