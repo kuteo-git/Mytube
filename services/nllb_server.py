@@ -48,7 +48,7 @@ async def translate(req: Request):
         outputs = model.generate(
             **inputs,
             forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang),
-            max_length=512,
+            max_new_tokens=min(256, max(32, int(len(text.split()) * 3))),
             num_beams=4,
         )
     translated = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]

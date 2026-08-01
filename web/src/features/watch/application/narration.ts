@@ -8,9 +8,9 @@
  * set.  Direct fetch + parse has no such problem.
  */
 const TTS_VOICE = 'Ngọc Linh'
-const PREFETCH_SEC = 8
+const PREFETCH_SEC = 10
 const MAX_CONCURRENT = 2
-const DEFAULT_SPEED = 1.2 // VieNeu-TTS reads slightly slow; 1.2× sounds natural
+const DEFAULT_SPEED = 1.1 // VieNeu-TTS reads slightly slow; 1.1× sounds natural
 const MAX_SPEED = 2.0     // ffmpeg atempo is pitch-preserving — 2.0× is fast but clear
 const GAP_BETWEEN_CLIPS = 0.25 // pause between sentences (seconds)
 
@@ -329,7 +329,7 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   // On first tick with cues, skip the first 5 s so the narration starts
   // smoothly instead of racing to catch up with in-progress cues.
   if (_skipUntil < 0 && cues.length > 0) {
-    _skipUntil = now + 5
+    _skipUntil = now + 10
     console.log('[narration] warm-start — skipping cues before', _skipUntil.toFixed(1) + 's')
   }
   if (_skipUntil > 0) {
@@ -366,7 +366,7 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
       try { src.stop() } catch { /* already stopped */ }
     }
     _activeSources.clear()
-    _skipUntil = now + 5
+    _skipUntil = now + 10
     let unmarked = 0
     for (const idx of _played) {
       const cue = cues[idx]
