@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadViSubtitles, resetNarration, tickNarration } from './narration'
+import { bindNarration, loadViSubtitles, resetNarration, tickNarration } from './narration'
 
 /**
  * Clips reach the timeline in cue order, whatever order they arrive in.
@@ -32,6 +32,9 @@ const VTT = [
 
 /** Every start(when) that reached the audio timeline, in the order it happened. */
 let scheduled: { when: number; duration: number; line: number }[] = []
+
+/** Every source handed to the timeline, so a test can watch them be stopped. */
+let sources: { stop: () => void }[] = []
 
 const CLIP_SECONDS = 0.5
 
@@ -67,6 +70,7 @@ function fakeAudioContext() {
           })
         },
       }
+      sources.push(source)
       return source
     },
     // The response carries which line it is, so the test can see not just that
@@ -85,6 +89,7 @@ function fakeVideo(currentTime: number) {
 
 beforeEach(() => {
   scheduled = []
+  sources = []
   resetNarration()
 
   vi.stubGlobal('fetch', async (url: string, init?: { body?: string }) => {
@@ -172,6 +177,51 @@ describe('scheduling order', () => {
 
     // Nothing is spoken over the top of what comes later just to catch up.
     expect(scheduled).toHaveLength(0)
+  })
+
+  it('places well beyond the next few seconds', async () => {
+    // The runway is what carries narration through a backgrounded tab: nothing
+    // new can be placed there, because timers are throttled to a crawl or
+    // frozen, but whatever is already on the audio timeline still plays.
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    const ctx = fakeAudioContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(fakeVideo(0) as any, ctx as any)
+    await settle()
+
+    // All three cues, the last of which is five seconds out, are placed from a
+    // single tick — no further wake-up needed.
+    expect(scheduled).toHaveLength(3)
+  })
+
+  it('stops on the video’s own pause event, with no tick involved', async () => {
+    // The case this exists for: pause pressed on a lock screen, tab in the
+    // background. Polling would notice somewhere in the next minute, and until
+    // then a voice narrates a video that has stopped.
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    const ctx = fakeAudioContext()
+    const video = document.createElement('video')
+    Object.defineProperty(video, 'paused', { configurable: true, value: false })
+    Object.defineProperty(video, 'currentTime', { configurable: true, value: 0, writable: true })
+
+    const unbind = bindNarration(video)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle()
+    expect(scheduled.length).toBeGreaterThan(0)
+
+    const stops: number[] = []
+    for (const source of sources) source.stop = () => stops.push(1)
+
+    // No tick after this point — only the event.
+    video.dispatchEvent(new Event('pause'))
+    expect(stops.length).toBeGreaterThan(0)
+
+    unbind()
   })
 
   it('schedules nothing while the video is paused', async () => {

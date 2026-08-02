@@ -243,9 +243,32 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
    | điều khiển màn khoá | ✓ | ✗ |
    | narration (TTS) ở nền | ✗ | ✗ |
 
-   **Narration vỡ ở nền trên cả hai** vì bộ điều phối của nó là `setInterval`
-   (`Player.tsx`), mà trình duyệt bóp nghẹt timer của tab ẩn. Cứu được đòi viết lại
-   thành đặt lịch trước trên đồng hồ `AudioContext` — chưa làm.
+   **Narration ở nền — sửa một nửa 2026-08-03, và hai nửa là hai nguyên nhân khác
+   nhau.** Ghi chú cũ ở đây gộp chúng làm một, sai:
+
+   | Nguyên nhân | Ở đâu | Sửa được? |
+   |---|---|---|
+   | **timer bị bóp** → không đặt thêm lịch | Android, và tab ẩn trên desktop | **Đã sửa** |
+   | **OS treo `AudioContext`** | iOS nền/khoá máy | Không, từ web |
+
+   Cái thứ nhất mới là thứ người dùng gặp trên Android, và nó **không** phải giới hạn
+   của trình duyệt: `source.start(when)` do **luồng audio** thực thi, không cần JS
+   chạy. Nhưng tầm đặt lịch chỉ có 10 giây, nên vào nền là tick chết → im sau ≤10s.
+   Giờ `PREFETCH_SEC = 60`.
+
+   **Kèm theo bắt buộc**: dừng/tua chuyển sang **nghe sự kiện** của thẻ video
+   (`bindNarration`) chứ không hỏi thăm mỗi 100ms. Đặt lịch xa mà vẫn dựa vào timer
+   thì bấm dừng từ màn khoá — nơi timer không chạy — sẽ nghe thuyết minh nói tiếp cả
+   phút sau khi hình đã đứng.
+
+   Đầu ra cũng được định tuyến qua `<audio>` bằng `createMediaStreamDestination`
+   thay vì `ctx.destination` thẳng. Rẻ, và đưa thuyết minh vào cùng luật âm lượng
+   với mọi thứ khác máy phát. **Không phải lời hứa rằng iOS đã xong** — mẫu âm thanh
+   vẫn do `AudioContext` sinh ra, mà đó chính là thứ iOS treo. Chưa kiểm trên iPhone thật.
+
+   Narration vẫn vỡ ở nền trên iOS. Cách duy nhất là server dựng sẵn một track rồi
+   trộn vào file — và cái đó phải TTS toàn bộ video **trước khi nghe được câu đầu**,
+   tức xoá mất tính chất "nghe được sau vài giây" vừa xây. Việc của một phase.
 
    Đây là lý do kỹ thuật cụ thể cho "app mobile" ở Phase 3 (§7): không phải để đẹp
    hơn, mà vì phát nền trên iPhone chỉ native mới làm được.

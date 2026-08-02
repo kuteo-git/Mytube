@@ -25,8 +25,24 @@ import {
 
 const TTS_VOICE = 'Ngọc Linh'
 
-/** How far ahead of the playhead clips are prepared. */
-const PREFETCH_SEC = 10
+/**
+ * How far ahead of the playhead clips are prepared and placed.
+ *
+ * A minute, not the ten seconds it was, and the reason is background playback
+ * on a phone. `start(when)` is honoured by the audio thread whether or not any
+ * JavaScript is running, so whatever has been placed will play; but nothing new
+ * gets placed while the tab is in the background, because timers there are
+ * throttled to a crawl and often frozen outright. Ten seconds of runway meant
+ * narration went quiet ten seconds after the screen went off, while the video's
+ * own audio — a media element, driven by the browser rather than by us — kept
+ * going. Sixty seconds of runway is sixty seconds of narration that no longer
+ * depends on being woken up.
+ *
+ * It does not help iOS, which suspends the audio clock itself when the page
+ * goes to the background. That needs the narration to be a media element rather
+ * than Web Audio, and is noted in CLAUDE.md §8.3b.
+ */
+const PREFETCH_SEC = 60
 
 /** Fetches allowed to be in flight at once. */
 const MAX_CONCURRENT = 2
@@ -123,16 +139,61 @@ let _generation = 0
 
 // ---- audio sink -------------------------------------------------------------
 
+/** The element the narration is routed through, when routing is possible. */
+let _outputElement: HTMLAudioElement | null = null
+
+/**
+ * Connect the narration to something that will make a sound.
+ *
+ * Straight to `ctx.destination` is the obvious answer and the one that was
+ * here. It is also the answer that keeps narration off a phone in the
+ * background: the system tracks *media elements* — that is why the video's own
+ * audio carries on with the screen off — and a Web Audio graph playing into the
+ * void is not one, so it is among the first things suspended.
+ *
+ * `createMediaStreamDestination` turns the graph into a stream that an
+ * `<audio>` element can play, which makes it a media element as far as the
+ * system is concerned. That is worth doing on its own — it is what puts
+ * narration under the same volume and routing rules as everything else the
+ * device plays.
+ *
+ * Whether it survives an iOS background is a separate question and the honest
+ * answer is that it may well not: the samples are still produced by the audio
+ * context, and iOS suspends that. Routing costs almost nothing, so it is worth
+ * having either way; it is not a claim that iOS is solved.
+ */
+function connectOutput(ctx: AudioContext, node: GainNode) {
+  if (typeof ctx.createMediaStreamDestination !== 'function' || typeof Audio !== 'function') {
+    node.connect(ctx.destination)
+    return
+  }
+
+  try {
+    const stream = ctx.createMediaStreamDestination()
+    node.connect(stream)
+
+    const element = _outputElement ?? new Audio()
+    element.srcObject = stream.stream
+    element.autoplay = true
+    // Narration is speech about what is on screen, so it belongs to the video
+    // rather than being a track of its own the system might offer to skip.
+    element.setAttribute('playsinline', '')
+    void element.play().catch(() => undefined)
+    _outputElement = element
+  } catch {
+    // Any browser that will not do this still gets narration the plain way.
+    node.connect(ctx.destination)
+  }
+}
+
 /**
  * Where a prepared clip goes.
  *
- * Behind a seam on purpose. Web Audio is the right tool for placing a clip at
- * an exact moment, and it is what plays narration today — but a mobile system
- * suspends it the instant the tab goes to the background, which is why video
- * audio survives there and narration does not. Reaching that will mean feeding
- * a media element instead, and when it does, only this function should have to
- * change: the ordering and timing above it are not audio-specific and should
- * not be rewritten to find that out.
+ * Behind a seam on purpose. Web Audio is the right tool for placing a clip at an
+ * exact moment and stays; what may yet have to change is where its output ends
+ * up, and that is `connectOutput` above rather than anything here. The ordering
+ * and timing this sits under are not audio-specific and should not have to be
+ * rewritten to find that out.
  */
 function scheduleBuffer(ctx: AudioContext, buffer: AudioBuffer, when: number): number {
   const source = ctx.createBufferSource()
@@ -176,6 +237,18 @@ function stopEverything() {
   _scheduledUntil = 0
 }
 
+/** Tear down the routing element, so a new video does not inherit the old one. */
+function releaseOutput() {
+  if (!_outputElement) return
+  try {
+    _outputElement.pause()
+    _outputElement.srcObject = null
+  } catch {
+    /* already gone */
+  }
+  _outputElement = null
+}
+
 // ---- loading ----------------------------------------------------------------
 
 /**
@@ -193,6 +266,7 @@ export function loadViSubtitles(url: string, lang = 'vi') {
   _lastTime = 0
   _masterGain = null
   stopEverything()
+  releaseOutput()
 
   const generation = _generation
   void fetch(url)
@@ -300,8 +374,43 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
 }
 
 /**
+ * Listen to the video rather than ask it.
+ *
+ * Placing a minute of narration ahead only works if stopping it does not depend
+ * on a timer, because the moment that matters most is the one where timers are
+ * least reliable: the viewer presses pause on a lock screen, with the tab in the
+ * background. Polling would notice somewhere in the next minute, and until then
+ * a voice would carry on narrating a video that had stopped. These events fire
+ * from the browser whether or not anything of ours is being woken up.
+ *
+ * Returns a function that removes the listeners.
+ */
+export function bindNarration(video: HTMLVideoElement): () => void {
+  const onPause = () => stopEverything()
+
+  const onSeeking = () => {
+    // Everything placed was placed against a playhead that no longer exists.
+    _generation++
+    stopEverything()
+    _pumping = false
+    _cursor = _cues ? firstCueAtOrAfter(_cues, video.currentTime) : 0
+    _lastTime = video.currentTime
+  }
+
+  video.addEventListener('pause', onPause)
+  video.addEventListener('ended', onPause)
+  video.addEventListener('seeking', onSeeking)
+
+  return () => {
+    video.removeEventListener('pause', onPause)
+    video.removeEventListener('ended', onPause)
+    video.removeEventListener('seeking', onSeeking)
+  }
+}
+
+/**
  * Called on a timer while narration is on. Keeps the pump fed, follows the
- * viewer's volume, and reacts to pauses and seeks.
+ * viewer's volume, and catches a seek the events missed.
  */
 export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const cues = _cues
@@ -315,7 +424,7 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
 
   if (!_masterGain) {
     _masterGain = ctx.createGain()
-    _masterGain.connect(ctx.destination)
+    connectOutput(ctx, _masterGain)
   }
   _masterGain.gain.setValueAtTime(video.volume * NARRATION_GAIN, ctx.currentTime)
 
@@ -358,6 +467,7 @@ export function resetNarration() {
   _lastTime = 0
   _masterGain = null
   stopEverything()
+  releaseOutput()
 }
 
 export function isNarrationActive(): boolean {

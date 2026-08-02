@@ -26,7 +26,7 @@ import {
   useAutoplayPreference,
   useQualityPreference,
 } from '@/features/watch/application/autoplay'
-import { tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
+import { bindNarration, tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
 import { classifyGesture } from '@/features/watch/application/player-geometry'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
@@ -546,13 +546,24 @@ export function Player({
   // 100 ms is fast enough for TTS scheduling without wasting CPU.
   useEffect(() => {
     if (!narrationOn) return
+
+    // Pause and seek come from the element's own events, not from this timer.
+    // A minute of narration is placed on the audio timeline in advance so it
+    // survives the tab going to the background — and in the background the
+    // timer is the first thing to stop, which is exactly when a pause pressed
+    // on a lock screen has to be noticed.
+    const element = front()
+    const unbind = element ? bindNarration(element) : undefined
+
     const id = setInterval(() => {
       const el = front()
       if (!el || !audioCtxRef.current) return
       tickNarration(el, audioCtxRef.current)
     }, 100)
+
     return () => {
       clearInterval(id)
+      unbind?.()
       resetNarration()
       audioCtxRef.current?.suspend()
     }
