@@ -25,7 +25,8 @@ import {
   useAutoplayPreference,
   useQualityPreference,
 } from '@/features/watch/application/autoplay'
-import { hasVietnameseSubs, tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
+import { tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
+import { classifyGesture } from '@/features/watch/application/player-geometry'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
 
@@ -244,6 +245,15 @@ export function Player({
   thumbnailURL,
   nextVideoTitle,
   onPlayNext,
+  title,
+  channelTitle,
+  variant = 'full',
+  onClose,
+  onExpand,
+  dragEnabled = false,
+  onDragMove,
+  onDragRelease,
+  pauseToken = 0,
 }: {
   videoId: string
   hue: number
@@ -262,7 +272,39 @@ export function Player({
   thumbnailURL?: string
   nextVideoTitle?: string
   onPlayNext?: () => void
+  /** The video title, shown in the miniplayer overlay on hover. */
+  title?: string
+  /** Shown beneath the title in the mobile bar, where there is room for it. */
+  channelTitle?: string
+  /**
+   * Which shape the player is in.
+   *
+   * `full` is the watch page. `mini` is the desktop corner player, which is
+   * still a picture you watch. `bar` is the mobile one, which is a strip along
+   * the bottom: the picture shrinks to a thumbnail and the row becomes mostly
+   * text and two buttons, because at that size a picture with controls over it
+   * is neither watchable nor tappable.
+   */
+  variant?: 'full' | 'mini' | 'bar'
+  /** Closes the miniplayer and stops playback entirely. */
+  onClose?: () => void
+  /** Navigates back to the full Watch page. */
+  onExpand?: () => void
+  /** Enables the drag-down-to-minimise gesture. Mobile, full-size only. */
+  dragEnabled?: boolean
+  /** Reports drag distance and the height it should be measured against. */
+  onDragMove?: (deltaY: number, playerHeight: number) => void
+  /** Ends the drag with the closing velocity in px/ms. */
+  onDragRelease?: (velocity: number) => void
+  /**
+   * Bumped when playback should stop — closing the miniplayer on the watch page.
+   * A token rather than a boolean so that pausing a second time is a second
+   * event rather than a value that was already what it needed to be.
+   */
+  pauseToken?: number
 }) {
+  const mini = variant !== 'full'
+  const bar = variant === 'bar'
   const { data: sources, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
   // Playing from upstream always schedules a copy, so a job is coming even if
   // the queue has not caught up yet.
@@ -313,6 +355,14 @@ export function Player({
     () => (frontIsARef.current ? videoBRef.current : videoARef.current),
     [],
   )
+
+  // Stop on request from outside — closing the miniplayer while the watch page
+  // is still open. Zero is the initial token and means nothing has asked yet,
+  // so it must not pause a video that is only just starting.
+  useEffect(() => {
+    if (pauseToken === 0) return
+    front()?.pause()
+  }, [pauseToken, front])
   // URL loaded in each element. The back one is set only while an upgrade is
   // being prepared, and cleared afterwards so an abandoned stream is torn down
   // rather than left pulling bytes.
@@ -446,9 +496,6 @@ export function Player({
     !streaming && offsetSeconds === 0 && elementDuration > 0 ? elementDuration : durationSeconds
 
   const playable = Boolean(frontSrc) && !loadFailed
-  if (subtitles.length > 0) {
-    console.log('[Player] subtitles available:', subtitles.length, 'mediaState:', mediaState)
-  }
   // Captions no longer wait for the media file: ingest publishes them ahead of
   // the transfer, precisely so they are usable during upstream playback.
   const captionsAvailable = subtitles.length > 0
@@ -1053,20 +1100,91 @@ export function Player({
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
 
+  // Drag the picture downwards to put it away, the way the phone app does.
+  //
+  // The axis lock is what stops this from fighting the controls that are already
+  // here: a sideways movement is somebody scrubbing and an upward one is not a
+  // request to dismiss anything, so only a deliberate downward drag counts. The
+  // height is taken once, at the start — measuring it live would divide by a box
+  // that is shrinking because of the very drag being measured.
+  const dragRef = useRef<{
+    x: number
+    y: number
+    height: number
+    lastY: number
+    lastT: number
+    velocity: number
+    active: boolean
+  } | null>(null)
+
+  const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragEnabled) return
+    if ((e.target as HTMLElement).closest('[data-player-controls]')) return
+    dragRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      height: e.currentTarget.clientHeight,
+      lastY: e.clientY,
+      lastT: e.timeStamp,
+      velocity: 0,
+      active: false,
+    }
+  }
+
+  const moveDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current
+    if (!d) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+
+    if (!d.active) {
+      const verdict = classifyGesture(dx, dy)
+      if (verdict === 'ignore') {
+        dragRef.current = null
+        return
+      }
+      if (verdict === 'tap') return
+      d.active = true
+      e.currentTarget.setPointerCapture(e.pointerId)
+    }
+
+    const elapsed = e.timeStamp - d.lastT
+    if (elapsed > 0) d.velocity = (e.clientY - d.lastY) / elapsed
+    d.lastY = e.clientY
+    d.lastT = e.timeStamp
+    onDragMove?.(dy, d.height)
+  }
+
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (!d?.active) return
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    onDragRelease?.(d.velocity)
+  }
+
   return (
     <div
       className={clsx(
-        'group/player relative aspect-video w-full overflow-hidden rounded-xl bg-black',
+        'group/player relative h-full w-full overflow-hidden bg-black',
         // The cursor goes with the chrome. Leaving an arrow sitting on a film is
-        // the same distraction in miniature.
-        !controlsVisible && 'cursor-none',
+        // the same distraction in miniature. Not in mini mode: the miniplayer
+        // overlay needs the pointer to stay visible.
+        !mini && !controlsVisible && 'cursor-none',
       )}
-      style={
-        playable
+      onPointerDownCapture={beginDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      style={{
+        touchAction: dragEnabled ? 'none' : undefined,
+        ...(playable
           ? undefined
-          : { background: `radial-gradient(120% 90% at 50% 30%, hsl(${hue} 40% 22%), #000 70%)` }
-      }
-      onPointerMove={wakeControls}
+          : { background: `radial-gradient(120% 90% at 50% 30%, hsl(${hue} 40% 22%), #000 70%)` }),
+      }}
+      onPointerMove={(e) => {
+        moveDrag(e)
+        wakeControls()
+      }}
       onPointerDown={wakeControls}
       // Leaving takes the chrome immediately rather than after the delay: the
       // pointer is demonstrably elsewhere, so there is nothing to wait for.
@@ -1164,7 +1282,13 @@ export function Player({
                 key={isA ? 'a' : 'b'}
                 ref={isA ? videoARef : videoBRef}
                 src={src}
-                className="absolute inset-0 h-full w-full cursor-pointer"
+                className={clsx(
+                  'absolute top-0 left-0 h-full cursor-pointer',
+                  // In the bar the picture is a thumbnail on the left rather than
+                  // the whole surface: stretched across a 72px-tall strip it would
+                  // be a smear, and the row is mostly text at that size anyway.
+                  bar ? 'w-32 object-cover' : 'w-full',
+                )}
                 // The hidden layer must stay laid out and decoding — display:none
                 // would stop it buffering, which is the entire point of it.
                 style={{ opacity: isFront ? 1 : 0, pointerEvents: isFront ? undefined : 'none' }}
@@ -1366,10 +1490,11 @@ export function Player({
         </p>
       )}
 
-      {/* focus-within, not just the pointer: tabbing to a control has to bring
-          it back, or the chrome becomes unreachable from the keyboard — and the
-          keyboard is what the eventual television remote maps onto. */}
+      {/* Controls bar — hidden in mini mode. The miniplayer has its own
+          minimal overlay instead. */}
+      {!mini && (
       <div
+        data-player-controls
         className={clsx(
           'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-2',
           'transition-opacity duration-200 ease-out',
@@ -1499,7 +1624,6 @@ export function Player({
                 setNarrationOn((o) => {
                   const next = !o
                   window.localStorage.setItem('yt-narration-on', next ? '1' : '0')
-                  console.log('[narration] toggle', o, '->', next)
                   return next
                 })
               }}
@@ -1546,6 +1670,97 @@ export function Player({
           </button>
         </div>
       </div>
+      )}
+
+      {/* Miniplayer overlay — replaces the full controls bar.
+          Click anywhere to expand, hover for close/expand buttons and title. */}
+      {variant === 'mini' && (
+        <div className="absolute inset-0 group/mini">
+          {/* Click anywhere on the video → go back to Watch */}
+          <button
+            type="button"
+            onClick={onExpand}
+            className="absolute inset-0"
+            aria-label="Expand player"
+          />
+
+          {/* Close button — top-right, visible on hover */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onClose?.() }}
+            className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/70
+                       opacity-0 transition-opacity duration-150 group-hover/mini:opacity-100"
+            aria-label="Close player"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+
+          {/* Expand button — top-left, visible on hover */}
+          <button
+            type="button"
+            onClick={onExpand}
+            className="absolute top-2 left-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/70
+                       opacity-0 transition-opacity duration-150 group-hover/mini:opacity-100"
+            aria-label="Expand player"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+              <polyline points="15 3 21 3 21 9" />
+              <polyline points="9 21 3 21 3 15" />
+              <line x1="21" y1="3" x2="14" y2="10" />
+              <line x1="3" y1="21" x2="10" y2="14" />
+            </svg>
+          </button>
+
+          {/* Title — bottom gradient bar, visible on hover */}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3
+                          opacity-0 transition-opacity duration-150 group-hover/mini:opacity-100">
+            <p className="text-xs text-white clamp-1">{title ?? ''}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile bar. No hover state to hide behind on a touch screen, so both
+          buttons are permanently visible and sized to be hit with a thumb. */}
+      {bar && (
+        <div className="absolute inset-0 flex items-center pl-32">
+          <button
+            type="button"
+            onClick={onExpand}
+            className="absolute inset-0"
+            aria-label="Expand player"
+          />
+
+          <div className="min-w-0 flex-1 px-3">
+            <p className="clamp-1 text-xs font-medium text-white">{title ?? ''}</p>
+            {channelTitle && <p className="clamp-1 text-[11px] text-text-2">{channelTitle}</p>}
+          </div>
+
+          <div data-player-controls className="relative z-10 flex items-center gap-1 pr-2">
+            <button
+              type="button"
+              onClick={toggle}
+              className="grid h-10 w-10 place-items-center rounded-full text-white"
+              aria-label={playing ? 'Pause' : 'Play'}
+            >
+              {playing ? <Pause size={20} /> : <Play size={20} />}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-10 w-10 place-items-center rounded-full text-white"
+              aria-label="Close player"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

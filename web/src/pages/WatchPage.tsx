@@ -1,11 +1,13 @@
+import clsx from 'clsx'
+import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { usePopular, useUpNext, useVideo } from '@/features/catalog/application/queries'
 import { recordAutoplayHop } from '@/features/watch/application/autoplay'
 import { useQueue } from '@/features/watch/application/queue'
 import { arrivedByAdvancing, markAdvancedTo, useWatchTrail } from '@/features/watch/application/trail'
+import { usePlayer } from '@/features/watch/application/player-context'
 import { CommentSection } from '@/features/watch/ui/CommentSection'
 import { DescriptionBox } from '@/features/watch/ui/DescriptionBox'
-import { Player } from '@/features/watch/ui/Player'
 import { QueueRail } from '@/features/watch/ui/QueueRail'
 import { UpNextRail } from '@/features/watch/ui/UpNextRail'
 import { VideoActions } from '@/features/watch/ui/VideoActions'
@@ -15,9 +17,6 @@ import { mediaURL } from '@/shared/lib/media'
 export function WatchPage() {
   const { videoId } = useParams()
   const { data: video, isPending, isError } = useVideo(videoId)
-  if (video && video.subtitles.length > 0) {
-    console.log('[WatchPage] subtitles:', video.subtitles.length, 'mediaState:', video.mediaState)
-  }
   const { data: upNext } = useUpNext(videoId)
   // The last resort behind "next". Cheap and cached, and it is what keeps the
   // button alive once every suggestion has already been played this sitting.
@@ -25,6 +24,7 @@ export function WatchPage() {
   const queue = useQueue(videoId)
   const trail = useWatchTrail(videoId)
   const navigate = useNavigate()
+  const { slotRef, activate } = usePlayer()
 
   // "Next" must always have an answer.
   //
@@ -69,6 +69,41 @@ export function WatchPage() {
   // by any of that, and expires on its own.
   const startAtBeginning = arrivedByAdvancing(videoId)
 
+  const onPlayNext = next
+    ? () => {
+        recordAutoplayHop()
+        markAdvancedTo(next.id)
+        // Staying inside the queue means carrying it along; a
+        // recommendation is a fresh start with no list.
+        navigate(`/watch/${next.id}${nextInQueue ? queue.search : ''}`)
+      }
+    : undefined
+
+  // Register the video with the player context so AppShell can render it.
+  // The Player instance lives in AppShell and is portal'd here.
+  useEffect(() => {
+    if (!video || isPending || isError) return
+    activate({
+      videoId: video.id,
+      title: video.title,
+      channelTitle: video.channel.name,
+      hue: hueFromId(video.id),
+      durationSeconds: video.durationSeconds,
+      initialPositionSeconds: startAtBeginning ? 0 : (video.userState?.watchPositionSeconds ?? 0),
+      mediaState: video.mediaState,
+      subtitles: video.subtitles,
+      thumbnailURL: mediaURL(video.thumbnailPath) || undefined,
+      nextVideoTitle: next?.title,
+      onPlayNext,
+    })
+  }, [video, isPending, isError, startAtBeginning, next?.title, activate])
+
+  // Leaving the watch page needs no teardown. The player host lives in AppShell
+  // and works out its own shape from the route, so unmounting this page simply
+  // takes the slot away and the host moves to the corner. An earlier version
+  // tore the player down here and rebuilt it elsewhere, which is precisely what
+  // stopped the video.
+
   if (isPending) {
     return (
       <div className="mx-auto max-w-[1754px] px-6 py-6">
@@ -82,30 +117,20 @@ export function WatchPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-[1754px] flex-col gap-6 px-6 py-6 min-[1000px]:flex-row">
+    <div
+      className="mx-auto flex max-w-[1754px] flex-col gap-6 px-0 py-0 min-[700px]:px-6 min-[700px]:py-6
+                 min-[1000px]:flex-row
+                 pt-[calc(3.5rem+56.25vw)] min-[700px]:pt-6"
+    >
       <div className="min-w-0 max-w-[1280px] flex-1">
-        <Player
-          videoId={video.id}
-          hue={hueFromId(video.id)}
-          durationSeconds={video.durationSeconds}
-          initialPositionSeconds={
-            startAtBeginning ? 0 : (video.userState?.watchPositionSeconds ?? 0)
-          }
-          mediaState={video.mediaState}
-          subtitles={video.subtitles}
-          thumbnailURL={mediaURL(video.thumbnailPath) || undefined}
-          nextVideoTitle={next?.title}
-          onPlayNext={
-            next
-              ? () => {
-                  recordAutoplayHop()
-                  markAdvancedTo(next.id)
-                  // Staying inside the queue means carrying it along; a
-                  // recommendation is a fresh start with no list.
-                  navigate(`/watch/${next.id}${nextInQueue ? queue.search : ''}`)
-                }
-              : undefined
-          }
+        {/* The player's slot. AppShell measures this div and positions the player
+            host over it — the player is never a child of this page, which is what
+            lets it outlive the page. On mobile the host is pinned below the top
+            bar instead, so the slot only reserves the space it would occupy. */}
+        <div
+          ref={slotRef}
+          data-testid="player-slot"
+          className={clsx('hidden aspect-video w-full rounded-xl bg-black min-[700px]:block')}
         />
 
         <h1 className="mt-3 text-xl leading-7 font-bold">{video.title}</h1>

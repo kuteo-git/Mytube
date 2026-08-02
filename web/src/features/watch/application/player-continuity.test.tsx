@@ -1,0 +1,159 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { describe, expect, it, vi } from 'vitest'
+import { AppShell } from '@/app/AppShell'
+import { WatchPage } from '@/pages/WatchPage'
+
+/**
+ * The one thing about the miniplayer a machine can check here, and the thing
+ * that was actually broken.
+ *
+ * The old implementation portal'd the Player between two containers. Changing a
+ * portal's container does not move the DOM: React tears the subtree down and
+ * builds a new one, `<video>` included, so the element that was playing is
+ * discarded and a fresh one starts from nothing. On screen that read as sound
+ * with no picture, and no amount of animation work could have addressed it.
+ *
+ * The assertion is therefore about *node identity*, not about anything merely
+ * being present. A test that only checked "a video exists" would have passed
+ * against the broken version, which is exactly how that version came to be
+ * handed over as working.
+ *
+ * Navigation happens through the router already on screen. Re-rendering a fresh
+ * MemoryRouter would remount the whole tree and report a new node no matter
+ * what the code did — the test would fail identically whether or not the bug
+ * was present, and so would be measuring nothing.
+ */
+
+const stream = {
+  local: null,
+  instant: { url: 'blob:instant', height: 360, name: 'instant' },
+  remux: null,
+  sources: [{ name: 'instant', url: 'blob:instant', height: 360, seekable: true }],
+}
+
+const channel = {
+  id: 'c1',
+  name: 'A channel',
+  handle: '@a',
+  avatarPath: '',
+  bannerPath: '',
+  subscriberCount: 0,
+  verified: false,
+  subscribed: false,
+}
+
+const video = {
+  id: 'abc',
+  title: 'A video',
+  channel,
+  durationSeconds: 240,
+  viewCount: 10,
+  publishedAt: new Date().toISOString(),
+  addedAt: new Date().toISOString(),
+  thumbnailPath: '',
+  description: '',
+  hashtags: [],
+  topics: [],
+  mediaState: 'READY' as const,
+  mediaPath: '',
+  sizeBytes: 0,
+  pinned: false,
+  sourceUrl: '',
+  likeCount: 0,
+  subtitles: [],
+  userState: {
+    watchProgress: 0,
+    watchPositionSeconds: 0,
+    reaction: 'NONE' as const,
+    inWatchLater: false,
+  },
+}
+
+vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
+  httpCatalogRepository: {
+    getVideo: vi.fn(async () => video),
+    getVideoEnsuring: vi.fn(async () => video),
+    getStream: vi.fn(async () => stream),
+    listUpNext: vi.fn(async () => []),
+    listPopular: vi.fn(async () => []),
+    listComments: vi.fn(async () => ({ comments: [], nextPageToken: '' })),
+    listTopics: vi.fn(async () => []),
+    listSubscriptions: vi.fn(async () => []),
+    listJobs: vi.fn(async () => []),
+    listFeed: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    recordProgress: vi.fn(async () => {}),
+    cancelDownload: vi.fn(async () => {}),
+    getStorage: vi.fn(async () => ({ usedBytes: 0, budgetBytes: 1 })),
+  },
+}))
+
+let go: (to: string) => void = () => {}
+
+function Navigator() {
+  go = useNavigate()
+  return null
+}
+
+function renderApp() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  })
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/watch/abc']}>
+        <Navigator />
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<div>home</div>} />
+            <Route path="/watch/:videoId" element={<WatchPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+describe('player continuity', () => {
+  it('keeps the very same <video> node when leaving the watch page', async () => {
+    renderApp()
+
+    const before = await waitFor(() => {
+      const el = document.querySelector('video')
+      expect(el).not.toBeNull()
+      return el!
+    })
+
+    await act(async () => {
+      go('/')
+    })
+
+    await screen.findByText('home')
+
+    expect(document.querySelector('video')).toBe(before)
+    expect(before.isConnected).toBe(true)
+  })
+
+  it('still holds the same node on the way back to the watch page', async () => {
+    renderApp()
+
+    const before = await waitFor(() => {
+      const el = document.querySelector('video')
+      expect(el).not.toBeNull()
+      return el!
+    })
+
+    await act(async () => {
+      go('/')
+    })
+    await screen.findByText('home')
+
+    await act(async () => {
+      go('/watch/abc')
+    })
+
+    await waitFor(() => expect(document.querySelector('video')).toBe(before))
+    expect(before.isConnected).toBe(true)
+  })
+})

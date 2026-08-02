@@ -146,7 +146,9 @@ function CardMenu({ video, close }: { video: Video; close: () => void }) {
   const notInterested = useNotInterested()
 
   return (
-    <ul className="absolute right-0 bottom-10 z-20 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
+    // Above the player host: this menu opens in the bottom-right of the grid,
+    // which is exactly where the miniplayer parks.
+    <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
       <li>
         <button
           type="button"

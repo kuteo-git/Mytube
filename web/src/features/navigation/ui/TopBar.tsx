@@ -20,7 +20,10 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const pendingIngest = active + failed
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 bg-bg px-4">
+    // Above the player host, which the search suggestions depend on: `sticky`
+    // with a z-index makes this a stacking context, so anything inside it is
+    // capped at whatever this header is worth.
+    <header className="sticky top-0 z-40 flex h-14 items-center gap-2 bg-bg px-4">
       <div className="flex shrink-0 items-center gap-1">
         <IconButton label="Toggle sidebar" onClick={onToggleSidebar}>
           <Menu size={24} />
