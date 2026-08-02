@@ -346,9 +346,18 @@ vì `IntersectionObserver` vốn chỉ chạy ở desktop. Bar chỉ xuất hi�
 `localStorage`, nên một lần bị chặn autoplay là im lặng được lưu như **sở thích** và trả lại ở
 mọi lần mở sau — không cách nào phân biệt với lựa chọn thật. Đã đổi khoá sang
 `yt-player-muted-v2` để bỏ các giá trị cũ, và chỉ ghi từ nút tắt tiếng và thanh âm lượng.
-**Toàn cảnh và PiP trên iPhone phải dùng `webkitEnterFullscreen` / `webkitSetPresentationMode`**
-— API chuẩn không tồn tại ở đó, và vì code gọi bằng `?.` nên nút hiện ra mà bấm im lặng. Khả
-năng được hỏi từ `HTMLVideoElement.prototype`, không phải từ ref (ref rỗng ở render đầu).
+**Toàn cảnh và PiP: có `webkit*` thì ƯU TIÊN `webkit*`, không phải ngược lại (sửa 2026-08-03).**
+Lần đầu tôi cho API chuẩn đi trước và chỉ rơi xuống webkit khi chuẩn vắng mặt — sai. Safari
+trên iPhone **có** báo hỗ trợ Fullscreen API, nhưng thứ nó cho là phần tử phóng to *trong
+trang*: **không xoay ngang**, và không có trình phát hệ thống để bàn giao trạng thái phát lúc
+thoát. `webkitEnterFullscreen` mới mở trình phát gốc của Apple. Cùng lý do cho
+`webkitSetPresentationMode`.
+Khả năng "trình duyệt có biết khái niệm này không" hỏi từ `HTMLVideoElement.prototype` (ref
+rỗng ở render đầu). Nhưng "video NÀY có đủ điều kiện không" thì chỉ phần tử trả lời được —
+`webkitSupportsPresentationMode`, hỏi trong effect sau khi phần tử tồn tại.
+**Thoát toàn cảnh trên iOS trả video về ở trạng thái dừng** dù lúc vào đang chạy. Nghe
+`webkitbeginfullscreen`/`webkitendfullscreen` để nhớ và trả lại — không thì rời một video, quay
+về một khung hình đứng.
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
 được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
 đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).

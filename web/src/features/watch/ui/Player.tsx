@@ -33,6 +33,7 @@ import {
   canUsePiP,
   enterPiP,
   goFullscreen,
+  videoSupportsPiP,
 } from '@/features/watch/application/player-presentation'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
@@ -1218,8 +1219,44 @@ export function Player({
     coarse ? 'h-11 w-11' : 'h-9 w-9',
   )
 
-  const pipAvailable = canUsePiP()
+  // Whether the browser knows the idea at all — enough to decide on the first
+  // render, before any element exists.
+  const pipPossible = canUsePiP()
   const fullscreenAvailable = canGoFullscreen()
+
+  // Whether this video in particular qualifies, which only the element can say.
+  // Asked once it exists and kept, so the button appears or does not rather than
+  // appearing and then refusing.
+  const [pipAvailable, setPipAvailable] = useState(false)
+  useEffect(() => {
+    if (!pipPossible) return
+    setPipAvailable(videoSupportsPiP(front()))
+  }, [pipPossible, front, frontSrc])
+
+  // Coming back from Apple's full-screen player.
+  //
+  // iOS hands the video to the system while it is full screen and hands it back
+  // on the way out, and what comes back can be stopped even though it was
+  // running when it left. Remembering the state across the handover and putting
+  // it back is the difference between returning to a video and returning to a
+  // still.
+  useEffect(() => {
+    const element = front()
+    if (!element) return
+    let wasPlaying = false
+    const onBegin = () => {
+      wasPlaying = !element.paused
+    }
+    const onEnd = () => {
+      if (wasPlaying && element.paused) void element.play().catch(() => undefined)
+    }
+    element.addEventListener('webkitbeginfullscreen', onBegin)
+    element.addEventListener('webkitendfullscreen', onEnd)
+    return () => {
+      element.removeEventListener('webkitbeginfullscreen', onBegin)
+      element.removeEventListener('webkitendfullscreen', onEnd)
+    }
+  }, [front, frontSrc])
 
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)

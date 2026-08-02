@@ -627,6 +627,44 @@ describe('closing the corner player from the watch page', () => {
   })
 })
 
+describe('coming back from Apple’s full-screen player', () => {
+  it('is still playing, as it was on the way in', async () => {
+    // iOS hands the video to the system while it is full screen and hands it
+    // back stopped. Returning to a still, having left a video, reads as the
+    // player having given up.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+
+    await act(async () => {
+      void front.play()
+    })
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+
+    await act(async () => {
+      front.dispatchEvent(new Event('webkitbeginfullscreen'))
+    })
+    // The system player stops it on the way out.
+    await act(async () => {
+      front.pause()
+      front.dispatchEvent(new Event('webkitendfullscreen'))
+    })
+
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+  })
+
+  it('leaves it stopped if it was stopped when it went in', async () => {
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+
+    await act(async () => {
+      front.dispatchEvent(new Event('webkitbeginfullscreen'))
+      front.dispatchEvent(new Event('webkitendfullscreen'))
+    })
+
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+  })
+})
+
 describe('when the browser refuses to start it', () => {
   it('leaves the first frame still rather than playing without sound', async () => {
     // CLAUDE.md §8b: a video that is plainly not running is easier to

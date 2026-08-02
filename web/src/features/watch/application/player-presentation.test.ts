@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { canGoFullscreen, canUsePiP, enterPiP, goFullscreen } from './player-presentation'
+import {
+  canGoFullscreen,
+  canUsePiP,
+  enterPiP,
+  goFullscreen,
+  videoSupportsPiP,
+} from './player-presentation'
 
 /**
  * Asking each browser in the words it understands.
@@ -51,7 +57,11 @@ describe('canGoFullscreen', () => {
 })
 
 describe('goFullscreen', () => {
-  it('prefers the standard method when it is available', () => {
+  it('prefers the webkit method even where the standard one is offered', () => {
+    // Safari reports the Fullscreen API on iPhone, and what it gives is the
+    // element expanded inside the page: no rotation to landscape, and no system
+    // player to hand playback back from on the way out. Preferring the standard
+    // call because it is the standard was the wrong way round.
     setDocumentFlag('fullscreenEnabled', true)
     const video = document.createElement('video')
     const standard = vi.fn(async () => {})
@@ -60,8 +70,19 @@ describe('goFullscreen', () => {
 
     goFullscreen(video)
 
+    expect(webkit).toHaveBeenCalled()
+    expect(standard).not.toHaveBeenCalled()
+  })
+
+  it('uses the standard method where there is no webkit one', () => {
+    setDocumentFlag('fullscreenEnabled', true)
+    const video = document.createElement('video')
+    const standard = vi.fn(async () => {})
+    Object.assign(video, { requestFullscreen: standard })
+
+    goFullscreen(video)
+
     expect(standard).toHaveBeenCalled()
-    expect(webkit).not.toHaveBeenCalled()
   })
 
   it('falls back to the webkit method on a phone', () => {
@@ -149,6 +170,52 @@ describe('entering picture in picture on a phone', () => {
     expect(() => enterPiP(video)).not.toThrow()
     // No point starting playback for a floating window that cannot open.
     expect(play).not.toHaveBeenCalled()
+  })
+})
+
+describe('videoSupportsPiP', () => {
+  it('asks the element, which is the only one that knows', () => {
+    // The method existing on the prototype says the browser knows the idea, not
+    // that this video qualifies.
+    const video = document.createElement('video')
+    Object.assign(video, {
+      webkitSupportsPresentationMode: (mode: string) => mode === 'picture-in-picture',
+    })
+    expect(videoSupportsPiP(video)).toBe(true)
+  })
+
+  it('believes an element that says no', () => {
+    const video = document.createElement('video')
+    Object.assign(video, { webkitSupportsPresentationMode: () => false })
+    expect(videoSupportsPiP(video)).toBe(false)
+  })
+
+  it('falls back to the document flag where the element cannot say', () => {
+    setDocumentFlag('pictureInPictureEnabled', true)
+    expect(videoSupportsPiP(document.createElement('video'))).toBe(true)
+  })
+
+  it('is false without an element', () => {
+    expect(videoSupportsPiP(null)).toBe(false)
+  })
+})
+
+describe('entering picture in picture prefers webkit too', () => {
+  it('uses the presentation mode even where the standard call exists', () => {
+    setDocumentFlag('pictureInPictureEnabled', true)
+    const video = document.createElement('video')
+    const standard = vi.fn(async () => ({}) as PictureInPictureWindow)
+    const webkit = vi.fn()
+    Object.defineProperty(video, 'paused', { configurable: true, value: false })
+    Object.assign(video, {
+      requestPictureInPicture: standard,
+      webkitSetPresentationMode: webkit,
+    })
+
+    enterPiP(video)
+
+    expect(webkit).toHaveBeenCalledWith('picture-in-picture')
+    expect(standard).not.toHaveBeenCalled()
   })
 })
 

@@ -50,16 +50,28 @@ function hasVideoMethod(name: string): boolean {
 
 export function goFullscreen(video: HTMLVideoElement | null): void {
   if (!video) return
-  if (typeof video.requestFullscreen === 'function' && document.fullscreenEnabled) {
-    void video.requestFullscreen().catch(() => undefined)
+  const webkit = video as WebkitVideo
+
+  // The webkit method first, wherever it exists — which in practice means an
+  // iPhone, and only an iPhone.
+  //
+  // Preferring the standard call looked like the tidier rule and was the wrong
+  // way round. Safari now reports the Fullscreen API as available on iPhone, and
+  // what it gives is the element expanded within the page: no rotation to
+  // landscape, and no system player to hand playback back from on the way out.
+  // `webkitEnterFullscreen` is the one that opens Apple's own player, which is
+  // what a phone is expected to do and what rotates.
+  //
+  // The price is that Apple's controls take the screen, so the quality menu and
+  // the narration switch are out of reach until the viewer comes back.
+  if (typeof webkit.webkitEnterFullscreen === 'function') {
+    webkit.webkitEnterFullscreen()
     return
   }
-  // iPhone: hands over to the system player. Its own controls take the screen,
-  // so the quality menu and the narration switch are out of reach until the
-  // viewer comes back — which is the price of the rotation and the full screen
-  // actually being full.
-  const webkit = video as WebkitVideo
-  webkit.webkitEnterFullscreen?.()
+
+  if (typeof video.requestFullscreen === 'function') {
+    void video.requestFullscreen().catch(() => undefined)
+  }
 }
 
 export function canUsePiP(): boolean {
@@ -70,21 +82,37 @@ export function canUsePiP(): boolean {
 
 export function enterPiP(video: HTMLVideoElement | null): void {
   if (!video) return
+  const webkit = video as WebkitVideo
 
-  if (
-    typeof video.requestPictureInPicture === 'function' &&
-    document.pictureInPictureEnabled
-  ) {
-    void video.requestPictureInPicture().catch(() => undefined)
+  // Same order and the same reason as full screen: where Safari's own method
+  // exists it is the one that works, whatever the standard flag claims.
+  if (typeof webkit.webkitSetPresentationMode === 'function') {
+    // iOS will not float a video that is not running, and says so by doing
+    // nothing at all. Starting it first is inside the same gesture as the
+    // press, so the autoplay policy has no objection either.
+    if (video.paused) void video.play().catch(() => undefined)
+    webkit.webkitSetPresentationMode('picture-in-picture')
     return
   }
 
-  const webkit = video as WebkitVideo
-  if (typeof webkit.webkitSetPresentationMode !== 'function') return
+  if (typeof video.requestPictureInPicture === 'function') {
+    void video.requestPictureInPicture().catch(() => undefined)
+  }
+}
 
-  // iOS refuses to float a video that is not running, and says so by doing
-  // nothing at all. Starting it first is inside the same gesture as the press,
-  // so the autoplay policy has no objection either.
-  if (video.paused) void video.play().catch(() => undefined)
-  webkit.webkitSetPresentationMode('picture-in-picture')
+/**
+ * Whether this particular video can float, asked of the element itself.
+ *
+ * `webkitSupportsPresentationMode` is the only honest answer available on iOS —
+ * the method existing on the prototype says the browser knows the idea, not that
+ * this video qualifies. It needs a real element, so callers ask once the element
+ * exists rather than while deciding what to render, and keep the answer.
+ */
+export function videoSupportsPiP(video: HTMLVideoElement | null): boolean {
+  if (!video) return false
+  const webkit = video as WebkitVideo
+  if (typeof webkit.webkitSupportsPresentationMode === 'function') {
+    return webkit.webkitSupportsPresentationMode('picture-in-picture')
+  }
+  return typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled)
 }
