@@ -334,6 +334,73 @@ describe('controls offered by each shape', () => {
   })
 })
 
+describe('telling the operating system what is playing', () => {
+  it('publishes the video as media session metadata', async () => {
+    const setActionHandler = vi.fn()
+    vi.stubGlobal('MediaMetadata', class {
+      constructor(public init: MediaMetadataInit) {}
+    })
+    Object.defineProperty(navigator, 'mediaSession', {
+      configurable: true,
+      value: { setActionHandler, metadata: null, playbackState: 'none' },
+    })
+
+    await ready()
+
+    // This is what a phone's lock screen reads. Without it Android treats the
+    // playback as untracked noise and is free to kill it on switching apps.
+    const metadata = navigator.mediaSession.metadata as unknown as { init: MediaMetadataInit }
+    expect(metadata.init.title).toBe('A video')
+    expect(metadata.init.artist).toBe('A channel')
+
+    const registered = setActionHandler.mock.calls.map(([action]) => action)
+    expect(registered).toEqual(expect.arrayContaining(['play', 'pause']))
+  })
+})
+
+describe('picture in picture', () => {
+  it('is not drawn at all where the browser cannot do it', async () => {
+    Object.defineProperty(document, 'pictureInPictureEnabled', {
+      configurable: true,
+      value: false,
+    })
+
+    await ready()
+
+    // A button that cannot do anything is the one thing CLAUDE.md §5 forbids.
+    expect(screen.queryByLabelText('Picture in picture')).not.toBeInTheDocument()
+  })
+
+  it('asks the visible layer for the floating window', async () => {
+    Object.defineProperty(document, 'pictureInPictureEnabled', {
+      configurable: true,
+      value: true,
+    })
+    const request = vi.fn(async () => ({}) as PictureInPictureWindow)
+    Object.defineProperty(HTMLVideoElement.prototype, 'requestPictureInPicture', {
+      configurable: true,
+      value: request,
+    })
+
+    const { front } = await ready()
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Picture in picture'))
+    })
+
+    expect(request).toHaveBeenCalled()
+    expect(request.mock.instances[0]).toBe(front)
+  })
+})
+
+describe('the top bar', () => {
+  it('offers no voice search, because there was never anything behind it', async () => {
+    // It had no handler at all — a control that did nothing on either platform.
+    await ready()
+    expect(screen.queryByLabelText('Search by voice')).not.toBeInTheDocument()
+  })
+})
+
 describe('room at the foot of the page', () => {
   const main = () => document.querySelector('main')!
 

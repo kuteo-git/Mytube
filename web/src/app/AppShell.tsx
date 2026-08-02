@@ -24,7 +24,7 @@ function AppShellInner() {
   const isWatch = pathname.startsWith('/watch')
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { isMobile, mode, placement } = usePlayer()
+  const { isMobile, mode, placement, safeBottom } = usePlayer()
 
   // Room at the foot of the page for the miniplayer to sit over.
   //
@@ -39,7 +39,7 @@ function AppShellInner() {
   // gap at the bottom of every page that nothing on screen explains.
   const reservedBottom =
     mode === 'mini' && placement
-      ? placement.rect.height + MINI_MARGIN * 2 + (isMobile ? BOTTOM_NAV_HEIGHT : 0)
+      ? placement.rect.height + MINI_MARGIN * 2 + (isMobile ? BOTTOM_NAV_HEIGHT + safeBottom : 0)
       : undefined
 
   // youtube.com hides the rail on the watch page to give the player room, and

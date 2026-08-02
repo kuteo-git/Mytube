@@ -46,6 +46,13 @@
     overscroll-behavior-y: none;
   }
 
+  :root {
+    /* Published as a variable so the layout arithmetic, which is plain
+       TypeScript and cannot evaluate env(), can read the same number the
+       stylesheet uses. Zero everywhere without a home indicator. */
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   html {
     background-color: var(--color-bg);
     color-scheme: dark;

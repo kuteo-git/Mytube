@@ -231,6 +231,26 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 1. ~~34 GiB là chỗ đau nhất~~ **Đã giải quyết bằng SSD ngoài** (xem mục 2). Rủi ro còn lại: ổ ngoài rớt kết nối thì service ghi lỗi vào file trên đường dẫn không tồn tại — chưa có test cho trường hợp này.
 2. **Microservices + gRPC với người chưa từng làm gRPC** → P1 chậm hơn monolith đáng kể, thời gian đầu chủ yếu là setup. Đã chấp nhận với giá đã biết. Dùng **ConnectRPC** (curl debug được từng service) thay vì gRPC thuần.
 3. **HTTPS trên Smart TV chưa được chứng minh.** Phải thử sớm với TV thật, đừng để tới Phase 3.
+3b. **Phát nền trên iOS là bất khả thi từ web (xác định 2026-08-02).** iOS treo cả
+   `<video>` lẫn `AudioContext` khi tab vào nền hoặc khoá màn hình. Không có cờ nào,
+   không có PWA nào vượt qua được. Đã làm những gì web cho phép:
+   **Media Session** (metadata + nút trên màn khoá) và **Picture-in-Picture**.
+
+   | | Android Chrome | iOS Safari |
+   |---|---|---|
+   | chuyển sang app khác | ✓ | ✓ **chỉ khi đang PiP** |
+   | khoá màn hình | ✓ | ✗ |
+   | điều khiển màn khoá | ✓ | ✗ |
+   | narration (TTS) ở nền | ✗ | ✗ |
+
+   **Narration vỡ ở nền trên cả hai** vì bộ điều phối của nó là `setInterval`
+   (`Player.tsx`), mà trình duyệt bóp nghẹt timer của tab ẩn. Cứu được đòi viết lại
+   thành đặt lịch trước trên đồng hồ `AudioContext` — chưa làm.
+
+   Đây là lý do kỹ thuật cụ thể cho "app mobile" ở Phase 3 (§7): không phải để đẹp
+   hơn, mà vì phát nền trên iPhone chỉ native mới làm được.
+   **Bẫy đi kèm:** player có hai thẻ `<video>`; khi đổi tầng phải xin PiP lại trên
+   thẻ mới **trước** khi xoá nguồn thẻ cũ, không thì cửa sổ PiP tắt giữa chừng.
 4. **yt-dlp hỏng định kỳ** khi YouTube đổi cơ chế → ingest phải xử lý lỗi tử tế + cho retry.
 5. **YouTube chặn theo IP nếu bắn quá nhiều full-metadata (ĐÃ XẢY RA 2026-07-29).**
    Backfill topic chạy 8 luồng song song; tới ~800 video thì mọi full fetch trả về

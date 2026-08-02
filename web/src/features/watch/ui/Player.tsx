@@ -5,6 +5,7 @@ import {
   Headphones,
   Maximize,
   Pause,
+  PictureInPicture2,
   Play,
   Settings,
   SkipForward,
@@ -789,6 +790,14 @@ export function Player({
       // about to fire events, in an order nothing here controls, and the answer
       // is already known at this point.
       setPlaying(!next.paused)
+
+      // Carry the floating window across with everything else. The outgoing
+      // element's source is dropped a few lines below, and dropping the source
+      // of the element currently in picture-in-picture closes the window — so
+      // the request has to be made before that, not after.
+      if (document.pictureInPictureElement === current) {
+        void next.requestPictureInPicture?.().catch(() => undefined)
+      }
       // Dropping the old source releases it — for the muxed stream that is what
       // kills the ffmpeg process still muxing the rest of the video.
       if (frontIsARef.current) setSrcB(undefined)
@@ -1100,6 +1109,61 @@ export function Player({
     if (low) options.push({ value: 'low', label: `${low.height ?? 360}p` })
     return options
   }, [tiers])
+
+  // Tell the operating system what is playing.
+  //
+  // This is what puts the title, the channel and working transport buttons on a
+  // phone's lock screen, and on Android it is the difference between playback
+  // surviving a switch to another app and being killed as untracked noise. It
+  // buys nothing on iOS, where the system suspends the page regardless — see
+  // the note on the picture-in-picture button below.
+  useEffect(() => {
+    const session = navigator.mediaSession
+    if (!session) return
+
+    if (typeof MediaMetadata !== 'undefined') {
+      session.metadata = new MediaMetadata({
+        title: title ?? '',
+        artist: channelTitle ?? '',
+        artwork: thumbnailURL ? [{ src: thumbnailURL }] : [],
+      })
+    }
+
+    const handlers: [MediaSessionAction, MediaSessionActionHandler | null][] = [
+      ['play', () => void front()?.play().catch(() => undefined)],
+      ['pause', () => front()?.pause()],
+      ['nexttrack', onPlayNext ?? null],
+      ['seekbackward', () => seekTo(positionRef.current - 10)],
+      ['seekforward', () => seekTo(positionRef.current + 10)],
+    ]
+    for (const [action, handler] of handlers) {
+      // Browsers reject actions they do not implement, one by one.
+      try {
+        session.setActionHandler(action, handler)
+      } catch {
+        /* not supported here */
+      }
+    }
+
+    return () => {
+      for (const [action] of handlers) {
+        try {
+          session.setActionHandler(action, null)
+        } catch {
+          /* not supported here */
+        }
+      }
+    }
+  }, [title, channelTitle, thumbnailURL, onPlayNext, seekTo, front])
+
+  useEffect(() => {
+    if (navigator.mediaSession) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'
+  }, [playing])
+
+  // Read once: a browser does not gain or lose the feature while running, and
+  // a control that cannot do anything must not be drawn at all (CLAUDE.md §5).
+  const pipAvailable =
+    typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled)
 
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
@@ -1691,6 +1755,22 @@ export function Player({
                 setQuality(next)
               }}
             />
+          )}
+
+          {/* Picture-in-picture, offered only where the browser has it.
+              On iOS this is the *only* way playback survives leaving the page:
+              the system suspends video and audio alike when the tab goes to the
+              background, and a floating window is the one thing it keeps. */}
+          {variant === 'full' && pipAvailable && (
+            <button
+              type="button"
+              aria-label="Picture in picture"
+              onClick={() => void front()?.requestPictureInPicture?.().catch(() => undefined)}
+              disabled={!playable}
+              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+            >
+              <PictureInPicture2 size={20} />
+            </button>
           )}
 
           {variant === 'full' && (

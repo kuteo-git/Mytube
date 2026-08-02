@@ -51,6 +51,8 @@ export interface PlayerContextValue {
   state: PlayerState | null
   mode: PlayerMode
   isMobile: boolean
+  /** The home indicator's share of the bottom edge; zero without one. */
+  safeBottom: number
   /** Whether the viewer is on a watch page. Decides what "close" means. */
   isWatch: boolean
   /** Where and how AppShell should position the player host. Null when hidden. */
@@ -91,6 +93,21 @@ function readViewport() {
   return { width: window.innerWidth, height: window.innerHeight }
 }
 
+/**
+ * The home indicator's share of the bottom edge.
+ *
+ * Read back from the variable the stylesheet sets, because the layout
+ * arithmetic here is plain TypeScript and `env()` only exists inside CSS. Zero
+ * on everything without a home indicator — and also zero on an iPhone if the
+ * viewport meta tag loses `viewport-fit=cover`, which is the quiet way this
+ * whole allowance stops working.
+ */
+function readSafeBottom(): number {
+  if (typeof getComputedStyle !== 'function') return 0
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')
+  return Number.parseFloat(raw) || 0
+}
+
 export function PlayerProvider({
   children,
   isWatch,
@@ -100,6 +117,7 @@ export function PlayerProvider({
 }) {
   const [state, setState] = useState<PlayerState | null>(null)
   const [viewport, setViewport] = useState(readViewport)
+  const [safeBottom, setSafeBottom] = useState(readSafeBottom)
   const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null)
   const [slotDocRect, setSlotDocRect] = useState<ViewRect | null>(null)
   const [pinnedMini, setPinnedMini] = useState(false)
@@ -126,7 +144,12 @@ export function PlayerProvider({
   const slotRef = useCallback((el: HTMLDivElement | null) => setSlotEl(el), [])
 
   useEffect(() => {
-    const onResize = () => setViewport(readViewport())
+    // Rotating the phone changes which edge the home indicator is on, so the
+    // inset is re-read alongside the viewport rather than measured once.
+    const onResize = () => {
+      setViewport(readViewport())
+      setSafeBottom(readSafeBottom())
+    }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -238,10 +261,11 @@ export function PlayerProvider({
         isMobile,
         slotDocRect,
         viewport,
+        safeBottom,
         scrollY: 0,
         dragProgress: drag,
       }),
-    [mode, isMobile, slotDocRect, viewport, drag],
+    [mode, isMobile, slotDocRect, viewport, safeBottom, drag],
   )
 
   // CSS cannot transition across a change of `position`, and the two modes do
@@ -287,6 +311,7 @@ export function PlayerProvider({
       state,
       mode,
       isMobile,
+      safeBottom,
       isWatch,
       placement: rendered,
       slotRef,
@@ -303,6 +328,7 @@ export function PlayerProvider({
       state,
       mode,
       isMobile,
+      safeBottom,
       isWatch,
       rendered,
       slotRef,

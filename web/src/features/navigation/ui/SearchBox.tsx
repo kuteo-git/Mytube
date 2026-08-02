@@ -1,10 +1,9 @@
 import clsx from 'clsx'
-import { Hash, Mic, Search, Tv, X } from 'lucide-react'
+import { Hash, Search, Tv, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSuggestions } from '@/features/catalog/application/queries'
 import type { Suggestion } from '@/features/catalog/infrastructure/catalogRepository'
-import { IconButton } from '@/shared/ui/primitives'
 
 /**
  * Search with type-ahead over the local library.
@@ -150,9 +149,9 @@ export function SearchBox() {
         )}
       </div>
 
-      <IconButton label="Search by voice" className="bg-surface hover:bg-surface-hover">
-        <Mic size={20} />
-      </IconButton>
+      {/* No voice search button. It had no handler at all — a control that did
+          nothing on either platform, which CLAUDE.md §5 forbids, and one more
+          thing pushing the row past the width of a phone. */}
     </div>
   )
 }

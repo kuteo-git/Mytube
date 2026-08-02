@@ -1,4 +1,5 @@
 import {
+  BOTTOM_NAV_HEIGHT,
   type ViewRect,
   fullRectMobile,
   lerpRect,
@@ -28,6 +29,12 @@ export interface PlacementInput {
   /** The watch page slot, in document coordinates. Null until measured. */
   slotDocRect: ViewRect | null
   viewport: { width: number; height: number }
+  /**
+   * The home indicator's share of the bottom edge, zero on anything without one.
+   * The bar rests on the navigation, and the navigation now grows to clear this,
+   * so the bar has to know about it too or it lands back on top of the labels.
+   */
+  safeBottom: number
   scrollY: number
   /** 0..1 while a finger is dragging the player down, otherwise null. */
   dragProgress: number | null
@@ -88,11 +95,11 @@ export function fullPlacement(input: PlacementInput): HostPlacement {
 }
 
 export function miniPlacement(input: PlacementInput): HostPlacement {
-  const { isMobile, viewport } = input
+  const { isMobile, viewport, safeBottom } = input
   return {
     position: 'fixed',
     rect: isMobile
-      ? miniRectMobile(viewport.width, viewport.height)
+      ? miniRectMobile(viewport.width, viewport.height, BOTTOM_NAV_HEIGHT + safeBottom)
       : miniRectDesktop(viewport.width, viewport.height),
     animate: true,
   }

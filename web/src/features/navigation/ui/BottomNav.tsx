@@ -24,6 +24,9 @@ export function BottomNav() {
     <nav
       className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-stretch border-t border-white/10
                  bg-bg min-[700px]:hidden"
+      // The bar keeps its own height and grows underneath it, so the labels stay
+      // clear of the home indicator instead of sitting under it.
+      style={{ paddingBottom: 'var(--safe-bottom)', height: 'calc(3.5rem + var(--safe-bottom))' }}
       aria-label="Main"
     >
       {ITEMS.map(({ icon: Icon, label, to }) => (

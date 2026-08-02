@@ -15,6 +15,7 @@ const base: PlacementInput = {
   isMobile: false,
   slotDocRect: { top: 500, left: 100, width: 1280, height: 720 },
   viewport: { width: 1440, height: 900 },
+  safeBottom: 0,
   scrollY: 0,
   dragProgress: null,
 }
@@ -91,6 +92,21 @@ describe('placementFor', () => {
     const p = placementFor({ ...base, mode: 'mini' })!
     expect(p.position).toBe('fixed')
     expect(p.rect).toEqual(miniRectDesktop(1440, 900))
+  })
+
+  it('clears the home indicator as well as the navigation', () => {
+    // The navigation grows to sit above the indicator, so a bar that only knew
+    // about the navigation's nominal height would land back on top of its
+    // labels — the exact overlap this is meant to remove, moved up 34 pixels.
+    const inset = 34
+    const p = placementFor({
+      ...base,
+      mode: 'mini',
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+      safeBottom: inset,
+    })!
+    expect(p.rect.top + p.rect.height).toBe(844 - BOTTOM_NAV_HEIGHT - inset)
   })
 
   it('makes the mobile miniplayer a bar above the navigation', () => {

@@ -25,9 +25,16 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
     // capped at whatever this header is worth.
     <header className="sticky top-0 z-40 flex h-14 items-center gap-2 bg-bg px-4">
       <div className="flex shrink-0 items-center gap-1">
-        <IconButton label="Toggle sidebar" onClick={onToggleSidebar}>
-          <Menu size={24} />
-        </IconButton>
+        {/* Desktop only. There it does two jobs — collapsing the rail, and on the
+            watch page opening the drawer, which is the only way off that page
+            besides the logo because the rail is hidden there. Below the
+            breakpoint the bottom bar carries navigation, so this is one more
+            thing competing for a 390px-wide row. */}
+        <span className="hidden min-[700px]:contents">
+          <IconButton label="Toggle sidebar" onClick={onToggleSidebar}>
+            <Menu size={24} />
+          </IconButton>
+        </span>
         <Link to="/" className="ml-1 flex items-center gap-1.5" aria-label="Home">
           <svg viewBox="0 0 28 20" width={30} height={22} aria-hidden>
             <path
@@ -36,13 +43,17 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
             />
             <path d="M11.2 14.3 18.4 10l-7.2-4.3v8.6Z" fill="#fff" />
           </svg>
-          <span className="text-xl font-medium tracking-tight">Library</span>
+          {/* The wordmark is the cheapest thing to cut when the row is short:
+              the mark alone still says where home is. */}
+          <span className="hidden text-xl font-medium tracking-tight min-[700px]:inline">
+            Library
+          </span>
         </Link>
       </div>
 
       <SearchBox />
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex min-w-0 shrink items-center gap-2">
         {/* The badge counts ingest events, and the Activity page is where those
             events are listed — so the bell goes there. It had the count but no
             destination, which made it the one control on this bar that reported
@@ -51,7 +62,7 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
           to="/activity"
           aria-label={`Downloads: ${active} active, ${failed} failed`}
           title={`Downloads: ${active} active, ${failed} failed`}
-          className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-text transition-colors duration-150 ease-out hover:bg-surface-hover"
+          className="relative hidden h-10 w-10 shrink-0 place-items-center rounded-full text-text transition-colors duration-150 ease-out hover:bg-surface-hover min-[700px]:grid"
         >
           <Bell size={22} />
           {pendingIngest > 0 && (
