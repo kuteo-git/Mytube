@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import type { ReactionState } from '../domain/video'
 import type { Feed } from '../infrastructure/catalogRepository'
+import { hideVideo } from './hidden'
 import { httpCatalogRepository as repo } from '../infrastructure/catalogRepository'
 
 /**
@@ -287,26 +288,6 @@ export function useSetPinned() {
   })
 }
 
-const HIDDEN_KEY = 'yt-hidden-videos'
-
-function loadHidden(): Set<string> {
-  try {
-    const raw = localStorage.getItem(HIDDEN_KEY)
-    return raw ? new Set(JSON.parse(raw) as string[]) : new Set()
-  } catch { return new Set() }
-}
-
-function persistHidden(videoId: string) {
-  const set = loadHidden()
-  set.add(videoId)
-  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...set])) } catch { /* quota */ }
-}
-
-/** Videos the viewer has hidden this session and across refreshes. */
-export function hiddenVideoIDs(): Set<string> {
-  return loadHidden()
-}
-
 /**
  * The shape react-query keeps for a paged feed. Named here because the cache is
  * edited directly below, and an edit against an untyped cache is an edit that
@@ -317,6 +298,25 @@ interface InfiniteFeed {
   pageParams: unknown[]
 }
 
+/**
+ * "I have already seen this."
+ *
+ * Hidden locally so it goes at once, and recorded as fully watched so the
+ * server agrees: the ranker already drops anything past 85% from the home page,
+ * so telling it the truth is what makes this outlive the browser it was pressed
+ * in. The local list is what makes it instant, and what covers the seconds
+ * before the feed is next fetched.
+ */
+export function useMarkWatched() {
+  return useMutation({
+    mutationFn: ({ videoId, durationSeconds }: { videoId: string; durationSeconds: number }) =>
+      repo.recordProgress(videoId, Math.max(0, Math.floor(durationSeconds)), 1),
+    onMutate: ({ videoId }) => {
+      hideVideo(videoId, 'watched')
+    },
+  })
+}
+
 export function useNotInterested() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -324,7 +324,7 @@ export function useNotInterested() {
     onMutate: (videoId) => {
       // Persist across refreshes — the server signal is fire-and-forget and
       // may not have committed before the next page load.
-      persistHidden(videoId)
+      hideVideo(videoId, 'not-interested')
 
       // Remove instantly from every cached feed page.
       queryClient.setQueriesData<InfiniteFeed>(

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  hiddenVideoIDs,
   useDiscover,
   useFeed,
   usePopular,
@@ -9,6 +8,7 @@ import {
   useTopPlayed,
   useTopics,
 } from '@/features/catalog/application/queries'
+import { useHiddenVideos } from '@/features/catalog/application/hidden'
 import { ChipBar } from '@/features/catalog/ui/ChipBar'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
@@ -40,6 +40,13 @@ export function HomePage() {
   const { data: storage } = useStorage()
   const { data: topPlayed } = useTopPlayed(25)
   const { data: popular } = usePopular(12)
+
+  // Every section reads the same list. It used to be the feed alone, edited
+  // through its query cache, so hiding a card in "Popular with you" removed it
+  // from a list it was not in and left it exactly where it was.
+  const hidden = useHiddenVideos()
+  const visible = <T extends { id: string }>(items: T[] | undefined) =>
+    (items ?? []).filter((item) => !hidden.has(item.id))
   // When browsing a topic, also show what YouTube has for it. The library is
   // what the topics chose to bring in; YouTube search stretches past that.
   const isTopic = active !== 'All'
@@ -88,11 +95,11 @@ export function HomePage() {
         </p>
       ) : (
         <>
-          {showCollections && popular && popular.length > 0 && (
+          {showCollections && visible(popular).length > 0 && (
             <section className="pt-3">
               <h2 className="mb-3 text-lg font-medium">Popular with you</h2>
               <div className="grid grid-cols-1 gap-x-2 gap-y-4 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
-                {popular.map((video) => (
+                {visible(popular).map((video) => (
                   <VideoCard key={video.id} video={video} />
                 ))}
               </div>
@@ -104,14 +111,12 @@ export function HomePage() {
             {/* The mix leads the grid: it is the one entry that is a list
                 rather than a video, and it is what a returning viewer most
                 often wants. */}
-            {showCollections && topPlayed && topPlayed.length > 1 && (
-              <TopPlayedCard videos={topPlayed} />
+            {showCollections && visible(topPlayed).length > 1 && (
+              <TopPlayedCard videos={visible(topPlayed)} />
             )}
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
-              : videos
-                  .filter((v) => !hiddenVideoIDs().has(v.id))
-                  .map((video) => <VideoCard key={video.id} video={video} />)}
+              : visible(videos).map((video) => <VideoCard key={video.id} video={video} />)}
           </div>
 
           <InfiniteList

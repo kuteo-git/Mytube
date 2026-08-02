@@ -6,6 +6,7 @@ import { Sidebar } from '@/features/navigation/ui/Sidebar'
 import { TopBar } from '@/features/navigation/ui/TopBar'
 import { Player } from '@/features/watch/ui/Player'
 import { PlayerProvider, usePlayer } from '@/features/watch/application/player-context'
+import { BOTTOM_NAV_HEIGHT } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 
 export function AppShell() {
@@ -24,7 +25,7 @@ function AppShellInner() {
   const isWatch = pathname.startsWith('/watch')
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { isMobile, mode, miniReserve } = usePlayer()
+  const { isMobile, mode, miniReserve, safeBottom } = usePlayer()
 
   // Put back whatever this browser was in the middle of, in the corner, paused.
   const resuming = useResumeLastWatched(isWatch)
@@ -45,7 +46,11 @@ function AppShellInner() {
   //
   // Not reserved otherwise. Always leaving the gap would put an unexplained
   // stretch of nothing at the bottom of every page.
-  const reservedBottom = mode === 'mini' || resuming ? miniReserve : undefined
+  // The navigation's real height, which is more than the bar itself on a phone
+  // with a home indicator. Reserving only the nominal 3.5rem left the last row
+  // of every grid tucked under the labels.
+  const navReserve = isMobile ? BOTTOM_NAV_HEIGHT + safeBottom : 0
+  const reservedBottom = mode === 'mini' || resuming ? miniReserve : navReserve || undefined
 
   // youtube.com hides the rail on the watch page to give the player room, and
   // reaches it through a drawer instead. The drawer overlays rather than pushes:
@@ -120,8 +125,6 @@ function AppShellInner() {
           slideMargin && 'transition-[margin] duration-200 ease-out',
           showFullSidebar && 'ml-60',
           showMiniSidebar && 'ml-[72px]',
-          // Room for the bottom bar, so the last row is never sitting under it.
-          isMobile && 'pb-14',
         )}
         style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >

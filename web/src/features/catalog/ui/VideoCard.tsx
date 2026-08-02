@@ -4,11 +4,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
-import { useNotInterested, useSetPinned, useStreamPrefetch } from '../application/queries'
+import {
+  useMarkWatched,
+  useNotInterested,
+  useSetPinned,
+  useStreamPrefetch,
+} from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
 import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useCoarsePointer } from '@/shared/lib/pointer'
 
 /**
  * Grid card. No scale or shadow on hover: youtube.com does not do it and a
@@ -18,6 +24,7 @@ export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
+  const coarse = useCoarsePointer()
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -97,10 +104,15 @@ export function VideoCard({ video }: { video: Video }) {
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
             className={clsx(
-              'h-9 w-9 shrink-0 rounded-full transition-opacity duration-150 ease-out',
-              // Revealed on hover like youtube.com, but also on keyboard focus so
-              // the action stays reachable without a pointer (TV remote, Phase 3).
-              'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+              'shrink-0 rounded-full transition-opacity duration-150 ease-out',
+              coarse ? 'h-11 w-11' : 'h-9 w-9',
+              // Revealed on hover like youtube.com, and on keyboard focus so the
+              // action stays reachable without a pointer (TV remote, Phase 3).
+              //
+              // Always there for a finger. There is no hovering on a touch
+              // screen, so hiding it behind hover did not make it discreet, it
+              // made it unreachable — the menu simply did not exist on a phone.
+              coarse ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
               'grid place-items-center hover:bg-surface-hover',
               menuOpen && 'opacity-100 bg-surface-hover',
             )}
@@ -144,6 +156,7 @@ export function VideoCardSkeleton() {
 function CardMenu({ video, close }: { video: Video; close: () => void }) {
   const setPinned = useSetPinned()
   const notInterested = useNotInterested()
+  const markWatched = useMarkWatched()
 
   return (
     // Above the player host: this menu opens in the bottom-right of the grid,
@@ -160,6 +173,22 @@ function CardMenu({ video, close }: { video: Video; close: () => void }) {
         >
           <Bookmark size={16} fill={video.pinned ? 'currentColor' : 'none'} />
           {video.pinned ? 'Unkeep' : 'Keep'}
+        </button>
+      </li>
+      <li>
+        <button
+          type="button"
+          onClick={() => {
+            markWatched.mutate({
+              videoId: video.id,
+              durationSeconds: video.durationSeconds,
+            })
+            close()
+          }}
+          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+        >
+          <CheckCircle size={16} />
+          Watched
         </button>
       </li>
       <li>
