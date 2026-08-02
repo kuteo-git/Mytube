@@ -484,7 +484,16 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     if (start - now > PREFETCH_SEC) continue
 
     _played.add(i)
-    const slot = Math.max(0.1, end - start)
+    let slot = Math.max(0.1, end - start)
+
+    // If there's a gap before the next cue, let the TTS use that time
+    // instead of forcing speed-up.  Capped at 2× the original slot so a
+    // 1 s cue doesn't stretch over an ad break.
+    const nextCue = cues[i + 1]
+    if (nextCue && nextCue.start > end) {
+      const extended = nextCue.start - start
+      slot = Math.min(extended, slot * 2)
+    }
 
     // Two-pass speed fitting via server-side ffmpeg atempo (pitch-preserving):
     //  1. Fetch at DEFAULT_SPEED (1.1×) — cached per text+speed.
