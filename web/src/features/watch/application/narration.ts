@@ -200,9 +200,9 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     // across multiple lines.  Detect by checking for <c> tags.
     const hasTags = payloadLines.some((l) => l.includes('<c>'))
     if (hasTags) isAutoCaption = true
-    // Two-line carry-over without <c> tags: line 1 = prev clean text,
-    // line 2 = new words.
-    const isTwoLineCarry = !hasTags && payloadLines.length === 2
+    // Two-line carry-over WITHOUT <c> tags is ONLY for auto-captions.
+    // Manual captions with 2 lines are multi-line subtitles, not carry-over.
+    const isTwoLineCarry = !hasTags && payloadLines.length === 2 && isAutoCaption
 
     // Skip YouTube's ~10 ms clean-snapshot cues.
     if (end - start < 0.1) continue
