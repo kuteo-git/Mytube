@@ -36,6 +36,7 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
         .replace(/\byou'll\b/gi, 'XXXX will')
         .replace(/\byou'd\b/gi, 'XXXX would')
         .replace(/\byou've\b/gi, 'XXXX have')
+        .replace(/\by'all\b/gi, 'XXXX all')
         .replace(/\byourself\b/gi, 'YYYY')
         .replace(/\byourselves\b/gi, 'YYYY')
         .replace(/\byou\b/gi, 'XXXX')

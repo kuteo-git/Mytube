@@ -374,6 +374,7 @@ function prepForTranslation(text: string): string {
     .replace(/\byou'll\b/gi, 'XXXX will')
     .replace(/\byou'd\b/gi, 'XXXX would')
     .replace(/\byou've\b/gi, 'XXXX have')
+    .replace(/\by'all\b/gi, 'XXXX all')
     .replace(/\byourself\b/gi, 'YYYY')
     .replace(/\byourselves\b/gi, 'YYYY')
     .replace(/\byou\b/gi, 'XXXX')
@@ -413,6 +414,10 @@ describe('you/your pronoun replacement', () => {
   it('handles "yourself" and "yourselves"', () => {
     expect(prepForTranslation('do it yourself')).toBe('do it YYYY')
     expect(prepForTranslation('help yourselves')).toBe('help YYYY')
+  })
+
+  it('handles "y\'all"', () => {
+    expect(prepForTranslation("y'all come back")).toBe('XXXX all come back')
   })
 
   it('does NOT replace "young", "youth"', () => {
