@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useVideo } from '@/features/catalog/application/queries'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
@@ -21,18 +21,28 @@ import { usePlayer } from './player-context'
  * this knows — what plays next, what the queue holds. Stepping in first would
  * mean two answers to the same question.
  */
-export function useResumeLastWatched(isWatch: boolean): void {
+export function useResumeLastWatched(isWatch: boolean): boolean {
   const { state, activate } = usePlayer()
 
   // Read once. Progress reporting rewrites this entry every fifteen seconds, so
   // reading it on every render would mean resuming to a moving target.
   const [entry] = useState(readLastWatched)
 
-  const wanted = entry && !isWatch && !state ? entry.videoId : undefined
+  // Offered once, and then never again for as long as this page is open.
+  //
+  // Without this the offer could not be refused. Closing the miniplayer clears
+  // the player's state, which is exactly the condition this hook waits for, so
+  // it put the video straight back — and the entry it was reading from is a
+  // snapshot taken at mount, so clearing storage did not stop it either. The
+  // close button worked perfectly and was undone within the same tick.
+  const offered = useRef(false)
+
+  const wanted = entry && !isWatch && !state && !offered.current ? entry.videoId : undefined
   const { data: video } = useVideo(wanted)
 
   useEffect(() => {
-    if (!video || !entry || state) return
+    if (!video || !entry || state || offered.current) return
+    offered.current = true
 
     activate({
       videoId: video.id,
@@ -51,4 +61,12 @@ export function useResumeLastWatched(isWatch: boolean): void {
       autoplay: false,
     })
   }, [video, entry, state, activate])
+
+  // Whether a corner window is on its way.
+  //
+  // Known synchronously, at the first render, because the entry is read from
+  // storage rather than fetched — and that matters: the page can leave room for
+  // it from the start instead of reflowing when it arrives a moment later,
+  // which is what made opening the app flash and settle.
+  return Boolean(entry) && !isWatch && !offered.current
 }

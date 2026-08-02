@@ -10,7 +10,14 @@ import {
 } from 'react'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import { forgetLastWatched } from './last-watched'
-import { MOBILE_BREAKPOINT, type ViewRect } from './player-geometry'
+import {
+  BOTTOM_NAV_HEIGHT,
+  MINI_MARGIN,
+  MOBILE_BREAKPOINT,
+  type ViewRect,
+  miniRectDesktop,
+  miniRectMobile,
+} from './player-geometry'
 import {
   type HostPlacement,
   bridgePlacement,
@@ -60,6 +67,13 @@ export interface PlayerContextValue {
   isWatch: boolean
   /** Where and how AppShell should position the player host. Null when hidden. */
   placement: HostPlacement | null
+  /**
+   * How much room the foot of a page needs for the miniplayer.
+   *
+   * Available whether or not one is showing, so a page can leave the space
+   * before the player arrives rather than reflowing once it has.
+   */
+  miniReserve: number
   /** Callback ref for the watch page's layout slot. */
   slotRef: (el: HTMLDivElement | null) => void
   activate: (state: PlayerState) => void
@@ -234,6 +248,13 @@ export function PlayerProvider({
     setPauseToken((t) => t + 1)
   }, [])
 
+  const miniReserve = useMemo(() => {
+    const rect = isMobile
+      ? miniRectMobile(viewport.width, viewport.height, BOTTOM_NAV_HEIGHT + safeBottom)
+      : miniRectDesktop(viewport.width, viewport.height)
+    return rect.height + MINI_MARGIN * 2 + (isMobile ? BOTTOM_NAV_HEIGHT + safeBottom : 0)
+  }, [isMobile, viewport, safeBottom])
+
   const mode: PlayerMode = deriveMode(Boolean(state), isWatch, pinnedMini)
 
   const target = useMemo(
@@ -295,6 +316,7 @@ export function PlayerProvider({
       safeBottom,
       isWatch,
       placement: rendered,
+      miniReserve,
       slotRef,
       activate,
       deactivate,
@@ -310,6 +332,7 @@ export function PlayerProvider({
       safeBottom,
       isWatch,
       rendered,
+      miniReserve,
       slotRef,
       activate,
       deactivate,

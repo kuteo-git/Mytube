@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   hiddenVideoIDs,
@@ -24,6 +24,15 @@ export function HomePage() {
   const { topicName } = useParams()
   const [selected, setSelected] = useState('All')
   const active = topicName ?? selected
+
+  // A different topic is a different grid, so it starts at its own beginning.
+  //
+  // Keeping the scroll position across the change put the viewer somewhere in
+  // the middle of a list they had not seen the top of — and, having scrolled
+  // down through the previous topic, often past the end of the new one.
+  useEffect(() => {
+    window.scrollTo({ top: 0 })
+  }, [active])
 
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useFeed(active)

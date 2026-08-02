@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
+import { HomePage } from '@/pages/HomePage'
 import { WatchPage } from '@/pages/WatchPage'
 import { miniRectDesktop } from '@/features/watch/application/player-geometry'
 import { fireIntersection } from '@/test/setup'
@@ -121,7 +122,7 @@ function renderWatch() {
   )
 }
 
-const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 20))))
+const settle = (ms = 20) => act(async () => void (await new Promise((r) => setTimeout(r, ms))))
 
 beforeEach(() => {
   localReady = false
@@ -738,7 +739,12 @@ describe('when the browser refuses to start it', () => {
 
 describe('picking up where the tab left off', () => {
   function renderHome() {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+    // A real cache lifetime, unlike the rest of this file. It matters here: with
+    // gcTime 0 the video is thrown away the moment nothing is observing it, so
+    // a second offer would have to refetch and would not arrive in time to be
+    // seen. In production the data is still there and the second offer is
+    // instant — which is the behaviour being guarded against.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={['/']}>
@@ -787,6 +793,39 @@ describe('picking up where the tab left off', () => {
     expect(document.querySelector('video')).toBeNull()
   })
 
+  it('can be refused, and stays refused', async () => {
+    // The offer used to put itself straight back. Closing clears the player's
+    // state, which is precisely the condition the resume waits for, and the
+    // entry it reads is a snapshot taken at mount — so clearing storage did not
+    // stop it either. The close button worked and was undone in the same tick.
+    rememberLastWatched('abc', 42, 240)
+    renderHome()
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Close player'))
+    })
+    // Long enough for the offer to be made a second time if it were going to
+    // be: clearing the player's state is the very condition it waits for.
+    await settle(300)
+
+    expect(document.querySelector('video')).toBeNull()
+  })
+
+  it('leaves room for the corner window before it arrives', async () => {
+    // Otherwise the page is drawn, and then three hundred pixels of layout move
+    // underneath the viewer as the player turns up.
+    rememberLastWatched('abc', 42, 240)
+    renderHome()
+
+    const main = document.querySelector('main')!
+    expect(main.style.paddingBottom).not.toBe('')
+
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    // And the room does not change when it actually arrives.
+    expect(main.style.paddingBottom).not.toBe('')
+  })
+
   it('stops offering once the viewer closes it', async () => {
     rememberLastWatched('abc', 42, 240)
     renderHome()
@@ -798,6 +837,30 @@ describe('picking up where the tab left off', () => {
 
     // Closing it is the answer to the offer, and it must not be made again.
     expect(readLastWatched()).toBeNull()
+  })
+})
+
+describe('changing topic on the home page', () => {
+  it('starts the new grid at its own beginning', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/topic/Music']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/topic/:topicName" element={<HomePage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await settle()
+
+    // Keeping the position across the change left the viewer partway down a
+    // list they had not seen the top of, and often past the end of it.
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
+    scrollTo.mockRestore()
   })
 })
 

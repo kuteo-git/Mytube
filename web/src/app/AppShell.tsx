@@ -6,7 +6,6 @@ import { Sidebar } from '@/features/navigation/ui/Sidebar'
 import { TopBar } from '@/features/navigation/ui/TopBar'
 import { Player } from '@/features/watch/ui/Player'
 import { PlayerProvider, usePlayer } from '@/features/watch/application/player-context'
-import { BOTTOM_NAV_HEIGHT, MINI_MARGIN } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 
 export function AppShell() {
@@ -25,26 +24,28 @@ function AppShellInner() {
   const isWatch = pathname.startsWith('/watch')
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { isMobile, mode, placement, safeBottom } = usePlayer()
+  const { isMobile, mode, miniReserve } = usePlayer()
 
   // Put back whatever this browser was in the middle of, in the corner, paused.
-  useResumeLastWatched(isWatch)
+  const resuming = useResumeLastWatched(isWatch)
 
   // Room at the foot of the page for the miniplayer to sit over.
   //
   // Without it the last row of a grid is simply underneath the corner window,
   // and the only way to see it is to overscroll and hold — which stops being
-  // possible at all once the rubber band is disabled. Taken from the rect the
-  // player is actually using rather than written out here: the miniplayer sizes
-  // itself against the viewport now, and a number typed in this file would be
-  // wrong on most screens and would quietly stay wrong.
+  // possible at all once the rubber band is disabled. The number comes from the
+  // geometry rather than being written out here, so it stays right as the
+  // miniplayer sizes itself against the viewport.
   //
-  // Only while the miniplayer is showing. Reserving it always would leave a
-  // gap at the bottom of every page that nothing on screen explains.
-  const reservedBottom =
-    mode === 'mini' && placement
-      ? placement.rect.height + MINI_MARGIN * 2 + (isMobile ? BOTTOM_NAV_HEIGHT + safeBottom : 0)
-      : undefined
+  // Also reserved while a resume is still on its way. The alternative is what
+  // reopening the app used to do: draw the page, then have a corner window
+  // arrive and push three hundred pixels of layout around underneath it. The
+  // entry is read from storage synchronously, so that arrival is known about
+  // before the first paint and there is no reason to be surprised by it.
+  //
+  // Not reserved otherwise. Always leaving the gap would put an unexplained
+  // stretch of nothing at the bottom of every page.
+  const reservedBottom = mode === 'mini' || resuming ? miniReserve : undefined
 
   // youtube.com hides the rail on the watch page to give the player room, and
   // reaches it through a drawer instead. The drawer overlays rather than pushes:
