@@ -10,7 +10,7 @@
 const TTS_VOICE = 'Ngọc Linh'
 const PREFETCH_SEC = 10
 const MAX_CONCURRENT = 2
-const DEFAULT_SPEED = 1.1 // VieNeu-TTS reads slightly slow; 1.1× sounds natural
+const DEFAULT_SPEED = 1.0 // natural speed — only speed up when slot is tight
 const MAX_SPEED = 3.0     // ffmpeg atempo is pitch-preserving — 3.0× is fast but clear
 const GAP_BETWEEN_CLIPS = 0.25 // pause between sentences (seconds)
 
@@ -266,10 +266,10 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     for (let j = 0; j < cues.length; j++) {
       if (!buf) { bufStart = cues[j].start }
       buf += (buf ? ' ' : '') + cues[j].text
-      // End at the start of the last word, not its scheduled end
-      // (= next word's start).  When a clause ends at punctuation,
-      // the audio stops at the word boundary, not at the gap.
-      bufEnd = cues[j].start
+      // For word-level sub-cues (auto-captions), end at the word's start
+      // so the clause stops at the boundary, not the gap before the next
+      // word.  For manual captions (real duration), use the cue's end time.
+      bufEnd = cues[j].end - cues[j].start > 0.5 ? cues[j].end : cues[j].start
 
       // Find the last clause boundary in buf, skipping digit.digit patterns
       // and commas where the preceding text is too short to stand alone
