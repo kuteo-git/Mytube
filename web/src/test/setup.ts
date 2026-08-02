@@ -76,10 +76,30 @@ afterEach(() => watchers.clear())
 
 // jsdom does not implement media playback and throws on these, which is fatal
 // as soon as a test renders the player at all.
-HTMLMediaElement.prototype.play = function play() {
+//
+// These do more than not throw: they keep a `paused` flag and fire the matching
+// event, because the player reads both. A stub that returned quietly and left
+// `paused` permanently true would make every element look stopped, and any test
+// about playback state would be describing the stub rather than the player.
+const pausedFlag = new WeakMap<HTMLMediaElement, boolean>()
+
+Object.defineProperty(HTMLMediaElement.prototype, 'paused', {
+  configurable: true,
+  get(this: HTMLMediaElement) {
+    return pausedFlag.get(this) ?? true
+  },
+})
+
+HTMLMediaElement.prototype.play = function play(this: HTMLMediaElement) {
+  pausedFlag.set(this, false)
+  this.dispatchEvent(new Event('play'))
   return Promise.resolve()
 }
-HTMLMediaElement.prototype.pause = function pause() {}
+
+HTMLMediaElement.prototype.pause = function pause(this: HTMLMediaElement) {
+  pausedFlag.set(this, true)
+  this.dispatchEvent(new Event('pause'))
+}
 
 // jsdom in this configuration exposes a `localStorage` that has no methods on
 // it, and the app reads preferences during render — so components throw before

@@ -8,7 +8,7 @@ import {
   resolvePin,
   toViewport,
 } from './player-host'
-import { BAR_HEIGHT, BOTTOM_NAV_HEIGHT, MINI_HEIGHT, MINI_WIDTH } from './player-geometry'
+import { BAR_HEIGHT, BOTTOM_NAV_HEIGHT, miniRectDesktop } from './player-geometry'
 
 const base: PlacementInput = {
   mode: 'full',
@@ -84,14 +84,13 @@ describe('placementFor', () => {
     // the move to the real slot becomes a second leg the viewer never asked for.
     const p = placementFor({ ...base, slotDocRect: null })!
     expect(p.position).toBe('fixed')
-    expect(p.rect.width).toBe(MINI_WIDTH)
+    expect(p.rect.width).toBe(miniRectDesktop(1440, 900).width)
   })
 
   it('fixes the desktop miniplayer to the bottom-right corner', () => {
     const p = placementFor({ ...base, mode: 'mini' })!
     expect(p.position).toBe('fixed')
-    expect(p.rect.width).toBe(MINI_WIDTH)
-    expect(p.rect.height).toBe(MINI_HEIGHT)
+    expect(p.rect).toEqual(miniRectDesktop(1440, 900))
   })
 
   it('makes the mobile miniplayer a bar above the navigation', () => {

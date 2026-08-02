@@ -22,9 +22,18 @@ export interface ViewRect {
   height: number
 }
 
-/** Desktop miniplayer: 400x225 (16:9) tucked into the bottom-right corner. */
-export const MINI_WIDTH = 400
-export const MINI_HEIGHT = 225
+/**
+ * Desktop miniplayer: 16:9, tucked into the bottom-right corner, sized against
+ * the viewport between a floor and a ceiling.
+ *
+ * The floor is where the controls stop fitting — play, volume and captions
+ * begin to crowd each other below it. The ceiling is where it stops being a
+ * corner window: past about a third of the width it is no longer something the
+ * page continues behind, it is the page.
+ */
+export const MINI_MIN_WIDTH = 400
+export const MINI_MAX_WIDTH = 560
+export const MINI_WIDTH_FRACTION = 0.32
 export const MINI_MARGIN = 16
 
 /** Mobile miniplayer: a full-width bar, the shape the YouTube app uses. */
@@ -38,11 +47,13 @@ export const TOP_BAR_HEIGHT = 56
 export const MOBILE_BREAKPOINT = 700
 
 export function miniRectDesktop(viewportWidth: number, viewportHeight: number): ViewRect {
+  const width = clamp(viewportWidth * MINI_WIDTH_FRACTION, MINI_MIN_WIDTH, MINI_MAX_WIDTH)
+  const height = Math.round((width * 9) / 16)
   return {
-    top: viewportHeight - MINI_MARGIN - MINI_HEIGHT,
-    left: viewportWidth - MINI_MARGIN - MINI_WIDTH,
-    width: MINI_WIDTH,
-    height: MINI_HEIGHT,
+    top: viewportHeight - MINI_MARGIN - height,
+    left: viewportWidth - MINI_MARGIN - width,
+    width,
+    height,
   }
 }
 

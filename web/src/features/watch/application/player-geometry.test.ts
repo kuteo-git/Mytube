@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   BAR_HEIGHT,
   BOTTOM_NAV_HEIGHT,
-  MINI_HEIGHT,
-  MINI_WIDTH,
+  MINI_MAX_WIDTH,
+  MINI_MIN_WIDTH,
+  MINI_WIDTH_FRACTION,
   classifyGesture,
   dragProgress,
   fullRectMobile,
@@ -14,22 +15,47 @@ import {
 } from './player-geometry'
 
 describe('miniRectDesktop', () => {
-  it('sits 16px from the bottom-right corner at 1440x900', () => {
-    expect(miniRectDesktop(1440, 900)).toEqual({
-      top: 900 - 16 - MINI_HEIGHT,
-      left: 1440 - 16 - MINI_WIDTH,
-      width: MINI_WIDTH,
-      height: MINI_HEIGHT,
+  it('takes its share of the viewport at 1440x900', () => {
+    const r = miniRectDesktop(1440, 900)
+    expect(r.width).toBe(1440 * MINI_WIDTH_FRACTION)
+    expect(r).toEqual({
+      top: 900 - 16 - r.height,
+      left: 1440 - 16 - r.width,
+      width: r.width,
+      height: r.height,
     })
   })
 
-  it('keeps the same margins on a 1920x1080 display', () => {
-    const r = miniRectDesktop(1920, 1080)
-    expect(1920 - (r.left + r.width)).toBe(16)
-    expect(1080 - (r.top + r.height)).toBe(16)
+  it('stops shrinking at the floor, where the controls stop fitting', () => {
+    expect(miniRectDesktop(1024, 640).width).toBe(MINI_MIN_WIDTH)
+    expect(miniRectDesktop(800, 600).width).toBe(MINI_MIN_WIDTH)
   })
 
-  it('still fits on a 1280x720 laptop screen', () => {
+  it('stops growing at the ceiling, so it stays a corner window', () => {
+    expect(miniRectDesktop(1920, 1080).width).toBe(MINI_MAX_WIDTH)
+    expect(miniRectDesktop(2560, 1440).width).toBe(MINI_MAX_WIDTH)
+  })
+
+  it('is 16:9 at every size', () => {
+    for (const width of [800, 1280, 1440, 1920, 2560]) {
+      const r = miniRectDesktop(width, 900)
+      expect(r.height).toBe(Math.round((r.width * 9) / 16))
+    }
+  })
+
+  it('keeps the same margins whatever the size', () => {
+    for (const [vw, vh] of [
+      [1280, 720],
+      [1920, 1080],
+      [2560, 1440],
+    ]) {
+      const r = miniRectDesktop(vw, vh)
+      expect(vw - (r.left + r.width)).toBe(16)
+      expect(vh - (r.top + r.height)).toBe(16)
+    }
+  })
+
+  it('still fits on a small laptop screen', () => {
     const r = miniRectDesktop(1280, 720)
     expect(r.top).toBeGreaterThan(0)
     expect(r.left).toBeGreaterThan(0)

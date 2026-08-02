@@ -28,6 +28,24 @@
 }
 
 @layer base {
+  /* No rubber band at the ends of the page, and no pull-to-refresh.
+   *
+   * The second is the reason for the first as much as the look is: the player
+   * is dismissed by dragging it downwards, and a downward drag near the top of
+   * a page is also how a phone is asked to reload. Two gestures that are the
+   * same gesture, and the one that throws away what you were watching should
+   * not be one of them.
+   *
+   * Vertical only. Blocking the horizontal axis would take swipe-to-go-back
+   * with it, on a trackpad and from the edge of a phone screen alike — real
+   * navigation, given up to remove a sideways bounce nobody meets. And only
+   * here, on the document: the horizontal rails inside the page (chips, the
+   * queue, the rail) still scroll and bounce as themselves. */
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+
   html {
     background-color: var(--color-bg);
     color-scheme: dark;

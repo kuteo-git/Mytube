@@ -6,6 +6,7 @@ import { Sidebar } from '@/features/navigation/ui/Sidebar'
 import { TopBar } from '@/features/navigation/ui/TopBar'
 import { Player } from '@/features/watch/ui/Player'
 import { PlayerProvider, usePlayer } from '@/features/watch/application/player-context'
+import { BOTTOM_NAV_HEIGHT, MINI_MARGIN } from '@/features/watch/application/player-geometry'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -23,7 +24,23 @@ function AppShellInner() {
   const isWatch = pathname.startsWith('/watch')
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { isMobile } = usePlayer()
+  const { isMobile, mode, placement } = usePlayer()
+
+  // Room at the foot of the page for the miniplayer to sit over.
+  //
+  // Without it the last row of a grid is simply underneath the corner window,
+  // and the only way to see it is to overscroll and hold — which stops being
+  // possible at all once the rubber band is disabled. Taken from the rect the
+  // player is actually using rather than written out here: the miniplayer sizes
+  // itself against the viewport now, and a number typed in this file would be
+  // wrong on most screens and would quietly stay wrong.
+  //
+  // Only while the miniplayer is showing. Reserving it always would leave a
+  // gap at the bottom of every page that nothing on screen explains.
+  const reservedBottom =
+    mode === 'mini' && placement
+      ? placement.rect.height + MINI_MARGIN * 2 + (isMobile ? BOTTOM_NAV_HEIGHT : 0)
+      : undefined
 
   // youtube.com hides the rail on the watch page to give the player room, and
   // reaches it through a drawer instead. The drawer overlays rather than pushes:
@@ -101,6 +118,7 @@ function AppShellInner() {
           // Room for the bottom bar, so the last row is never sitting under it.
           isMobile && 'pb-14',
         )}
+        style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >
         <Outlet />
       </main>

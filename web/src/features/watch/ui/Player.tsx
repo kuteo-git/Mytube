@@ -785,6 +785,10 @@ export function Player({
 
       if (wasPlaying) void next.play().catch(() => undefined)
       current.pause()
+      // Say it outright rather than waiting to be told. Both calls above are
+      // about to fire events, in an order nothing here controls, and the answer
+      // is already known at this point.
+      setPlaying(!next.paused)
       // Dropping the old source releases it — for the muxed stream that is what
       // kills the ffmpeg process still muxing the rest of the video.
       if (frontIsARef.current) setSrcB(undefined)
@@ -1304,8 +1308,24 @@ export function Player({
                 // Clicking the picture toggles playback, the way every video
                 // player on the web behaves.
                 onClick={isFront ? toggle : undefined}
-                onPlay={isFront ? () => setPlaying(true) : undefined}
-                onPause={isFront ? () => setPlaying(false) : undefined}
+                // Attached to both layers, and asking which one is at the front
+                // when the event *fires* rather than when this rendered.
+                //
+                // Binding by render-time front-ness was wrong in exactly the
+                // case that matters: the handover calls play() on the element
+                // that is about to come forward, while React still has it as the
+                // back one, so its handler was undefined when the play event
+                // arrived and the state never learned that playback had resumed.
+                // The pause() on the outgoing layer did land, so the player sat
+                // there playing while insisting it was paused — showing a play
+                // button, and holding the controls open, since they are pinned
+                // whenever nothing is playing.
+                onPlay={() => {
+                  if (isA === frontIsARef.current) setPlaying(true)
+                }}
+                onPause={() => {
+                  if (isA === frontIsARef.current) setPlaying(false)
+                }}
                 onVolumeChange={
                   isFront
                     ? (e) => {
@@ -1490,9 +1510,19 @@ export function Player({
         </p>
       )}
 
-      {/* Controls bar — hidden in mini mode. The miniplayer has its own
-          minimal overlay instead. */}
-      {!mini && (
+      {/* The controls bar, in full and in the corner alike.
+
+          The miniplayer shows a reduced set of the same controls rather than a
+          second set of its own: volume and captions are not the simple toggles
+          they look like — they duck for narration, and they have to be carried
+          across the layer swap by hand — and two implementations of that would
+          only agree until the first time one of them was fixed. The mobile bar
+          is the exception; it is 72px of mostly text and has its own two buttons.
+
+          What the corner drops is what will not fit or cannot mean anything
+          there: the seek row, the clock, next, autoplay, quality, narration, and
+          fullscreen. */}
+      {variant !== 'bar' && (
       <div
         data-player-controls
         className={clsx(
@@ -1508,6 +1538,7 @@ export function Player({
         )}
         onFocusCapture={wakeControls}
       >
+        {variant === 'full' && (
         <SeekBar
           position={position}
           duration={duration}
@@ -1524,6 +1555,7 @@ export function Player({
           onScrub={(next) => setPosition(next)}
           onSeek={seekTo}
         />
+        )}
 
         <div className="flex items-center gap-2 py-1.5 text-white">
           <button
@@ -1539,7 +1571,7 @@ export function Player({
           {/* A real Next button. The autoplay switch sits further along the bar:
               a skip-forward icon means "go to the next video" everywhere else,
               so using it for a toggle made the control look broken. */}
-          {onPlayNext && (
+          {onPlayNext && variant === 'full' && (
             <button
               type="button"
               aria-label="Next video"
@@ -1563,12 +1595,14 @@ export function Player({
             onChange={applyVolume}
           />
 
-          <span className="ml-1 text-xs tabular-nums">
-            {formatDuration(position)} / {formatDuration(duration)}
-          </span>
+          {variant === 'full' && (
+            <span className="ml-1 text-xs tabular-nums">
+              {formatDuration(position)} / {formatDuration(duration)}
+            </span>
+          )}
           <span className="flex-1" />
 
-          {onPlayNext && (
+          {onPlayNext && variant === 'full' && (
             <button
               type="button"
               role="switch"
@@ -1606,7 +1640,7 @@ export function Player({
             />
           )}
 
-          {narrationAvailable && (
+          {narrationAvailable && variant === 'full' && (
             <button
               type="button"
               aria-label={narrationOn ? 'Turn off narration' : 'Turn on Vietnamese narration'}
@@ -1640,7 +1674,7 @@ export function Player({
           {/* Only offered when there is more than one way to play the video.
               A quality menu over a single source would be a control that
               cannot do anything. */}
-          {qualityOptions.length > 1 && (
+          {qualityOptions.length > 1 && variant === 'full' && (
             <QualityMenu
               choice={quality}
               options={qualityOptions}
@@ -1659,28 +1693,47 @@ export function Player({
             />
           )}
 
-          <button
-            type="button"
-            aria-label="Full screen"
-            onClick={() => void front()?.requestFullscreen?.()}
-            disabled={!playable}
-            className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
-          >
-            <Maximize size={22} />
-          </button>
+          {variant === 'full' && (
+            <button
+              type="button"
+              aria-label="Full screen"
+              onClick={() => void front()?.requestFullscreen?.()}
+              disabled={!playable}
+              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+            >
+              <Maximize size={22} />
+            </button>
+          )}
         </div>
       </div>
       )}
 
-      {/* Miniplayer overlay — replaces the full controls bar.
-          Click anywhere to expand, hover for close/expand buttons and title. */}
+      {/* Miniplayer overlay — close, expand, and the title. The playback
+          controls are the real bar above, not part of this. */}
       {variant === 'mini' && (
-        <div className="absolute inset-0 group/mini">
-          {/* Click anywhere on the video → go back to Watch */}
+        <>
+          {/* Deliberately not wrapped in a container.
+
+              These three were grouped in an `absolute inset-0` div, which did
+              nothing except hold them — and swallowed every press on the
+              controls bar underneath, because a transparent element still takes
+              hit tests across everything it covers and this one came later in
+              the DOM. They are all absolutely positioned against the player
+              root, so the wrapper bought nothing and cost the controls.
+
+              Leaving it out is the fix rather than adding pointer-events-none:
+              with nothing spanning the surface there is no press to lose, and
+              nobody has to remember a class to keep it that way. */}
+
+          {/* Click the picture to go back to Watch — the picture, and not the
+              row of controls along the bottom. The 56px comes from that bar:
+              `pt-8 pb-2` around a `py-1.5` row of `h-9` buttons is 56px of
+              actual controls. Two numbers in two files with nothing tying them
+              together, so changing the bar's padding means changing this. */}
           <button
             type="button"
             onClick={onExpand}
-            className="absolute inset-0"
+            className="absolute inset-x-0 top-0 bottom-14"
             aria-label="Expand player"
           />
 
@@ -1688,8 +1741,11 @@ export function Player({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onClose?.() }}
-            className="absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/70
-                       opacity-0 transition-opacity duration-150 group-hover/mini:opacity-100"
+            className={clsx(
+              'absolute top-2 right-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/70',
+              'transition-opacity duration-150',
+              controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
+            )}
             aria-label="Close player"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
@@ -1702,8 +1758,11 @@ export function Player({
           <button
             type="button"
             onClick={onExpand}
-            className="absolute top-2 left-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/70
-                       opacity-0 transition-opacity duration-150 group-hover/mini:opacity-100"
+            className={clsx(
+              'absolute top-2 left-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-black/70',
+              'transition-opacity duration-150',
+              controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
+            )}
             aria-label="Expand player"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
@@ -1714,12 +1773,18 @@ export function Player({
             </svg>
           </button>
 
-          {/* Title — bottom gradient bar, visible on hover */}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent pt-8 pb-2 px-3
-                          opacity-0 transition-opacity duration-150 group-hover/mini:opacity-100">
-            <p className="text-xs text-white clamp-1">{title ?? ''}</p>
+          {/* The title sits above the controls rather than behind them: the
+              gradient strip at the bottom is the real controls bar. Nothing to
+              press here, so it takes no hit tests either. */}
+          <div
+            className={clsx(
+              'pointer-events-none absolute inset-x-0 bottom-14 px-3 transition-opacity duration-150',
+              controlsVisible ? 'opacity-100' : 'opacity-0',
+            )}
+          >
+            <p className="clamp-1 text-xs text-white drop-shadow">{title ?? ''}</p>
           </div>
-        </div>
+        </>
       )}
 
       {/* Mobile bar. No hover state to hide behind on a touch screen, so both
