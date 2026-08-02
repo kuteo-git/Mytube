@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lrstanley/go-ytdlp"
@@ -344,6 +345,16 @@ func (d *Downloader) FetchSubtitles(ctx context.Context, videoURL, videoID strin
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil
 	}
+	// Already on disk: nothing to fetch and nothing to publish. Two callers now
+	// reach this — the download worker and the request that starts playback —
+	// and whichever arrives second must not spend a second round of requests on
+	// captions that are already there. Returning nothing rather than the
+	// existing tracks is deliberate: the caller publishes what it is given, and
+	// the tracks it would be given here have already been published by the
+	// caller that fetched them.
+	if len(collectSubtitles(dir, videoID, true)) > 0 {
+		return nil
+	}
 	return d.fetchSubtitles(ctx, videoURL, dir, videoID, target)
 }
 
@@ -421,29 +432,79 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 
 // fetchSubtitles runs two passes so the result can say truthfully whether a
 // track was written by a human or by a machine. yt-dlp gives both the same
-// filename, so the only way to tell them apart is to ask for them separately:
-// whatever the manual pass produces is authored, and anything the automatic
-// pass adds afterwards is not.
+// filename, so the only way to tell them apart is to ask for them separately.
 //
-// It never returns an error. A video without captions is a working video, and
-// the media has already downloaded by the time this runs.
+// The two passes run at the same time, into a directory each.
+//
+// They used to run one after the other, and told authored from automatic by
+// *order*: whatever existed after the first pass was written by a human. That
+// made the second pass wait on the first for no reason other than the naming
+// collision — and captions are wanted precisely during the early seconds when
+// the viewer is watching the lower-quality upstream stream, so the wait was
+// spent exactly where it hurt. Writing each pass somewhere of its own answers
+// the same question by *place* instead, and neither has to wait.
+//
+// It never returns an error. A video without captions is a working video.
 func (d *Downloader) fetchSubtitles(ctx context.Context, videoURL, dir, videoID, target string) []domain.SubtitleTrack {
-	d.runSubtitlePass(ctx, videoURL, target, false)
-	authored := collectSubtitles(dir, videoID, false)
+	base := filepath.Base(target)
+	authoredDir := filepath.Join(dir, ".subs-authored")
+	autoDir := filepath.Join(dir, ".subs-auto")
 
-	d.runSubtitlePass(ctx, videoURL, target, true)
-	all := collectSubtitles(dir, videoID, true)
-
-	authoredLanguages := make(map[string]struct{}, len(authored))
-	for _, t := range authored {
-		authoredLanguages[t.Language] = struct{}{}
+	// Leftovers from an interrupted run would be read as this run's results.
+	_ = os.RemoveAll(authoredDir)
+	_ = os.RemoveAll(autoDir)
+	if err := os.MkdirAll(authoredDir, 0o755); err != nil {
+		return nil
 	}
-
-	for i := range all {
-		_, wasAuthored := authoredLanguages[all[i].Language]
-		all[i].Generated = !wasAuthored
+	if err := os.MkdirAll(autoDir, 0o755); err != nil {
+		return nil
 	}
-	return all
+	defer func() {
+		_ = os.RemoveAll(authoredDir)
+		_ = os.RemoveAll(autoDir)
+	}()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		d.runSubtitlePass(ctx, videoURL, filepath.Join(authoredDir, base), false)
+	}()
+	go func() {
+		defer wg.Done()
+		d.runSubtitlePass(ctx, videoURL, filepath.Join(autoDir, base), true)
+	}()
+	wg.Wait()
+
+	return mergeSubtitlePasses(authoredDir, autoDir, dir, videoID)
+}
+
+// mergeSubtitlePasses moves both passes' files into the video's directory,
+// authored first so a language a human captioned is never replaced by the
+// machine's version of the same language.
+func mergeSubtitlePasses(authoredDir, autoDir, dir, videoID string) []domain.SubtitleTrack {
+	var tracks []domain.SubtitleTrack
+	taken := map[string]struct{}{}
+
+	for _, pass := range []struct {
+		dir       string
+		generated bool
+	}{{authoredDir, false}, {autoDir, true}} {
+		for _, track := range collectSubtitles(pass.dir, videoID, true) {
+			if _, already := taken[track.Language]; already {
+				continue
+			}
+			name := filepath.Base(track.Path)
+			if err := os.Rename(filepath.Join(pass.dir, name), filepath.Join(dir, name)); err != nil {
+				continue
+			}
+			taken[track.Language] = struct{}{}
+			track.Generated = pass.generated
+			track.Path = filepath.Join(videoID, name)
+			tracks = append(tracks, track)
+		}
+	}
+	return tracks
 }
 
 func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target string, automatic bool) {
@@ -607,6 +668,7 @@ func (d *Downloader) saveChannelImage(ctx context.Context, url, channelID, kind 
 	}
 	return filepath.Join("channels", channelID, name)
 }
+
 // saveThumbnail downloads the best available thumbnail for a video.
 // Tries maxresdefault (1920×1080), then sddefault (640×480), then the
 // URL passed in (usually hqdefault at 480×360). Cards are ~560 px wide
@@ -666,7 +728,6 @@ func (d *Downloader) saveThumbnail(ctx context.Context, url, videoID string) str
 func (d *Downloader) SaveThumbnail(ctx context.Context, url, videoID string) string {
 	return d.saveThumbnail(ctx, url, videoID)
 }
-
 
 // FetchChannelArtwork downloads the avatar and banner and returns their paths
 // under the media root.

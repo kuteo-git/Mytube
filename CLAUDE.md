@@ -489,6 +489,19 @@ history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   không có view count, không có ngày đăng, không có `thumbnail` (dùng mảng `thumbnails`).
   **Không được default ngày đăng = now** — nó hiện thành "1 minute ago" trên mọi card.
 - **yt-dlp đặt cùng tên file cho phụ đề người làm và máy làm** → phải chạy 2 lượt mới phân biệt được.
+  **Sửa 2026-08-02 — vẫn 2 lượt, nhưng song song.** Trước đây hai lượt chạy tuần tự và phân
+  biệt authored/auto bằng **thứ tự**: cái gì có mặt sau lượt một là do người làm. Nghĩa là lượt
+  hai phải đợi lượt một chỉ vì một va chạm tên file. Giờ mỗi lượt ghi vào **thư mục tạm riêng**
+  (`.subs-authored` / `.subs-auto`), chạy đồng thời, rồi hợp nhất — cùng câu hỏi nhưng trả lời
+  bằng **chỗ ghi** thay vì thứ tự, và không ai phải đợi ai.
+  **Và chỗ gọi đã đổi**: `FetchSubtitles` trước chỉ chạy trong worker, tức phải xếp hàng sau
+  `pollInterval` (3s) rồi sau `Preview` (~2s) rồi mới tới hai lượt tuần tự — đo được **5–12
+  giây**, rơi đúng vào cửa sổ phụ đề cần nhất (lúc đang xem bản upstream chất lượng thấp).
+  Giờ `Submit` bắn nó ngay khi **bấm play**, chạy nền. `FetchSubtitles` tự bỏ qua nếu file đã
+  có trên đĩa, nên worker và đường mới không làm hai lần.
+  **Không bao giờ chạy khi `?prefetch=1`** — rê chuột qua feed là hàng chục card, mỗi card một
+  full extract cho video chưa ai chọn xem. Đó đúng hình dạng sự cố §8 rủi ro 5. Chỉ bấm play
+  mới tới được `Submit`, nên ranh giới nằm sẵn ở đó chứ không phải một cái `if` phải nhớ.
 - **`ffmpeg` nuốt stdin** trong vòng lặp bash → luôn dùng `-nostdin`.
 - **pgx encode nil slice thành NULL** → vi phạm NOT NULL của cột mảng.
 

@@ -25,6 +25,7 @@ type Ingest struct {
 	logger        *slog.Logger
 	resolved      *resolveCache
 	backfill      *backfillState
+	subtitles     *subtitleFetches
 	// Gap between backfill fetches. Zero means the package default; tests set
 	// it so they do not wait out a rate limit meant for YouTube.
 	backfillDelay time.Duration
@@ -51,6 +52,7 @@ func New(
 		logger:        logger,
 		resolved:      newResolveCache(),
 		backfill:      &backfillState{},
+		subtitles:     newSubtitleFetches(),
 	}
 }
 
@@ -275,6 +277,13 @@ func (i *Ingest) Submit(ctx context.Context, url, requestedBy string, preferredH
 	if err != nil {
 		return domain.Job{}, err
 	}
+
+	// Captions, started now rather than when the worker reaches this job. Only
+	// pressing play gets here — hovering a card resolves the stream and stops
+	// there — which is what keeps a feed scroll from turning into dozens of
+	// upstream extracts. See subtitles.go.
+	i.startSubtitleFetch(url, preferredHeight)
+
 	return job, nil
 }
 
