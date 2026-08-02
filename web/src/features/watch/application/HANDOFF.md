@@ -162,6 +162,33 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 
 ---
 
+## Translation Models
+
+File config: `services/nllb_server.py` (dòng `MODEL_NAME`). Port 8005.
+
+### NLLB-200-distilled-600M (đang dùng)
+
+| Ưu | Nhược |
+|-----|-------|
+| Dịch 200 ngôn ngữ, EN→VI khá tốt | Nặng ~2.5GB disk, ~4GB RAM |
+| Ngữ cảnh ổn với câu dài | Chậm (~2-3s/câu lần đầu, ~0.5s sau warmup) |
+| Phân biệt được ngữ cảnh formal/casual | `you` → `anh` (phải dùng pronoun replacement) |
+
+### Helsinki-NLP/opus-mt-en-vi
+
+| Ưu | Nhược |
+|-----|-------|
+| Nhẹ ~300MB disk/RAM | Chỉ EN→VI, ko hỗ trợ language khác |
+| Nhanh hơn NLLB (~0.3s/câu) | Chất lượng thấp hơn, dịch thô |
+| Chuyên cho EN→VI | Dịch `Dr.` → `Tiến sĩ` (sai context) |
+
+### Cách đổi model
+
+1. Sửa `MODEL_NAME` trong `services/nllb_server.py`
+2. Kill port 8005, xoá cache model cũ: `rm -rf ~/.cache/huggingface/hub/models--facebook--nllb*`
+3. Restart: `/tmp/nllb-venv/bin/python services/nllb_server.py &`
+4. Model mới tự tải từ HuggingFace lần đầu chạy
+
 ## Unit Tests
 
 `narration.test.ts` — 29 tests:
