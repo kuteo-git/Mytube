@@ -147,8 +147,6 @@ function PlayerHost() {
     isMobile,
     isWatch,
     pauseToken,
-    onDrag,
-    onDragEnd,
   } = usePlayer()
   const navigate = useNavigate()
 
@@ -214,9 +212,6 @@ function PlayerHost() {
         onClose={onClose}
         onExpand={onExpand}
         pauseToken={pauseToken}
-        dragEnabled={isMobile && mode === 'full'}
-        onDragMove={onDrag}
-        onDragRelease={onDragEnd}
       />
     </div>
   )

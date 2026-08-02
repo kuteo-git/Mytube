@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
-import { MOBILE_BREAKPOINT, type ViewRect, dragProgress, shouldCommit } from './player-geometry'
+import { MOBILE_BREAKPOINT, type ViewRect } from './player-geometry'
 import {
   type HostPlacement,
   bridgePlacement,
@@ -75,10 +75,6 @@ export interface PlayerContextValue {
    * pausing twice has to be able to happen twice.
    */
   pauseToken: number
-  /** Reports an in-progress downward drag on the player surface. */
-  onDrag: (deltaY: number, playerHeight: number) => void
-  /** Ends a drag; commits to the miniplayer or springs back. */
-  onDragEnd: (velocity: number) => void
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
@@ -121,7 +117,6 @@ export function PlayerProvider({
   const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null)
   const [slotDocRect, setSlotDocRect] = useState<ViewRect | null>(null)
   const [pinnedMini, setPinnedMini] = useState(false)
-  const [drag, setDrag] = useState<number | null>(null)
   const [dismissed, setDismissed] = useState(false)
   const [pauseToken, setPauseToken] = useState(0)
 
@@ -202,7 +197,6 @@ export function PlayerProvider({
 
   const activate = useCallback((next: PlayerState) => {
     setPinnedMini(false)
-    setDrag(null)
     setDismissed(false)
     setState(next)
   }, [])
@@ -210,17 +204,14 @@ export function PlayerProvider({
   const deactivate = useCallback(() => {
     setState(null)
     setPinnedMini(false)
-    setDrag(null)
     setDismissed(false)
   }, [])
 
   const minimize = useCallback(() => {
-    setDrag(null)
     setPinnedMini(true)
   }, [])
 
   const restore = useCallback(() => {
-    setDrag(null)
     setPinnedMini(false)
     setDismissed(false)
   }, [])
@@ -233,24 +224,10 @@ export function PlayerProvider({
   // out of view and still audible is the very fault this whole feature exists to
   // avoid, and it would be no better for being intentional.
   const dismiss = useCallback(() => {
-    setDrag(null)
     setPinnedMini(false)
     setDismissed(true)
     setPauseToken((t) => t + 1)
   }, [])
-
-  const onDrag = useCallback((deltaY: number, playerHeight: number) => {
-    setDrag(dragProgress(deltaY, playerHeight))
-  }, [])
-
-  const onDragEnd = useCallback(
-    (velocity: number) => {
-      const committed = shouldCommit(drag ?? 0, velocity)
-      setDrag(null)
-      setPinnedMini(committed)
-    },
-    [drag],
-  )
 
   const mode: PlayerMode = deriveMode(Boolean(state), isWatch, pinnedMini)
 
@@ -263,9 +240,8 @@ export function PlayerProvider({
         viewport,
         safeBottom,
         scrollY: 0,
-        dragProgress: drag,
       }),
-    [mode, isMobile, slotDocRect, viewport, safeBottom, drag],
+    [mode, isMobile, slotDocRect, viewport, safeBottom],
   )
 
   // CSS cannot transition across a change of `position`, and the two modes do
@@ -321,8 +297,6 @@ export function PlayerProvider({
       restore,
       dismiss,
       pauseToken,
-      onDrag,
-      onDragEnd,
     }),
     [
       state,
@@ -338,8 +312,6 @@ export function PlayerProvider({
       restore,
       dismiss,
       pauseToken,
-      onDrag,
-      onDragEnd,
     ],
   )
 

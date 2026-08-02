@@ -335,6 +335,17 @@ là `pointerdown → pointerup → pointerleave → click`, thanh bị tắt `po
 kiện trước cú click dành cho nó. Đó là lý do "bấm menu không ăn" trên iPhone.
 Trên cảm ứng, thanh gọn lại: bỏ slider âm lượng (có nút cứng), còn phụ đề/chất lượng/thuyết
 minh/tự động phát gom vào nút ⚙; vùng chạm 44px thay vì 36.
+**Bảng ⚙ trên cảm ứng phải portal ra `document.body`**, không được là dropdown trong player:
+player có `overflow-hidden` (cần, để giữ bo góc) và trên điện thoại chỉ cao ~220px, nên một
+danh sách mở lên trên bị **cắt mất phần đầu**. Đã gặp thật.
+**Cử chỉ vuốt-xuống-thu-nhỏ đã BỎ (2026-08-03)** — người dùng thấy vô dụng. Gỡ cả bộ máy chứ
+không chỉ ngắt dây. Hệ quả: trên điện thoại, trang watch **không còn** trạng thái mini nào,
+vì `IntersectionObserver` vốn chỉ chạy ở desktop. Bar chỉ xuất hiện khi rời trang watch.
+**Mute không được ghi từ `volumechange`.** Sự kiện đó bắn cho cả thay đổi của chính player
+(ducking cho thuyết minh, và trước đây là autoplay policy tự tắt tiếng). Nó từng ghi vào
+`localStorage`, nên một lần bị chặn autoplay là im lặng được lưu như **sở thích** và trả lại ở
+mọi lần mở sau — không cách nào phân biệt với lựa chọn thật. Đã đổi khoá sang
+`yt-player-muted-v2` để bỏ các giá trị cũ, và chỉ ghi từ nút tắt tiếng và thanh âm lượng.
 **Toàn cảnh và PiP trên iPhone phải dùng `webkitEnterFullscreen` / `webkitSetPresentationMode`**
 — API chuẩn không tồn tại ở đó, và vì code gọi bằng `?.` nên nút hiện ra mà bấm im lặng. Khả
 năng được hỏi từ `HTMLVideoElement.prototype`, không phải từ ref (ref rỗng ở render đầu).

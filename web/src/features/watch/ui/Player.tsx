@@ -14,6 +14,7 @@ import {
   VolumeX,
 } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
@@ -27,7 +28,6 @@ import {
   useQualityPreference,
 } from '@/features/watch/application/autoplay'
 import { bindNarration, tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
-import { classifyGesture } from '@/features/watch/application/player-geometry'
 import {
   canGoFullscreen,
   canUsePiP,
@@ -121,6 +121,18 @@ const CONTROLS_IDLE_MS = 3000
  * reaching, with nothing holding the bar open in the meantime.
  */
 const CONTROLS_IDLE_TOUCH_MS = 5000
+
+/**
+ * Where the viewer's mute preference is kept.
+ *
+ * Version two, because version one cannot be trusted. The volumechange handler
+ * used to write to it, and that event fires for the player's own changes as
+ * well as the viewer's — including the autoplay policy muting the video on
+ * load. Anyone whose browser refused audible autoplay once had silence recorded
+ * as a preference and handed back on every visit afterwards, and there is no
+ * way to tell those entries from real ones. Starting a new key abandons them.
+ */
+const MUTED_KEY = 'yt-player-muted-v2'
 
 /**
  * How many times auto will try the muxed stream before settling for the low
@@ -267,9 +279,6 @@ export function Player({
   variant = 'full',
   onClose,
   onExpand,
-  dragEnabled = false,
-  onDragMove,
-  onDragRelease,
   pauseToken = 0,
 }: {
   videoId: string
@@ -307,17 +316,6 @@ export function Player({
   onClose?: () => void
   /** Navigates back to the full Watch page. */
   onExpand?: () => void
-  /** Enables the drag-down-to-minimise gesture. Mobile, full-size only. */
-  dragEnabled?: boolean
-  /** Reports drag distance and the height it should be measured against. */
-  onDragMove?: (deltaY: number, playerHeight: number) => void
-  /** Ends the drag with the closing velocity in px/ms. */
-  onDragRelease?: (velocity: number) => void
-  /**
-   * Bumped when playback should stop — closing the miniplayer on the watch page.
-   * A token rather than a boolean so that pausing a second time is a second
-   * event rather than a value that was already what it needed to be.
-   */
   pauseToken?: number
 }) {
   const mini = variant !== 'full'
@@ -393,7 +391,7 @@ export function Player({
     const v = window.localStorage.getItem('yt-player-volume')
     return v !== null ? parseFloat(v) : 1
   })
-  const [muted, setMuted] = useState(() => window.localStorage.getItem('yt-player-muted') === '1')
+  const [muted, setMuted] = useState(() => window.localStorage.getItem(MUTED_KEY) === '1')
   const [position, setPosition] = useState(initialPositionSeconds)
   const [buffered, setBuffered] = useState(0)
   // Duration reported by the media element. Only meaningful once the whole
@@ -1020,7 +1018,7 @@ export function Player({
     const element = front()
     setVolume(next)
     window.localStorage.setItem('yt-player-volume', String(next))
-    window.localStorage.setItem('yt-player-muted', next === 0 ? '1' : '0')
+    window.localStorage.setItem(MUTED_KEY, next === 0 ? '1' : '0')
     if (element) {
       element.volume = next
       element.muted = next === 0
@@ -1035,7 +1033,7 @@ export function Player({
     // A deliberate choice, so the automatic restore must not overrule it.
     element.muted = !element.muted
     setMuted(element.muted)
-    window.localStorage.setItem('yt-player-muted', element.muted ? '1' : '0')
+    window.localStorage.setItem(MUTED_KEY, element.muted ? '1' : '0')
   }
 
   // Keyboard control. Space and arrows are the conventions people already know,
@@ -1226,69 +1224,6 @@ export function Player({
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
 
-  // Drag the picture downwards to put it away, the way the phone app does.
-  //
-  // The axis lock is what stops this from fighting the controls that are already
-  // here: a sideways movement is somebody scrubbing and an upward one is not a
-  // request to dismiss anything, so only a deliberate downward drag counts. The
-  // height is taken once, at the start — measuring it live would divide by a box
-  // that is shrinking because of the very drag being measured.
-  const dragRef = useRef<{
-    x: number
-    y: number
-    height: number
-    lastY: number
-    lastT: number
-    velocity: number
-    active: boolean
-  } | null>(null)
-
-  const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragEnabled) return
-    if ((e.target as HTMLElement).closest('[data-player-controls]')) return
-    dragRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      height: e.currentTarget.clientHeight,
-      lastY: e.clientY,
-      lastT: e.timeStamp,
-      velocity: 0,
-      active: false,
-    }
-  }
-
-  const moveDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current
-    if (!d) return
-    const dx = e.clientX - d.x
-    const dy = e.clientY - d.y
-
-    if (!d.active) {
-      const verdict = classifyGesture(dx, dy)
-      if (verdict === 'ignore') {
-        dragRef.current = null
-        return
-      }
-      if (verdict === 'tap') return
-      d.active = true
-      e.currentTarget.setPointerCapture(e.pointerId)
-    }
-
-    const elapsed = e.timeStamp - d.lastT
-    if (elapsed > 0) d.velocity = (e.clientY - d.lastY) / elapsed
-    d.lastY = e.clientY
-    d.lastT = e.timeStamp
-    onDragMove?.(dy, d.height)
-  }
-
-  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current
-    dragRef.current = null
-    if (!d?.active) return
-    e.currentTarget.releasePointerCapture?.(e.pointerId)
-    onDragRelease?.(d.velocity)
-  }
-
   return (
     <div
       className={clsx(
@@ -1298,19 +1233,14 @@ export function Player({
         // overlay needs the pointer to stay visible.
         !mini && !controlsVisible && 'cursor-none',
       )}
-      onPointerDownCapture={beginDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
       style={{
-        touchAction: dragEnabled ? 'none' : undefined,
         ...(playable
           ? undefined
           : { background: `radial-gradient(120% 90% at 50% 30%, hsl(${hue} 40% 22%), #000 70%)` }),
       }}
       onPointerMove={(e) => {
-        moveDrag(e)
-        // A finger sliding across the picture is a drag, not a reason to keep
-        // the chrome awake; that is what its own tap already did.
+        // A finger sliding across the picture is not a reason to keep the
+        // chrome awake; its own tap already did that.
         if (e.pointerType !== 'touch') {
           pointerKindRef.current = 'mouse'
           wakeControls('mouse')
@@ -1466,16 +1396,25 @@ export function Player({
                 onVolumeChange={
                   isFront
                     ? (e) => {
-                        // The browser dispatches volumechange asynchronously,
-                        // so a boolean guard in the effect is already cleared
-                        // by the time this fires.  Compare the element's
-                        // current volume against the value we last set: if
-                        // they match, this is our own ducking/restore event.
+                        // Follow the element, but do not record what it says.
+                        //
+                        // This event fires for our own changes as much as for
+                        // the viewer's — ducking for narration, restoring after
+                        // it, and once upon a time the autoplay policy muting
+                        // the video on load. The guard below only compares
+                        // volume, so a change to `muted` alone got through, and
+                        // early in a page load `lastSetVolumeRef` is still -1
+                        // and even that guard does not hold. A mute nobody
+                        // asked for was therefore written down as a preference
+                        // and read back on every later visit, which is why the
+                        // sound stayed off long after the code that muted it
+                        // had gone.
+                        //
+                        // Preferences are written where the viewer expresses
+                        // them: the mute button and the volume slider.
                         if (e.currentTarget.volume === lastSetVolumeRef.current) return
                         setVolume(e.currentTarget.volume)
                         setMuted(e.currentTarget.muted)
-                        window.localStorage.setItem('yt-player-volume', String(e.currentTarget.volume))
-                        window.localStorage.setItem('yt-player-muted', e.currentTarget.muted ? '1' : '0')
                       }
                     : undefined
                 }
@@ -1802,6 +1741,7 @@ export function Player({
               options={qualityOptions}
               playingLabel={tierLabel}
               buttonClassName={controlButton}
+              sheet={coarse}
               onOpenChange={trackMenu}
               // On a phone the gear is the only place left for the settings the
               // bar no longer has room to show one by one.
@@ -2030,6 +1970,7 @@ function QualityMenu({
   onOpenChange,
   buttonClassName,
   extras,
+  sheet,
 }: {
   choice: QualityChoice
   options: { value: QualityChoice; label: string }[]
@@ -2037,6 +1978,8 @@ function QualityMenu({
   /** Extra rows below the quality list. On a phone this is where the settings
    *  the bar no longer has room for end up. */
   extras?: React.ReactNode
+  /** Render as a sheet at the foot of the screen rather than a dropdown. */
+  sheet?: boolean
   /** What is on screen right now, shown beside Auto so it is never a mystery. */
   playingLabel: string
   onSelect: (next: QualityChoice) => void
@@ -2045,6 +1988,7 @@ function QualityMenu({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   useEffect(() => {
     onOpenChange(open)
     return () => { if (open) onOpenChange(false) }
@@ -2052,11 +1996,39 @@ function QualityMenu({
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      // The sheet is portalled out of the player, so it is not inside `ref`.
+      // Without asking it too, pressing anything on it would count as pressing
+      // outside and close it before the press arrived.
+      if (ref.current?.contains(target)) return
+      if (listRef.current?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
+
+  // One list, two frames around it.
+  const rows = options.map((option) => (
+    <li key={option.value}>
+      <button
+        type="button"
+        onClick={() => {
+          onSelect(option.value)
+          setOpen(false)
+        }}
+        className={
+          'flex w-full items-center justify-between gap-4 px-4 py-2 text-left transition-colors duration-150 ease-out hover:bg-surface-hover ' +
+          (choice === option.value ? 'font-medium' : '')
+        }
+      >
+        <span>{option.label}</span>
+        {option.value === 'auto' && choice === 'auto' && (
+          <span className="text-xs text-text-2">{playingLabel}</span>
+        )}
+      </button>
+    </li>
+  ))
 
   return (
     <div ref={ref} className="relative">
@@ -2073,32 +2045,46 @@ function QualityMenu({
         <Settings size={22} />
       </button>
 
-      {open && (
-        <ul className="absolute right-0 bottom-11 min-w-44 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg">
-          {options.map((option) => (
-            <li key={option.value}>
-              <button
-                type="button"
-                onClick={() => {
-                  onSelect(option.value)
-                  setOpen(false)
-                }}
-                className={
-                  'flex w-full items-center justify-between gap-4 px-4 py-2 text-left transition-colors duration-150 ease-out hover:bg-surface-hover ' +
-                  (choice === option.value ? 'font-medium' : '')
-                }
-              >
-                <span>{option.label}</span>
-                {option.value === 'auto' && choice === 'auto' && (
-                  <span className="text-xs text-text-2">{playingLabel}</span>
-                )}
-              </button>
-            </li>
-          ))}
+      {open && !sheet && (
+        <ul
+          ref={listRef}
+          className="absolute right-0 bottom-11 min-w-44 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
+        >
+          {rows}
           {extras && <li className="my-1 border-t border-line" aria-hidden />}
           {extras}
         </ul>
       )}
+
+      {/* On a phone the same list is a sheet at the foot of the screen, and it
+          is portalled out of the player to get there.
+
+          Not a style choice. The player clips its own contents — it has to, so
+          the picture keeps its corners — and on a phone it is only about two
+          hundred pixels tall. A dropdown opening upwards from the bar inside
+          that box has nowhere to go: the top of the list is simply cut off,
+          which is how this was reported. Rendering into the body puts it
+          outside the box that was doing the cutting. */}
+      {open && sheet &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[60] bg-black/50"
+              onClick={() => setOpen(false)}
+              aria-hidden
+            />
+            <ul
+              ref={listRef}
+              className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl bg-surface pt-2 text-sm shadow-2xl"
+              style={{ paddingBottom: 'calc(0.5rem + var(--safe-bottom))' }}
+            >
+              {rows}
+              {extras && <li className="my-1 border-t border-line" aria-hidden />}
+              {extras}
+            </ul>
+          </>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -2160,6 +2146,7 @@ function CaptionMenu({
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
   useEffect(() => {
     onOpenChange(open)
     return () => { if (open) onOpenChange(false) }
@@ -2167,7 +2154,13 @@ function CaptionMenu({
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      // The sheet is portalled out of the player, so it is not inside `ref`.
+      // Without asking it too, pressing anything on it would count as pressing
+      // outside and close it before the press arrived.
+      if (ref.current?.contains(target)) return
+      if (listRef.current?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)

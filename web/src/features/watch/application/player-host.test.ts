@@ -17,7 +17,6 @@ const base: PlacementInput = {
   viewport: { width: 1440, height: 900 },
   safeBottom: 0,
   scrollY: 0,
-  dragProgress: null,
 }
 
 describe('deriveMode', () => {
@@ -120,27 +119,6 @@ describe('placementFor', () => {
     expect(p.rect.top + p.rect.height).toBe(844 - BOTTOM_NAV_HEIGHT)
   })
 
-  it('follows the finger during a drag, with the transition off', () => {
-    const input: PlacementInput = {
-      ...base,
-      isMobile: true,
-      viewport: { width: 390, height: 844 },
-      dragProgress: 0.5,
-    }
-    const p = placementFor(input)!
-    const full = placementFor({ ...input, dragProgress: null })!
-    const mini = placementFor({ ...input, mode: 'mini', dragProgress: null })!
-
-    expect(p.animate).toBe(false)
-    expect(p.rect.height).toBeCloseTo((full.rect.height + mini.rect.height) / 2)
-    expect(p.rect.top).toBeCloseTo((full.rect.top + mini.rect.top) / 2)
-  })
-
-  it('a drag outranks the mode it started from', () => {
-    const dragged = placementFor({ ...base, isMobile: true, dragProgress: 0 })!
-    const still = placementFor({ ...base, isMobile: true })!
-    expect(dragged.rect).toEqual(still.rect)
-  })
 })
 
 describe('needsBridge', () => {

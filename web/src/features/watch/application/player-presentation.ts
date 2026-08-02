@@ -70,6 +70,7 @@ export function canUsePiP(): boolean {
 
 export function enterPiP(video: HTMLVideoElement | null): void {
   if (!video) return
+
   if (
     typeof video.requestPictureInPicture === 'function' &&
     document.pictureInPictureEnabled
@@ -77,6 +78,13 @@ export function enterPiP(video: HTMLVideoElement | null): void {
     void video.requestPictureInPicture().catch(() => undefined)
     return
   }
+
   const webkit = video as WebkitVideo
-  webkit.webkitSetPresentationMode?.('picture-in-picture')
+  if (typeof webkit.webkitSetPresentationMode !== 'function') return
+
+  // iOS refuses to float a video that is not running, and says so by doing
+  // nothing at all. Starting it first is inside the same gesture as the press,
+  // so the autoplay policy has no objection either.
+  if (video.paused) void video.play().catch(() => undefined)
+  webkit.webkitSetPresentationMode('picture-in-picture')
 }

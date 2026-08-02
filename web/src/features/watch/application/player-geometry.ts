@@ -84,57 +84,6 @@ export function fullRectMobile(viewportWidth: number): ViewRect {
   }
 }
 
-export function lerpRect(from: ViewRect, to: ViewRect, p: number): ViewRect {
-  const t = clamp(p, 0, 1)
-  return {
-    top: from.top + (to.top - from.top) * t,
-    left: from.left + (to.left - from.left) * t,
-    width: from.width + (to.width - from.width) * t,
-    height: from.height + (to.height - from.height) * t,
-  }
-}
-
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
-}
-
-/* ---------------------------------------------------------------- gestures */
-
-export type GestureVerdict = 'tap' | 'ignore' | 'drag'
-
-/** Movement below this is a tap, not a drag: fingers are never perfectly still. */
-export const TAP_SLOP = 10
-/** Fraction of the player's height a drag must cover to commit on distance alone. */
-export const COMMIT_FRACTION = 0.35
-/** Downward speed, px/ms, that commits regardless of distance covered. */
-export const COMMIT_VELOCITY = 0.5
-
-/**
- * Which of the three things a pointer movement on the player surface is.
- *
- * The axis lock is what keeps this from fighting the controls: a horizontal
- * movement is somebody scrubbing, and an upward one is not a request to put the
- * video away. Only a deliberate downward drag minimises.
- */
-export function classifyGesture(dx: number, dy: number): GestureVerdict {
-  if (Math.abs(dx) < TAP_SLOP && Math.abs(dy) < TAP_SLOP) return 'tap'
-  if (Math.abs(dx) > Math.abs(dy)) return 'ignore'
-  if (dy < 0) return 'ignore'
-  return 'drag'
-}
-
-export function dragProgress(dy: number, playerHeight: number): number {
-  if (playerHeight <= 0) return 0
-  return clamp(dy / (playerHeight * COMMIT_FRACTION), 0, 1)
-}
-
-/**
- * Distance *or* speed commits.
- *
- * The velocity branch is not a refinement. A short quick flick is how people
- * actually dismiss things on a phone, and on distance alone every one of those
- * springs back — which reads as the app ignoring them.
- */
-export function shouldCommit(progress: number, velocity: number): boolean {
-  return progress >= 1 || velocity > COMMIT_VELOCITY
 }

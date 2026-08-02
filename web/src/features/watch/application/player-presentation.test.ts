@@ -112,6 +112,46 @@ describe('enterPiP', () => {
   })
 })
 
+describe('entering picture in picture on a phone', () => {
+  it('starts the video first, because iOS will not float a stopped one', () => {
+    setDocumentFlag('pictureInPictureEnabled', false)
+    const video = document.createElement('video')
+    const play = vi.fn(async () => {})
+    const webkit = vi.fn()
+    Object.defineProperty(video, 'paused', { configurable: true, value: true })
+    Object.assign(video, { play, webkitSetPresentationMode: webkit })
+
+    enterPiP(video)
+
+    expect(play).toHaveBeenCalled()
+    expect(webkit).toHaveBeenCalledWith('picture-in-picture')
+  })
+
+  it('leaves a running video alone', () => {
+    setDocumentFlag('pictureInPictureEnabled', false)
+    const video = document.createElement('video')
+    const play = vi.fn(async () => {})
+    Object.defineProperty(video, 'paused', { configurable: true, value: false })
+    Object.assign(video, { play, webkitSetPresentationMode: vi.fn() })
+
+    enterPiP(video)
+
+    expect(play).not.toHaveBeenCalled()
+  })
+
+  it('does nothing where the method is absent', () => {
+    setDocumentFlag('pictureInPictureEnabled', false)
+    const video = document.createElement('video')
+    const play = vi.fn(async () => {})
+    Object.defineProperty(video, 'paused', { configurable: true, value: true })
+    Object.assign(video, { play })
+
+    expect(() => enterPiP(video)).not.toThrow()
+    // No point starting playback for a floating window that cannot open.
+    expect(play).not.toHaveBeenCalled()
+  })
+})
+
 describe('capability is read from the prototype, not from an element', () => {
   it('answers before any video has been created', () => {
     // The instance comes from a ref, which is empty on the first render and

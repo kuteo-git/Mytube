@@ -595,6 +595,38 @@ describe('a bar sized for a thumb', () => {
   })
 })
 
+describe('closing the corner player from the watch page', () => {
+  it('reaches the close button rather than the surface behind it', async () => {
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+    await act(async () => {
+      void front.play()
+    })
+    await minimise()
+
+    // Wake the chrome, or the button is deliberately unclickable.
+    await act(async () => {
+      fireEvent.pointerMove(document.querySelector('video')!, { pointerType: 'mouse' })
+    })
+
+    const close = screen.getByLabelText('Close player')
+    // The click-to-expand surface covers the picture. If the close button were
+    // inside it, or under it, this press would expand instead of closing.
+    for (const expand of screen.getAllByLabelText('Expand player')) {
+      expect(expand.contains(close)).toBe(false)
+    }
+
+    await act(async () => {
+      fireEvent.click(close)
+    })
+
+    // Closing on the watch page returns the player to its slot and pauses it,
+    // rather than destroying it — the video still has a home on that page.
+    expect(document.querySelector('video')).toBe(front)
+    expect(screen.getByTestId('player-host').style.position).toBe('absolute')
+  })
+})
+
 describe('when the browser refuses to start it', () => {
   it('leaves the first frame still rather than playing without sound', async () => {
     // CLAUDE.md §8b: a video that is plainly not running is easier to

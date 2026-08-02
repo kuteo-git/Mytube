@@ -2,7 +2,6 @@ import {
   BOTTOM_NAV_HEIGHT,
   type ViewRect,
   fullRectMobile,
-  lerpRect,
   miniRectDesktop,
   miniRectMobile,
 } from './player-geometry'
@@ -36,8 +35,6 @@ export interface PlacementInput {
    */
   safeBottom: number
   scrollY: number
-  /** 0..1 while a finger is dragging the player down, otherwise null. */
-  dragProgress: number | null
 }
 
 /**
@@ -110,13 +107,7 @@ export function toViewport(rect: ViewRect, scrollY: number): ViewRect {
   return { ...rect, top: rect.top - scrollY }
 }
 
-/**
- * The placement for a given moment.
- *
- * A drag outranks the mode: while a finger is down the host follows the finger
- * between the two rectangles, with the transition off so it tracks exactly
- * rather than easing towards where the finger was a moment ago.
- */
+/** The placement for a given moment. */
 export function placementFor(input: PlacementInput): HostPlacement | null {
   if (input.mode === 'hidden') return null
 
@@ -131,16 +122,6 @@ export function placementFor(input: PlacementInput): HostPlacement | null {
   // and animates once, correctly.
   if (input.mode === 'full' && !input.isMobile && !input.slotDocRect) {
     return miniPlacement(input)
-  }
-
-  if (input.dragProgress !== null) {
-    // Drags only happen on mobile, where full is already `fixed`, so both ends
-    // of the interpolation are in the same space and lerping is meaningful.
-    return {
-      position: 'fixed',
-      rect: lerpRect(full.rect, mini.rect, input.dragProgress),
-      animate: false,
-    }
   }
 
   return input.mode === 'full' ? full : mini
