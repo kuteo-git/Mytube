@@ -386,8 +386,12 @@ describe('picture in picture', () => {
 
     const { front } = await ready()
 
+    // The button appears once an effect has asked the element whether it can
+    // float — the prototype only says the browser knows the idea. So it is
+    // waited for rather than assumed, which is what made this flaky.
+    const button = await screen.findByLabelText('Picture in picture')
     await act(async () => {
-      fireEvent.click(screen.getByLabelText('Picture in picture'))
+      fireEvent.click(button)
     })
 
     expect(request).toHaveBeenCalled()
@@ -628,38 +632,77 @@ describe('closing the corner player from the watch page', () => {
 })
 
 describe('coming back from Apple’s full-screen player', () => {
-  it('is still playing, as it was on the way in', async () => {
-    // iOS hands the video to the system while it is full screen and hands it
-    // back stopped. Returning to a still, having left a video, reads as the
-    // player having given up.
+  const enterFullscreen = (video: HTMLVideoElement) =>
+    act(() => {
+      video.dispatchEvent(new Event('webkitbeginfullscreen'))
+    })
+
+  const leaveFullscreen = (video: HTMLVideoElement) =>
+    act(() => {
+      video.dispatchEvent(new Event('webkitendfullscreen'))
+    })
+
+  it('is still playing when the system stops it before announcing the exit', async () => {
     Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
     const { front } = await ready()
-
     await act(async () => {
       void front.play()
     })
-    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
 
-    await act(async () => {
-      front.dispatchEvent(new Event('webkitbeginfullscreen'))
-    })
-    // The system player stops it on the way out.
+    await enterFullscreen(front)
     await act(async () => {
       front.pause()
-      front.dispatchEvent(new Event('webkitendfullscreen'))
+    })
+    await leaveFullscreen(front)
+
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+  })
+
+  it('is still playing when the system stops it after announcing the exit', async () => {
+    // The ordering the first attempt missed: at the moment the exit is
+    // announced the video has not stopped yet, so looking at it then finds
+    // nothing wrong and the pause lands unopposed a moment later.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+    await act(async () => {
+      void front.play()
+    })
+
+    await enterFullscreen(front)
+    await leaveFullscreen(front)
+    await act(async () => {
+      front.pause()
     })
 
     expect(screen.getByLabelText('Pause')).toBeInTheDocument()
   })
 
+  it('remembers across a source change made while full screen', async () => {
+    // The download finishing mid-viewing re-runs the effect, and the memory of
+    // "it was playing" cannot be the one that goes with it.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front, back } = await ready()
+    await act(async () => {
+      void front.play()
+    })
+
+    await enterFullscreen(front)
+    localReady = true
+    await waitFor(() => expect(back.getAttribute('src')).toBeTruthy(), { timeout: 8000 })
+    await leaveFullscreen(front)
+    await act(async () => {
+      front.pause()
+    })
+
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+  }, 20000)
+
   it('leaves it stopped if it was stopped when it went in', async () => {
     Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
     const { front } = await ready()
 
-    await act(async () => {
-      front.dispatchEvent(new Event('webkitbeginfullscreen'))
-      front.dispatchEvent(new Event('webkitendfullscreen'))
-    })
+    await enterFullscreen(front)
+    await leaveFullscreen(front)
 
     expect(screen.getByLabelText('Play')).toBeInTheDocument()
   })

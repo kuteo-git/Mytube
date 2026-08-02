@@ -1236,27 +1236,56 @@ export function Player({
   // Coming back from Apple's full-screen player.
   //
   // iOS hands the video to the system while it is full screen and hands it back
-  // on the way out, and what comes back can be stopped even though it was
-  // running when it left. Remembering the state across the handover and putting
-  // it back is the difference between returning to a video and returning to a
-  // still.
+  // stopped, even when it was running on the way in. Leaving a video and
+  // returning to a still frame reads as the player having given up.
+  //
+  // Two things make this harder than it sounds, and the first attempt fell to
+  // both. The memory of "it was playing" cannot live in the effect's closure:
+  // the source can change while the viewer is in full screen — the downloaded
+  // file becoming ready is the obvious way — and the effect re-running takes
+  // that memory with it. And the pause does not reliably arrive before the
+  // announcement that full screen ended, so checking at that moment can find a
+  // video that has not stopped yet and will a moment later.
+  //
+  // So the memory is a ref, and the window stays open long enough to catch a
+  // pause that arrives after the event rather than before it.
+  const resumeAfterFullscreenRef = useRef(false)
   useEffect(() => {
-    const element = front()
-    if (!element) return
-    let wasPlaying = false
-    const onBegin = () => {
-      wasPlaying = !element.paused
+    const elements = [videoARef.current, videoBRef.current].filter(
+      (el): el is HTMLVideoElement => el !== null,
+    )
+    if (elements.length === 0) return
+
+    const onBegin = (event: Event) => {
+      resumeAfterFullscreenRef.current = !(event.target as HTMLVideoElement).paused
     }
-    const onEnd = () => {
-      if (wasPlaying && element.paused) void element.play().catch(() => undefined)
+    const onEnd = (event: Event) => {
+      if (!resumeAfterFullscreenRef.current) return
+      const element = event.target as HTMLVideoElement
+      const resume = () => {
+        if (element.paused) void element.play().catch(() => undefined)
+      }
+      resume()
+      // And once more after the event queue has drained, for the ordering where
+      // iOS stops it on the way out rather than on the way.
+      const timer = window.setTimeout(() => {
+        resume()
+        resumeAfterFullscreenRef.current = false
+      }, 250)
+      return () => window.clearTimeout(timer)
     }
-    element.addEventListener('webkitbeginfullscreen', onBegin)
-    element.addEventListener('webkitendfullscreen', onEnd)
+
+    for (const element of elements) {
+      element.addEventListener('webkitbeginfullscreen', onBegin)
+      element.addEventListener('webkitendfullscreen', onEnd)
+    }
     return () => {
-      element.removeEventListener('webkitbeginfullscreen', onBegin)
-      element.removeEventListener('webkitendfullscreen', onEnd)
+      for (const element of elements) {
+        element.removeEventListener('webkitbeginfullscreen', onBegin)
+        element.removeEventListener('webkitendfullscreen', onEnd)
+      }
     }
-  }, [front, frontSrc])
+  }, [playable])
 
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
@@ -1427,7 +1456,14 @@ export function Player({
                 onPlay={() => {
                   if (isA === frontIsARef.current) setPlaying(true)
                 }}
-                onPause={() => {
+                onPause={(e) => {
+                  // A pause arriving in the moments after full screen ended is
+                  // the system letting go, not the viewer stopping the video.
+                  if (resumeAfterFullscreenRef.current) {
+                    resumeAfterFullscreenRef.current = false
+                    void e.currentTarget.play().catch(() => undefined)
+                    return
+                  }
                   if (isA === frontIsARef.current) setPlaying(false)
                 }}
                 onVolumeChange={

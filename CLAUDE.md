@@ -357,7 +357,11 @@ rỗng ở render đầu). Nhưng "video NÀY có đủ điều kiện không" t
 `webkitSupportsPresentationMode`, hỏi trong effect sau khi phần tử tồn tại.
 **Thoát toàn cảnh trên iOS trả video về ở trạng thái dừng** dù lúc vào đang chạy. Nghe
 `webkitbeginfullscreen`/`webkitendfullscreen` để nhớ và trả lại — không thì rời một video, quay
-về một khung hình đứng.
+về một khung hình đứng. **Hai cái bẫy, bản sửa đầu dính cả hai:**
+(a) trí nhớ "lúc vào đang chạy" **không được** để trong closure của effect — nguồn có thể đổi
+giữa chừng (file local tải xong) làm effect chạy lại và mang trí nhớ đi mất; phải là ref.
+(b) `pause` **không chắc** đến trước `webkitendfullscreen`; kiểm một lần tại thời điểm đó có
+thể thấy video chưa dừng, rồi nó dừng ngay sau. Phải bắt cả cú `pause` đến muộn.
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
 được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
 đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).
