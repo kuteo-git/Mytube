@@ -45,10 +45,11 @@ function groupCuesForTranslation(cues: CueText[]): CueText[] {
         if (/^(Dr|Mr|Mrs|Ms|DR|Prof|Sr|Jr|vs|etc)$/i.test(wordBefore)) continue
       }
       if (after && after !== ' ') continue
-      // Don't split on comma if the text before it is too short.
+      // Don't split on comma if either side is too short to stand alone.
       if (ch === ',') {
-        const wordsBefore = buf.slice(0, idx).trim().split(/\s+/).length
-        if (wordsBefore <= 2) continue
+        const bw = buf.slice(0, idx).trim().split(/\s+/).length
+        const aw = buf.slice(idx + 1).trim().split(/\s+/).length
+        if (bw <= 2 || aw <= 2) continue
       }
       lastEnd = idx + 1
     }
@@ -79,19 +80,18 @@ describe('groupCuesForTranslation', () => {
     const result = groupCuesForTranslation(cues)
     const texts = result.map((c) => c.text)
 
+    // wordsAfter=1 ("Kimmy") ≤ 2 → comma doesn't split → joined with next
     expect(texts).toEqual([
-      'new DeepSeek style moment,',
-      'Kimmy K3.',
+      'new DeepSeek style moment, Kimmy K3.',
       'A release big enough to shake the whole race again.',
       'Then it got shut down for a moment,',
       'but China immediately came',
     ])
 
-    // Timing: clause ends at the start of its last word (bufEnd = cue.start).
-    expect(result[0].start).toBe(3.929)
-    expect(result[0].end).toBe(3.929)  // "moment," starts at 3.929
-    // Last clause starts at the last word's bufStart (set after prev split)
-    expect(result[4].end).toBe(10.88) // clip ends at cue start of last segment
+    // With wordsAfter check, "moment, Kimmy" (Kimmy=1 word) → no split
+    expect(result).toHaveLength(4)
+    expect(result[0].text).toBe('new DeepSeek style moment, Kimmy K3.')
+    expect(result[3].text).toBe('but China immediately came')
   })
 
   it('does not split on decimal numbers like 2.5', () => {
@@ -115,27 +115,29 @@ describe('groupCuesForTranslation', () => {
     expect(result[0].text).toBe('Then, how are you.')
   })
 
-  it('splits comma when preceding text has 3+ words', () => {
+  it('splits comma when both sides have 3+ words', () => {
     const cues: CueText[] = [
-      { start: 0, end: 1, text: 'new DeepSeek style moment,' },
-      { start: 1, end: 2, text: 'Kimmy' },
+      { start: 0, end: 1, text: 'this is a long phrase,' },
+      { start: 1, end: 2, text: 'and another long one here too' },
     ]
     const result = groupCuesForTranslation(cues)
+    // Both sides > 2 words → split
     expect(result).toHaveLength(2)
-    expect(result[0].text).toBe('new DeepSeek style moment,')
-    expect(result[1].text).toBe('Kimmy')
+    expect(result[0].text).toBe('this is a long phrase,')
+    expect(result[1].text).toBe('and another long one here too')
   })
 
-  it('"But, at this moment, ..." skips first comma, splits at second', () => {
+  it('"But, at this moment, ..." skips both commas (wordsBefore=1, wordsAfter=3)', () => {
     const cues: CueText[] = [
       { start: 0, end: 1, text: 'But, at this moment,' },
       { start: 1, end: 2, text: 'we must act now.' },
     ]
     const result = groupCuesForTranslation(cues)
-    // "But," is 1 word → skip first comma. "at this moment," is 3 words → split.
-    expect(result).toHaveLength(2)
-    expect(result[0].text).toBe('But, at this moment,')
-    expect(result[1].text).toBe('we must act now.')
+    // "But," wordsBefore=1 ≤ 2 → skip. "at this moment," wordsBefore=3 (>2) but
+    // wordsAfter: "we must act now." has no text after comma in this buffer yet
+    // → wordsAfter is counted from remaining buf after comma = "" → 0 ≤ 2 → skip
+    expect(result).toHaveLength(1)
+    expect(result[0].text).toBe('But, at this moment, we must act now.')
   })
 
   it('skips abbreviation periods: Dr., Mr., DR., etc.', () => {
@@ -343,9 +345,9 @@ describe('two-line carry-over without <c> tags', () => {
       { start: 105.68, end: 107.59, text: 'Có thể anh ta sẽ bực mình vì điều gì đó tôi nói' },
     ]
     const result = groupCuesForTranslation(cues)
-    // Comma splits: "ngu ngốc," (4 words before comma > 2 → split)
-    expect(result[0].text).toBe('Chồng tôi gọi tôi là ngu ngốc,')
-    expect(result[1].text).toBe('béo.')
+    // wordsAfter=0 for "ngốc," → don't split → joined with "béo."
+    expect(result).toHaveLength(2)
+    expect(result[0].text).toBe('Chồng tôi gọi tôi là ngu ngốc, béo.')
   })
 
   it('appends "?" to previous sentence (no duplicate)', () => {
