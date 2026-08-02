@@ -55,6 +55,18 @@ function fakeAudioContext() {
     state: 'running' as const,
     destination: {},
     createGain: gain,
+    // The narration runs through a limiter, because its gain is above one and
+    // would otherwise flatten the peaks of speech that is already near full
+    // scale. Nothing here asserts on it; it just has to exist to be connected.
+    createDynamicsCompressor: () => ({
+      threshold: { setValueAtTime: () => {} },
+      knee: { setValueAtTime: () => {} },
+      ratio: { setValueAtTime: () => {} },
+      attack: { setValueAtTime: () => {} },
+      release: { setValueAtTime: () => {} },
+      connect: () => {},
+      disconnect: () => {},
+    }),
     createBufferSource() {
       const source = {
         buffer: null as { duration: number; line: number } | null,

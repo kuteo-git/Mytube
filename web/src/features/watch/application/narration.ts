@@ -38,9 +38,12 @@ const TTS_VOICE = 'Ngọc Linh'
  * going. Sixty seconds of runway is sixty seconds of narration that no longer
  * depends on being woken up.
  *
- * It does not help iOS, which suspends the audio clock itself when the page
- * goes to the background. That needs the narration to be a media element rather
- * than Web Audio, and is noted in CLAUDE.md §8.3b.
+ * It does not help iOS, which suspends the audio clock itself when the page goes
+ * to the background — so there is no clock left to honour what was placed.
+ * Routing through a MediaStream and an `<audio>` element was tried, on the
+ * theory that a media element is what a phone keeps alive; Safari sent it down
+ * its real-time communication path instead and returned a rasp that cut out
+ * every second. See CLAUDE.md §8.3b.
  */
 const PREFETCH_SEC = 60
 
@@ -139,51 +142,35 @@ let _generation = 0
 
 // ---- audio sink -------------------------------------------------------------
 
-/** The element the narration is routed through, when routing is possible. */
-let _outputElement: HTMLAudioElement | null = null
-
 /**
- * Connect the narration to something that will make a sound.
+ * Connect the narration to the speakers, through something that will not let it
+ * clip.
  *
- * Straight to `ctx.destination` is the obvious answer and the one that was
- * here. It is also the answer that keeps narration off a phone in the
- * background: the system tracks *media elements* — that is why the video's own
- * audio carries on with the screen off — and a Web Audio graph playing into the
- * void is not one, so it is among the first things suspended.
+ * The gain below is well above one, so that the voice carries over the film's
+ * own audio. Fed straight to the destination that is a guarantee of distortion:
+ * anything louder than 1/gain gets its peaks flattened, and synthesised speech
+ * arrives close to full scale, so it is most of it. A limiter keeps the loudness
+ * and takes away the clipping — the crackle was not a mystery, it was arithmetic.
  *
- * `createMediaStreamDestination` turns the graph into a stream that an
- * `<audio>` element can play, which makes it a media element as far as the
- * system is concerned. That is worth doing on its own — it is what puts
- * narration under the same volume and routing rules as everything else the
- * device plays.
- *
- * Whether it survives an iOS background is a separate question and the honest
- * answer is that it may well not: the samples are still produced by the audio
- * context, and iOS suspends that. Routing costs almost nothing, so it is worth
- * having either way; it is not a claim that iOS is solved.
+ * It used to go through a MediaStream into an `<audio>` element, on the theory
+ * that a phone keeps media elements alive in the background where it suspends
+ * Web Audio. On iOS that made things worse rather than better: Safari puts a
+ * MediaStream through its real-time communication path, which resampled the
+ * speech into a rasp and cut each clip off after about a second. The theory was
+ * worth an hour to test and the test answered it.
  */
 function connectOutput(ctx: AudioContext, node: GainNode) {
-  if (typeof ctx.createMediaStreamDestination !== 'function' || typeof Audio !== 'function') {
-    node.connect(ctx.destination)
-    return
-  }
+  const limiter = ctx.createDynamicsCompressor()
+  // Ratio and knee chosen to catch peaks rather than to squash the whole
+  // signal: below the threshold nothing is touched at all.
+  limiter.threshold.setValueAtTime(-3, ctx.currentTime)
+  limiter.knee.setValueAtTime(0, ctx.currentTime)
+  limiter.ratio.setValueAtTime(20, ctx.currentTime)
+  limiter.attack.setValueAtTime(0.003, ctx.currentTime)
+  limiter.release.setValueAtTime(0.15, ctx.currentTime)
 
-  try {
-    const stream = ctx.createMediaStreamDestination()
-    node.connect(stream)
-
-    const element = _outputElement ?? new Audio()
-    element.srcObject = stream.stream
-    element.autoplay = true
-    // Narration is speech about what is on screen, so it belongs to the video
-    // rather than being a track of its own the system might offer to skip.
-    element.setAttribute('playsinline', '')
-    void element.play().catch(() => undefined)
-    _outputElement = element
-  } catch {
-    // Any browser that will not do this still gets narration the plain way.
-    node.connect(ctx.destination)
-  }
+  node.connect(limiter)
+  limiter.connect(ctx.destination)
 }
 
 /**
@@ -237,17 +224,6 @@ function stopEverything() {
   _scheduledUntil = 0
 }
 
-/** Tear down the routing element, so a new video does not inherit the old one. */
-function releaseOutput() {
-  if (!_outputElement) return
-  try {
-    _outputElement.pause()
-    _outputElement.srcObject = null
-  } catch {
-    /* already gone */
-  }
-  _outputElement = null
-}
 
 // ---- loading ----------------------------------------------------------------
 
@@ -266,7 +242,6 @@ export function loadViSubtitles(url: string, lang = 'vi') {
   _lastTime = 0
   _masterGain = null
   stopEverything()
-  releaseOutput()
 
   const generation = _generation
   void fetch(url)
@@ -467,7 +442,6 @@ export function resetNarration() {
   _lastTime = 0
   _masterGain = null
   stopEverything()
-  releaseOutput()
 }
 
 export function isNarrationActive(): boolean {

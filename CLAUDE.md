@@ -261,10 +261,17 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
    thì bấm dừng từ màn khoá — nơi timer không chạy — sẽ nghe thuyết minh nói tiếp cả
    phút sau khi hình đã đứng.
 
-   Đầu ra cũng được định tuyến qua `<audio>` bằng `createMediaStreamDestination`
-   thay vì `ctx.destination` thẳng. Rẻ, và đưa thuyết minh vào cùng luật âm lượng
-   với mọi thứ khác máy phát. **Không phải lời hứa rằng iOS đã xong** — mẫu âm thanh
-   vẫn do `AudioContext` sinh ra, mà đó chính là thứ iOS treo. Chưa kiểm trên iPhone thật.
+   **Đã thử `createMediaStreamDestination` → `<audio>` và ĐÃ BỎ (2026-08-03).**
+   Giả thuyết: điện thoại giữ media element sống ở nền nên định tuyến qua đó có thể
+   cứu iOS. Kết quả đo trên iPhone thật: **tệ hơn hẳn** — Safari đẩy MediaStream qua
+   đường xử lý real-time communication, tiếng TTS bị **rè** và **ngắt sau ~1 giây**
+   mỗi cue. Đã trả về `ctx.destination`. Đừng thử lại đường này.
+
+   **Tiếng rè còn một nguyên nhân thứ hai, có sẵn từ trước:** `NARRATION_GAIN = 2.5`
+   nhân với `video.volume`. Ở âm lượng tối đa thì mọi mẫu trên 0.4 biên độ bị cắt
+   ngọn, mà TTS vốn được chuẩn hoá gần mức đầy — nên nó rè cả ở foreground, chỉ là
+   không ai để ý cho tới khi có cái để so sánh. Giờ có `DynamicsCompressor` làm
+   limiter trước `destination`: giữ độ to, bỏ phần cắt ngọn.
 
    Narration vẫn vỡ ở nền trên iOS. Cách duy nhất là server dựng sẵn một track rồi
    trộn vào file — và cái đó phải TTS toàn bộ video **trước khi nghe được câu đầu**,
