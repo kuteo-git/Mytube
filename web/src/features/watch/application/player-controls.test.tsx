@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
 import { WatchPage } from '@/pages/WatchPage'
 import { miniRectDesktop } from '@/features/watch/application/player-geometry'
@@ -280,6 +280,8 @@ describe('controls offered by each shape', () => {
   })
 
   it('gives the full player everything', async () => {
+    // The browser has to be able to do it before the button is drawn, so say so.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
     await ready()
 
     expect(screen.getByLabelText('Play')).toBeInTheDocument()
@@ -390,6 +392,193 @@ describe('picture in picture', () => {
 
     expect(request).toHaveBeenCalled()
     expect(request.mock.instances[0]).toBe(front)
+  })
+})
+
+describe('a finger, not a mouse', () => {
+  const picture = () => document.querySelector('video')!
+  const bar = () => document.querySelector('[data-player-controls]') as HTMLElement
+
+  const visible = () => !bar().className.includes('opacity-0')
+
+  it('does not hide the moment the finger lifts', async () => {
+    // `pointerleave` fires when a touch ends, because the pointer has ceased to
+    // exist rather than moved away. Acting on it took the controls away the
+    // instant you stopped touching them — and, because the sequence is
+    // pointerdown, pointerup, pointerleave, click, made the bar unclickable one
+    // event before the click that was meant for it arrived.
+    const { front } = await ready()
+    await act(async () => {
+      fireEvent.play(front)
+    })
+
+    await act(async () => {
+      fireEvent.pointerDown(picture(), { pointerType: 'touch' })
+    })
+    expect(visible()).toBe(true)
+
+    await act(async () => {
+      fireEvent.pointerLeave(picture(), { pointerType: 'touch' })
+    })
+    expect(visible()).toBe(true)
+  })
+
+  it('still hides when a mouse leaves the picture', async () => {
+    const { front } = await ready()
+    await act(async () => {
+      fireEvent.play(front)
+    })
+
+    await act(async () => {
+      fireEvent.pointerDown(picture(), { pointerType: 'mouse' })
+    })
+    expect(visible()).toBe(true)
+
+    await act(async () => {
+      fireEvent.pointerLeave(picture(), { pointerType: 'mouse' })
+    })
+    expect(visible()).toBe(false)
+  })
+
+  it('a tap shows the controls instead of pausing', async () => {
+    const { front } = await ready()
+    await act(async () => {
+      fireEvent.play(front)
+    })
+    // Hide them first, so the tap has something to do.
+    await act(async () => {
+      fireEvent.pointerLeave(picture(), { pointerType: 'mouse' })
+    })
+    expect(visible()).toBe(false)
+
+    await act(async () => {
+      fireEvent.pointerDown(picture(), { pointerType: 'touch' })
+      fireEvent.click(picture())
+    })
+
+    expect(visible()).toBe(true)
+    // Still playing: looking at the controls must not interrupt the video.
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+  })
+
+  it('a second tap puts them away again', async () => {
+    const { front } = await ready()
+    await act(async () => {
+      fireEvent.play(front)
+    })
+    // Start from hidden: the controls come up on load, so without this the
+    // first tap would be putting them away and the test would be reading the
+    // second tap as the first.
+    await act(async () => {
+      fireEvent.pointerLeave(picture(), { pointerType: 'mouse' })
+    })
+
+    await act(async () => {
+      fireEvent.pointerDown(picture(), { pointerType: 'touch' })
+      fireEvent.click(picture())
+    })
+    expect(visible()).toBe(true)
+
+    await act(async () => {
+      fireEvent.pointerDown(picture(), { pointerType: 'touch' })
+      fireEvent.click(picture())
+    })
+    expect(visible()).toBe(false)
+  })
+
+  it('a mouse click still plays and pauses', async () => {
+    const { front } = await ready()
+    // Actually playing, not just an event saying so: `toggle` reads `paused`
+    // from the element, and firing the event alone leaves it stopped.
+    await act(async () => {
+      void front.play()
+    })
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.pointerDown(picture(), { pointerType: 'mouse' })
+      fireEvent.click(picture())
+    })
+
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+  })
+})
+
+describe('a bar sized for a thumb', () => {
+  /** Answers yes to `(pointer: coarse)` and no to everything else. */
+  function pretendTouchDevice() {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('coarse'),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }))
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('drops the volume slider, which a phone has buttons for', async () => {
+    pretendTouchDevice()
+    await ready()
+
+    expect(screen.queryByLabelText('Volume')).not.toBeInTheDocument()
+  })
+
+  it('keeps the volume slider where there is a mouse', async () => {
+    await ready()
+
+    expect(screen.getByLabelText('Volume')).toBeInTheDocument()
+  })
+
+  it('gathers the rest behind one settings button', async () => {
+    pretendTouchDevice()
+    await ready()
+
+    // The switches that were loose on the bar are not on it any more.
+    expect(screen.queryByLabelText('Autoplay')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Settings')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+    // Autoplay only exists when there is a next video; narration is the row
+    // this fixture can show.
+    expect(screen.getByRole('switch', { name: 'Thuyết minh' })).toBeInTheDocument()
+  })
+
+  it('holds the controls open while the settings are open', async () => {
+    // Otherwise the sheet takes itself away mid-decision: the bar hides on a
+    // timer, and the sheet lives on the bar.
+    pretendTouchDevice()
+    const { front } = await ready()
+    await act(async () => {
+      fireEvent.play(front)
+    })
+
+    vi.useFakeTimers()
+    try {
+      const picture = document.querySelector('video')!
+      act(() => {
+        fireEvent.pointerDown(picture, { pointerType: 'touch' })
+      })
+      act(() => {
+        fireEvent.click(screen.getByLabelText('Settings'))
+      })
+
+      // Well past the idle timeout, which on touch is five seconds.
+      act(() => {
+        vi.advanceTimersByTime(10_000)
+      })
+
+      const bar = document.querySelector('[data-player-controls]') as HTMLElement
+      expect(bar.className).not.toContain('opacity-0')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

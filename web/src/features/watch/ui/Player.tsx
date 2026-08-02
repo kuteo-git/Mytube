@@ -28,8 +28,15 @@ import {
 } from '@/features/watch/application/autoplay'
 import { bindNarration, tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
 import { classifyGesture } from '@/features/watch/application/player-geometry'
+import {
+  canGoFullscreen,
+  canUsePiP,
+  enterPiP,
+  goFullscreen,
+} from '@/features/watch/application/player-presentation'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
+import { useCoarsePointer } from '@/shared/lib/pointer'
 
 /**
  * Progressive MP4 in a plain <video> element, served over HTTP range requests.
@@ -105,6 +112,15 @@ const HANDOVER_OVERSHOOT_TOLERANCE = 1
  * way, short enough that it does not sit over a film.
  */
 const CONTROLS_IDLE_MS = 3000
+
+/**
+ * The same, for a finger.
+ *
+ * Longer, because a mouse keeps the chrome up simply by being over the picture
+ * and a finger cannot. Every second of the three has to be spent reading and
+ * reaching, with nothing holding the bar open in the meantime.
+ */
+const CONTROLS_IDLE_TOUCH_MS = 5000
 
 /**
  * How many times auto will try the muxed stream before settling for the low
@@ -429,13 +445,28 @@ export function Player({
     setOpenMenus((count) => Math.max(0, count + (open ? 1 : -1)))
   }, [])
 
-  const wakeControls = useCallback(() => {
+  // What kind of pointer touched this last.
+  //
+  // Held per interaction rather than decided per device. A tablet with a
+  // keyboard has both, and the right answer depends on which one is being used
+  // right now — not on how wide the screen is, which is what a breakpoint would
+  // have told us.
+  const pointerKindRef = useRef<'mouse' | 'touch'>('mouse')
+
+  const wakeControls = useCallback((kind: 'mouse' | 'touch' = pointerKindRef.current) => {
     setPointerActive(true)
     window.clearTimeout(hideTimerRef.current)
+    // A finger gets longer, because there is no hovering to keep the chrome up
+    // between one deliberate tap and the next.
     hideTimerRef.current = window.setTimeout(
       () => setPointerActive(false),
-      CONTROLS_IDLE_MS,
+      kind === 'touch' ? CONTROLS_IDLE_TOUCH_MS : CONTROLS_IDLE_MS,
     )
+  }, [])
+
+  const hideControls = useCallback(() => {
+    window.clearTimeout(hideTimerRef.current)
+    setPointerActive(false)
   }, [])
 
   // Paused counts as attention: nothing is being obscured, and the controls are
@@ -926,6 +957,41 @@ export function Player({
   }, [])
 
   /**
+   * What a press on the picture itself means.
+   *
+   * With a mouse it plays and pauses, as it does on every video on the web.
+   *
+   * With a finger it shows and hides the controls instead, which is what a
+   * phone does. The two cannot both be the tap: a finger has no way to hover,
+   * so the only way to bring the bar up is to touch the picture — and if that
+   * also started or stopped the video, then looking at the controls would mean
+   * interrupting what you were watching, every time, and dismissing them would
+   * mean interrupting it again.
+   */
+  const toggleNarration = useCallback(() => {
+    // The AudioContext has to be created and resumed inside the gesture, or the
+    // browser's autoplay policy will not let it make a sound.
+    if (!narrationOn) {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      void audioCtxRef.current.resume()
+    }
+    setNarrationOn((on) => {
+      const next = !on
+      window.localStorage.setItem('yt-narration-on', next ? '1' : '0')
+      return next
+    })
+  }, [narrationOn])
+
+  const tapPicture = useCallback(() => {
+    if (pointerKindRef.current !== 'touch') {
+      toggle()
+      return
+    }
+    if (pointerActive) hideControls()
+    else wakeControls('touch')
+  }, [toggle, pointerActive, hideControls, wakeControls])
+
+  /**
    * Moves to an absolute position, however the current tier allows it.
    *
    * A seekable tier is a plain assignment. The muxed stream has no index, so
@@ -1171,10 +1237,19 @@ export function Player({
     if (navigator.mediaSession) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'
   }, [playing])
 
-  // Read once: a browser does not gain or lose the feature while running, and
-  // a control that cannot do anything must not be drawn at all (CLAUDE.md §5).
-  const pipAvailable =
-    typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled)
+  // Asked of the element rather than of the document, because iPhone answers no
+  // to the document and yes to the video. A control that cannot do anything must
+  // not be drawn at all (CLAUDE.md §5), and both of these were drawn and dead.
+  // Finger-sized targets, and fewer of them. 36px is under the 44 Apple asks
+  // for, which is most of why the bar felt cramped — not the count alone.
+  const coarse = useCoarsePointer()
+  const controlButton = clsx(
+    'grid place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10',
+    coarse ? 'h-11 w-11' : 'h-9 w-9',
+  )
+
+  const pipAvailable = canUsePiP()
+  const fullscreenAvailable = canGoFullscreen()
 
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
@@ -1262,14 +1337,29 @@ export function Player({
       }}
       onPointerMove={(e) => {
         moveDrag(e)
-        wakeControls()
+        // A finger sliding across the picture is a drag, not a reason to keep
+        // the chrome awake; that is what its own tap already did.
+        if (e.pointerType !== 'touch') {
+          pointerKindRef.current = 'mouse'
+          wakeControls('mouse')
+        }
       }}
-      onPointerDown={wakeControls}
-      // Leaving takes the chrome immediately rather than after the delay: the
-      // pointer is demonstrably elsewhere, so there is nothing to wait for.
-      onPointerLeave={() => {
-        window.clearTimeout(hideTimerRef.current)
-        setPointerActive(false)
+      onPointerDown={(e) => {
+        pointerKindRef.current = e.pointerType === 'touch' ? 'touch' : 'mouse'
+        wakeControls(pointerKindRef.current)
+      }}
+      // A mouse leaving takes the chrome with it: it is demonstrably elsewhere,
+      // so there is nothing to wait for.
+      //
+      // A finger does not leave, it lifts — and the browser reports that as
+      // `pointerleave` too, because the pointer has ceased to exist rather than
+      // moved away. Acting on it meant the controls vanished the instant you
+      // stopped touching them, which is also why nothing on the bar could be
+      // pressed: the sequence is pointerdown, pointerup, pointerleave, click,
+      // so the bar was made unclickable one event before the click arrived.
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'touch') return
+        hideControls()
         setOpenMenus(0) // dismiss menus so controls can hide
       }}
     >
@@ -1382,7 +1472,7 @@ export function Player({
                 preload={isFront ? 'metadata' : 'auto'}
                 // Clicking the picture toggles playback, the way every video
                 // player on the web behaves.
-                onClick={isFront ? toggle : undefined}
+                onClick={isFront ? tapPicture : undefined}
                 // Attached to both layers, and asking which one is at the front
                 // when the event *fires* rather than when this rendered.
                 //
@@ -1611,7 +1701,7 @@ export function Player({
           // a bare video should — and the container wakes the chrome anyway.
           controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         )}
-        onFocusCapture={wakeControls}
+        onFocusCapture={() => wakeControls()}
       >
         {variant === 'full' && (
         <SeekBar
@@ -1638,7 +1728,7 @@ export function Player({
             aria-label={playing ? 'Pause' : 'Play'}
             onClick={toggle}
             disabled={!playable}
-            className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+            className={controlButton}
           >
             {playing ? <Pause size={22} /> : <Play size={22} />}
           </button>
@@ -1656,12 +1746,13 @@ export function Player({
                 setCountdown(null)
                 onPlayNext()
               }}
-              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+              className={controlButton}
             >
               <SkipForward size={22} />
             </button>
           )}
 
+          {!coarse && (
           <VolumeControl
             volume={muted ? 0 : volume}
             muted={muted}
@@ -1669,6 +1760,7 @@ export function Player({
             onToggleMute={toggleMute}
             onChange={applyVolume}
           />
+          )}
 
           {variant === 'full' && (
             <span className="ml-1 text-xs tabular-nums">
@@ -1677,7 +1769,7 @@ export function Player({
           )}
           <span className="flex-1" />
 
-          {onPlayNext && variant === 'full' && (
+          {onPlayNext && variant === 'full' && !coarse && (
             <button
               type="button"
               role="switch"
@@ -1685,7 +1777,7 @@ export function Player({
               aria-label="Autoplay"
               title={autoplayEnabled ? 'Autoplay is on' : 'Autoplay is off'}
               onClick={() => setAutoplayEnabled(!autoplayEnabled)}
-              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+              className={controlButton}
             >
               {/* Drawn as a switch, not an action: the state has to be readable
                   at a glance, and an icon that looks clickable-once would read
@@ -1715,27 +1807,12 @@ export function Player({
             />
           )}
 
-          {narrationAvailable && variant === 'full' && (
+          {narrationAvailable && variant === 'full' && !coarse && (
             <button
               type="button"
               aria-label={narrationOn ? 'Turn off narration' : 'Turn on Vietnamese narration'}
               aria-pressed={narrationOn}
-              onClick={() => {
-                // Create + resume AudioContext during the user gesture so the
-                // browser allows audible playback. The tick loop (requestAnimationFrame)
-                // runs too late for the autoplay policy.
-                if (!narrationOn) {
-                  if (!audioCtxRef.current) {
-                    audioCtxRef.current = new AudioContext()
-                  }
-                  void audioCtxRef.current.resume()
-                }
-                setNarrationOn((o) => {
-                  const next = !o
-                  window.localStorage.setItem('yt-narration-on', next ? '1' : '0')
-                  return next
-                })
-              }}
+              onClick={toggleNarration}
               className={`p-2 rounded-full transition-colors duration-150 ease-out ${
                 narrationOn
                   ? 'text-brand hover:bg-brand/10'
@@ -1749,12 +1826,35 @@ export function Player({
           {/* Only offered when there is more than one way to play the video.
               A quality menu over a single source would be a control that
               cannot do anything. */}
-          {qualityOptions.length > 1 && variant === 'full' && (
+          {(qualityOptions.length > 1 || coarse) && variant === 'full' && (
             <QualityMenu
               choice={quality}
               options={qualityOptions}
               playingLabel={tierLabel}
+              buttonClassName={controlButton}
               onOpenChange={trackMenu}
+              // On a phone the gear is the only place left for the settings the
+              // bar no longer has room to show one by one.
+              extras={
+                coarse ? (
+                  <>
+                    {narrationAvailable && (
+                      <SettingRow
+                        label="Thuyết minh"
+                        on={narrationOn}
+                        onToggle={toggleNarration}
+                      />
+                    )}
+                    {onPlayNext && (
+                      <SettingRow
+                        label="Tự động phát"
+                        on={autoplayEnabled}
+                        onToggle={() => setAutoplayEnabled(!autoplayEnabled)}
+                      />
+                    )}
+                  </>
+                ) : undefined
+              }
               onSelect={(next) => {
                 // Choosing again is a fresh decision: a viewer who asks for
                 // 1080p after auto gave up on it should get an attempt, not
@@ -1776,21 +1876,21 @@ export function Player({
             <button
               type="button"
               aria-label="Picture in picture"
-              onClick={() => void front()?.requestPictureInPicture?.().catch(() => undefined)}
+              onClick={() => enterPiP(front())}
               disabled={!playable}
-              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+              className={controlButton}
             >
               <PictureInPicture2 size={20} />
             </button>
           )}
 
-          {variant === 'full' && (
+          {variant === 'full' && fullscreenAvailable && (
             <button
               type="button"
               aria-label="Full screen"
-              onClick={() => void front()?.requestFullscreen?.()}
+              onClick={() => goFullscreen(front())}
               disabled={!playable}
-              className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+              className={controlButton}
             >
               <Maximize size={22} />
             </button>
@@ -1940,9 +2040,15 @@ function QualityMenu({
   playingLabel,
   onSelect,
   onOpenChange,
+  buttonClassName,
+  extras,
 }: {
   choice: QualityChoice
   options: { value: QualityChoice; label: string }[]
+  buttonClassName?: string
+  /** Extra rows below the quality list. On a phone this is where the settings
+   *  the bar no longer has room for end up. */
+  extras?: React.ReactNode
   /** What is on screen right now, shown beside Auto so it is never a mystery. */
   playingLabel: string
   onSelect: (next: QualityChoice) => void
@@ -1968,10 +2074,13 @@ function QualityMenu({
     <div ref={ref} className="relative">
       <button
         type="button"
-        aria-label="Quality"
+        aria-label="Settings"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
+        className={
+          buttonClassName ??
+          'grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10'
+        }
       >
         <Settings size={22} />
       </button>
@@ -1998,9 +2107,54 @@ function QualityMenu({
               </button>
             </li>
           ))}
+          {extras && <li className="my-1 border-t border-line" aria-hidden />}
+          {extras}
         </ul>
       )}
     </div>
+  )
+}
+
+/**
+ * One on/off line in the settings sheet.
+ *
+ * A row rather than an icon, because the sheet has room for words and the bar
+ * did not — which is the reason these moved here.
+ */
+function SettingRow({
+  label,
+  on,
+  onToggle,
+}: {
+  label: string
+  on: boolean
+  onToggle: () => void
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <span>{label}</span>
+        <span
+          className={clsx(
+            'flex h-4 w-8 shrink-0 items-center rounded-full px-0.5 transition-colors duration-150 ease-out',
+            on ? 'bg-brand' : 'bg-white/25',
+          )}
+        >
+          <span
+            className={clsx(
+              'h-3 w-3 rounded-full bg-white transition-transform duration-150 ease-out',
+              on && 'translate-x-4',
+            )}
+          />
+        </span>
+      </button>
+    </li>
   )
 }
 
