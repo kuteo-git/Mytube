@@ -159,6 +159,7 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
   const raw = await resp.text()
 
   const cues: CueText[] = []
+  let isAutoCaption = false // set to true when we see <c> tags
   const lines = raw.split('\n')
   let i = 0
 
@@ -198,6 +199,7 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     // new tagged sentence on line 2.  Manual captions have all content spread
     // across multiple lines.  Detect by checking for <c> tags.
     const hasTags = payloadLines.some((l) => l.includes('<c>'))
+    if (hasTags) isAutoCaption = true
     // Two-line carry-over without <c> tags: line 1 = prev clean text,
     // line 2 = new words.
     const isTwoLineCarry = !hasTags && payloadLines.length === 2
@@ -249,6 +251,9 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
   }
 
   // Group consecutive cues until a sentence/clause boundary so the
+  // Manual captions are already complete sentences — no grouping needed.
+  if (!isAutoCaption) return cues
+
   // Split cues at clause/sentence boundaries for cleaner TTS pacing.
   if (_sourceLang === 'en' || _sourceLang === 'vi') {
     // Only treat . ! ? as sentence-ending when preceded by a letter,
@@ -307,14 +312,16 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
       }
 
       if (lastEnd > 0) {
-        const clause = stripBrackets(buf.slice(0, lastEnd).trim())
+        let clause = buf.slice(0, lastEnd).trim()
+        if (isAutoCaption) clause = stripBrackets(clause)
         if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
         buf = buf.slice(lastEnd).trim()
         bufStart = bufEnd
       }
     }
     if (buf.trim()) {
-      const clause = stripBrackets(buf.trim())
+      let clause = buf.trim()
+      if (isAutoCaption) clause = stripBrackets(clause)
       if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
     }
     cues.length = 0
