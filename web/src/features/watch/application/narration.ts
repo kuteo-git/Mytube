@@ -159,16 +159,19 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
 
     if (!isFinite(start) || !isFinite(end)) continue
 
-    // Skip leading blank/whitespace-only lines — YouTube auto-captions
-    // sometimes have a leading space before the tagged text.
-    while (i < lines.length && lines[i].trim() === '') i++
-
+    // Collect payload lines.  Skip blank/whitespace-only lines BEFORE the
+    // real payload (YouTube auto-captions sometimes have leading spaces),
+    // but never skip past the next timing line.
+    while (i < lines.length && lines[i].trim() === '' && !lines[i].includes('-->')) i++
     const payloadLines: string[] = []
-    while (i < lines.length && lines[i].trim() !== '') {
+    while (i < lines.length && lines[i].trim() !== '' && !lines[i].includes('-->')) {
       payloadLines.push(lines[i])
       i++
     }
-    i++
+    // Only skip the blank separator when we actually collected payload.
+    // If payload is empty, the next "blank" line is likely the next
+    // timing line — let the main loop pick it up.
+    if (payloadLines.length > 0) i++
 
     // YouTube auto-captions carry the previous sentence on line 1 and the
     // new tagged sentence on line 2.  Manual captions have all content spread
