@@ -366,6 +366,79 @@ describe('two-line carry-over without <c> tags', () => {
   })
 })
 
+// ---- you/your pronoun replacement -------------------------------------------
+
+function prepForTranslation(text: string): string {
+  return text
+    .replace(/\byou're\b/gi, 'XXXX are')
+    .replace(/\byou'll\b/gi, 'XXXX will')
+    .replace(/\byou'd\b/gi, 'XXXX would')
+    .replace(/\byou've\b/gi, 'XXXX have')
+    .replace(/\byourself\b/gi, 'YYYY')
+    .replace(/\byourselves\b/gi, 'YYYY')
+    .replace(/\byou\b/gi, 'XXXX')
+    .replace(/\byours\b/gi, 'YYYY')
+    .replace(/\byour\b/gi, 'YYYY')
+}
+
+function postAfterTranslation(text: string): string {
+  return text
+    .replace(/XXXX/gi, 'bạn')
+    .replace(/YYYY/gi, 'của bạn')
+}
+
+describe('you/your pronoun replacement', () => {
+  it('replaces "you" → XXXX', () => {
+    expect(prepForTranslation('hello you')).toBe('hello XXXX')
+    expect(prepForTranslation('You are here')).toBe('XXXX are here')
+    expect(prepForTranslation('HELLO YOU')).toBe('HELLO XXXX')
+  })
+
+  it('replaces "your" → YYYY', () => {
+    expect(prepForTranslation('your car')).toBe('YYYY car')
+    expect(prepForTranslation('Your Highness')).toBe('YYYY Highness')
+  })
+
+  it('expands contractions keeping the verb', () => {
+    expect(prepForTranslation("you're welcome")).toBe('XXXX are welcome')
+    expect(prepForTranslation("you'll see")).toBe('XXXX will see')
+    expect(prepForTranslation("you'd know")).toBe('XXXX would know')
+    expect(prepForTranslation("you've got this")).toBe('XXXX have got this')
+  })
+
+  it('handles "yours"', () => {
+    expect(prepForTranslation('this is yours')).toBe('this is YYYY')
+  })
+
+  it('handles "yourself" and "yourselves"', () => {
+    expect(prepForTranslation('do it yourself')).toBe('do it YYYY')
+    expect(prepForTranslation('help yourselves')).toBe('help YYYY')
+  })
+
+  it('does NOT replace "young", "youth"', () => {
+    expect(prepForTranslation('a young person')).toBe('a young person')
+    expect(prepForTranslation('the youth')).toBe('the youth')
+  })
+
+  it('post-processing: XXXX → bạn, YYYY → của bạn', () => {
+    expect(postAfterTranslation('XXXX là tốt')).toBe('bạn là tốt')
+    expect(postAfterTranslation('YYYY xe')).toBe('của bạn xe')
+    expect(postAfterTranslation('XXXX và YYYY')).toBe('bạn và của bạn')
+  })
+
+  it('full round-trip: you → XXXX → dịch → bạn', () => {
+    const original = "you're amazing and your work is great"
+    const prepped = prepForTranslation(original)
+    // Simulate NLLB translation keeping placeholders
+    const fakeTranslation = 'XXXX tuyệt vời và YYYY công việc rất tốt'
+    const final = postAfterTranslation(fakeTranslation)
+    expect(final).toBe('bạn tuyệt vời và của bạn công việc rất tốt')
+    expect(final).not.toContain('anh')
+    expect(final).not.toContain('XXXX')
+    expect(final).not.toContain('YYYY')
+  })
+})
+
 // ---- warm-start skip logic --------------------------------------------------
 
 function applyWarmStartSkip(

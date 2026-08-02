@@ -26,14 +26,35 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     const cached = _tlCache.get(text)
     if (cached) { viText = cached }
     else {
+      // NLLB translates "you" → "anh" (formal).  Replace with placeholders
+      // before translation, then substitute "bạn" / "của bạn" after.
+      // Contractions are expanded so the verb stays for NLLB to translate:
+      //   you're → XXXX are → bạn là   |   you'll → XXXX will → bạn sẽ
+      // \b prevents false positives like "young", "youth".
+      const prepped = text
+        .replace(/\byou're\b/gi, 'XXXX are')
+        .replace(/\byou'll\b/gi, 'XXXX will')
+        .replace(/\byou'd\b/gi, 'XXXX would')
+        .replace(/\byou've\b/gi, 'XXXX have')
+        .replace(/\byourself\b/gi, 'YYYY')
+        .replace(/\byourselves\b/gi, 'YYYY')
+        .replace(/\byou\b/gi, 'XXXX')
+        .replace(/\byours\b/gi, 'YYYY')
+        .replace(/\byour\b/gi, 'YYYY')
       const resp = await fetch('/api/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, src: 'eng_Latn', tgt: 'vie_Latn' }),
+        body: JSON.stringify({ text: prepped, src: 'eng_Latn', tgt: 'vie_Latn' }),
       })
       if (resp.ok) {
-        const { translated } = await resp.json() as { translated: string }
-        if (translated) { _tlCache.set(text, translated); viText = translated }
+        let translated = (await resp.json() as { translated: string }).translated
+        if (translated) {
+          translated = translated
+            .replace(/XXXX/gi, 'bạn')
+            .replace(/YYYY/gi, 'của bạn')
+          _tlCache.set(text, translated)
+          viText = translated
+        }
       }
     }
   }
