@@ -175,8 +175,11 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     // across multiple lines.  Detect by checking for <c> tags.
     const hasTags = payloadLines.some((l) => l.includes('<c>'))
     // Two-line carry-over without <c> tags: line 1 = prev clean text,
-    // line 2 = new words.  Treat like auto-caption to avoid duplicates.
+    // line 2 = new words.  Only when the last line has actual content
+    // (not just punctuation like "?" which lives on its own line).
+    const lastLine = payloadLines[payloadLines.length - 1] || ''
     const isTwoLineCarry = !hasTags && payloadLines.length === 2
+      && (lastLine.includes('<') || lastLine.length > 2)
 
     // Skip YouTube's ~10 ms clean-snapshot cues.
     if (end - start < 0.1) continue

@@ -195,6 +195,17 @@ describe('groupCuesForTranslation', () => {
     expect(result[1].text).toBe('Câu hỏi nghiêm túc.')
   })
 
+  it('does not use isTwoLineCarry when last line is short punctuation', () => {
+    // Simulates: ["Vậy nếu bạn...", "?"] — "?" is not <c> tagged content
+    const cues: CueText[] = [
+      { start: 0, end: 1, text: 'hello' },
+      { start: 1, end: 2, text: 'world' },
+    ]
+    // These should group normally (join = "hello world"), not be treated as carry-over
+    const result = groupCuesForTranslation(cues)
+    expect(result[0].text).toBe('hello world')
+  })
+
   it('single cue without punctuation stays as-is', () => {
     const cues: CueText[] = [
       { start: 0, end: 2, text: 'no punctuation here' },
