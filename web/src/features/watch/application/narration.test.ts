@@ -7,6 +7,20 @@ import { describe, it, expect } from 'vitest'
 interface CueText { start: number; end: number; text: string }
 
 // Same algorithm as narration.ts — keep in sync.
+function stripBrackets(text: string): string {
+  const EMOTION_TAGS = /\[(cười|thở dài|hắng giọng)\]/gi
+  const placeholders: string[] = []
+  let s = text.replace(EMOTION_TAGS, (match) => {
+    placeholders.push(match)
+    return `\x00${placeholders.length - 1}\x00`
+  })
+  s = s.replace(/\s*\[[^\]]*\]\s*/g, ' ')
+  s = s.replace(/ \./g, '.')
+  s = s.replace(/\x00(\d+)\x00/g, (_, i) => placeholders[+i] || '')
+  s = s.replace(/\s{2,}/g, ' ')
+  return s.trim()
+}
+
 function groupCuesForTranslation(cues: CueText[]): CueText[] {
   const grouped: CueText[] = []
   let buf = ''
@@ -40,14 +54,15 @@ function groupCuesForTranslation(cues: CueText[]): CueText[] {
     }
 
     if (lastEnd > 0) {
-      const clause = buf.slice(0, lastEnd).trim()
+      const clause = stripBrackets(buf.slice(0, lastEnd).trim())
       if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
       buf = buf.slice(lastEnd).trim()
       bufStart = bufEnd
     }
   }
   if (buf.trim()) {
-    grouped.push({ start: bufStart, end: bufEnd, text: buf.trim() })
+    const clause = stripBrackets(buf.trim())
+    if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
   }
   return grouped
 }
@@ -133,6 +148,51 @@ describe('groupCuesForTranslation', () => {
     // "DR." is abbreviation, "City." is sentence end — 1 group
     expect(result).toHaveLength(1)
     expect(result[0].text).toBe('DR. TYSON: From the American Museum of Natural History in New York City.')
+  })
+
+  it('parses leading text before first timestamp tag', () => {
+    // VTT tagged line: "Được <00:00:00.155><c>rồi, </c><00:00:00.310><c>tôi</c>"
+    // Leading "Được " should be captured at cue start time.
+    const cues: CueText[] = [
+      { start: 0.000, end: 0.000, text: 'Được' },
+      { start: 0.155, end: 0.000, text: 'rồi,' },
+      { start: 0.310, end: 1.299, text: 'tôi' },
+    ]
+    // After grouping: "Được rồi, tôi" — no clause boundaries
+    const result = groupCuesForTranslation(cues)
+    expect(result).toHaveLength(1)
+    expect(result[0].start).toBe(0.000) // first word's timestamp
+    expect(result[0].text).toBe('Được rồi, tôi')
+  })
+
+  it('word-level timing preserved after clause split', () => {
+    const cues: CueText[] = [
+      { start: 9.296, end: 9.678, text: 'Đó' },
+      { start: 9.678, end: 9.830, text: 'là' },
+      { start: 9.990, end: 10.140, text: 'kiểu' },
+      { start: 10.140, end: 10.290, text: 'người' },
+      { start: 10.290, end: 11.640, text: 'mà bạn không bao giờ biết được,' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    expect(result).toHaveLength(1)
+    // Clause starts at first word's precise timestamp (9.296), not cue time
+    expect(result[0].start).toBe(9.296)
+    expect(result[0].text).toBe('Đó là kiểu người mà bạn không bao giờ biết được,')
+  })
+
+  it('strips brackets after grouping (not per-word)', () => {
+    // Simulated word-level cues from "[tiếng vỗ tay]" across <c> tags
+    const cues: CueText[] = [
+      { start: 0, end: 0.1, text: 'các bạn' },
+      { start: 0.1, end: 0.2, text: '[tiếng' },
+      { start: 0.2, end: 0.3, text: 'vỗ' },
+      { start: 0.3, end: 0.4, text: 'tay].' },
+      { start: 0.4, end: 0.5, text: 'Câu hỏi nghiêm túc.' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    // Brackets stripped after grouping. "tay]." splits at the period.
+    expect(result[0].text).toBe('các bạn.')
+    expect(result[1].text).toBe('Câu hỏi nghiêm túc.')
   })
 
   it('single cue without punctuation stays as-is', () => {

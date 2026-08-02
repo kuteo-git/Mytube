@@ -82,17 +82,8 @@ function parseVTTTime(raw: string): number {
  *  Other [square-bracket] descriptions like [Âm nhạc], [Tiếng gió] are
  *  still removed because they are not speech. */
 function cleanCueText(raw: string): string {
-  const EMOTION_TAGS = /\[(cười|thở dài|hắng giọng)\]/gi
-  const placeholders: string[] = []
-
-  // Save emotion tags before cleaning.
-  let s = raw.replace(EMOTION_TAGS, (match) => {
-    placeholders.push(match)
-    return `\x00${placeholders.length - 1}\x00`
-  })
-
   // Decode HTML entities first so &gt;&gt; → >> is caught by the >> removal below.
-  s = s
+  let s = raw
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -102,9 +93,6 @@ function cleanCueText(raw: string): string {
   s = s
     // Remove WebVTT angle-bracket tags: <c>, </c>, <00:00:00.000>
     .replace(/<[^>]+>/g, '')
-    // Remove [square-bracket] descriptions — including malformed ones where
-    // the closing bracket is missing (YouTube auto-captions often have these).
-    .replace(/\[[^\]]*\]?/g, '')
     // Remove >> speaker indicators anywhere in the text.
     .replace(/>>\s*/g, '')
     // Strip music notes and other non-speech symbols the TTS would spell out
@@ -114,10 +102,24 @@ function cleanCueText(raw: string): string {
   // Collapse multiple spaces into one.
   s = s.replace(/\s{2,}/g, ' ')
 
-  // Restore emotion tags.
-  s = s.replace(/\x00(\d+)\x00/g, (_, i) => placeholders[+i] || '')
-
   return s
+}
+
+/** Strip [sound-effect] brackets and emotion tags from the final text.
+ *  Must be done AFTER grouping, not per-word, because brackets can span
+ *  multiple <c> tags (e.g. "[tiếng <c>vỗ </c><c>tay]"). */
+function stripBrackets(text: string): string {
+  const EMOTION_TAGS = /\[(cười|thở dài|hắng giọng)\]/gi
+  const placeholders: string[] = []
+  let s = text.replace(EMOTION_TAGS, (match) => {
+    placeholders.push(match)
+    return `\x00${placeholders.length - 1}\x00`
+  })
+  s = s.replace(/\s*\[[^\]]*\]\s*/g, ' ')
+  s = s.replace(/ \./g, '.') // " ." → "."
+  s = s.replace(/\x00(\d+)\x00/g, (_, i) => placeholders[+i] || '')
+  s = s.replace(/\s{2,}/g, ' ')
+  return s.trim()
 }
 
 /**
@@ -157,6 +159,10 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
 
     if (!isFinite(start) || !isFinite(end)) continue
 
+    // Skip leading blank/whitespace-only lines — YouTube auto-captions
+    // sometimes have a leading space before the tagged text.
+    while (i < lines.length && lines[i].trim() === '') i++
+
     const payloadLines: string[] = []
     while (i < lines.length && lines[i].trim() !== '') {
       payloadLines.push(lines[i])
@@ -168,18 +174,43 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     // new tagged sentence on line 2.  Manual captions have all content spread
     // across multiple lines.  Detect by checking for <c> tags.
     const hasTags = payloadLines.some((l) => l.includes('<c>'))
-    const rawText = hasTags
-      ? payloadLines[payloadLines.length - 1] || ''  // auto-caption: last line only
-      : payloadLines.join(' ')                        // manual: join all lines
-    const text = cleanCueText(rawText)
-    if (!text) continue
 
-    // Skip YouTube's ~10 ms clean-snapshot cues.  They carry the same text as
-    // the preceding tagged cue but with a near-zero timespan; scheduling both
-    // would play the same TTS buffer at two slightly different times.
+    // Skip YouTube's ~10 ms clean-snapshot cues.
     if (end - start < 0.1) continue
 
-    cues.push({ start, end, text })
+    if (hasTags) {
+      // Auto-caption: parse per-word timestamps for precise timing.
+      // Text before the first timestamp tag (e.g. "Được " before
+      // <00:00:00.155>) is also part of the cue — capture it.
+      const taggedLine = payloadLines[payloadLines.length - 1] || ''
+      let m: RegExpExecArray | null
+      // Leading text before the first <timestamp> tag.
+      const leadMatch = taggedLine.match(/^([^<]+)</)
+      if (leadMatch) {
+        const wordText = cleanCueText(leadMatch[1])
+        if (wordText) cues.push({ start, end: 0, text: wordText })
+      }
+      // <timestamp><c>text</c> pairs.
+      const wordRe = /(\d{2}:\d{2}:\d{2}\.\d{3})><c>([^<]*)<\/c>/g
+      while ((m = wordRe.exec(taggedLine)) !== null) {
+        const wordTime = parseVTTTime(m[1])
+        const wordText = cleanCueText(m[2])
+        if (!wordText || !isFinite(wordTime)) continue
+        cues.push({ start: wordTime, end: 0, text: wordText })
+      }
+      // Set end times: each word ends at the next word's start (or the
+      // cue end for the last word).  Works for both leading text and
+      // timestamp-tagged words — both have end=0 initially.
+      for (let k = cues.length - 1; k >= 0; k--) {
+        if (cues[k].end > 0) break
+        cues[k].end = (k + 1 < cues.length) ? cues[k + 1].start : end
+      }
+    } else {
+      // Manual caption: join all lines.
+      const text = cleanCueText(payloadLines.join(' '))
+      if (!text) continue
+      cues.push({ start, end, text })
+    }
   }
 
   // Group consecutive cues until a sentence/clause boundary so the
@@ -238,14 +269,15 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
       }
 
       if (lastEnd > 0) {
-        const clause = buf.slice(0, lastEnd).trim()
+        const clause = stripBrackets(buf.slice(0, lastEnd).trim())
         if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
         buf = buf.slice(lastEnd).trim()
         bufStart = bufEnd
       }
     }
     if (buf.trim()) {
-      grouped.push({ start: bufStart, end: bufEnd, text: buf.trim() })
+      const clause = stripBrackets(buf.trim())
+      if (clause) grouped.push({ start: bufStart, end: bufEnd, text: clause })
     }
     cues.length = 0
     cues.push(...grouped)
