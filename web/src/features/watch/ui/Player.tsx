@@ -493,18 +493,18 @@ export function Player({
 
   // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
   // TTS audio and plays clips at their scheduled times through Web Audio API.
+  // Use setInterval instead of requestAnimationFrame so the tick loop
+  // keeps running when the tab is hidden (rAF is paused by the browser).
+  // 100 ms is fast enough for TTS scheduling without wasting CPU.
   useEffect(() => {
     if (!narrationOn) return
-    let frame = 0
-    const tick = () => {
+    const id = setInterval(() => {
       const el = front()
-      if (!el || !audioCtxRef.current) { frame = requestAnimationFrame(tick); return }
+      if (!el || !audioCtxRef.current) return
       tickNarration(el, audioCtxRef.current)
-      frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
+    }, 100)
     return () => {
-      cancelAnimationFrame(frame)
+      clearInterval(id)
       resetNarration()
       audioCtxRef.current?.suspend()
     }
