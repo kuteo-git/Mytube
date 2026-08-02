@@ -10,7 +10,7 @@
 const TTS_VOICE = 'Ngọc Linh'
 const PREFETCH_SEC = 10
 const MAX_CONCURRENT = 2
-const DEFAULT_SPEED = 1.0 // natural speed — only speed up when slot is tight
+const DEFAULT_SPEED = 1.1 // VieNeu-TTS reads slightly slow; 1.1× sounds natural
 const MAX_SPEED = 3.0     // ffmpeg atempo is pitch-preserving — 3.0× is fast but clear
 const GAP_BETWEEN_CLIPS = 0.25 // pause between sentences (seconds)
 
@@ -252,7 +252,8 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
 
   // Group consecutive cues until a sentence/clause boundary so the
   // Manual captions are already complete sentences — no grouping needed.
-  if (!isAutoCaption) return cues
+  // Strip brackets from each cue to remove speaker labels and sound effects.
+  if (!isAutoCaption) return cues.map((c) => ({ ...c, text: stripBrackets(c.text) }))
 
   // Split cues at clause/sentence boundaries for cleaner TTS pacing.
   if (_sourceLang === 'en' || _sourceLang === 'vi') {
