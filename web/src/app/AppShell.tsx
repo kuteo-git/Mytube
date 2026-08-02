@@ -7,6 +7,7 @@ import { TopBar } from '@/features/navigation/ui/TopBar'
 import { Player } from '@/features/watch/ui/Player'
 import { PlayerProvider, usePlayer } from '@/features/watch/application/player-context'
 import { BOTTOM_NAV_HEIGHT, MINI_MARGIN } from '@/features/watch/application/player-geometry'
+import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -25,6 +26,9 @@ function AppShellInner() {
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { isMobile, mode, placement, safeBottom } = usePlayer()
+
+  // Put back whatever this browser was in the middle of, in the corner, paused.
+  useResumeLastWatched(isWatch)
 
   // Room at the foot of the page for the miniplayer to sit over.
   //
@@ -212,6 +216,7 @@ function PlayerHost() {
         onClose={onClose}
         onExpand={onExpand}
         pauseToken={pauseToken}
+        autoplay={state.autoplay !== false}
       />
     </div>
   )

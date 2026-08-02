@@ -9,7 +9,7 @@ export function StoragePage() {
 
   if (isPending) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-6">
+      <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
         <h1 className="text-2xl font-bold">Storage</h1>
         <p className="mt-3 text-sm text-text-2">Loading…</p>
       </div>
@@ -18,7 +18,7 @@ export function StoragePage() {
 
   if (isError || !data) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-6">
+      <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
         <h1 className="text-2xl font-bold">Storage</h1>
         <p className="mt-3 text-sm text-text-2">
           Could not load storage usage. Is the gateway running?
@@ -30,7 +30,7 @@ export function StoragePage() {
   const ratio = data.budgetBytes > 0 ? data.usedBytes / data.budgetBytes : 0
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-6">
+    <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">Storage</h1>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

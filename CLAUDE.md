@@ -362,6 +362,23 @@ về một khung hình đứng. **Hai cái bẫy, bản sửa đầu dính cả 
 giữa chừng (file local tải xong) làm effect chạy lại và mang trí nhớ đi mất; phải là ref.
 (b) `pause` **không chắc** đến trước `webkitendfullscreen`; kiểm một lần tại thời điểm đó có
 thể thấy video chưa dừng, rồi nó dừng ngay sau. Phải bắt cả cú `pause` đến muộn.
+**Mở lại app thì video dở dang được đưa lại vào góc, ĐANG DỪNG (2026-08-03).**
+`last-watched.ts` giữ `{videoId, position, savedAt}` trong localStorage, ghi cùng nhịp với
+`recordProgress`. Ba luật: xem quá **95%** thì coi như xong và **quên**; quá **7 ngày** thì
+không còn là "vừa nãy" nữa; bấm ✕ là câu trả lời cho lời mời, nên cũng quên.
+**Không tự phát** — tiếng phát ra từ góc màn hình của một trang vừa mở là giật mình, và đây sẽ
+là lần thứ hai trong dự án video tự chạy khi không ai bảo.
+**Không dùng history của server** cho việc này: history nói *đã từng xem gì, trên mọi máy*, còn
+đây nói *trình duyệt NÀY đang xem dở gì*. Dùng history sẽ mời lại thứ đã xem xong ở máy khác.
+Vị trí thì ưu tiên số của server, chỉ dùng số local khi tab đóng trước lần báo cuối.
+
+**Padding thống nhất: `px-4` trên điện thoại, `px-6` từ 700px.** Áp cho mọi trang.
+Riêng `ChipBar` ở Home tràn ra mép trên điện thoại (`-mx-4` + `px-4` bên trong): một dãy cuộn
+ngang mà dừng trước mép trông như đã hết chứ không như còn tiếp.
+**Bẫy đã gặp:** WatchPage từng chừa `pt-[calc(3.5rem+56.25vw)]` — cộng **thừa** chiều cao
+`TopBar`, vì `sticky` **vẫn chiếm chỗ trong luồng** nên nội dung đã bắt đầu ở dưới nó rồi. Thừa
+đúng 56px giữa hình và tiêu đề. Giờ chỉ còn `pt-[56.25vw]`.
+
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
 được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
 đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).

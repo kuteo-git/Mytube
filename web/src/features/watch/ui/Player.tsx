@@ -38,6 +38,7 @@ import {
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
 import { useCoarsePointer } from '@/shared/lib/pointer'
+import { rememberLastWatched } from '@/features/watch/application/last-watched'
 
 /**
  * Progressive MP4 in a plain <video> element, served over HTTP range requests.
@@ -281,6 +282,7 @@ export function Player({
   onClose,
   onExpand,
   pauseToken = 0,
+  autoplay = true,
 }: {
   videoId: string
   hue: number
@@ -318,6 +320,11 @@ export function Player({
   /** Navigates back to the full Watch page. */
   onExpand?: () => void
   pauseToken?: number
+  /**
+   * Whether to start on arrival. False when the player is being put back after
+   * a restart: something offered back should wait to be accepted.
+   */
+  autoplay?: boolean
 }) {
   const mini = variant !== 'full'
   const bar = variant === 'bar'
@@ -1111,6 +1118,12 @@ export function Player({
       const total = trustedDurationRef.current
       if (!total) return
 
+      // Locally as well as on the server. The server's copy is history — what
+      // was watched, on any device, ever. This one is narrower and answers a
+      // different question: what this browser was in the middle of, so that
+      // opening the app again can offer it back rather than starting blank.
+      rememberLastWatched(videoId, element.currentTime, total)
+
       void repo
         .recordProgress(
           videoId,
@@ -1558,7 +1571,11 @@ export function Player({
                   //
                   // A first frame sitting still is honest about needing a press.
                   // A picture that moves without sound is not.
-                  element.play().catch(() => undefined)
+                  //
+                  // And a video restored from a previous visit does not start at
+                  // all: it is an offer, and an offer that begins playing on its
+                  // own is not an offer.
+                  if (autoplay) element.play().catch(() => undefined)
                 }}
                 // Only meaningful on the layer being prepared: it means the
                 // replacement has reached its mark and can take over.

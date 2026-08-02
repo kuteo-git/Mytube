@@ -48,7 +48,7 @@ export function SearchResultsPage() {
   const remaining = (upstream ?? []).filter((v) => !localIds.has(v.id))
 
   return (
-    <div className="px-6 pb-16">
+    <div className="px-4 pb-16 min-[700px]:px-6">
       <h1 className="py-6 text-xl">
         Results for <span className="font-bold">{query}</span>
       </h1>

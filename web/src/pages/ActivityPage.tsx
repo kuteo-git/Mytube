@@ -31,7 +31,7 @@ export function ActivityPage() {
   const done = (jobs ?? []).filter((j) => j.state === 'SUCCEEDED')
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-6">
+    <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-medium">Activity</h1>
 
       <section className="mt-6">

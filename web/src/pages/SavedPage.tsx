@@ -9,7 +9,7 @@ export function SavedPage() {
   const videos = data?.pages.flatMap((page) => page.videos) ?? []
 
   return (
-    <div className="px-6 pb-16">
+    <div className="px-4 pb-16 min-[700px]:px-6">
       <h1 className="py-4 text-2xl font-bold">Saved videos</h1>
 
       {isError ? (

@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
+import { forgetLastWatched } from './last-watched'
 import { MOBILE_BREAKPOINT, type ViewRect } from './player-geometry'
 import {
   type HostPlacement,
@@ -43,6 +44,8 @@ export interface PlayerState {
   channelTitle?: string
   nextVideoTitle?: string
   onPlayNext?: () => void
+  /** False when the player is being restored from a previous visit. */
+  autoplay?: boolean
 }
 
 export type PlayerMode = 'hidden' | 'full' | 'mini'
@@ -202,6 +205,8 @@ export function PlayerProvider({
   }, [])
 
   const deactivate = useCallback(() => {
+    // Closing it is the answer to the offer. It must not be made again.
+    forgetLastWatched()
     setState(null)
     setPinnedMini(false)
     setDismissed(false)

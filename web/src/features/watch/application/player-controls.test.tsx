@@ -6,6 +6,11 @@ import { AppShell } from '@/app/AppShell'
 import { WatchPage } from '@/pages/WatchPage'
 import { miniRectDesktop } from '@/features/watch/application/player-geometry'
 import { fireIntersection } from '@/test/setup'
+import {
+  forgetLastWatched,
+  readLastWatched,
+  rememberLastWatched,
+} from '@/features/watch/application/last-watched'
 
 /**
  * Which controls each shape of the player offers, and which layer is allowed to
@@ -728,6 +733,71 @@ describe('when the browser refuses to start it', () => {
     expect(screen.getByLabelText('Play')).toBeInTheDocument()
 
     reject.mockRestore()
+  })
+})
+
+describe('picking up where the tab left off', () => {
+  function renderHome() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/" element={<div>home</div>} />
+              <Route path="/watch/:videoId" element={<WatchPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  afterEach(() => forgetLastWatched())
+
+  it('offers the video back in the corner, stopped', async () => {
+    rememberLastWatched('abc', 42, 240)
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play')
+
+    renderHome()
+    const element = await waitFor(() => {
+      const el = document.querySelector('video')
+      expect(el).not.toBeNull()
+      return el!
+    })
+
+    // In the corner, because this is not the watch page.
+    expect(screen.getByTestId('player-host').style.position).toBe('fixed')
+
+    await act(async () => {
+      fireEvent.loadedMetadata(element)
+    })
+
+    // And waiting to be accepted. Sound arriving unbidden from the corner of a
+    // page somebody has only just opened is startling.
+    expect(play).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+
+    play.mockRestore()
+  })
+
+  it('offers nothing when nothing was left unfinished', async () => {
+    renderHome()
+    await settle()
+    expect(document.querySelector('video')).toBeNull()
+  })
+
+  it('stops offering once the viewer closes it', async () => {
+    rememberLastWatched('abc', 42, 240)
+    renderHome()
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Close player'))
+    })
+
+    // Closing it is the answer to the offer, and it must not be made again.
+    expect(readLastWatched()).toBeNull()
   })
 })
 

@@ -42,7 +42,7 @@ export function ChannelPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 pb-16">
+    <div className="mx-auto max-w-6xl px-4 pb-16 min-[700px]:px-6">
       {channelPending || !channelPage ? (
         <div className="mt-4 aspect-[6/1] w-full animate-pulse rounded-xl bg-surface" />
       ) : (

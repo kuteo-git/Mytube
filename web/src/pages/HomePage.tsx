@@ -47,7 +47,7 @@ export function HomePage() {
   const chips = ['All', ...(topics ?? []).map((t) => t.name)]
 
   return (
-    <div className="px-6 pb-16">
+    <div className="px-4 pb-16 min-[700px]:px-6">
       {storage && (
         <StorageBanner usedBytes={storage.usedBytes} budgetBytes={storage.budgetBytes} />
       )}

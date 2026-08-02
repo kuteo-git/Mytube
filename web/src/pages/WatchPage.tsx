@@ -106,7 +106,7 @@ export function WatchPage() {
 
   if (isPending) {
     return (
-      <div className="mx-auto max-w-[1754px] px-6 py-6">
+      <div className="mx-auto max-w-[1754px] px-4 py-6 min-[700px]:px-6">
         <div className="aspect-video w-full max-w-[1280px] animate-pulse rounded-xl bg-surface" />
       </div>
     )
@@ -118,10 +118,20 @@ export function WatchPage() {
 
   return (
     <div
-      className="mx-auto flex max-w-[1754px] flex-col gap-6 px-0 py-0 min-[700px]:px-6 min-[700px]:py-6
+      className="mx-auto flex max-w-[1754px] flex-col gap-6 px-4 py-0 min-[700px]:px-6 min-[700px]:py-6
                  min-[1000px]:flex-row
-                 pt-[calc(3.5rem+56.25vw)] min-[700px]:pt-6"
+                 pt-[56.25vw] min-[700px]:pt-6"
     >
+      {/* The reserve is the player's height and nothing else.
+
+          It used to add the top bar's height as well, which was counted twice:
+          the bar is `sticky`, and a sticky element still takes its place in the
+          flow, so the content already begins below it. The result was a gap of
+          exactly one top bar between the picture and the title.
+
+          56.25vw is 9/16 of the width — the same 16:9 the player host computes
+          for itself on a phone. Two expressions of one number, which is a thing
+          to be careful of: changing the shape means changing both. */}
       <div className="min-w-0 max-w-[1280px] flex-1">
         {/* The player's slot. AppShell measures this div and positions the player
             host over it — the player is never a child of this page, which is what
