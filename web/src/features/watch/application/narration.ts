@@ -231,7 +231,10 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     for (let j = 0; j < cues.length; j++) {
       if (!buf) { bufStart = cues[j].start }
       buf += (buf ? ' ' : '') + cues[j].text
-      bufEnd = cues[j].end
+      // End at the start of the last word, not its scheduled end
+      // (= next word's start).  When a clause ends at punctuation,
+      // the audio stops at the word boundary, not at the gap.
+      bufEnd = cues[j].start
 
       // Find the last clause boundary in buf, skipping digit.digit patterns
       // and commas where the preceding text is too short to stand alone

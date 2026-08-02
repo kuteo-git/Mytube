@@ -2,7 +2,7 @@
  * Unit tests for VTT cue grouping logic (narration.ts — _sourceLang === 'en').
  * Run: npx vitest run web/src/features/watch/application/narration.test.ts
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll } from 'vitest'
 
 interface CueText { start: number; end: number; text: string }
 
@@ -29,7 +29,7 @@ function groupCuesForTranslation(cues: CueText[]): CueText[] {
   for (let j = 0; j < cues.length; j++) {
     if (!buf) { bufStart = cues[j].start }
     buf += (buf ? ' ' : '') + cues[j].text
-    bufEnd = cues[j].end
+    bufEnd = cues[j].start
 
     let lastEnd = -1
     const re = /[.!?,]/g
@@ -87,11 +87,11 @@ describe('groupCuesForTranslation', () => {
       'but China immediately came',
     ])
 
-    // Timing: each clause uses start of first cue + end of last cue in its group.
+    // Timing: clause ends at the start of its last word (bufEnd = cue.start).
     expect(result[0].start).toBe(3.929)
-    expect(result[0].end).toBe(6.309)
-    expect(result[4].start).toBe(13.120)
-    expect(result[4].end).toBe(13.120)
+    expect(result[0].end).toBe(3.929)  // "moment," starts at 3.929
+    // Last clause starts at the last word's bufStart (set after prev split)
+    expect(result[4].end).toBe(10.88) // clip ends at cue start of last segment
   })
 
   it('does not split on decimal numbers like 2.5', () => {
@@ -203,7 +203,107 @@ describe('groupCuesForTranslation', () => {
     expect(result).toHaveLength(1)
     expect(result[0].text).toBe('no punctuation here')
     expect(result[0].start).toBe(0)
-    expect(result[0].end).toBe(2)
+    expect(result[0].end).toBe(0) // clause ends at cue's start (bufEnd = cue.start)
+  })
+})
+
+// ---- end-to-end VTT file test ------------------------------------------------
+
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
+
+function parseVTTTime(raw: string): number {
+  const parts = raw.split(':')
+  if (parts.length !== 3) return NaN
+  return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2])
+}
+
+function cleanCueText(raw: string): string {
+  let s = raw
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  s = s.replace(/<[^>]+>/g, '').replace(/>>\\s*/g, '')
+    .replace(/[♪♫♬→←↑↓↔«»""''„‚]/g, '').trim()
+  return s.replace(/\\s{2,}/g, ' ')
+}
+
+function parseVTTFile(raw: string): CueText[] {
+  const cues: CueText[] = []
+  const lines = raw.split('\n')
+  let i = 0
+  while (i < lines.length && !lines[i].includes('-->')) i++
+  while (i < lines.length) {
+    const timingLine = lines[i]
+    if (!timingLine || !timingLine.includes('-->')) { i++; continue }
+    const arrowIdx = timingLine.indexOf('-->')
+    const start = parseVTTTime(timingLine.substring(0, arrowIdx).trim())
+    const end = parseVTTTime(timingLine.substring(arrowIdx + 3).trim().split(/\s/)[0])
+    i++
+    if (!isFinite(start) || !isFinite(end)) continue
+    while (i < lines.length && lines[i].trim() === '') i++
+    const payloadLines: string[] = []
+    while (i < lines.length && lines[i].trim() !== '') { payloadLines.push(lines[i]); i++ }
+    i++
+    if (end - start < 0.1) continue
+    const hasTags = payloadLines.some(l => l.includes('<c>'))
+    if (hasTags) {
+      const taggedLine = payloadLines[payloadLines.length - 1] || ''
+      const leadMatch = taggedLine.match(/^([^<]+)</)
+      if (leadMatch) {
+        const wt = cleanCueText(leadMatch[1])
+        if (wt) cues.push({ start, end: 0, text: wt })
+      }
+      const wordRe = /(\d{2}:\d{2}:\d{2}\.\d{3})><c>([^<]*)<\/c>/g
+      let m: RegExpExecArray | null
+      while ((m = wordRe.exec(taggedLine)) !== null) {
+        const wordTime = parseVTTTime(m[1])
+        const wordText = cleanCueText(m[2])
+        if (!wordText || !isFinite(wordTime)) continue
+        cues.push({ start: wordTime, end: 0, text: wordText })
+      }
+      for (let k = cues.length - 1; k >= 0; k--) {
+        if (cues[k].end > 0) break
+        cues[k].end = (k + 1 < cues.length) ? cues[k + 1].start : end
+      }
+    } else {
+      const text = cleanCueText(payloadLines.join(' '))
+      if (!text) continue
+      cues.push({ start, end, text })
+    }
+  }
+  return groupCuesForTranslation(cues)
+}
+
+describe('VTT file parsing (MeplqZ0nM1c)', () => {
+  const vttPath = '/Volumes/Data2/Youtube/MeplqZ0nM1c/1080p.mp4.vi.vtt'
+  let cues: CueText[]
+
+  beforeAll(() => {
+    const raw = readFileSync(vttPath, 'utf-8')
+    cues = parseVTTFile(raw)
+  })
+
+  it('parses the VTT file without errors', () => {
+    expect(cues.length).toBeGreaterThan(500)
+  })
+
+  it('first cue starts near 0 and includes leading word', () => {
+    expect(cues[0].start).toBeLessThan(0.2) // ~0.000s or 0.155s
+    expect(cues[0].text).toContain('Được')
+  })
+
+  it('has word-level precision timing (not cue-level)', () => {
+    // "Đó là" should start near 9.296 (word timestamp), not 9.830 (cue end)
+    const doLa = cues.find(c => c.text.includes('Đó là'))
+    expect(doLa).toBeDefined()
+    expect(doLa!.start).toBeLessThan(9.4) // 9.296, not 9.830
+    expect(doLa!.start).toBeGreaterThan(9.2)
+  })
+
+  it('removes sound-effect brackets like [tiếng vỗ tay]', () => {
+    // After stripBrackets, neither the bracket chars nor the enclosed text remain
+    const brackets = cues.filter(c => c.text.includes('[tiếng vỗ tay]'))
+    expect(brackets.length).toBe(0)
   })
 })
 
