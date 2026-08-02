@@ -63,6 +63,8 @@ export interface CatalogRepository {
   cancelJob(jobId: string): Promise<void>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
+  /** Hides a video from the feed and tells the recommender not to offer it. */
+  recordNotInterested(videoId: string): Promise<void>
   setReaction(videoId: string, reaction: ReactionState): Promise<number>
   addComment(videoId: string, text: string, parentCommentId?: string): Promise<Comment>
 
@@ -361,6 +363,12 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<void>(`/videos/${encodeURIComponent(videoId)}/progress`, {
       method: 'POST',
       body: JSON.stringify({ positionSeconds, watchedFraction }),
+    })
+  },
+
+  recordNotInterested(videoId) {
+    return request<void>(`/videos/${encodeURIComponent(videoId)}/not-interested`, {
+      method: 'POST',
     })
   },
 

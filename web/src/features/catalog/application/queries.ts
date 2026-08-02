@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ReactionState } from '../domain/video'
+import type { Feed } from '../infrastructure/catalogRepository'
 import { httpCatalogRepository as repo } from '../infrastructure/catalogRepository'
 
 /**
@@ -304,6 +305,16 @@ function persistHidden(videoId: string) {
 /** Videos the viewer has hidden this session and across refreshes. */
 export function hiddenVideoIDs(): Set<string> {
   return loadHidden()
+}
+
+/**
+ * The shape react-query keeps for a paged feed. Named here because the cache is
+ * edited directly below, and an edit against an untyped cache is an edit that
+ * cannot be checked.
+ */
+interface InfiniteFeed {
+  pages: Feed[]
+  pageParams: unknown[]
 }
 
 export function useNotInterested() {
