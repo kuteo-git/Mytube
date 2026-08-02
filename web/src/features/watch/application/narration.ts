@@ -174,11 +174,14 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     // new tagged sentence on line 2.  Manual captions have all content spread
     // across multiple lines.  Detect by checking for <c> tags.
     const hasTags = payloadLines.some((l) => l.includes('<c>'))
+    // Two-line carry-over without <c> tags: line 1 = prev clean text,
+    // line 2 = new words.  Treat like auto-caption to avoid duplicates.
+    const isTwoLineCarry = !hasTags && payloadLines.length === 2
 
     // Skip YouTube's ~10 ms clean-snapshot cues.
     if (end - start < 0.1) continue
 
-    if (hasTags) {
+    if (hasTags || isTwoLineCarry) {
       // Auto-caption: parse per-word timestamps for precise timing.
       // Text before the first timestamp tag (e.g. "Được " before
       // <00:00:00.155>) is also part of the cue — capture it.
