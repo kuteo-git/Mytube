@@ -504,10 +504,6 @@ export function Player({
   // taking position as a dependency and restarting on every tick.
   const positionRef = useRef(0)
   const handoverFrameRef = useRef(0)
-  // True while sound is off only because the browser insisted, as opposed to
-  // because the viewer turned it off. The distinction is the whole point: one
-  // should be undone at the first opportunity, the other never.
-  const mutedByPolicyRef = useRef(false)
   // The volume we last set programmatically (for ducking).  When the browser
   // fires onVolumeChange asynchronously, comparing against this value tells us
   // whether the event came from our own effect or from a real user interaction.
@@ -890,28 +886,6 @@ export function Player({
     waitForMark()
   }, [front, back, captions, abandonUpgrade])
 
-  // Give the sound back at the first gesture the document gets.
-  //
-  // Any click or key press satisfies the autoplay policy, so there is no need
-  // to ask for one — the next thing the viewer does for their own reasons is
-  // enough. Only unmutes what the policy muted; someone who reached for the
-  // mute button keeps their silence.
-  useEffect(() => {
-    const restore = () => {
-      if (!mutedByPolicyRef.current) return
-      mutedByPolicyRef.current = false
-      const element = front()
-      if (!element) return
-      element.muted = false
-      setMuted(false)
-    }
-    window.addEventListener('pointerdown', restore)
-    window.addEventListener('keydown', restore)
-    return () => {
-      window.removeEventListener('pointerdown', restore)
-      window.removeEventListener('keydown', restore)
-    }
-  }, [front])
 
   // A pending handover must not outlive the video it belongs to.
   useEffect(() => () => window.cancelAnimationFrame(handoverFrameRef.current), [])
@@ -1043,7 +1017,6 @@ export function Player({
     resetAutoplayChain()
     // Reaching for the volume is a decision about sound, so the automatic
     // restore steps aside for the same reason it does for the mute button.
-    mutedByPolicyRef.current = false
     const element = front()
     setVolume(next)
     window.localStorage.setItem('yt-player-volume', String(next))
@@ -1060,7 +1033,6 @@ export function Player({
     const element = front()
     if (!element) return
     // A deliberate choice, so the automatic restore must not overrule it.
-    mutedByPolicyRef.current = false
     element.muted = !element.muted
     setMuted(element.muted)
     window.localStorage.setItem('yt-player-muted', element.muted ? '1' : '0')
@@ -1559,24 +1531,22 @@ export function Player({
                   // The new source is loaded and positioned: resume tracking.
                   swappingRef.current = false
 
-                  // Start playing on arrival, audibly if the browser allows it.
+                  // Start playing on arrival, audibly, or not at all.
                   //
-                  // It usually will not on a fresh page: audible autoplay needs
-                  // a gesture in the document, and a reload creates a new one,
-                  // so a page opened or refreshed has none to offer. Left at
-                  // that, every reload lands on a paused first frame.
+                  // Audible autoplay needs a gesture the document has not been
+                  // given, so on a fresh page this is often refused. A refusal
+                  // used to fall back to muted, which CLAUDE.md §8b had already
+                  // decided against and which iPhone turns from a compromise
+                  // into the normal case: Safari refuses far more readily, so
+                  // the fallback was not a fallback there, it was the outcome.
+                  // Silent playback then had to be undone by hand, and undoing
+                  // it is not simply a matter of clearing `muted` — Safari
+                  // wants the element played again inside a gesture, which
+                  // nothing was doing.
                   //
-                  // So a refusal falls back to muted — which is always allowed
-                  // — and the sound comes back by itself at the first click or
-                  // key press anywhere on the page. Nothing has to be read or
-                  // pressed to fix it, which is why there is no longer a badge
-                  // asking for one.
-                  element.play().catch(() => {
-                    element.muted = true
-                    setMuted(true)
-                    mutedByPolicyRef.current = true
-                    void element.play().catch(() => undefined)
-                  })
+                  // A first frame sitting still is honest about needing a press.
+                  // A picture that moves without sound is not.
+                  element.play().catch(() => undefined)
                 }}
                 // Only meaningful on the layer being prepared: it means the
                 // replacement has reached its mark and can take over.
@@ -1798,7 +1768,7 @@ export function Player({
             </button>
           )}
 
-          {captionsAvailable && (
+          {captionsAvailable && !coarse && (
             <CaptionMenu
               tracks={subtitles}
               active={captions}
@@ -1838,6 +1808,24 @@ export function Player({
               extras={
                 coarse ? (
                   <>
+                    {captionsAvailable && (
+                      <>
+                        <li className="px-4 pt-2 pb-1 text-xs text-text-2">Phụ đề</li>
+                        <SettingRow
+                          label="Tắt"
+                          on={captions === null}
+                          onToggle={() => setCaptions(null)}
+                        />
+                        {subtitles.map((track) => (
+                          <SettingRow
+                            key={track.language}
+                            label={track.label + (track.generated ? ' (tự động)' : '')}
+                            on={captions === track.language}
+                            onToggle={() => setCaptions(track.language)}
+                          />
+                        ))}
+                      </>
+                    )}
                     {narrationAvailable && (
                       <SettingRow
                         label="Thuyết minh"

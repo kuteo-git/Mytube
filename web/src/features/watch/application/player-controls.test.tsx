@@ -550,6 +550,19 @@ describe('a bar sized for a thumb', () => {
     expect(screen.getByRole('switch', { name: 'Thuyết minh' })).toBeInTheDocument()
   })
 
+  it('puts captions behind the gear too', async () => {
+    pretendTouchDevice()
+    await ready()
+
+    expect(screen.queryByLabelText('Subtitles')).not.toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+    expect(screen.getByRole('switch', { name: 'English' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Tắt' })).toBeInTheDocument()
+  })
+
   it('holds the controls open while the settings are open', async () => {
     // Otherwise the sheet takes itself away mid-decision: the bar hides on a
     // timer, and the sheet lives on the bar.
@@ -579,6 +592,29 @@ describe('a bar sized for a thumb', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('when the browser refuses to start it', () => {
+  it('leaves the first frame still rather than playing without sound', async () => {
+    // CLAUDE.md §8b: a video that is plainly not running is easier to
+    // understand than one that appears to be running with nothing to hear. The
+    // code had drifted into muting and carrying on, which on iPhone is not an
+    // edge case — Safari refuses audible autoplay almost always, so silent was
+    // simply what playback sounded like.
+    const reject = vi
+      .spyOn(HTMLMediaElement.prototype, 'play')
+      .mockRejectedValue(new Error('NotAllowedError'))
+
+    const { front } = await ready()
+    await act(async () => {
+      fireEvent.loadedMetadata(front)
+    })
+
+    expect(front.muted).toBe(false)
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+
+    reject.mockRestore()
   })
 })
 

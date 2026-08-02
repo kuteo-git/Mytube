@@ -317,9 +317,27 @@ request nào** phải chờ. Cache resolve trong ingest: đo thật **1.85s → 
 `hiện tại + 0.6s`, tới mốc thì hoán đổi opacity. Không chớp đen, không tua lùi. Đổi một thẻ
 tại chỗ chính là thứ gây chớp trước đây.
 Player: autoplay (bị trình duyệt chặn thì **để nguyên ở khung hình đầu**, không tự bật muted —
-một video rõ ràng chưa chạy dễ hiểu hơn một video trông như đang chạy mà không có tiếng),
-điều khiển **tự ẩn sau 3 giây** không rê chuột (hiện lại khi rê/bấm/focus, luôn hiện khi pause
-hoặc đang mở menu), click = play/pause,
+một video rõ ràng chưa chạy dễ hiểu hơn một video trông như đang chạy mà không có tiếng).
+**Code đã từng trôi khỏi luật này và bị kéo về 2026-08-03**: có lúc nó tự bật muted rồi phát
+tiếp, kèm một bộ "khôi phục tiếng ở cử chỉ đầu tiên". Trên desktop nghe như một sự tiện lợi;
+trên iPhone thì Safari từ chối autoplay có tiếng gần như luôn luôn, nên nhánh dự phòng **chính
+là** kết quả bình thường — video phát câm. Và gỡ câm không chỉ là gán `muted = false`: Safari
+đòi gọi lại `play()` trong cùng cử chỉ, mà không chỗ nào làm. Đó là lý do luật này tồn tại.
+
+Điều khiển **tự ẩn sau 3 giây** với chuột, **5 giây với ngón tay** (hiện lại khi rê/bấm/focus,
+luôn hiện khi pause hoặc đang mở menu). **Chuột: click = play/pause. Cảm ứng: chạm = bật/tắt
+menu** — ngón tay không rê được nên chạm là cách duy nhất gọi menu lên, mà nếu nó cũng
+play/pause thì mỗi lần nhìn điều khiển đều cắt ngang cái đang xem. Phân biệt bằng `pointerType`
+của chính sự kiện, không đoán theo bề rộng màn hình.
+**`pointerleave` KHÔNG được dùng để ẩn trên cảm ứng**: con trỏ chạm không rời đi mà *ngừng tồn
+tại*, trình duyệt báo bằng cùng sự kiện — nên mọi cú chạm tự ẩn menu lúc nhấc tay, và vì chuỗi
+là `pointerdown → pointerup → pointerleave → click`, thanh bị tắt `pointer-events` đúng một sự
+kiện trước cú click dành cho nó. Đó là lý do "bấm menu không ăn" trên iPhone.
+Trên cảm ứng, thanh gọn lại: bỏ slider âm lượng (có nút cứng), còn phụ đề/chất lượng/thuyết
+minh/tự động phát gom vào nút ⚙; vùng chạm 44px thay vì 36.
+**Toàn cảnh và PiP trên iPhone phải dùng `webkitEnterFullscreen` / `webkitSetPresentationMode`**
+— API chuẩn không tồn tại ở đó, và vì code gọi bằng `?.` nên nút hiện ra mà bấm im lặng. Khả
+năng được hỏi từ `HTMLVideoElement.prototype`, không phải từ ref (ref rỗng ở render đầu).
 `Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
 được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
 đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).
