@@ -47,8 +47,8 @@ function groupCuesForTranslation(cues: CueText[]): CueText[] {
       if (after && after !== ' ') continue
       // Don't split on comma if the text before it is too short.
       if (ch === ',') {
-        const wordsBefore = buf.slice(0, idx).trim().split(/\s+/)
-        if (wordsBefore.length <= 2) continue
+        const wordsBefore = buf.slice(0, idx).trim().split(/\s+/).length
+        if (wordsBefore <= 2) continue
       }
       lastEnd = idx + 1
     }
@@ -315,6 +315,52 @@ describe('VTT file parsing (MeplqZ0nM1c)', () => {
     // After stripBrackets, neither the bracket chars nor the enclosed text remain
     const brackets = cues.filter(c => c.text.includes('[tiếng vỗ tay]'))
     expect(brackets.length).toBe(0)
+  })
+})
+
+// ---- two-line carry-over without tags ---------------------------------------
+
+describe('two-line carry-over without <c> tags', () => {
+  // These simulate what parseVTT produces AFTER processing 2-line cues
+  // where line 1 = prev clean text (discarded), line 2 = new text (kept).
+
+  it('keeps "giúp đỡ." from 2-line cue (no <c> tags)', () => {
+    // Cue: ["Đây là...xin", "giúp đỡ."] → isTwoLineCarry → only "giúp đỡ."
+    const cues: CueText[] = [
+      { start: 42.720, end: 44.790, text: 'là những người phụ nữ đã viết thư cho chúng tôi để xin' },
+      { start: 44.800, end: 46.150, text: 'giúp đỡ.' },
+      { start: 46.160, end: 48.390, text: 'Nhưng họ quá sợ làm xáo trộn cuộc sống gia' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    const texts = result.map(c => c.text)
+    expect(texts).toContain('là những người phụ nữ đã viết thư cho chúng tôi để xin giúp đỡ.')
+  })
+
+  it('keeps "béo." from 2-line cue (no <c> tags)', () => {
+    const cues: CueText[] = [
+      { start: 102.24, end: 104.23, text: 'Chồng tôi gọi tôi là ngu ngốc,' },
+      { start: 104.24, end: 105.67, text: 'béo.' },
+      { start: 105.68, end: 107.59, text: 'Có thể anh ta sẽ bực mình vì điều gì đó tôi nói' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    // Comma splits: "ngu ngốc," (4 words before comma > 2 → split)
+    expect(result[0].text).toBe('Chồng tôi gọi tôi là ngu ngốc,')
+    expect(result[1].text).toBe('béo.')
+  })
+
+  it('appends "?" to previous sentence (no duplicate)', () => {
+    // Cue at 20.800: ["Vậy nếu bạn...thì sao", "?"] → only "?"
+    const cues: CueText[] = [
+      { start: 19.52, end: 20.79, text: 'Vậy nếu bạn đã kết hôn với người đó thì sao' },
+      { start: 20.80, end: 23.35, text: '?' },
+      { start: 23.36, end: 27.99, text: 'Ngày này qua ngày khác, hết lần này đến lần khác.' },
+    ]
+    const result = groupCuesForTranslation(cues)
+    const texts = result.map(c => c.text)
+    // "?" should join with previous text, not duplicate it
+    expect(texts[0]).toBe('Vậy nếu bạn đã kết hôn với người đó thì sao ?')
+    // Should NOT contain the duplicate
+    expect(texts.filter(t => t.includes('Vậy nếu bạn đã kết hôn')).length).toBe(1)
   })
 })
 

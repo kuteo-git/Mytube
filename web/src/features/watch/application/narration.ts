@@ -178,11 +178,8 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
     // across multiple lines.  Detect by checking for <c> tags.
     const hasTags = payloadLines.some((l) => l.includes('<c>'))
     // Two-line carry-over without <c> tags: line 1 = prev clean text,
-    // line 2 = new words.  Only when the last line has actual content
-    // (not just punctuation like "?" which lives on its own line).
-    const lastLine = payloadLines[payloadLines.length - 1] || ''
+    // line 2 = new words.
     const isTwoLineCarry = !hasTags && payloadLines.length === 2
-      && (lastLine.includes('<') || lastLine.length > 2)
 
     // Skip YouTube's ~10 ms clean-snapshot cues.
     if (end - start < 0.1) continue
@@ -200,12 +197,20 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
         if (wordText) cues.push({ start, end: 0, text: wordText })
       }
       // <timestamp><c>text</c> pairs.
+      let hasWordCues = false
       const wordRe = /(\d{2}:\d{2}:\d{2}\.\d{3})><c>([^<]*)<\/c>/g
       while ((m = wordRe.exec(taggedLine)) !== null) {
+        hasWordCues = true
         const wordTime = parseVTTTime(m[1])
         const wordText = cleanCueText(m[2])
         if (!wordText || !isFinite(wordTime)) continue
         cues.push({ start: wordTime, end: 0, text: wordText })
+      }
+      // If the tagged line has no word-level timestamps (e.g. "giúp đỡ."
+      // or "?" on its own line), use the text as-is.
+      if (!leadMatch && !hasWordCues) {
+        const text = cleanCueText(taggedLine)
+        if (text) cues.push({ start, end, text })
       }
       // Set end times: each word ends at the next word's start (or the
       // cue end for the last word).  Works for both leading text and
@@ -265,11 +270,11 @@ async function fetchAndParseVTT(url: string): Promise<CueText[]> {
         }
         // Clause-ending punctuation must be followed by space or end-of-string.
         if (after && after !== ' ') continue
-        // Don't split on comma if either side is too short to stand alone.
+        // Don't split on comma if the text before it is too short
+        // ("Then, how are you" → keep together).
         if (ch === ',') {
           const wordsBefore = buf.slice(0, idx).trim().split(/\s+/).length
-          const wordsAfter = buf.slice(idx + 1).trim().split(/\s+/).length
-          if (wordsBefore <= 2 || wordsAfter <= 2) continue
+          if (wordsBefore <= 2) continue
         }
         lastEnd = idx + 1
       }
