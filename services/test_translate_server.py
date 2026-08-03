@@ -87,3 +87,45 @@ def test_config_ignores_blanks_rather_than_taking_them():
     # translate against an empty base url.
     got = resolve_config({"baseUrl": "", "model": "", "apiKey": ""})
     assert got == (OMNIROUTE_BASE_URL, OMNIROUTE_MODEL, OMNIROUTE_API_KEY)
+
+
+def test_batch_request_turns_thinking_off(monkeypatch):
+    """The router bills and delays for reasoning we then discard.
+
+    Measured against the real router on a 15-cue batch: with this field the
+    call went from 5.1s and 649 completion tokens to 2.5s and 345, and the
+    translation was unchanged. The two switches usually reached for first —
+    chat_template_kwargs.enable_thinking and a "/no_think" suffix — were both
+    accepted and ignored, so this one is load-bearing rather than belt-and-braces.
+    """
+    import json
+    import translate_server
+
+    sent = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {"choices": [{"message": {"content": "1. một"}}]}
+            ).encode()
+
+    def fake_urlopen(req, timeout=None):
+        sent["payload"] = json.loads(req.data)
+        return FakeResponse()
+
+    monkeypatch.setattr(translate_server.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(translate_server.json, "load", lambda r: json.loads(r.read()))
+
+    translate_server.omniroute_batch(
+        ["hello"], [], base_url="http://router", model="m", api_key="k"
+    )
+    assert sent["payload"]["thinking"] == {"type": "disabled"}
+    # Streaming stays off for the same reason it always was: a body of SSE
+    # frames is not JSON.
+    assert sent["payload"]["stream"] is False

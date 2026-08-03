@@ -132,6 +132,18 @@ def omniroute_batch(
     payload = {
         "model": model,
         "stream": False,
+        # Thinking off. sub_translation routes to a reasoning model, and the
+        # reasoning was being paid for and then thrown away: clean() strips the
+        # <think> block and openai_content() reads `content` only.
+        #
+        # This is the field the router honours, and it is worth knowing that it
+        # is the *only* one. Measured on a real 15-cue batch, both of the usual
+        # switches came back with the reasoning still attached and no change in
+        # timing: chat_template_kwargs.enable_thinking=false, and "/no_think"
+        # appended to the prompt. On the same batch this field took it from
+        # 5.1s and 649 completion tokens to 2.5s and 345, with the translation
+        # unchanged.
+        "thinking": {"type": "disabled"},
         "messages": [{
             "role": "user",
             "content": BATCH_PROMPT.format(n=len(cues), ctx=ctx, body=body),
