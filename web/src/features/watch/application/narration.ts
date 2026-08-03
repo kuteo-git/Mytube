@@ -89,10 +89,9 @@ let _passPhase: NarrationPhase = 'idle'
 /** The message of anything the pass threw, for the status line. */
 let _passThrew = ''
 /** When translating actually began, and how much was already cached by then. */
+let _passAbort: AbortController | null = null
 let _passStartedAt = 0
 let _passBaseline = 0
-/** Written since the last flush, so a flush posts only what is new. */
-const _unsaved = new Map<string, string>()
 
 /**
  * Which video narration is for, so synthesised clips can be filed beside it.
@@ -196,6 +195,11 @@ function announceCues(cues: CueText[]) {
  * the one state from which no pass can ever start again.
  */
 export function cancelTranslationPass() {
+  // Stop the work upstream, not just our interest in it. A batch nobody is
+  // waiting for is still a batch the router is spending time on — the same
+  // reasoning that cancels a download when you leave a video (CLAUDE.md §8b).
+  _passAbort?.abort()
+  _passAbort = null
   _passGeneration++
   _passRunning = false
   _passPhase = 'idle'
@@ -241,6 +245,8 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   _passThrew = ''
   _passStartedAt = 0
   _passBaseline = 0
+  _passAbort = new AbortController()
+  const signal = _passAbort.signal
   const generation = _passGeneration
 
   void (async () => {
@@ -304,25 +310,26 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         if (missing.length === 0) continue
 
         const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
-        const out = await translateBatch(missing, context)
-        if (generation !== _passGeneration) return
+        const out = await translateBatch(missing, context, signal)
 
+        // Bank what came back before asking whether anyone still wants it.
+        // These lines were translated and paid for; throwing them away because
+        // the viewer moved on in the meantime means paying again next time.
+        const banked = new Map<string, string>()
         missing.forEach((text, i) => {
           const vi = out[i]
           if (!vi) return
-          _tlCache.set(text, vi)
-          // By text, not by position: indexOf found the first cue with the same
-          // words, which is the wrong one whenever a line repeats.
           const h = hashOf.get(text)
-          if (h) _unsaved.set(h, vi)
+          if (h) banked.set(h, vi)
+          // The in-memory cache belongs to whichever pass is current. Writing
+          // to it after being superseded would put this video's lines into the
+          // next one's.
+          if (generation === _passGeneration) _tlCache.set(text, vi)
         })
-        _passDone = countDone()
+        if (banked.size > 0) void saveNarrationCache(videoId, banked)
 
-        // Flush as we go. A viewer who closes the tab halfway keeps the half
-        // that was paid for.
-        const batchSaved = new Map(_unsaved)
-        _unsaved.clear()
-        void saveNarrationCache(videoId, batchSaved)
+        if (generation !== _passGeneration) return
+        _passDone = countDone()
       }
 
       // Only now, with the whole pass behind it. Written mid-pass this would be

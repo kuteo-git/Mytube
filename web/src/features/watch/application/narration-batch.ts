@@ -60,6 +60,7 @@ export function workOrder(total: number, first: number): number[] {
 export async function translateBatch(
   cues: string[],
   context: string[],
+  signal?: AbortSignal,
 ): Promise<string[]> {
   const blank = cues.map(() => '')
   if (cues.length === 0) return []
@@ -68,6 +69,7 @@ export async function translateBatch(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cues, context }),
+      signal,
     })
     if (!resp.ok) {
       _lastError = `máy chủ trả ${resp.status}`
@@ -86,7 +88,14 @@ export async function translateBatch(
     // it onto the wrong cue.
     return filled
   } catch (e) {
-    _lastError = e instanceof Error ? e.message : 'không gọi được'
+    // Leaving the video is not a failure — and it clears whatever was there,
+    // because this module's error outlives the pass that set it. Left alone, a
+    // stale message would surface on the status line of the next video.
+    _lastError = signal?.aborted
+      ? ''
+      : e instanceof Error
+        ? e.message
+        : 'không gọi được'
     return blank
   }
 }

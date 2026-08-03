@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   BATCH_SIZE,
   FIRST_BATCH,
+  lastBatchError,
   planBatches,
   translateBatch,
   workOrder,
@@ -65,6 +66,34 @@ describe('translateBatch', () => {
   it('resolves to blanks when the request fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
     expect(await translateBatch(['one', 'two'], [])).toEqual(['', ''])
+    expect(lastBatchError()).not.toBe('')
+  })
+
+  it('does not call leaving the video a failure', async () => {
+    // Closing a video aborts the batch in flight. That is the viewer doing
+    // something ordinary, not the translator breaking, and recording it would
+    // put an error on the status line of the next video they open.
+    const ctrl = new AbortController()
+    ctrl.abort()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new DOMException('aborted', 'AbortError')),
+    )
+    expect(await translateBatch(['one'], [], ctrl.signal)).toEqual([''])
+    expect(lastBatchError()).toBe('')
+  })
+
+  it('passes the abort signal to the request', async () => {
+    // Without it, leaving a video leaves the router working on a batch nobody
+    // will ever read — the same waste that cancelling a download avoids.
+    const ctrl = new AbortController()
+    const f = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ translations: ['một'] }),
+    })
+    vi.stubGlobal('fetch', f)
+    await translateBatch(['one'], [], ctrl.signal)
+    expect(f.mock.calls[0][1].signal).toBe(ctrl.signal)
   })
 })
 
