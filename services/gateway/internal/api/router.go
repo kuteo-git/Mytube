@@ -343,7 +343,9 @@ func (g *Gateway) handleGetVideo(w http.ResponseWriter, r *http.Request) {
 		g.writeErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toVideoDTO(resp.Msg.GetVideo()))
+	dto := toVideoDTO(resp.Msg.GetVideo())
+	g.attachMachineTranslation(&dto)
+	writeJSON(w, http.StatusOK, dto)
 }
 
 func (g *Gateway) handleSearch(w http.ResponseWriter, r *http.Request) {

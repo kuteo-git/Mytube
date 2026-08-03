@@ -329,11 +329,16 @@ export function startTranslationPass(videoId: string, fromTime: number) {
 
         if (generation !== _passGeneration) return
         _passDone = countDone()
+
+        // After every batch, not only at the end. The file is what makes the
+        // translation a selectable subtitle track, so writing it once at the
+        // finish meant a viewer had nothing to select for the several minutes
+        // it took to get there.
+        void saveNarrationVtt(videoId, toVTT(cues, _tlCache))
       }
 
-      // Only now, with the whole pass behind it. Written mid-pass this would be
-      // a subtitle file that looks complete and stops halfway through the
-      // video — worse than not being there.
+      // A last write with everything in it, in case the final batch was all
+      // cache hits and the loop wrote nothing.
       if (generation === _passGeneration) {
         void saveNarrationVtt(videoId, toVTT(cues, _tlCache))
       }

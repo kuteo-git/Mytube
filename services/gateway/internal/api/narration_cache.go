@@ -232,6 +232,11 @@ func (g *Gateway) handlePutNarrationCache(w http.ResponseWriter, r *http.Request
 // "vi-mt" shows as VI-MT and is unmistakable.
 const machineVTTSuffix = ".vi-mt.vtt"
 
+// machineVTTLanguage is the BCP-47 tag the track is offered under. "vi-x-mt"
+// uses the private-use subtag, so anything reading it knows this is Vietnamese
+// without mistaking it for the human-written track a video may also carry.
+const machineVTTLanguage = "vi-x-mt"
+
 // narrationVTTName picks the filename the track should take.
 //
 // The base is copied from a subtitle already in the folder ("1080p.mp4.en.vtt"
@@ -289,4 +294,47 @@ func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) 
 	g.logger.Info("narration vtt", "file", name, "bytes", len(body))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"file": name, "bytes": len(body)})
+}
+
+// attachMachineTranslation adds the generated Vietnamese track to a video's
+// subtitle list when one has been written.
+//
+// The catalog cannot know about it: collectSubtitles runs once, when the video
+// is downloaded, and this file appears later — the first time somebody narrates
+// it. Without this the translation was a mode of the player rather than a
+// subtitle, which meant it could only be shown by drawing over the picture
+// ourselves, and only while the machinery that produced it was switched on.
+// As a track it is just another language, drawn by the browser like the rest.
+func (g *Gateway) attachMachineTranslation(v *videoDTO) {
+	if v == nil || v.ID == "" || g.mediaRoot == "" {
+		return
+	}
+	for _, t := range v.Subtitles {
+		if t.Language == machineVTTLanguage {
+			return
+		}
+	}
+	dir, err := safeVideoDir(g.mediaRoot, v.ID)
+	if err != nil {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, machineVTTSuffix) {
+			continue
+		}
+		v.Subtitles = append(v.Subtitles, subtitleDTO{
+			Language: machineVTTLanguage,
+			Label:    "Tiếng Việt (dịch máy)",
+			URL:      "/media/" + v.ID + "/" + name,
+			// Generated in the sense the player already means it: nobody wrote
+			// these by hand.
+			Generated: true,
+		})
+		return
+	}
 }

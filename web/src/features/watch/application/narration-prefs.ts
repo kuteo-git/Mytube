@@ -1,41 +1,46 @@
 /**
- * What narration does with a translated cue: nothing, show it, speak it, or
- * both. Separate from which engine produced it, so the two can be judged one at
- * a time — a bad impression from a single combined list of presets could not be
- * traced back to the engine or to the presentation.
+ * What narration does, now that the translation is a subtitle track like any
+ * other.
+ *
+ * There used to be four output modes here — off, subtitles, voice, both —
+ * because showing the translated text was something only this feature could do,
+ * by drawing over the picture. Once the translation is a track the browser can
+ * render, "show it" is just selecting it in the subtitle list, and what is left
+ * for narration to decide is whether to read it aloud.
  */
-export type NarrationOutput = 'off' | 'subs' | 'voice' | 'both'
 
-const OUTPUT_KEY = 'yt-narration-output-v1'
+const SPEAK_KEY = 'yt-narration-speak-v1'
 const AUTO_KEY = 'yt-narration-auto-translate-v1'
-const LEGACY_KEY = 'yt-narration-on'
-
-const OUTPUTS: NarrationOutput[] = ['off', 'subs', 'voice', 'both']
+/** Superseded twice. Read once, to carry a viewer's choice across. */
+const OUTPUT_KEY = 'yt-narration-output-v1'
+const LEGACY_ON_KEY = 'yt-narration-on'
 
 export function loadNarrationPrefs(): {
-  output: NarrationOutput
+  speak: boolean
   /** Whether the background translation pass may run at all. */
   autoTranslate: boolean
 } {
-  const rawOutput = window.localStorage.getItem(OUTPUT_KEY)
-
-  let output: NarrationOutput = 'off'
-  if (OUTPUTS.includes(rawOutput as NarrationOutput)) {
-    output = rawOutput as NarrationOutput
-  } else if (window.localStorage.getItem(LEGACY_KEY) === '1') {
-    // Someone who had the old switch on wanted a voice, not subtitles.
-    output = 'voice'
+  const raw = window.localStorage.getItem(SPEAK_KEY)
+  let speak = raw === '1'
+  if (raw === null) {
+    // Anyone who had it reading aloud under either older key keeps that.
+    const output = window.localStorage.getItem(OUTPUT_KEY)
+    speak =
+      output === 'voice' ||
+      output === 'both' ||
+      window.localStorage.getItem(LEGACY_ON_KEY) === '1'
   }
+
   // Defaults on: a video with only English subtitles cannot be narrated without
   // it, and someone switching narration on has already said what they want.
   const autoTranslate = window.localStorage.getItem(AUTO_KEY) !== '0'
-  return { output, autoTranslate }
+  return { speak, autoTranslate }
 }
 
 export function saveNarrationPrefs(p: {
-  output: NarrationOutput
+  speak: boolean
   autoTranslate: boolean
 }) {
-  window.localStorage.setItem(OUTPUT_KEY, p.output)
+  window.localStorage.setItem(SPEAK_KEY, p.speak ? '1' : '0')
   window.localStorage.setItem(AUTO_KEY, p.autoTranslate ? '1' : '0')
 }

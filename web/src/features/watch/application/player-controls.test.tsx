@@ -136,6 +136,8 @@ beforeEach(() => {
   // Narration preferences persist. A test that switches narration on would
   // otherwise leave it on for every test after it in this file, and those
   // render a player that starts an audio scheduler jsdom has no clock for.
+  window.localStorage.removeItem('yt-narration-speak-v1')
+  window.localStorage.removeItem('yt-narration-auto-translate-v1')
   window.localStorage.removeItem('yt-narration-output-v1')
   window.localStorage.removeItem('yt-narration-engine-v1')
   window.localStorage.removeItem('yt-narration-on')

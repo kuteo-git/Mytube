@@ -129,3 +129,52 @@ func TestNarrationVTTNameWithNothingToCopy(t *testing.T) {
 		t.Fatalf("want narration.vi-mt.vtt, got %q", got)
 	}
 }
+
+func TestAttachMachineTranslation(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "vid1")
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "1080p.mp4.vi-mt.vtt"), []byte("WEBVTT"), 0o644)
+
+	g := &Gateway{mediaRoot: root}
+	v := videoDTO{ID: "vid1", Subtitles: []subtitleDTO{
+		{Language: "en", Label: "English", URL: "/media/vid1/1080p.mp4.en.vtt"},
+	}}
+	g.attachMachineTranslation(&v)
+
+	if len(v.Subtitles) != 2 {
+		t.Fatalf("want 2 tracks, got %d", len(v.Subtitles))
+	}
+	got := v.Subtitles[1]
+	if got.Language != "vi-x-mt" {
+		t.Fatalf("want vi-x-mt so it cannot be confused with a human track, got %q", got.Language)
+	}
+	if got.URL != "/media/vid1/1080p.mp4.vi-mt.vtt" {
+		t.Fatalf("wrong url: %q", got.URL)
+	}
+}
+
+func TestAttachMachineTranslationWithNoFile(t *testing.T) {
+	// Nothing translated yet: the track simply is not offered.
+	g := &Gateway{mediaRoot: t.TempDir()}
+	v := videoDTO{ID: "vid1"}
+	g.attachMachineTranslation(&v)
+	if len(v.Subtitles) != 0 {
+		t.Fatalf("invented a track: %+v", v.Subtitles)
+	}
+}
+
+func TestAttachMachineTranslationIsIdempotent(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "vid1")
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "1080p.mp4.vi-mt.vtt"), []byte("WEBVTT"), 0o644)
+
+	g := &Gateway{mediaRoot: root}
+	v := videoDTO{ID: "vid1"}
+	g.attachMachineTranslation(&v)
+	g.attachMachineTranslation(&v)
+	if len(v.Subtitles) != 1 {
+		t.Fatalf("added it twice: %d", len(v.Subtitles))
+	}
+}

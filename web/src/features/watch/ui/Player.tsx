@@ -41,9 +41,7 @@ import { formatDuration as formatEta } from '@/features/watch/application/narrat
 import {
   loadNarrationPrefs,
   saveNarrationPrefs,
-  type NarrationOutput,
 } from '@/features/watch/application/narration-prefs'
-import { NarrationSubtitles } from '@/features/watch/ui/NarrationSubtitles'
 import { centreCues } from '@/features/watch/application/cue-placement'
 import {
   canGoFullscreen,
@@ -437,13 +435,11 @@ export function Player({
   }, [])
   const captionsRef = useRef<string | null>(null)
   const [narrationPrefs, setNarrationPrefs] = useState(loadNarrationPrefs)
-  const narrationOn = narrationPrefs.output !== 'off'
-  // Showing the translation and speaking it are separate: subtitles must not
-  // duck the video's own audio, and must not start the TTS scheduler.
-  const narrationSpeaks =
-    narrationPrefs.output === 'voice' || narrationPrefs.output === 'both'
-  const narrationShows =
-    narrationPrefs.output === 'subs' || narrationPrefs.output === 'both'
+  const narrationSpeaks = narrationPrefs.speak
+  // Reading aloud is the only thing narration still decides. Showing the
+  // translated text is choosing its track in the subtitle list, like any other
+  // language the video carries.
+  const narrationOn = narrationSpeaks
   const narrationOnRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
   // Keep refs synchronised so callbacks that are intentionally stable (empty
@@ -564,7 +560,10 @@ export function Player({
   const narrationAvailable = hasVi || hasEn
   // Translation only happens when there is nothing Vietnamese to read already:
   // loadViSubtitles takes a Vietnamese track in preference to translating one.
-  const narrationSourceIsEnglish = hasEn && !hasVi
+  // Whether this video can be translated at all: there is English to work from
+  // and no Vietnamese track to prefer over it. Decides whether the translation
+  // group appears — never whether it runs, which is the switch's job.
+  const canTranslate = hasEn && !hasVi
 
   // <track> elements are created synchronously by React, but the browser
   // initialises the backing TextTrack objects asynchronously (microtask).
@@ -1026,19 +1025,6 @@ export function Player({
    * interrupting what you were watching, every time, and dismissing them would
    * mean interrupting it again.
    */
-  const setNarrationOutput = useCallback((output: NarrationOutput) => {
-    // The AudioContext has to be created and resumed inside the gesture, or the
-    // browser's autoplay policy will not let it make a sound.
-    if (output === 'voice' || output === 'both') {
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
-      void audioCtxRef.current.resume()
-    }
-    setNarrationPrefs((p) => {
-      const next = { ...p, output }
-      saveNarrationPrefs(next)
-      return next
-    })
-  }, [])
 
   // Declared here rather than beside the other layout state: the settings below
   // size their touch targets from it, and they are built first.
@@ -1055,78 +1041,28 @@ export function Player({
     return () => window.clearInterval(id)
   }, [narrationOn])
 
-  /**
-   * What text is on the picture: nothing, the video's own subtitles, or the
-   * machine translation.
-   *
-   * One control, because there is one answer. It used to be two — a captions
-   * group and a narration group that also offered subtitles — so "Phụ đề"
-   * appeared under the heading "Thuyết minh" while a separate list a few rows
-   * up offered subtitles as well. Two ways to put Vietnamese on screen, and no
-   * way to tell from the menu which one you were choosing.
-   */
-  // Two different questions. Whether this video could be translated decides
-  // whether the group appears at all — gating that on the switch would hide the
-  // switch that turns it back on. Whether a translation is actually on offer as
-  // a subtitle depends on the switch as well.
-  const canTranslate = narrationAvailable && narrationSourceIsEnglish
-  const translatedAvailable = canTranslate && narrationPrefs.autoTranslate
-  const subtitleValue = narrationShows
-    ? 'mt'
-    : (captions ?? 'off')
-
-  const chooseSubtitle = useCallback(
-    (v: string) => {
-      const speaking = narrationSpeaks
-      if (v === 'mt') {
-        setCaptions(null)
-        setNarrationOutput(speaking ? 'both' : 'subs')
-        return
-      }
-      setCaptions(v === 'off' ? null : v)
-      setNarrationOutput(speaking ? 'voice' : 'off')
-    },
-    [narrationSpeaks, setCaptions],
-  )
-
   const toggleAutoTranslate = useCallback(() => {
     setNarrationPrefs((p) => {
-      const autoTranslate = !p.autoTranslate
-      // Turning it off takes the translated subtitle away, so anything selecting
-      // it has to let go: the alternative is a segmented control with nothing
-      // highlighted and a picture with nothing on it.
-      const showing = p.output === 'subs' || p.output === 'both'
-      const output =
-        !autoTranslate && showing
-          ? p.output === 'both'
-            ? 'voice'
-            : 'off'
-          : p.output
-      const next = { ...p, autoTranslate, output }
+      const next = { ...p, autoTranslate: !p.autoTranslate }
       saveNarrationPrefs(next)
       return next
     })
   }, [])
 
   const toggleSpeak = useCallback(() => {
-    const showing = narrationShows
-    const next = narrationSpeaks
-      ? showing
-        ? 'subs'
-        : 'off'
-      : showing
-        ? 'both'
-        : 'voice'
-    setNarrationOutput(next)
-  }, [narrationShows, narrationSpeaks])
+    // Outside the updater, not inside it: React may run an updater more than
+    // once, and building an AudioContext is not something to do twice.
+    if (!narrationPrefs.speak) {
+      // It has to be created and resumed inside the gesture, or the browser's
+      // autoplay policy will not let it make a sound.
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      void audioCtxRef.current.resume()
+    }
+    const next = { ...narrationPrefs, speak: !narrationPrefs.speak }
+    saveNarrationPrefs(next)
+    setNarrationPrefs(next)
+  }, [narrationPrefs])
 
-  /** The option carries its own state, where the eye already is. */
-  const translatedLabel =
-    progress.phase === 'translating'
-      ? 'VI (translating)'
-      : progress.phase === 'failed' || progress.phase === 'no-subtitles'
-        ? 'VI (failed)'
-        : 'VI (auto)'
 
   /**
    * Translation, last and behind a rule.
@@ -1165,25 +1101,26 @@ export function Player({
   const subtitleRows = (
     <SegmentedSetting
       label="Subtitles"
-      value={subtitleValue}
-      onSelect={chooseSubtitle}
+      value={captions ?? 'off'}
+      onSelect={(v: string) => setCaptions(v === 'off' ? null : v)}
       tall={coarse}
       options={[
         { value: 'off', label: 'Off' },
+        // The machine translation is in this list because the gateway offers it
+        // as a track once one has been written. It needs no special case here,
+        // and neither does anything else: one renderer, one list, one answer.
         ...subtitles
-          .filter((t) => /^(en|eng|vi|vie)$/.test(t.language))
+          .filter((t) => /^(en|eng|vi|vie|vi-x-mt)$/.test(t.language))
           .map((t) => ({
             value: t.language,
-            label: /^en/.test(t.language) ? 'EN' : 'VI',
+            label:
+              t.language === 'vi-x-mt'
+                ? 'VI (auto)'
+                : /^en/.test(t.language)
+                  ? 'EN'
+                  : 'VI',
             hint: t.label + (t.generated ? ' (auto-generated)' : ''),
           })),
-        ...(translatedAvailable
-          ? [{
-              value: 'mt',
-              label: translatedLabel,
-              hint: 'Machine translation into Vietnamese',
-            }]
-          : []),
       ]}
     />
   )
@@ -1664,8 +1601,6 @@ export function Player({
           )}
         </div>
       )}
-
-      <NarrationSubtitles front={front} active={narrationShows} />
 
       {/* Reopening a muxed stream at a new mark takes a couple of seconds, and
           the old picture stays on screen throughout. Without this the seek
