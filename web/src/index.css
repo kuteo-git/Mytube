@@ -100,12 +100,19 @@
      from the bottom. Switching between them made the text jump.
 
      One spec, written twice — here for the browser's renderer, and in
-     NarrationSubtitles for ours. Sizes are in vh rather than px so both scale
-     with the picture the way captions are expected to, which is also what the
-     browser's own default does. */
+     NarrationSubtitles for ours.
+
+     Placement is not here, because it cannot be: a cue's own align/position
+     settings beat any stylesheet. YouTube's auto-captions carry
+     `align:start position:0%` on every cue — 463 of them in one measured file —
+     pinning them bottom-left while our translation, carrying none, centres. The
+     gateway strips them on the way out; see internal/api/vtt.go. */
   ::cue {
     font-family: inherit;
-    font-size: 3.2vh;
+    /* clamp, not a bare vh: a tall window made the text enormous over a small
+       player, and a short one shrank it below reading size. The bounds are the
+       readable range; vh keeps it moving with the picture in between. */
+    font-size: clamp(13px, 2.1vh, 20px);
     line-height: 1.35;
     color: #fff;
     background-color: rgb(0 0 0 / 0.7);

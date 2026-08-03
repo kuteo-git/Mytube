@@ -85,8 +85,7 @@ func main() {
 
 	// Served here during development. In the LAN deployment Caddy takes this
 	// route over, since it handles range requests and caching better.
-	mux.Handle("GET /media/", http.StripPrefix("/media/",
-		http.FileServer(http.Dir(mediaRoot))))
+	mux.Handle("GET /media/", http.StripPrefix("/media/", api.MediaHandler(mediaRoot)))
 
 	handler := withCORS(mux, webOrigin)
 

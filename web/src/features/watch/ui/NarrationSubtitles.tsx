@@ -56,7 +56,7 @@ export function NarrationSubtitles({
     <div className="pointer-events-none absolute inset-x-0 bottom-[8%] z-20 flex justify-center px-[5%]">
       <span
         className="rounded bg-black/70 px-2 py-0.5 text-center text-white"
-        style={{ fontSize: '3.2vh', lineHeight: 1.35 }}
+        style={{ fontSize: 'clamp(13px, 2.1vh, 20px)', lineHeight: 1.35 }}
       >
         {line}
       </span>

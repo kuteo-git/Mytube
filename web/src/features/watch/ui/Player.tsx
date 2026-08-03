@@ -1073,6 +1073,14 @@ export function Player({
         ? 'VI (failed)'
         : 'VI (auto)'
 
+  const autoplayRow = onPlayNext ? (
+    <SettingRow
+      label="Autoplay"
+      on={autoplayEnabled}
+      onToggle={() => setAutoplayEnabled(!autoplayEnabled)}
+    />
+  ) : undefined
+
   const subtitleRows = (
     <SegmentedSetting
       label="Subtitles"
@@ -1927,34 +1935,9 @@ export function Player({
           )}
           <span className="flex-1" />
 
-          {onPlayNext && variant === 'full' && !coarse && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoplayEnabled}
-              aria-label="Autoplay"
-              title={autoplayEnabled ? 'Autoplay is on' : 'Autoplay is off'}
-              onClick={() => setAutoplayEnabled(!autoplayEnabled)}
-              className={controlButton}
-            >
-              {/* Drawn as a switch, not an action: the state has to be readable
-                  at a glance, and an icon that looks clickable-once would read
-                  as "skip", which is the button next to it. */}
-              <span
-                className={
-                  'flex h-3.5 w-7 items-center rounded-full px-0.5 transition-colors duration-150 ease-out ' +
-                  (autoplayEnabled ? 'bg-white' : 'bg-white/30')
-                }
-              >
-                <span
-                  className={
-                    'h-2.5 w-2.5 rounded-full transition-transform duration-150 ease-out ' +
-                    (autoplayEnabled ? 'translate-x-3.5 bg-black' : 'bg-white')
-                  }
-                />
-              </span>
-            </button>
-          )}
+          {/* Autoplay lives in the gear now, with the other settings. On the
+              bar it was a switch drawn to look like a switch and still read as
+              "skip", since the actual skip button sat right beside it. */}
 
           {/* Only in the corner. In the full player captions live in the gear
               beside narration: two menus a few pixels apart, one for the
@@ -1997,18 +1980,13 @@ export function Player({
                   <>
                     {subtitleRows}
                     {narrationRows}
-                    {onPlayNext && (
-                      <SettingRow
-                        label="Autoplay"
-                        on={autoplayEnabled}
-                        onToggle={() => setAutoplayEnabled(!autoplayEnabled)}
-                      />
-                    )}
+                    {autoplayRow}
                   </>
                 ) : (
                   <>
                     {subtitleRows}
                     {narrationRows}
+                    {autoplayRow}
                   </>
                 )
               }
