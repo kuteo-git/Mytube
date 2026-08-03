@@ -3,16 +3,18 @@ import { useParams } from 'react-router-dom'
 import {
   useDiscover,
   useFeed,
-  usePopular,
+  useHistory,
   useStorage,
   useTopPlayed,
   useTopics,
 } from '@/features/catalog/application/queries'
+import { isInProgress } from '@/features/catalog/domain/video'
 import { useHiddenVideos } from '@/features/catalog/application/hidden'
 import { ChipBar } from '@/features/catalog/ui/ChipBar'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
+import { VideoRail } from '@/features/catalog/ui/VideoRail'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
@@ -39,7 +41,13 @@ export function HomePage() {
   const { data: topics } = useTopics()
   const { data: storage } = useStorage()
   const { data: topPlayed } = useTopPlayed(25)
-  const { data: popular } = usePopular(12)
+  // Partly watched, most recent first — history already comes back in that
+  // order. isInProgress is the same 2%-to-95% window the feed ranks by, so a
+  // video cannot be finished here and unfinished there.
+  const { data: history } = useHistory()
+  const continueWatching = (history?.pages.flatMap((page) => page.videos) ?? [])
+    .filter(isInProgress)
+    .slice(0, 12)
 
   // Every section reads the same list. It used to be the feed alone, edited
   // through its query cache, so hiding a card in "Popular with you" removed it
@@ -95,15 +103,15 @@ export function HomePage() {
         </p>
       ) : (
         <>
-          {showCollections && visible(popular).length > 0 && (
+          {/* What a returning viewer came back for, and the one row that can
+              be finished rather than browsed. A rail, not a grid: as twelve
+              cards this section arrived instead of the feed rather than before
+              it — four rows on a desktop and twelve on a phone. */}
+          {showCollections && continueWatching.length > 0 && (
             <section className="pt-3">
-              <h2 className="mb-3 text-lg font-medium">Popular with you</h2>
-              <div className="grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
-                {visible(popular).map((video) => (
-                  <VideoCard key={video.id} video={video} />
-                ))}
-              </div>
-              <hr className="mt-10 border-0 border-t border-line" />
+              <h2 className="mb-3 text-lg font-medium">Continue watching</h2>
+              <VideoRail videos={continueWatching} />
+              <hr className="mt-8 border-0 border-t border-line" />
             </section>
           )}
 
