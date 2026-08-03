@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { videoItemHover } from '@/features/catalog/ui/video-item-hover'
+import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import { Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { ExternalVideo } from '../infrastructure/catalogRepository'
@@ -31,7 +31,7 @@ export function ExternalVideoCard({
   const open = useOpenExternal()
 
   return (
-    <article className={clsx('flex flex-col gap-3', videoItemHover)}>
+    <article className={clsx('flex flex-col gap-3', videoItemHover, videoItemBleed)}>
       <button
         type="button"
         disabled={open.isPending}

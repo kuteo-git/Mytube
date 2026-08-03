@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { videoItemHover } from '@/features/catalog/ui/video-item-hover'
+import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import { ListVideo } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
@@ -26,7 +26,7 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
     .filter((name, i, all) => name && all.indexOf(name) === i)
 
   return (
-    <article className={clsx('group flex flex-col gap-3', videoItemHover)}>
+    <article className={clsx('group flex flex-col gap-3', videoItemHover, videoItemBleed)}>
       <Link to={`/watch/${lead.id}${topPlayedQueueSearch()}`} className="block">
         {/* The offset slivers behind the thumbnail are the stack. Purely
             decorative, so they are hidden from assistive technology. */}
