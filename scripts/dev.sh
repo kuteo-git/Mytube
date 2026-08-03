@@ -4,7 +4,7 @@
 #   scripts/dev.sh
 #
 # Ports: gateway 8180 (the only one the browser talks to), catalog 8181,
-# recsys 8182, ingest 8183, TTS 8002, NLLB 8005, Vite 5173.
+# recsys 8182, ingest 8183, TTS 8002, translate 8005, Vite 5173.
 # Chosen off the 808x block because other projects on this machine hold 8080
 # and 8082 permanently.
 # Requires Postgres to be running:
@@ -59,11 +59,11 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 
-# --- NLLB translation server (EN → VI) ---
+# --- translation server (EN → VI), NLLB and Qwen ---
 NLLB_VENV="${NLLB_VENV:-/tmp/nllb-venv}"
-if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/nllb_server.py ]; then
-  echo "starting NLLB translation server (port 8005)..."
-  "$NLLB_VENV/bin/python" services/nllb_server.py >"$LOG_DIR/nllb.log" 2>&1 & pids+=($!)
+if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/translate_server.py ]; then
+  echo "starting translation server (port 8005)..."
+  "$NLLB_VENV/bin/python" services/translate_server.py >"$LOG_DIR/translate.log" 2>&1 & pids+=($!)
 fi
 
 echo "catalog :8181 | recsys :8182 | ingest :8183 | gateway :8180 | logs in $LOG_DIR"
