@@ -130,6 +130,7 @@ export type NarrationPhase =
   | 'not-needed'
   | 'translating'
   | 'done'
+  | 'failed'
 
 export function narrationProgress(): {
   done: number
@@ -307,7 +308,12 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       if (generation === _passGeneration) {
         _passRunning = false
         if (_passPhase === 'translating' || _passPhase === 'waiting-subtitles') {
-          _passPhase = _passTotal > 0 && _passDone >= _passTotal ? 'done' : 'idle'
+          // 'failed', never 'idle'. Falling back to idle meant a pass that ran
+          // to the end and got nothing usable back reported itself as "not
+          // started" — the one description guaranteed to send whoever reads it
+          // looking in the wrong place. It was reported twice before this.
+          _passPhase =
+            _passTotal > 0 && _passDone >= _passTotal ? 'done' : 'failed'
         }
       }
     }

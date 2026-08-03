@@ -2338,8 +2338,10 @@ function NarrationStatus({ engine }: { engine: NarrationEngine }) {
     'not-needed': 'Phụ đề đã là tiếng Việt, không cần dịch',
     translating: 'Đang dịch nền…',
     done: 'Đã dịch xong',
+    failed: 'Dịch lỗi — máy dịch không trả về kết quả',
   }
-  const bar = p.phase === 'translating' || p.phase === 'done'
+  const bar =
+    p.phase === 'translating' || p.phase === 'done' || p.phase === 'failed'
   const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
 
   return (
