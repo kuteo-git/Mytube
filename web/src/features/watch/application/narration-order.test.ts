@@ -99,6 +99,19 @@ function fakeVideo(currentTime: number) {
   return { currentTime, paused: false, volume: 1 }
 }
 
+/** A video the narration can also listen to, for the pause and seek handlers. */
+function listeningVideo(currentTime: number) {
+  const el = new EventTarget() as EventTarget & {
+    currentTime: number
+    paused: boolean
+    volume: number
+  }
+  el.currentTime = currentTime
+  el.paused = false
+  el.volume = 1
+  return el
+}
+
 beforeEach(() => {
   scheduled = []
   sources = []
@@ -247,5 +260,124 @@ describe('scheduling order', () => {
     await settle()
 
     expect(scheduled).toHaveLength(0)
+  })
+})
+
+/**
+ * Pressing play has to start asking for audio straight away.
+ *
+ * Reported as "TTS requests come a long time after play, and switching Read
+ * aloud off and on fixes it" — which is the tell: that toggle tears the tick
+ * loop down and rebuilds it, so whatever the loop was holding onto was the
+ * problem, not the settings.
+ */
+describe('resuming after a pause', () => {
+  it('asks for audio on the first tick after play', async () => {
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    const ctx = fakeAudioContext()
+    const video = listeningVideo(0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unbind = bindNarration(video as any)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle()
+    const beforePause = scheduled.length
+    expect(beforePause).toBeGreaterThan(0)
+
+    // Pause, exactly as the element would: the flag and the event.
+    video.paused = true
+    video.dispatchEvent(new Event('pause'))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle(20)
+
+    scheduled = []
+    // Play again, from the top, where every cue is still ahead.
+    video.paused = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle()
+
+    expect(scheduled.length).toBeGreaterThan(0)
+    unbind()
+  })
+
+  it('does not sit out the rest of the video after a pause', async () => {
+    // The cursor travels with the clips placed ahead of the playhead. Leaving
+    // it out there meant play resumed from a point the video had not reached,
+    // and nothing was said until it caught up.
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    const ctx = fakeAudioContext()
+    const video = listeningVideo(0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unbind = bindNarration(video as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle()
+
+    video.paused = true
+    video.dispatchEvent(new Event('pause'))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle(20)
+
+    scheduled = []
+    video.paused = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(video as any, ctx as any)
+    await settle()
+
+    // All three lines are still ahead of a playhead that never moved, so all
+    // three should be placed again.
+    expect(scheduled.map((s) => s.line)).toEqual([0, 1, 2])
+    unbind()
+  })
+})
+
+describe('which element narration listens to', () => {
+  it('follows the layer that is actually in front', async () => {
+    // The player keeps two <video> elements and swaps them — when the download
+    // replaces the upstream stream, or the quality changes. Listeners bound
+    // once stay on the element that was in front at the time, so a pause on the
+    // one actually showing goes unheard.
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    const first = listeningVideo(0)
+    const second = listeningVideo(0)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unbindFirst = bindNarration(first as any)
+
+    const ctx = fakeAudioContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(first as any, ctx as any)
+    await settle()
+    expect(scheduled.length).toBeGreaterThan(0)
+
+    // The swap: stop listening to the old layer, start on the new one.
+    unbindFirst()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const unbindSecond = bindNarration(second as any)
+
+    // A pause on the element now in front has to be heard.
+    second.paused = true
+    second.dispatchEvent(new Event('pause'))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(second as any, ctx as any)
+    await settle(20)
+
+    scheduled = []
+    second.paused = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(second as any, ctx as any)
+    await settle()
+
+    expect(scheduled.map((s) => s.line)).toEqual([0, 1, 2])
+    unbindSecond()
   })
 })

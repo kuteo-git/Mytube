@@ -640,11 +640,29 @@ export function Player({
     // survives the tab going to the background — and in the background the
     // timer is the first thing to stop, which is exactly when a pause pressed
     // on a lock screen has to be noticed.
-    const element = front()
-    const unbind = element ? bindNarration(element) : undefined
+    // Rebound whenever the front layer changes, not once at setup.
+    //
+    // The player keeps two <video> elements and swaps which is on screen — when
+    // the downloaded file replaces the upstream one, or the quality changes.
+    // Binding once left the listeners on whichever element happened to be in
+    // front at the time, so pause and play on the element actually showing went
+    // unheard: no rewind, and the cursor stayed out where the prefetch had left
+    // it, which is minutes of silence after pressing play. Switching Read aloud
+    // off and on appeared to fix it because that tears this effect down and
+    // rebuilds it against the current element.
+    let bound: HTMLVideoElement | null = null
+    let unbind: (() => void) | undefined
+    const bindTo = (el: HTMLVideoElement | null) => {
+      if (el === bound) return
+      unbind?.()
+      bound = el
+      unbind = el ? bindNarration(el) : undefined
+    }
+    bindTo(front())
 
     const id = setInterval(() => {
       const el = front()
+      bindTo(el)
       if (!el || !audioCtxRef.current) return
       tickNarration(el, audioCtxRef.current)
     }, 100)
