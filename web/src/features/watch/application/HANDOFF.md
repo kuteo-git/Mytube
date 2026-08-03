@@ -39,7 +39,7 @@ Hệ thống thuyết minh (narration) tự động đọc phụ đề tiếng V
 | `web/src/features/watch/ui/Player.tsx` | UI button + AudioContext management |
 | `services/gateway/internal/api/tts.go` | Proxy TTS + ffmpeg atempo |
 | `services/gateway/internal/api/translate.go` | Proxy NLLB-200 |
-| `services/nllb_server.py` | NLLB-200 translation server (port 8005) |
+| `services/translate_server.py` | Translation server, NLLB + Qwen (port 8005) |
 
 ---
 
@@ -50,7 +50,7 @@ Hệ thống thuyết minh (narration) tự động đọc phụ đề tiếng V
 | `TTS_VOICE` | `'Ngọc Linh'` | Giọng đọc |
 | `DEFAULT_SPEED` | `1.1` | Tốc độ mặc định (server atempo) |
 | `MAX_SPEED` | `3.0` | Tốc độ tối đa khi slot chật |
-| `PREFETCH_SEC` | `10` | Fetch TTS trước bao nhiêu giây |
+| `PREFETCH_SEC` | `60` | Fetch TTS trước bao nhiêu giây (đã đổi từ 10 — xem CLAUDE.md §8.3b: 10s runway làm narration im sau ≤10s khi tab vào nền) |
 | `GAP_BETWEEN_CLIPS` | `0.25` | Khoảng nghỉ giữa 2 câu |
 | `NARRATION_DUCK` | `0.2` | Volume video khi bật thuyết minh (20%) |
 | `MAX_WORDS_NO_PUNCT` | `30` | Force split nếu ko có dấu câu |
@@ -141,7 +141,9 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 
 | Key | Ý nghĩa |
 |-----|---------|
-| `yt-narration-on` | Trạng thái nút thuyết minh |
+| `yt-narration-output-v1` | `off` / `subs` / `voice` / `both` |
+| `yt-narration-engine-v1` | `nllb` / `qwen` |
+| `yt-narration-on` | **Cũ.** Boolean bật/tắt; chỉ còn được đọc một lần để chuyển `'1'` → `output: 'voice'` |
 | `yt-player-volume` | Volume người dùng |
 | `yt-player-muted` | Mute state |
 | `yt-player-captions` | Ngôn ngữ sub đang chọn |
@@ -164,30 +166,58 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 
 ## Translation Models
 
-File config: `services/nllb_server.py` (dòng `MODEL_NAME`). Port 8005.
+Config: `services/translate_server.py`. Port 8005. Two engines, chọn trong menu
+⚙ của player dưới mục "Máy dịch".
 
-### NLLB-200-distilled-600M (đang dùng)
+Mọi số đo trên máy này (M4, 24 GB) ngày 2026-08-03, dùng cue đã gộp bởi
+`parseVTT()` thật.
 
-| Ưu | Nhược |
-|-----|-------|
-| Dịch 200 ngôn ngữ, EN→VI khá tốt | Nặng ~2.5GB disk, ~4GB RAM |
-| Ngữ cảnh ổn với câu dài | Chậm (~2-3s/câu lần đầu, ~0.5s sau warmup) |
-| Phân biệt được ngữ cảnh formal/casual | `you` → `anh` (phải dùng pronoun replacement) |
+| | NLLB-200-distilled-600M | Qwen3-8B-4bit (MLX) |
+|---|---|---|
+| Đường đi | 1 request/cue | lô 15, kèm 3 cue ngữ cảnh |
+| Throughput | ~10 từ/giây | 7.43 từ/giây |
+| Mỗi cue | 1.34s (20 từ), 1.71s (17 từ) | 1.36s |
+| Lần gọi đầu | 13.3s (cold) | 3.5s load model |
+| RAM | ~4 GB | ~4.5 GB |
+| Gọi người xem là "bạn" | chỉ khi có hack marker (không hack: sai 2/5) | 5/5 từ prompt |
+| Ngữ cảnh giữa các cue | không | có |
 
-### Helsinki-NLP/opus-mt-en-vi
+**MLX không chạy được NLLB.** NLLB-200 là encoder-decoder (M2M100), mà `mlx-lm`
+chỉ có kiến trúc decoder-only — đã kiểm cả 120 file trong `mlx_lm/models/`.
+Muốn port thì phải tự viết model. Đây là *đã kiểm*, không phải phỏng đoán.
 
-| Ưu | Nhược |
-|-----|-------|
-| Nhẹ ~300MB disk/RAM | Chỉ EN→VI, ko hỗ trợ language khác |
-| Nhanh hơn NLLB (~0.3s/câu) | Chất lượng thấp hơn, dịch thô |
-| Chuyên cho EN→VI | Dịch `Dr.` → `Tiến sĩ` (sai context) |
+**Đổi engine KHÔNG làm dịch nhanh hơn.** Cả hai ứng viên MLX đều đo được **chậm
+hơn** NLLB tính trên mỗi cue. Toàn bộ phần nhanh đến từ cache trong
+`{MEDIA_ROOT}/{videoId}/narration.vi.json`; đổi engine là mua **chất lượng**.
+Đừng với tay sang model to hơn để chữa một than phiền về độ trễ.
+
+**Lệch dòng theo lô là do đầu vào vụn, không phải do model.** Cho ăn dòng VTT
+thô đã khử trùng lặp: Qwen trả 9/12 dòng, Gemma-3-12B trả 44/60 — và vì client
+map theo vị trí, một dòng thiếu **không** làm mất một cue mà làm **mọi cue sau
+đó bị đọc lệch nhịp**, âm thầm. Cho ăn cue gộp bởi `parseVTT()`: cả hai đều
+60/60. Mọi benchmark sau này phải dùng cue đã gộp, không thì đo nhầm thứ.
+Server vẫn từ chối lô có số dòng không khớp và dịch lại từng cue.
+
+**Gemma-3-12B đã đo và đã loại.** Tiếng Việt tự nhiên nhất trong ba, nhưng nó
+**bịa thêm nội dung**: `"Just think about that."` trả về `"Nghĩ xem, đúng là bất
+ngờ."` Người nghe thuyết minh không có cách nào phân biệt câu bịa với câu người
+dẫn thật sự nói. Ngoài ra chậm hơn 1.7× (4.32 từ/giây), load 33s, cần 7 GB —
+không vừa ổ trong, chỉ nằm được trên SSD ngoài.
+
+**Mật độ lời nói**, đo trên 6 file phụ đề thật: **1.1–3.1 từ/giây video**. Nên
+Qwen đi trước playhead 2.4–3.7×, NLLB còn hơn. Biên đó không vô hạn: bấm play
+cũng khởi động một lượt tải yt-dlp và một lượt remux ffmpeg giành cùng GPU.
+
+`narration-vtt.ts` chạy được nguyên xi bằng `node --experimental-strip-types`
+(Node 25), nên nếu sau này muốn dịch sẵn phía server thì **không cần port**
+parser 348 dòng sang Python.
 
 ### Cách đổi model
 
-1. Sửa `MODEL_NAME` trong `services/nllb_server.py`
-2. Kill port 8005, xoá cache model cũ: `rm -rf ~/.cache/huggingface/hub/models--facebook--nllb*`
-3. Restart: `/tmp/nllb-venv/bin/python services/nllb_server.py &`
-4. Model mới tự tải từ HuggingFace lần đầu chạy
+1. Sửa `QWEN_MODEL` (hoặc `NLLB_MODEL`) trong `services/translate_server.py`
+2. Restart: `/tmp/nllb-venv/bin/python services/translate_server.py &`
+3. Cache phân vùng theo **id engine** — model mới mà dùng lại id cũ sẽ đọc phải
+   bản dịch của model trước. Đặt id mới.
 
 ## Unit Tests
 
@@ -211,5 +241,5 @@ Run: `npx vitest run web/src/features/watch/application/narration.test.ts`
 |------|---------|---------------|
 | 8180 | Gateway | `scripts/dev.sh` |
 | 8002 | TTS (VieNeu) | `python robot-esp32/services/vieneu_server.py` |
-| 8005 | NLLB Translate | `/tmp/nllb-venv/bin/python services/nllb_server.py` |
+| 8005 | Translate (NLLB + Qwen) | `/tmp/nllb-venv/bin/python services/translate_server.py` |
 | 5173 | Vite (web) | `scripts/dev.sh` (auto) |
