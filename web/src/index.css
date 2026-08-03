@@ -107,6 +107,23 @@
      `align:start position:0%` on every cue — 463 of them in one measured file —
      pinning them bottom-left while our translation, carrying none, centres. The
      gateway strips them on the way out; see internal/api/vtt.go. */
+  /* The stock select renders its arrow hard against the right border with no
+     gutter, so a long option — a voice name, a model id — runs straight into
+     it. The native widget gives no way to reserve that space, so the arrow is
+     drawn here instead and padding-right makes the room it never had. */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23aaaaaa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9.5l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 0.75rem 0.75rem;
+  }
+  select::-ms-expand {
+    display: none;
+  }
+
   ::cue {
     font-family: inherit;
     /* clamp, not a bare vh: a tall window made the text enormous over a small
