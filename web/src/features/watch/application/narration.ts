@@ -19,6 +19,7 @@ import {
   hashCue,
   loadNarrationCache,
   saveNarrationCache,
+  saveNarrationCues,
   type NarrationEngine,
 } from '@/features/watch/infrastructure/narration-cache'
 import {
@@ -78,6 +79,7 @@ let _passRunning = false
 let _passGeneration = 0
 let _passTotal = 0
 let _passDone = 0
+let _passPhase: NarrationPhase = 'idle'
 /** Written since the last flush, so a flush posts only what is new. */
 const _unsaved = new Map<string, string>()
 
@@ -92,6 +94,17 @@ export function setNarrationEngine(engine: NarrationEngine) {
   _passRunning = false
   _passTotal = 0
   _passDone = 0
+  _passPhase = 'idle'
+}
+
+/**
+ * Which video narration is for, so synthesised clips can be filed beside it.
+ *
+ * Set independently of the translation pass: the realtime engine has no pass at
+ * all, and its clips are just as worth keeping.
+ */
+export function setNarrationVideo(videoId: string) {
+  _passVideoId = videoId
 }
 
 export function translatedCue(text: string): string | undefined {
@@ -99,19 +112,35 @@ export function translatedCue(text: string): string | undefined {
 }
 
 /**
- * How far the background pass has got.
+ * Where the background pass has got to.
  *
- * The pass is the only part of narration that takes minutes and makes no sound
- * while it does. Without something to report, a viewer waiting on the first
- * line cannot tell translation-in-progress from translation-broken, and the two
- * look identical: silence.
+ * The phase matters as much as the numbers. A count of zero is true of a pass
+ * that has not started, one waiting on a subtitle file, one whose subtitles
+ * never arrived, and one that has nothing to do because the cues are already
+ * Vietnamese. Reporting all four as "preparing" — which the first version of
+ * this did — tells the viewer nothing and leaves no way to tell a slow pass
+ * from a broken one.
  */
+export type NarrationPhase =
+  | 'idle'
+  | 'waiting-subtitles'
+  | 'no-subtitles'
+  | 'not-needed'
+  | 'translating'
+  | 'done'
+
 export function narrationProgress(): {
   done: number
   total: number
   running: boolean
+  phase: NarrationPhase
 } {
-  return { done: _passDone, total: _passTotal, running: _passRunning }
+  return {
+    done: _passDone,
+    total: _passTotal,
+    running: _passRunning,
+    phase: _passPhase,
+  }
 }
 
 /** The cue covering `time`, or null when nothing is being said. */
@@ -125,6 +154,29 @@ export function currentCueText(cues: CueText[], time: number): string | null {
 /** The parsed cues, for callers that render rather than speak. */
 export function narrationCues(): CueText[] {
   return _cues ?? []
+}
+
+/** Resolved when the cue list lands, by whoever is loading it. */
+let _cuesWaiters: Array<(cues: CueText[]) => void> = []
+
+function announceCues(cues: CueText[]) {
+  const waiters = _cuesWaiters
+  _cuesWaiters = []
+  waiters.forEach((w) => w(cues))
+}
+
+/**
+ * The cues, once there are some.
+ *
+ * The translation pass used to poll `_cues` every 100ms and give up after ten
+ * seconds, which turned "the subtitle file is still downloading" into a
+ * permanent "no subtitles" that never retried — reported against a video whose
+ * VTT was sitting on disk and served a 200 the whole time. Waiting on the load
+ * itself has no deadline to get wrong.
+ */
+export function whenCuesReady(): Promise<CueText[]> {
+  if (_cues !== null) return Promise.resolve(_cues)
+  return new Promise((resolve) => _cuesWaiters.push(resolve))
 }
 
 /** Index of the cue playing at `time`, or the next one due. */
@@ -155,6 +207,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   _passGeneration++
   _passTotal = 0
   _passDone = 0
+  _passPhase = 'waiting-subtitles'
   const generation = _passGeneration
 
   void (async () => {
@@ -167,11 +220,19 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       if (generation !== _passGeneration) return
 
       // Wait for the cue list, which loadViSubtitles is fetching in parallel.
-      for (let i = 0; i < 100 && _cues === null; i++) {
-        await new Promise((r) => setTimeout(r, 100))
+      const cues = await whenCuesReady()
+      if (generation !== _passGeneration) return
+      if (cues.length === 0) {
+        // The load finished and produced nothing — a missing or unparseable
+        // VTT. Distinct from still waiting, which no longer expires.
+        _passPhase = 'no-subtitles'
+        return
       }
-      const cues = _cues
-      if (!cues || cues.length === 0 || generation !== _passGeneration) return
+      if (_sourceLang !== 'en') {
+        // Already Vietnamese. Narration reads the cues as they are.
+        _passPhase = 'not-needed'
+        return
+      }
 
       const first = nearestCueIndex(cues, fromTime)
       const texts = cues.slice(first).map((c) => c.text)
@@ -187,6 +248,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       const countDone = () => texts.filter((t) => _tlCache.has(t)).length
       _passTotal = texts.length
       _passDone = countDone()
+      _passPhase = _passDone >= _passTotal ? 'done' : 'translating'
 
       for (const { start, end } of planBatches(texts.length)) {
         if (generation !== _passGeneration) return
@@ -215,7 +277,12 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         void saveNarrationCache(videoId, _engine, batchSaved)
       }
     } finally {
-      if (generation === _passGeneration) _passRunning = false
+      if (generation === _passGeneration) {
+        _passRunning = false
+        if (_passPhase === 'translating' || _passPhase === 'waiting-subtitles') {
+          _passPhase = _passTotal > 0 && _passDone >= _passTotal ? 'done' : 'idle'
+        }
+      }
     }
   })()
 }
@@ -270,7 +337,15 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     const resp = await fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: viText, voice: TTS_VOICE, speed }),
+      // videoId tells the gateway where to keep the clip. Synthesis is the
+      // expensive half of narration and its bytes never change for the same
+      // words at the same tempo, so it belongs on disk beside the video.
+      body: JSON.stringify({
+        text: viText,
+        voice: TTS_VOICE,
+        speed,
+        videoId: _passVideoId,
+      }),
     })
     if (!resp.ok) throw new Error(`tts ${resp.status}`)
     const buf = await ctx.decodeAudioData(await resp.arrayBuffer())
@@ -421,11 +496,14 @@ export function loadViSubtitles(url: string, lang = 'vi') {
     .then((cues) => {
       if (generation !== _generation) return
       _cues = cues
+      announceCues(cues)
+      void saveNarrationCues(_passVideoId, cues)
     })
     .catch(() => {
       if (generation !== _generation) return
       // A video without narration is still a video.
       _cues = []
+      announceCues([])
     })
 }
 
@@ -604,6 +682,13 @@ function firstCueAtOrAfter(cues: CueText[], time: number): number {
 
 export function resetNarration() {
   _generation++
+  // Cancel any translation pass and release anything waiting on cues. A waiter
+  // left hanging would hold _passRunning true, and that flag being stuck is the
+  // one state from which no pass can ever start again.
+  _passGeneration++
+  _passRunning = false
+  _passPhase = 'idle'
+  announceCues([])
   _cues = null
   _cuesURL = ''
   _cursor = 0

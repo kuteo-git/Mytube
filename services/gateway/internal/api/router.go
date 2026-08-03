@@ -80,6 +80,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/translate/batch", g.handleTranslateBatch)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
+	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)
 	mux.HandleFunc("POST /api/videos/{id}/download/cancel", g.handleCancelVideoDownload)
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)

@@ -53,6 +53,48 @@ func TestNarrationCacheMissingIsEmptyNotError(t *testing.T) {
 	}
 }
 
+func TestTTSCacheRoundTrip(t *testing.T) {
+	root := t.TempDir()
+	wav := []byte("RIFF....fake wav")
+
+	if _, ok := readTTSCache(root, "vid1", "hello", 1.1); ok {
+		t.Fatal("cold cache must miss")
+	}
+	if err := writeTTSCache(root, "vid1", "hello", 1.1, wav); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got, ok := readTTSCache(root, "vid1", "hello", 1.1)
+	if !ok || string(got) != string(wav) {
+		t.Fatalf("read back wrong: ok=%v %q", ok, got)
+	}
+}
+
+func TestTTSCacheKeyedBySpeed(t *testing.T) {
+	// atempo output differs per speed, so the same sentence at 1.1 and 1.6 are
+	// different audio and must not share an entry.
+	root := t.TempDir()
+	_ = writeTTSCache(root, "vid1", "hello", 1.1, []byte("slow"))
+	_ = writeTTSCache(root, "vid1", "hello", 1.6, []byte("fast"))
+
+	a, _ := readTTSCache(root, "vid1", "hello", 1.1)
+	b, _ := readTTSCache(root, "vid1", "hello", 1.6)
+	if string(a) != "slow" || string(b) != "fast" {
+		t.Fatalf("speeds collided: %q %q", a, b)
+	}
+}
+
+func TestTTSCacheWithoutVideoIDIsANoOp(t *testing.T) {
+	// A caller that did not say which video this belongs to has nowhere to put
+	// it. Synthesis must still work, just uncached.
+	root := t.TempDir()
+	if err := writeTTSCache(root, "", "hello", 1.1, []byte("x")); err != nil {
+		t.Fatalf("must not error: %v", err)
+	}
+	if _, ok := readTTSCache(root, "", "hello", 1.1); ok {
+		t.Fatal("must not claim a hit")
+	}
+}
+
 func TestNarrationCacheRejectsPathEscape(t *testing.T) {
 	root := t.TempDir()
 	err := writeNarrationCache(root, "../../etc", "qwen",

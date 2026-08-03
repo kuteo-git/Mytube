@@ -32,6 +32,7 @@ import {
   resetNarration,
   loadViSubtitles,
   setNarrationEngine,
+  setNarrationVideo,
   startTranslationPass,
   narrationProgress,
 } from '@/features/watch/application/narration'
@@ -655,6 +656,22 @@ export function Player({
     if (enSub) loadViSubtitles(enSub.url, 'en')
   }, [narrationOn, subtitles])
 
+  // The engine lives in two places — React state for the menu, a module
+  // variable for the code that translates — and only a click was keeping them
+  // in step. A preference restored from localStorage on load never reached the
+  // module, so a viewer who had chosen NLLB came back to a menu saying NLLB
+  // while the batch engine did the work.
+  useEffect(() => {
+    setNarrationEngine(narrationPrefs.engine)
+  }, [narrationPrefs.engine])
+
+  // Tell narration which video it is for, so synthesised clips are filed beside
+  // that video. Not folded into the translation pass: the realtime engine has
+  // no pass, and its clips are worth keeping too.
+  useEffect(() => {
+    setNarrationVideo(videoId)
+  }, [videoId])
+
   // Anchor the background translation pass wherever the viewer actually is.
   // Only the batch engine has a pass; NLLB translates as it speaks.
   useEffect(() => {
@@ -1011,6 +1028,33 @@ export function Player({
   // Declared here rather than beside the other layout state: the narration
   // settings below size their touch targets from it, and they are built first.
   const coarse = useCoarsePointer()
+
+  /**
+   * The video's own subtitles. Switches rather than a segmented control: the
+   * list is however many languages the video shipped with, which is not a fixed
+   * small set, and a segment that has to wrap is worse than a list that scrolls.
+   */
+  const captionRows = captionsAvailable ? (
+    <SegmentedSetting
+      label="Phụ đề gốc"
+      value={captions ?? 'off'}
+      onSelect={(v) => setCaptions(v === 'off' ? null : v)}
+      tall={coarse}
+      options={[
+        { value: 'off', label: 'Tắt' },
+        // Only the two languages this library actually narrates between. A
+        // video carrying eight tracks would otherwise wrap the control onto
+        // three rows, which reads worse than the list it replaced.
+        ...subtitles
+          .filter((t) => /^(en|eng|vi|vie)$/.test(t.language))
+          .map((t) => ({
+            value: t.language,
+            label: /^en/.test(t.language) ? 'EN' : 'VI',
+            hint: t.label + (t.generated ? ' (tự động)' : ''),
+          })),
+      ]}
+    />
+  ) : undefined
 
   const narrationRows = narrationAvailable ? (
     <>
@@ -1880,7 +1924,12 @@ export function Player({
             </button>
           )}
 
-          {captionsAvailable && !coarse && (
+          {/* Only in the corner. In the full player captions live in the gear
+              beside narration: two menus a few pixels apart, one for the
+              video's own subtitles and one for the translated ones, was the
+              arrangement most likely to have someone change the wrong thing.
+              The corner player has no gear, so it keeps its button. */}
+          {captionsAvailable && !coarse && variant !== 'full' && (
             <CaptionMenu
               tracks={subtitles}
               active={captions}
@@ -1914,24 +1963,7 @@ export function Player({
               extras={
                 coarse ? (
                   <>
-                    {captionsAvailable && (
-                      <>
-                        <li className="px-4 pt-2 pb-1 text-xs text-text-2">Phụ đề</li>
-                        <SettingRow
-                          label="Tắt"
-                          on={captions === null}
-                          onToggle={() => setCaptions(null)}
-                        />
-                        {subtitles.map((track) => (
-                          <SettingRow
-                            key={track.language}
-                            label={track.label + (track.generated ? ' (tự động)' : '')}
-                            on={captions === track.language}
-                            onToggle={() => setCaptions(track.language)}
-                          />
-                        ))}
-                      </>
-                    )}
+                    {captionRows}
                     {narrationRows}
                     {onPlayNext && (
                       <SettingRow
@@ -1942,12 +1974,10 @@ export function Player({
                     )}
                   </>
                 ) : (
-                  // With a mouse the bar still shows captions, narration and
-                  // autoplay as their own buttons, so the gear carries only
-                  // what has nowhere else to live: which engine translates, and
-                  // whether the result is shown, spoken, or both. The headphone
-                  // button beside it stays a quick on/off.
-                  narrationRows
+                  <>
+                    {captionRows}
+                    {narrationRows}
+                  </>
                 )
               }
               onSelect={(next) => {
@@ -2215,7 +2245,10 @@ function QualityMenu({
       {open && !sheet && (
         <ul
           ref={listRef}
-          className="absolute right-0 bottom-11 min-w-44 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
+          // Wider than it was: the segmented controls inside need room for four
+          // labels side by side, and the progress line needs room for a status
+          // and a count on one row. min-w-44 squeezed both onto two lines each.
+          className="absolute right-0 bottom-11 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
         >
           {rows}
           {extras && <li className="my-1 border-t border-line" aria-hidden />}
@@ -2287,36 +2320,44 @@ function NarrationStatus({ engine }: { engine: NarrationEngine }) {
     )
   }
 
+  // "Preparing" was true of a pass that had not started, one waiting on a
+  // subtitle file, one whose subtitles never arrived, and one with nothing to
+  // do because the cues were already Vietnamese. Four states behind one word is
+  // no better than no status at all — it was reported as "stuck on preparing".
+  const label: Record<typeof p.phase, string> = {
+    idle: 'Chưa bắt đầu',
+    'waiting-subtitles': 'Đang tải phụ đề…',
+    'no-subtitles': 'Không lấy được phụ đề',
+    'not-needed': 'Phụ đề đã là tiếng Việt, không cần dịch',
+    translating: 'Đang dịch nền…',
+    done: 'Đã dịch xong',
+  }
+  const bar = p.phase === 'translating' || p.phase === 'done'
   const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
-  const done = p.total > 0 && p.done >= p.total
 
   return (
     <li className="px-4 pb-3" aria-live="polite">
       <div className="flex items-baseline justify-between gap-2 pb-1 text-xs">
-        <span className="text-text-2">
-          {p.total === 0
-            ? 'Đang chuẩn bị…'
-            : done
-              ? 'Đã dịch xong'
-              : p.running
-                ? 'Đang dịch nền…'
-                : 'Tạm dừng'}
+        <span className={p.phase === 'no-subtitles' ? 'text-brand' : 'text-text-2'}>
+          {label[p.phase]}
         </span>
-        {p.total > 0 && (
+        {bar && (
           <span className="tabular-nums text-text-2">
             {p.done}/{p.total} câu
           </span>
         )}
       </div>
-      <div className="h-1 overflow-hidden rounded-full bg-white/15">
-        <div
-          className={clsx(
-            'h-full rounded-full transition-[width] duration-300 ease-out',
-            done ? 'bg-white/50' : 'bg-brand',
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      {bar && (
+        <div className="h-1 overflow-hidden rounded-full bg-white/15">
+          <div
+            className={clsx(
+              'h-full rounded-full transition-[width] duration-300 ease-out',
+              p.phase === 'done' ? 'bg-white/50' : 'bg-brand',
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
     </li>
   )
 }
@@ -2416,6 +2457,14 @@ function SettingRow({
   )
 }
 
+/**
+ * Captions for the corner player, which has no gear.
+ *
+ * In the full player captions moved into the settings menu beside narration;
+ * here there is no settings menu to move them into, and the corner player is
+ * the one shape where a viewer is most likely to be half-watching something in
+ * another language. So this button survives, in this shape only.
+ */
 function CaptionMenu({
   tracks,
   active,

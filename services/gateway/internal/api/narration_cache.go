@@ -1,8 +1,12 @@
 package api
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -78,6 +82,110 @@ func writeNarrationCache(root, videoID, engine string, entries map[string]string
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// narrationTTSDir holds the synthesised clips for one video's narration.
+//
+// TTS was never cached anywhere: every clip was re-synthesised and re-stretched
+// on every viewing, and clips at a speed other than 1.0 — which is all of them,
+// since narration runs at 1.1 — were even sent with `Cache-Control: no-cache`,
+// so the browser could not keep them either.
+const narrationTTSDir = "narration-tts"
+
+// ttsKey identifies a clip by what determines its bytes: the words and the
+// tempo they were stretched to. Two speeds of one sentence are different audio.
+func ttsKey(text string, speed float64) string {
+	sum := sha1.Sum([]byte(fmt.Sprintf("%s@@%.2f", text, speed)))
+	return hex.EncodeToString(sum[:])
+}
+
+func ttsCachePath(root, videoID, text string, speed float64) (string, error) {
+	dir, err := safeVideoDir(root, videoID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, narrationTTSDir, ttsKey(text, speed)+".wav"), nil
+}
+
+func readTTSCache(root, videoID, text string, speed float64) ([]byte, bool) {
+	if videoID == "" {
+		return nil, false
+	}
+	path, err := ttsCachePath(root, videoID, text, speed)
+	if err != nil {
+		return nil, false
+	}
+	blob, err := os.ReadFile(path)
+	if err != nil || len(blob) == 0 {
+		return nil, false
+	}
+	return blob, true
+}
+
+func writeTTSCache(root, videoID, text string, speed float64, wav []byte) error {
+	// A caller that did not say which video this belongs to has nowhere to put
+	// it. Not an error — synthesis still worked, it just cannot be kept.
+	if videoID == "" || len(wav) == 0 {
+		return nil
+	}
+	path, err := ttsCachePath(root, videoID, text, speed)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	// Write-then-rename: a half-written WAV that another request reads as a hit
+	// would be worse than no cache at all.
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, wav, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// narrationCuesFile is the cue list exactly as the browser grouped it.
+//
+// Written for inspection and for anything server-side that needs the same cues
+// without re-implementing the parser — narration-vtt.ts runs unmodified under
+// `node --experimental-strip-types`, but a file on disk is cheaper still.
+//
+// Deliberately not read back by the player. The grouping rules have been
+// retuned a dozen times over this project's life, and a client that trusted a
+// stored copy would keep speaking last month's cues until someone thought to
+// delete the file.
+const narrationCuesFile = "narration-cues.json"
+
+func (g *Gateway) handlePutNarrationCues(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8<<20))
+	if err != nil || len(body) == 0 {
+		http.Error(w, "bad body", http.StatusBadRequest)
+		return
+	}
+	dir, err := safeVideoDir(g.mediaRoot, r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		g.logger.Warn("narration cues mkdir", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	path := filepath.Join(dir, narrationCuesFile)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+		g.logger.Warn("narration cues write", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		g.logger.Warn("narration cues rename", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"bytes": len(body)})
 }
 
 func (g *Gateway) handleGetNarrationCache(w http.ResponseWriter, r *http.Request) {

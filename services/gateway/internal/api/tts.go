@@ -17,6 +17,9 @@ type ttsRequest struct {
 	Text  string  `json:"text"`
 	Voice string  `json:"voice,omitempty"`
 	Speed float64 `json:"speed,omitempty"` // tempo multiplier: 1.0 = natural, 1.4 = fast
+	// VideoID says where to keep the result. Optional: without it synthesis
+	// still works, it just cannot be cached anywhere.
+	VideoID string `json:"videoId,omitempty"`
 }
 
 // handleTTS proxies a single text cue to the VieNeu-TTS micro-service,
@@ -32,6 +35,18 @@ func (g *Gateway) handleTTS(w http.ResponseWriter, r *http.Request) {
 	var req ttsRequest
 	if err := json.Unmarshal(body, &req); err != nil || strings.TrimSpace(req.Text) == "" {
 		http.Error(w, "invalid request: text is required", http.StatusBadRequest)
+		return
+	}
+
+	// Synthesis is the expensive half of narration and its output never changes
+	// for the same words at the same tempo, so it is kept on disk beside the
+	// video. Without this every viewing re-ran the TTS engine and ffmpeg for
+	// every line, including lines the same viewer had already heard.
+	if wav, ok := readTTSCache(g.mediaRoot, req.VideoID, req.Text, req.Speed); ok {
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Header().Set("Cache-Control", "public, max-age=604800")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(wav)
 		return
 	}
 
@@ -82,14 +97,16 @@ func (g *Gateway) handleTTS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "audio/wav")
-	// Don't cache speed-adjusted audio — different speeds for the same
-	// text produce different bytes.
-	if math.Abs(req.Speed-1.0) > 0.005 {
-		w.Header().Set("Cache-Control", "no-cache")
-	} else {
-		w.Header().Set("Cache-Control", "public, max-age=604800")
+	// Keep it beside the video before answering. The key already includes the
+	// speed, so a stretched clip is as cacheable as an unstretched one — the
+	// old `no-cache` for speed-adjusted audio meant narration, which always runs
+	// at 1.1, was the one thing that could never be cached.
+	if err := writeTTSCache(g.mediaRoot, req.VideoID, req.Text, req.Speed, synthBytes); err != nil {
+		g.logger.Warn("tts cache write", "error", err)
 	}
+
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Cache-Control", "public, max-age=604800")
 	w.WriteHeader(http.StatusOK)
 
 	written, _ := w.Write(synthBytes)

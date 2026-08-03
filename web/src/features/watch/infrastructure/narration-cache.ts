@@ -56,3 +56,28 @@ export async function saveNarrationCache(
     // Same reason as above.
   }
 }
+
+/**
+ * Store the cue list exactly as it was grouped, beside the video.
+ *
+ * Written, never read back. The value is having the artifact on disk next to
+ * the media and the translations — inspectable, and reusable by anything
+ * server-side that needs the same cues. Reading it back would be a trap: the
+ * grouping rules have been retuned a dozen times, and a client trusting a
+ * stored copy would go on speaking last month's cues until someone deleted it.
+ */
+export async function saveNarrationCues(
+  videoId: string,
+  cues: Array<{ start: number; end: number; text: string }>,
+): Promise<void> {
+  if (!videoId || cues.length === 0) return
+  try {
+    await fetch(`/api/videos/${videoId}/narration-cues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cues),
+    })
+  } catch {
+    // An artifact for humans and future jobs. Nothing here depends on it.
+  }
+}

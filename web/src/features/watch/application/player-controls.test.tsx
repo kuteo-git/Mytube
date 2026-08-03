@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
@@ -299,8 +306,15 @@ describe('controls offered by each shape', () => {
     expect(screen.getByLabelText('Play')).toBeInTheDocument()
     expect(screen.getByLabelText('Seek')).toBeInTheDocument()
     expect(screen.getByLabelText('Volume')).toBeInTheDocument()
-    expect(screen.getByLabelText('Subtitles')).toBeInTheDocument()
     expect(screen.getByLabelText('Full screen')).toBeInTheDocument()
+    // Captions are behind the gear now, beside the narration settings, rather
+    // than a button of their own a few pixels away from them.
+    expect(screen.queryByLabelText('Subtitles')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Settings')).toBeInTheDocument()
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+    expect(screen.getByRole('radio', { name: 'EN' })).toBeInTheDocument()
   })
 
   it('gives the corner player play, volume and captions', async () => {
@@ -578,8 +592,11 @@ describe('a bar sized for a thumb', () => {
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
-    expect(screen.getByRole('switch', { name: 'English' })).toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'Tắt' })).toBeInTheDocument()
+    // Captions are a segmented control too, restricted to the two languages
+    // this library narrates between.
+    const group = screen.getByRole('radiogroup', { name: 'Phụ đề gốc' })
+    expect(within(group).getByRole('radio', { name: 'EN' })).toBeInTheDocument()
+    expect(within(group).getByRole('radio', { name: 'Tắt' })).toBeInTheDocument()
   })
 
   it('offers the narration settings to a mouse as well', async () => {
