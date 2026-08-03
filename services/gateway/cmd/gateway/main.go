@@ -59,6 +59,7 @@ func main() {
 		recsysURL  = env("RECSYS_URL", "http://localhost:8182")
 		ingestURL  = env("INGEST_URL", "http://localhost:8183")
 		mediaRoot  = env("MEDIA_ROOT", "./media")
+		configDir  = env("CONFIG_DIR", "./data")
 		devUserID  = env("DEV_USER_ID", "u_luc")
 		webOrigin  = env("WEB_ORIGIN", "http://localhost:5173")
 	)
@@ -78,6 +79,7 @@ func main() {
 		devUserID,
 		ingestURL,
 		mediaRoot,
+		configDir,
 	)
 
 	mux := http.NewServeMux()

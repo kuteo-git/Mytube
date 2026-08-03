@@ -40,6 +40,11 @@ type Gateway struct {
 	// belong to. It can be an external SSD that is not mounted (CLAUDE.md §8.1),
 	// so every read of it treats absence as an empty cache rather than an error.
 	mediaRoot string
+	// configDir holds settings edited from the app, as opposed to the ones
+	// edited by hand in .env.local. Separate from mediaRoot: that lives on an
+	// external drive which may not be mounted (CLAUDE.md §8.1), and a setting
+	// nobody can save because a disk is unplugged would be its own bug.
+	configDir string
 }
 
 func NewGateway(
@@ -50,6 +55,7 @@ func NewGateway(
 	devUserID string,
 	ingestBaseURL string,
 	mediaRoot string,
+	configDir string,
 ) *Gateway {
 	return &Gateway{
 		catalog:       catalog,
@@ -60,6 +66,7 @@ func NewGateway(
 		ingestBaseURL: ingestBaseURL,
 		streamClient:  &http.Client{},
 		mediaRoot:     mediaRoot,
+		configDir:     configDir,
 	}
 }
 
@@ -77,6 +84,11 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/backfill", g.handleBackfillStatus)
 	mux.HandleFunc("POST /api/tts", g.handleTTS)
 	mux.HandleFunc("POST /api/translate/batch", g.handleTranslateBatch)
+	mux.HandleFunc("GET /api/translate/config", g.handleGetTranslateConfig)
+	mux.HandleFunc("POST /api/translate/config", g.handleSaveTranslateConfig)
+	mux.HandleFunc("GET /api/translate/models", g.handleTranslateModels)
+	mux.HandleFunc("POST /api/translate/test", g.handleTranslateTest)
+	mux.HandleFunc("GET /api/tts/voices", g.handleTTSVoices)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)

@@ -4,7 +4,15 @@ The model is not exercised here. What is exercised is the part that decides
 whether the model's answer may be trusted, which is the part that failed in
 measurement.
 """
-from translate_server import parse_numbered, aligned_or_none, openai_content
+from translate_server import (
+    OMNIROUTE_API_KEY,
+    OMNIROUTE_BASE_URL,
+    OMNIROUTE_MODEL,
+    aligned_or_none,
+    openai_content,
+    parse_numbered,
+    resolve_config,
+)
 
 
 def test_parse_numbered_reads_dot_and_paren():
@@ -55,3 +63,27 @@ def test_openai_content_ignores_reasoning():
 def test_openai_content_survives_a_shape_it_does_not_know():
     assert openai_content({"error": "nope"}) == ""
     assert openai_content({"choices": []}) == ""
+
+
+def test_config_prefers_the_request_over_the_environment():
+    # The gateway owns the configuration and sends it down with every batch, so
+    # a saved change takes effect on the next batch rather than on a restart.
+    got = resolve_config({
+        "baseUrl": "http://req:1",
+        "model": "req_model",
+        "apiKey": "sk-req",
+    })
+    assert got == ("http://req:1", "req_model", "sk-req")
+
+
+def test_config_falls_back_to_the_environment():
+    # Nothing sent: whatever the process was started with.
+    got = resolve_config({})
+    assert got == (OMNIROUTE_BASE_URL, OMNIROUTE_MODEL, OMNIROUTE_API_KEY)
+
+
+def test_config_ignores_blanks_rather_than_taking_them():
+    # An empty field is a field the caller did not fill in, not a request to
+    # translate against an empty base url.
+    got = resolve_config({"baseUrl": "", "model": "", "apiKey": ""})
+    assert got == (OMNIROUTE_BASE_URL, OMNIROUTE_MODEL, OMNIROUTE_API_KEY)

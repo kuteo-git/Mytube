@@ -20,6 +20,14 @@ mkdir -p "$LOG_DIR"
 # This machine has an external drive, which retires the 34 GiB internal-disk
 # constraint from CLAUDE.md §1 for local development. Media, budget and
 # eviction watermarks all move to reflect the real capacity available.
+# Keys and endpoints for local services live outside git. Sourced before
+# anything starts: the gateway reads OMNIROUTE_* as the fallback for its
+# translation settings, and sourcing this after it had launched left that
+# fallback empty — settings appeared blank the moment the saved file was removed.
+# Absent is fine; a service without its configuration reports itself unavailable.
+# shellcheck disable=SC1091
+[ -f .env.local ] && . ./.env.local
+
 export MEDIA_ROOT="${MEDIA_ROOT:-/Volumes/Data2/Youtube}"
 export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
@@ -60,11 +68,6 @@ for _ in $(seq 1 20); do
 done
 
 # --- translation server (EN → VI), NLLB and Qwen ---
-# Keys for local services live outside git. Absent is fine — the engines that
-# need them simply report themselves unavailable.
-# shellcheck disable=SC1091
-[ -f .env.local ] && . ./.env.local
-
 NLLB_VENV="${NLLB_VENV:-/tmp/nllb-venv}"
 if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/translate_server.py ]; then
   echo "starting translation server (port 8005)..."

@@ -89,13 +89,40 @@ def openai_content(payload: dict) -> str:
         return ""
 
 
-def omniroute_batch(cues: list[str], context: list[str]) -> list[str] | None:
+def resolve_config(body: dict) -> tuple[str, str, str]:
+    """Where to send this batch, and under whose key.
+
+    The gateway owns the configuration and sends it down with every batch, which
+    is what lets a change take effect on the next batch instead of on a restart.
+    The environment stays the fallback, so a deployment nobody has configured
+    from the app behaves exactly as .env.local says.
+
+    Blank fields fall back rather than being taken literally — an empty base url
+    is a field the caller left alone, not a request to translate against nothing.
+    """
+    return (
+        (body.get("baseUrl") or "") or OMNIROUTE_BASE_URL,
+        (body.get("model") or "") or OMNIROUTE_MODEL,
+        (body.get("apiKey") or "") or OMNIROUTE_API_KEY,
+    )
+
+
+def omniroute_batch(
+    cues: list[str],
+    context: list[str],
+    base_url: str = "",
+    model: str = "",
+    api_key: str = "",
+) -> list[str] | None:
     """Translate a batch through the LAN router.
 
     `stream: False` is required, not optional: the server streams by default
     even when nothing asked it to, and a body of SSE frames is not JSON.
     """
-    if not OMNIROUTE_BASE_URL:
+    base_url = base_url or OMNIROUTE_BASE_URL
+    model = model or OMNIROUTE_MODEL
+    api_key = api_key or OMNIROUTE_API_KEY
+    if not base_url:
         return None
     ctx = ""
     if context:
@@ -103,7 +130,7 @@ def omniroute_batch(cues: list[str], context: list[str]) -> list[str] | None:
               "\n".join(f"- {c}" for c in context) + "\n"
     body = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(cues))
     payload = {
-        "model": OMNIROUTE_MODEL,
+        "model": model,
         "stream": False,
         "messages": [{
             "role": "user",
@@ -111,10 +138,10 @@ def omniroute_batch(cues: list[str], context: list[str]) -> list[str] | None:
         }],
     }
     req = urllib.request.Request(
-        OMNIROUTE_BASE_URL.rstrip("/") + "/v1/chat/completions",
+        base_url.rstrip("/") + "/v1/chat/completions",
         json.dumps(payload).encode(),
         {
-            "Authorization": f"Bearer {OMNIROUTE_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
     )
@@ -150,11 +177,12 @@ async def translate_batch(req: Request):
     if not cues:
         return JSONResponse({"translations": [], "fell_back": False})
     context = body.get("context") or []
+    base_url, model, api_key = resolve_config(body)
 
     t0 = time.perf_counter()
     fell_back = False
 
-    out = omniroute_batch(cues, context)
+    out = omniroute_batch(cues, context, base_url, model, api_key)
     if out is None:
         # The batch could not be trusted. Retry one cue at a time, where there
         # is no ordering left to get wrong.
@@ -169,7 +197,7 @@ async def translate_batch(req: Request):
     # flush: stdout is a pipe under dev.sh, and Python buffers pipes. Without
     # this the log this server exists to be watched through stays empty until
     # the process ends.
-    print(f"[batch] {len(cues)} cues / {words} words in {dt:.1f}s"
+    print(f"[batch {model}] {len(cues)} cues / {words} words in {dt:.1f}s"
           f"{' FELL BACK' if fell_back else ''}", flush=True)
     return JSONResponse({"translations": out, "fell_back": fell_back})
 

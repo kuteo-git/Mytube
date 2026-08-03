@@ -92,26 +92,31 @@ func writeNarrationCache(root, videoID, engine string, entries map[string]string
 // so the browser could not keep them either.
 const narrationTTSDir = "narration-tts"
 
-// ttsKey identifies a clip by what determines its bytes: the words and the
-// tempo they were stretched to. Two speeds of one sentence are different audio.
-func ttsKey(text string, speed float64) string {
-	sum := sha1.Sum([]byte(fmt.Sprintf("%s@@%.2f", text, speed)))
+// ttsKey identifies a clip by everything that determines its bytes: the words,
+// the tempo they were stretched to, and the voice that read them.
+//
+// The voice was missing until settings made it selectable. Ten voices are on
+// offer, and without it in the key, choosing a different one kept serving
+// whichever had been synthesised first — from disk, with nothing anywhere to
+// say the setting had been ignored.
+func ttsKey(text string, speed float64, voice string) string {
+	sum := sha1.Sum([]byte(fmt.Sprintf("%s@@%.2f@@%s", text, speed, voice)))
 	return hex.EncodeToString(sum[:])
 }
 
-func ttsCachePath(root, videoID, text string, speed float64) (string, error) {
+func ttsCachePath(root, videoID, text string, speed float64, voice string) (string, error) {
 	dir, err := safeVideoDir(root, videoID)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, narrationTTSDir, ttsKey(text, speed)+".wav"), nil
+	return filepath.Join(dir, narrationTTSDir, ttsKey(text, speed, voice)+".wav"), nil
 }
 
-func readTTSCache(root, videoID, text string, speed float64) ([]byte, bool) {
+func readTTSCache(root, videoID, text string, speed float64, voice string) ([]byte, bool) {
 	if videoID == "" {
 		return nil, false
 	}
-	path, err := ttsCachePath(root, videoID, text, speed)
+	path, err := ttsCachePath(root, videoID, text, speed, voice)
 	if err != nil {
 		return nil, false
 	}
@@ -122,13 +127,13 @@ func readTTSCache(root, videoID, text string, speed float64) ([]byte, bool) {
 	return blob, true
 }
 
-func writeTTSCache(root, videoID, text string, speed float64, wav []byte) error {
+func writeTTSCache(root, videoID, text string, speed float64, voice string, wav []byte) error {
 	// A caller that did not say which video this belongs to has nowhere to put
 	// it. Not an error — synthesis still worked, it just cannot be kept.
 	if videoID == "" || len(wav) == 0 {
 		return nil
 	}
-	path, err := ttsCachePath(root, videoID, text, speed)
+	path, err := ttsCachePath(root, videoID, text, speed, voice)
 	if err != nil {
 		return err
 	}

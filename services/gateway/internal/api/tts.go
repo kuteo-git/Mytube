@@ -42,7 +42,7 @@ func (g *Gateway) handleTTS(w http.ResponseWriter, r *http.Request) {
 	// for the same words at the same tempo, so it is kept on disk beside the
 	// video. Without this every viewing re-ran the TTS engine and ffmpeg for
 	// every line, including lines the same viewer had already heard.
-	if wav, ok := readTTSCache(g.mediaRoot, req.VideoID, req.Text, req.Speed); ok {
+	if wav, ok := readTTSCache(g.mediaRoot, req.VideoID, req.Text, req.Speed, req.Voice); ok {
 		w.Header().Set("Content-Type", "audio/wav")
 		w.Header().Set("Cache-Control", "public, max-age=604800")
 		w.WriteHeader(http.StatusOK)
@@ -101,7 +101,7 @@ func (g *Gateway) handleTTS(w http.ResponseWriter, r *http.Request) {
 	// speed, so a stretched clip is as cacheable as an unstretched one — the
 	// old `no-cache` for speed-adjusted audio meant narration, which always runs
 	// at 1.1, was the one thing that could never be cached.
-	if err := writeTTSCache(g.mediaRoot, req.VideoID, req.Text, req.Speed, synthBytes); err != nil {
+	if err := writeTTSCache(g.mediaRoot, req.VideoID, req.Text, req.Speed, req.Voice, synthBytes); err != nil {
 		g.logger.Warn("tts cache write", "error", err)
 	}
 
@@ -161,4 +161,35 @@ func buildAtempoChain(factor float64) string {
 		parts = append(parts, fmt.Sprintf("atempo=%.4f", remaining))
 	}
 	return strings.Join(parts, ",")
+}
+
+// handleTTSVoices lists the voices the synthesiser offers.
+//
+// Only the list. The service also reports its own current voice, but that is a
+// global default this app never sets: every synthesis request names its voice,
+// because the voice is a per-device preference and two people in the house
+// should be able to disagree about it.
+func (g *Gateway) handleTTSVoices(w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
+		"http://localhost:8002/voice", nil)
+	if err != nil {
+		http.Error(w, "internal", http.StatusInternalServerError)
+		return
+	}
+	resp, err := g.streamClient.Do(req)
+	if err != nil {
+		g.logger.Warn("tts voices", "error", err)
+		http.Error(w, "tts service unreachable", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		Voices []string `json:"voices"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&body); err != nil {
+		http.Error(w, "unreadable voice list", http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"voices": body.Voices})
 }

@@ -57,15 +57,30 @@ func TestTTSCacheRoundTrip(t *testing.T) {
 	root := t.TempDir()
 	wav := []byte("RIFF....fake wav")
 
-	if _, ok := readTTSCache(root, "vid1", "hello", 1.1); ok {
+	if _, ok := readTTSCache(root, "vid1", "hello", 1.1, "Ngọc Linh"); ok {
 		t.Fatal("cold cache must miss")
 	}
-	if err := writeTTSCache(root, "vid1", "hello", 1.1, wav); err != nil {
+	if err := writeTTSCache(root, "vid1", "hello", 1.1, "Ngọc Linh", wav); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	got, ok := readTTSCache(root, "vid1", "hello", 1.1)
+	got, ok := readTTSCache(root, "vid1", "hello", 1.1, "Ngọc Linh")
 	if !ok || string(got) != string(wav) {
 		t.Fatalf("read back wrong: ok=%v %q", ok, got)
+	}
+}
+
+func TestTTSCacheKeyedByVoice(t *testing.T) {
+	// Ten voices are on offer. Without the voice in the key, changing it kept
+	// serving whichever voice happened to be synthesised first, from disk, with
+	// nothing to indicate the setting had been ignored.
+	root := t.TempDir()
+	_ = writeTTSCache(root, "vid1", "hello", 1.1, "Ngọc Linh", []byte("linh"))
+	_ = writeTTSCache(root, "vid1", "hello", 1.1, "Gia Bảo", []byte("bao"))
+
+	a, _ := readTTSCache(root, "vid1", "hello", 1.1, "Ngọc Linh")
+	b, _ := readTTSCache(root, "vid1", "hello", 1.1, "Gia Bảo")
+	if string(a) != "linh" || string(b) != "bao" {
+		t.Fatalf("voices collided: %q %q", a, b)
 	}
 }
 
@@ -73,11 +88,11 @@ func TestTTSCacheKeyedBySpeed(t *testing.T) {
 	// atempo output differs per speed, so the same sentence at 1.1 and 1.6 are
 	// different audio and must not share an entry.
 	root := t.TempDir()
-	_ = writeTTSCache(root, "vid1", "hello", 1.1, []byte("slow"))
-	_ = writeTTSCache(root, "vid1", "hello", 1.6, []byte("fast"))
+	_ = writeTTSCache(root, "vid1", "hello", 1.1, "V", []byte("slow"))
+	_ = writeTTSCache(root, "vid1", "hello", 1.6, "V", []byte("fast"))
 
-	a, _ := readTTSCache(root, "vid1", "hello", 1.1)
-	b, _ := readTTSCache(root, "vid1", "hello", 1.6)
+	a, _ := readTTSCache(root, "vid1", "hello", 1.1, "V")
+	b, _ := readTTSCache(root, "vid1", "hello", 1.6, "V")
 	if string(a) != "slow" || string(b) != "fast" {
 		t.Fatalf("speeds collided: %q %q", a, b)
 	}
@@ -87,10 +102,10 @@ func TestTTSCacheWithoutVideoIDIsANoOp(t *testing.T) {
 	// A caller that did not say which video this belongs to has nowhere to put
 	// it. Synthesis must still work, just uncached.
 	root := t.TempDir()
-	if err := writeTTSCache(root, "", "hello", 1.1, []byte("x")); err != nil {
+	if err := writeTTSCache(root, "", "hello", 1.1, "V", []byte("x")); err != nil {
 		t.Fatalf("must not error: %v", err)
 	}
-	if _, ok := readTTSCache(root, "", "hello", 1.1); ok {
+	if _, ok := readTTSCache(root, "", "hello", 1.1, "V"); ok {
 		t.Fatal("must not claim a hit")
 	}
 }
