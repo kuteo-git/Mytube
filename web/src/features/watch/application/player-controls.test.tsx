@@ -577,6 +577,25 @@ describe('a bar sized for a thumb', () => {
     expect(screen.getByRole('switch', { name: 'Tắt' })).toBeInTheDocument()
   })
 
+  it('offers the narration settings to a mouse as well', async () => {
+    // These first went only into the touch branch of the gear's extras, which
+    // renders nothing when there is a mouse — so with a mouse the engine choice
+    // and the subtitle-only mode could not be reached at all, while every test
+    // still passed. The headphone button on the bar toggles narration but
+    // cannot say which engine translates it.
+    await ready()
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+    expect(
+      screen.getByRole('switch', { name: 'Chỉ phụ đề tiếng Việt' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('switch', { name: 'Qwen (dịch nền, có ngữ cảnh)' }),
+    ).toBeInTheDocument()
+  })
+
   it('holds the controls open while the settings are open', async () => {
     // Otherwise the sheet takes itself away mid-decision: the bar hides on a
     // timer, and the sheet lives on the bar.

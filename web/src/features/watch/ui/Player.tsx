@@ -1000,6 +1000,54 @@ export function Player({
     setNarrationEngine(engine)
   }, [])
 
+  /**
+   * The narration group of the settings menu.
+   *
+   * Built once and used by both pointer types. It first went only into the
+   * touch branch of `extras`, which meant a mouse never saw it: with a mouse
+   * the bar has room for its own captions and narration buttons, so that branch
+   * renders nothing. The engine choice had nowhere to appear at all.
+   */
+  const narrationRows = narrationAvailable ? (
+    <>
+      <li className="px-4 pt-2 pb-1 text-xs text-text-2">Thuyết minh</li>
+      {/* Not plain "Tắt": the captions group has a row by that name, and two
+          switches with the same accessible name in one menu are
+          indistinguishable to anyone not reading the group headings. */}
+      <SettingRow
+        label="Tắt thuyết minh"
+        on={narrationPrefs.output === 'off'}
+        onToggle={() => setNarrationOutput('off')}
+      />
+      <SettingRow
+        label="Chỉ phụ đề tiếng Việt"
+        on={narrationPrefs.output === 'subs'}
+        onToggle={() => setNarrationOutput('subs')}
+      />
+      <SettingRow
+        label="Chỉ giọng đọc"
+        on={narrationPrefs.output === 'voice'}
+        onToggle={() => setNarrationOutput('voice')}
+      />
+      <SettingRow
+        label="Cả hai"
+        on={narrationPrefs.output === 'both'}
+        onToggle={() => setNarrationOutput('both')}
+      />
+      <li className="px-4 pt-2 pb-1 text-xs text-text-2">Máy dịch</li>
+      <SettingRow
+        label="Qwen (dịch nền, có ngữ cảnh)"
+        on={narrationPrefs.engine === 'qwen'}
+        onToggle={() => setEngine('qwen')}
+      />
+      <SettingRow
+        label="NLLB (dịch ngay từng câu)"
+        on={narrationPrefs.engine === 'nllb'}
+        onToggle={() => setEngine('nllb')}
+      />
+    </>
+  ) : undefined
+
   const toggleNarration = useCallback(() => {
     setNarrationOutput(narrationOn ? 'off' : 'voice')
   }, [narrationOn, setNarrationOutput])
@@ -1868,8 +1916,11 @@ export function Player({
 
           {/* Only offered when there is more than one way to play the video.
               A quality menu over a single source would be a control that
-              cannot do anything. */}
-          {(qualityOptions.length > 1 || coarse) && variant === 'full' && (
+              cannot do anything — unless the gear is also carrying the
+              narration settings, which it is whenever this video can be
+              narrated, and those are reachable nowhere else. */}
+          {(qualityOptions.length > 1 || coarse || narrationAvailable) &&
+            variant === 'full' && (
             <QualityMenu
               choice={quality}
               options={qualityOptions}
@@ -1900,50 +1951,7 @@ export function Player({
                         ))}
                       </>
                     )}
-                    {narrationAvailable && (
-                      <>
-                        <li className="px-4 pt-2 pb-1 text-xs text-text-2">
-                          Thuyết minh
-                        </li>
-                        {/* Not plain "Tắt": the captions group above has a row
-                            by that name, and two switches with the same
-                            accessible name in one menu are indistinguishable to
-                            anyone not reading the group headings. */}
-                        <SettingRow
-                          label="Tắt thuyết minh"
-                          on={narrationPrefs.output === 'off'}
-                          onToggle={() => setNarrationOutput('off')}
-                        />
-                        <SettingRow
-                          label="Chỉ phụ đề tiếng Việt"
-                          on={narrationPrefs.output === 'subs'}
-                          onToggle={() => setNarrationOutput('subs')}
-                        />
-                        <SettingRow
-                          label="Chỉ giọng đọc"
-                          on={narrationPrefs.output === 'voice'}
-                          onToggle={() => setNarrationOutput('voice')}
-                        />
-                        <SettingRow
-                          label="Cả hai"
-                          on={narrationPrefs.output === 'both'}
-                          onToggle={() => setNarrationOutput('both')}
-                        />
-                        <li className="px-4 pt-2 pb-1 text-xs text-text-2">
-                          Máy dịch
-                        </li>
-                        <SettingRow
-                          label="Qwen (dịch nền, có ngữ cảnh)"
-                          on={narrationPrefs.engine === 'qwen'}
-                          onToggle={() => setEngine('qwen')}
-                        />
-                        <SettingRow
-                          label="NLLB (dịch ngay từng câu)"
-                          on={narrationPrefs.engine === 'nllb'}
-                          onToggle={() => setEngine('nllb')}
-                        />
-                      </>
-                    )}
+                    {narrationRows}
                     {onPlayNext && (
                       <SettingRow
                         label="Tự động phát"
@@ -1952,7 +1960,14 @@ export function Player({
                       />
                     )}
                   </>
-                ) : undefined
+                ) : (
+                  // With a mouse the bar still shows captions, narration and
+                  // autoplay as their own buttons, so the gear carries only
+                  // what has nowhere else to live: which engine translates, and
+                  // whether the result is shown, spoken, or both. The headphone
+                  // button beside it stays a quick on/off.
+                  narrationRows
+                )
               }
               onSelect={(next) => {
                 // Choosing again is a fresh decision: a viewer who asks for
