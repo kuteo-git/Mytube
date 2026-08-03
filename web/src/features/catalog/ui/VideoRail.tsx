@@ -18,13 +18,20 @@ export function VideoRail({ videos }: { videos: Video[] }) {
 
   return (
     <div
-      // py-2, not pb-2. The cards carry a negative margin so their hover tint
-      // has a body without costing layout, which means each one bleeds 8px past
-      // its slot on every side — and overflow-x-auto clips vertically too, so
-      // the tops were being cut off. The padding is the room that bleed needs,
-      // and it has to be equal top and bottom or the row sits off-centre.
+      // Padding on all four sides, and a negative margin cancelling it.
+      //
+      // The cards carry their own negative margin so the hover tint has a body
+      // without costing layout, so each bleeds 8px past its slot on every side.
+      // A scroller clips that bleed — overflow-x-auto clips vertically too —
+      // which cut the tops off, and on wide screens, where this had no side
+      // padding at all, took the left edge off the first card as it lit up.
+      //
+      // So the room is here and the margin gives it back, leaving the cards
+      // lined up with the feed grid below exactly as before. Below 700px the
+      // row bleeds to the screen edge instead (CLAUDE.md §8b): a scrolling row
+      // that stops short of the edge reads as having ended.
       className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 py-2
-                 no-scrollbar min-[700px]:mx-0 min-[700px]:px-0"
+                 no-scrollbar min-[700px]:-mx-2 min-[700px]:px-2"
     >
       {videos.map((video) => (
         <div
