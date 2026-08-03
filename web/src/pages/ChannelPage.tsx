@@ -59,15 +59,25 @@ export function ChannelPage() {
           className="mt-6 flex flex-wrap gap-3 border-b border-line pb-4"
         >
           {sortOptions.map((option, index) => {
-            // The first option is the ordering the page loaded with, so it is
-            // the selected one until a chip is picked.
+            // Nothing picked yet means the page loaded in whatever order the
+            // channel offers first.
             const active = sortToken === undefined ? index === 0 : sortToken === option.token
             return (
               <Pill
                 key={option.token}
                 active={active}
                 aria-pressed={active}
-                onClick={() => setSortToken(index === 0 ? undefined : option.token)}
+                // Each chip sends its own token, including the first.
+                //
+                // The first used to send undefined, on the reasoning that it is
+                // "the default". But this row is rebuilt from whatever the last
+                // response carried, so position one is only the default until
+                // YouTube returns the orderings in another order — after which
+                // the chip labelled Popular asks for the default listing and
+                // the list does not change, which is what "sometimes clicking
+                // does nothing" looked like. A token means one ordering wherever
+                // it sits.
+                onClick={() => setSortToken(option.token)}
               >
                 {option.label}
               </Pill>

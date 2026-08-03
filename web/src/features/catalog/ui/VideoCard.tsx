@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Bookmark, CheckCircle, EyeOff, MoreVertical } from 'lucide-react'
+import {CheckCircle, EyeOff, MoreVertical} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
@@ -7,7 +7,6 @@ import { watchProgress } from '../domain/video'
 import {
   useMarkWatched,
   useNotInterested,
-  useSetPinned,
   useStreamPrefetch,
 } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
@@ -17,8 +16,13 @@ import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 
 /**
- * Grid card. No scale or shadow on hover: youtube.com does not do it and a
- * transform here would shift the grid (see MASTER.md anti-patterns).
+ * Grid card.
+ *
+ * No shadow, ring or scale on hover. The design system says so twice — "Hover
+ * card: không transform, không shadow, không scale" and again in the
+ * anti-patterns — and the card had grown a shadow and a ring anyway, which is
+ * why these read as a different kind of item from every other row in the app.
+ * What marks a card as live is the thing it reveals: the menu button.
  */
 export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
@@ -44,7 +48,7 @@ export function VideoCard({ video }: { video: Video }) {
     // spend it here, where nobody is waiting, instead of after the click.
     // Focus counts too, so a keyboard or a remote gets the same head start.
     <article
-      className="group flex flex-col gap-3 rounded-xl ring-1 ring-transparent transition-shadow duration-200 ease-out hover:shadow-lg hover:shadow-black/10 hover:ring-line"
+      className="group flex flex-col gap-3 rounded-xl"
       onPointerEnter={() => prefetch(video.id)}
       onPointerLeave={cancel}
       onFocus={() => prefetch(video.id)}
@@ -113,7 +117,10 @@ export function VideoCard({ video }: { video: Video }) {
               // screen, so hiding it behind hover did not make it discreet, it
               // made it unreachable — the menu simply did not exist on a phone.
               coarse ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
-              'grid place-items-center hover:bg-surface-hover',
+              // text-2 at rest like every other icon button in the app; it was
+              // inheriting full white, which made it the brightest thing on a
+              // card whose own title is the point.
+              'grid place-items-center text-text-2 hover:bg-surface-hover hover:text-text',
               menuOpen && 'opacity-100 bg-surface-hover',
             )}
           >
@@ -153,8 +160,15 @@ export function VideoCardSkeleton() {
   )
 }
 
+/**
+ * The card's overflow menu.
+ *
+ * Keep is not here. Keeping a video is a decision about one video you have
+ * chosen to watch, and it lives on the watch page beside the other actions on
+ * it. Offered from a grid of two dozen it is a decision nobody came to make,
+ * sitting above the two that are actually about tidying the grid.
+ */
 function CardMenu({ video, close }: { video: Video; close: () => void }) {
-  const setPinned = useSetPinned()
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
 
@@ -162,19 +176,6 @@ function CardMenu({ video, close }: { video: Video; close: () => void }) {
     // Above the player host: this menu opens in the bottom-right of the grid,
     // which is exactly where the miniplayer parks.
     <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
-      <li>
-        <button
-          type="button"
-          onClick={() => {
-            setPinned.mutate({ videoId: video.id, pinned: !video.pinned })
-            close()
-          }}
-          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-        >
-          <Bookmark size={16} fill={video.pinned ? 'currentColor' : 'none'} />
-          {video.pinned ? 'Unkeep' : 'Keep'}
-        </button>
-      </li>
       <li>
         <button
           type="button"

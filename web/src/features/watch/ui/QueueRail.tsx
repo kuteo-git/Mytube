@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import type { QueueItem } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration } from '@/shared/lib/format'
+import { formatDuration, formatRelative } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 
 /**
@@ -82,8 +82,15 @@ export function QueueRail({
                   <p className={clsx('clamp-2 text-sm leading-5', active && 'font-medium')}>
                     {item.title}
                   </p>
-                  {item.channelName && (
-                    <p className="clamp-1 mt-1 text-xs text-text-2">{item.channelName}</p>
+                  {/* Channel and date on one line, the same shape the grid
+                      cards use — a queue should not read as a different kind of
+                      list from the one it was opened from. */}
+                  {(item.channelName || item.publishedAt) && (
+                    <p className="clamp-1 mt-1 text-xs text-text-2">
+                      {[item.channelName, item.publishedAt && formatRelative(item.publishedAt)]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
                   )}
                 </div>
               </Link>

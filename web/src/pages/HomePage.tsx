@@ -76,7 +76,7 @@ export function HomePage() {
               <h2 className="mb-3 text-lg font-medium">
                 From YouTube &middot; {topicName}
               </h2>
-              <div className="grid grid-cols-1 gap-x-2 gap-y-4 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
                 {youtubeVideos.map((video) => (
                   <ExternalVideoCard key={video.id} video={video} />
                 ))}
@@ -98,7 +98,7 @@ export function HomePage() {
           {showCollections && visible(popular).length > 0 && (
             <section className="pt-3">
               <h2 className="mb-3 text-lg font-medium">Popular with you</h2>
-              <div className="grid grid-cols-1 gap-x-2 gap-y-4 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
+              <div className="grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
                 {visible(popular).map((video) => (
                   <VideoCard key={video.id} video={video} />
                 ))}
@@ -107,7 +107,7 @@ export function HomePage() {
             </section>
           )}
 
-          <div className="grid grid-cols-1 gap-x-2 gap-y-4 pt-3 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-10 pt-3 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
             {/* The mix leads the grid: it is the one entry that is a list
                 rather than a video, and it is what a returning viewer most
                 often wants. */}

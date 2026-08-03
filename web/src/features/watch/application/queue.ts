@@ -37,6 +37,8 @@ export interface QueueItem {
   channelName: string
   thumbnailUrl: string
   durationSeconds: number
+  /** ISO date, or '' when the source did not give one. */
+  publishedAt: string
 }
 
 export interface Queue {
@@ -91,6 +93,7 @@ export function useQueue(currentVideoId: string | undefined): Queue {
             channelName: v.channelName || channelName,
             thumbnailUrl: v.thumbnailUrl,
             durationSeconds: v.durationSeconds,
+            publishedAt: v.publishedAt ?? '',
           })),
         ) ?? []
     } else if (list === TOP_PLAYED_LIST) {
@@ -100,6 +103,7 @@ export function useQueue(currentVideoId: string | undefined): Queue {
         channelName: v.channel.name,
         thumbnailUrl: mediaURL(v.thumbnailPath) ?? '',
         durationSeconds: v.durationSeconds,
+        publishedAt: v.publishedAt ?? '',
       }))
     }
 

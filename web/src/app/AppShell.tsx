@@ -189,14 +189,23 @@ function PlayerHost() {
       data-testid="player-host"
       // Below the navigation chrome, above the page. The miniplayer is content
       // that outstayed its page, not a layer over the app.
-      className={clsx('z-30 overflow-hidden bg-black', mode === 'mini' && 'shadow-2xl')}
+      className={clsx(
+        'z-30 overflow-hidden bg-black',
+        // A corner-resident player is a floating object and should read as one.
+        // shadow-2xl alone did not: over a dark page a black shadow is nearly
+        // invisible, so the ring is what actually draws the edge.
+        mode === 'mini' && 'shadow-2xl shadow-black/60 ring-1 ring-white/10',
+      )}
       style={{
         position: placement.position,
         top: placement.rect.top,
         left: placement.rect.left,
         width: placement.rect.width,
         height: placement.rect.height,
-        borderRadius: mode === 'full' && !isMobile ? 12 : 0,
+        // Rounded whenever it is a card on a page: full-screen on a phone and
+        // the docked player are edge-to-edge, and everything else matches the
+        // 12px the thumbnails and cards around it use.
+        borderRadius: isMobile && mode === 'full' ? 0 : 12,
         transition: placement.animate
           ? 'top 300ms cubic-bezier(0.4, 0, 0.2, 1), left 300ms cubic-bezier(0.4, 0, 0.2, 1),' +
             ' width 300ms cubic-bezier(0.4, 0, 0.2, 1), height 300ms cubic-bezier(0.4, 0, 0.2, 1)'
