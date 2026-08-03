@@ -153,7 +153,7 @@ async def translate(req: Request):
         return JSONResponse({"translated": ""})
     t0 = time.perf_counter()
     out = nllb_one(text, body.get("src", "eng_Latn"), body.get("tgt", "vie_Latn"))
-    print(f"[{time.perf_counter() - t0:.2f}s] {text[:50]} -> {out[:50]}")
+    print(f"[{time.perf_counter() - t0:.2f}s] {text[:50]} -> {out[:50]}", flush=True)
     return JSONResponse({"translated": out})
 
 
@@ -184,12 +184,15 @@ async def translate_batch(req: Request):
 
     dt = time.perf_counter() - t0
     words = sum(len(c.split()) for c in cues)
+    # flush: stdout is a pipe under dev.sh, and Python buffers pipes. Without
+    # this the log this server exists to be watched through stays empty until
+    # the process ends.
     print(f"[batch {engine}] {len(cues)} cues / {words} words in {dt:.1f}s"
-          f"{' FELL BACK' if fell_back else ''}")
+          f"{' FELL BACK' if fell_back else ''}", flush=True)
     return JSONResponse({"translations": out, "engine": engine,
                          "fell_back": fell_back})
 
 
 if __name__ == "__main__":
-    print(f"translate server on {PORT}; engines load on first use")
+    print(f"translate server on {PORT}; engines load on first use", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=PORT, access_log=False)
