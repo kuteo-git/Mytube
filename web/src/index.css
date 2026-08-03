@@ -40,7 +40,14 @@
    * with it, on a trackpad and from the edge of a phone screen alike — real
    * navigation, given up to remove a sideways bounce nobody meets. And only
    * here, on the document: the horizontal rails inside the page (chips, the
-   * queue, the rail) still scroll and bounce as themselves. */
+   * queue, the rail) still scroll and bounce as themselves.
+   *
+   * Those rails carry overscroll-x-contain of their own, which is the other
+   * half of the same decision rather than a reversal of it. Swiping a rail past
+   * its end used to chain out to the document and be read as a back gesture, so
+   * a flick through the chips could leave the page. Contained, the swipe stops
+   * at the rail — and back still works everywhere it is actually meant to,
+   * which is what this rule is protecting. */
   html,
   body {
     overscroll-behavior-y: none;

@@ -43,7 +43,7 @@ export function ChipBar({
         ref={scroller}
         role="tablist"
         aria-label="Categories"
-        className="flex flex-1 gap-3 overflow-x-auto no-scrollbar"
+        className="flex flex-1 gap-3 overflow-x-auto overscroll-x-contain no-scrollbar"
       >
         {categories.map((category) => (
           <Pill

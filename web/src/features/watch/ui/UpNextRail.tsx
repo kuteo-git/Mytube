@@ -58,7 +58,7 @@ export function UpNextRail({
           <div
             role="tablist"
             aria-label="Filter suggestions"
-            className="flex gap-2 overflow-x-auto no-scrollbar"
+            className="flex gap-2 overflow-x-auto overscroll-x-contain no-scrollbar"
           >
             <Pill
               role="tab"

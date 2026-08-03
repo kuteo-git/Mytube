@@ -41,7 +41,7 @@ export function VideoRail({ videos }: { videos: Video[] }) {
       // added to the box was padding the snap immediately scrolled away.
       // scroll-padding moves the line the snap aligns to, so the room stays on
       // screen.
-      className="-mx-4 -my-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 py-4
+      className="-mx-4 -my-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-4 py-4
                  scroll-pl-4 no-scrollbar min-[700px]:-mx-6 min-[700px]:px-6
                  min-[700px]:scroll-pl-6"
     >
