@@ -576,10 +576,10 @@ describe('a bar sized for a thumb', () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
     // Autoplay only exists when there is a next video; narration is the row
-    // this fixture can show. Narration output is a segmented control now, so
-    // the control carrying the old on/off behaviour is a radio, not a switch.
+    // this fixture can show. Reading aloud is a switch again — what is written
+    // on the picture is the segmented control beside it.
     expect(
-      screen.getByRole('radio', { name: 'Giọng đọc' }),
+      screen.getByRole('switch', { name: 'Đọc thành tiếng' }),
     ).toBeInTheDocument()
   })
 
@@ -594,7 +594,7 @@ describe('a bar sized for a thumb', () => {
     })
     // Captions are a segmented control too, restricted to the two languages
     // this library narrates between.
-    const group = screen.getByRole('radiogroup', { name: 'Phụ đề gốc' })
+    const group = screen.getByRole('radiogroup', { name: 'Phụ đề' })
     expect(within(group).getByRole('radio', { name: 'EN' })).toBeInTheDocument()
     expect(within(group).getByRole('radio', { name: 'Tắt' })).toBeInTheDocument()
   })
@@ -610,10 +610,13 @@ describe('a bar sized for a thumb', () => {
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
+    // One subtitle control and one switch, not two overlapping groups.
     expect(
-      screen.getByRole('radiogroup', { name: 'Thuyết minh tiếng Việt' }),
+      screen.getByRole('radiogroup', { name: 'Phụ đề' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Phụ đề' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('switch', { name: 'Đọc thành tiếng' }),
+    ).toBeInTheDocument()
   })
 
   it('reports what the translator is doing once narration is on', async () => {
@@ -642,7 +645,7 @@ describe('a bar sized for a thumb', () => {
     expect(screen.queryByText(/Đang dịch|Đang tải|Chưa bắt đầu/)).toBeNull()
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('radio', { name: 'Giọng đọc' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Đọc thành tiếng' }))
     })
     expect(
       screen.getByText(/Đang dịch|Đang tải phụ đề|Chưa bắt đầu|Dịch lỗi/),

@@ -558,9 +558,12 @@ export function Player({
   // until the <track> elements load, so we check via hasVietnameseSubs().
   // Narration is available when there are Vietnamese or English subtitles.
   // English cues are translated via NLLB-200 before TTS.
-  const narrationAvailable = subtitles.some(
-    (s) => s.language === 'vi' || s.language === 'vie' || s.language === 'en' || s.language === 'eng',
-  )
+  const hasVi = subtitles.some((s) => /^vi/.test(s.language))
+  const hasEn = subtitles.some((s) => /^en/.test(s.language))
+  const narrationAvailable = hasVi || hasEn
+  // Translation only happens when there is nothing Vietnamese to read already:
+  // loadViSubtitles takes a Vietnamese track in preference to translating one.
+  const narrationSourceIsEnglish = hasEn && !hasVi
 
   // <track> elements are created synchronously by React, but the browser
   // initialises the backing TextTrack objects asynchronously (microtask).
@@ -1010,22 +1013,74 @@ export function Player({
   // size their touch targets from it, and they are built first.
   const coarse = useCoarsePointer()
 
+  // Polled in one place so the subtitle option and the line under it cannot
+  // disagree about what the translator is doing. Only while narration is on:
+  // this re-renders the player, and a video nobody is narrating should not pay
+  // for it twice a second.
+  const [progress, setProgress] = useState(narrationProgress)
+  useEffect(() => {
+    if (!narrationOn) return
+    const id = window.setInterval(() => setProgress(narrationProgress()), 500)
+    return () => window.clearInterval(id)
+  }, [narrationOn])
+
   /**
-   * The video's own subtitles. Switches rather than a segmented control: the
-   * list is however many languages the video shipped with, which is not a fixed
-   * small set, and a segment that has to wrap is worse than a list that scrolls.
+   * What text is on the picture: nothing, the video's own subtitles, or the
+   * machine translation.
+   *
+   * One control, because there is one answer. It used to be two — a captions
+   * group and a narration group that also offered subtitles — so "Phụ đề"
+   * appeared under the heading "Thuyết minh" while a separate list a few rows
+   * up offered subtitles as well. Two ways to put Vietnamese on screen, and no
+   * way to tell from the menu which one you were choosing.
    */
-  const captionRows = captionsAvailable ? (
+  const translatedAvailable = narrationAvailable && narrationSourceIsEnglish
+  const subtitleValue = narrationShows
+    ? 'mt'
+    : (captions ?? 'off')
+
+  const chooseSubtitle = useCallback(
+    (v: string) => {
+      const speaking = narrationSpeaks
+      if (v === 'mt') {
+        setCaptions(null)
+        setNarrationOutput(speaking ? 'both' : 'subs')
+        return
+      }
+      setCaptions(v === 'off' ? null : v)
+      setNarrationOutput(speaking ? 'voice' : 'off')
+    },
+    [narrationSpeaks, setCaptions],
+  )
+
+  const toggleSpeak = useCallback(() => {
+    const showing = narrationShows
+    const next = narrationSpeaks
+      ? showing
+        ? 'subs'
+        : 'off'
+      : showing
+        ? 'both'
+        : 'voice'
+    setNarrationOutput(next)
+  }, [narrationShows, narrationSpeaks])
+
+  /** "VI (đang dịch)" while there is work left, so the option carries its own state. */
+  const translatedLabel =
+    progress.phase === 'translating'
+      ? 'VI (đang dịch)'
+      : progress.phase === 'failed' || progress.phase === 'no-subtitles'
+        ? 'VI (lỗi)'
+        : 'VI (dịch)'
+
+  const subtitleRows = (
     <SegmentedSetting
-      label="Phụ đề gốc"
-      value={captions ?? 'off'}
-      onSelect={(v) => setCaptions(v === 'off' ? null : v)}
+      label="Phụ đề"
+      value={subtitleValue}
+      onSelect={chooseSubtitle}
       tall={coarse}
       options={[
         { value: 'off', label: 'Tắt' },
-        // Only the two languages this library actually narrates between. A
-        // video carrying eight tracks would otherwise wrap the control onto
-        // three rows, which reads worse than the list it replaced.
         ...subtitles
           .filter((t) => /^(en|eng|vi|vie)$/.test(t.language))
           .map((t) => ({
@@ -1033,28 +1088,34 @@ export function Player({
             label: /^en/.test(t.language) ? 'EN' : 'VI',
             hint: t.label + (t.generated ? ' (tự động)' : ''),
           })),
+        ...(translatedAvailable
+          ? [{
+              value: 'mt',
+              label: translatedLabel,
+              hint: 'Bản dịch máy sang tiếng Việt',
+            }]
+          : []),
       ]}
     />
-  ) : undefined
+  )
 
+  /**
+   * Whether the line on screen is also read aloud.
+   *
+   * A switch, not a fourth subtitle option: reading aloud is a different
+   * question from what is written, and folding them together is what produced a
+   * "Thuyết minh" group containing an option called "Phụ đề" while a separate
+   * subtitle list sat a few rows above it.
+   */
   const narrationRows = narrationAvailable ? (
     <>
-      <SegmentedSetting
-        label="Thuyết minh tiếng Việt"
-        value={narrationPrefs.output}
-        onSelect={setNarrationOutput}
-        tall={coarse}
-        options={[
-          { value: 'off', label: 'Tắt' },
-          { value: 'subs', label: 'Phụ đề', hint: 'Hiện bản dịch, không đọc' },
-          { value: 'voice', label: 'Giọng đọc', hint: 'Đọc thành tiếng' },
-          { value: 'both', label: 'Cả hai' },
-        ]}
+      <SettingRow
+        label="Đọc thành tiếng"
+        on={narrationSpeaks}
+        onToggle={toggleSpeak}
       />
-      {narrationPrefs.output !== 'off' && (
-        <>
-          <NarrationStatus />
-        </>
+      {(narrationSpeaks || narrationShows) && translatedAvailable && (
+        <NarrationStatus progress={progress} />
       )}
     </>
   ) : undefined
@@ -1934,7 +1995,7 @@ export function Player({
               extras={
                 coarse ? (
                   <>
-                    {captionRows}
+                    {subtitleRows}
                     {narrationRows}
                     {onPlayNext && (
                       <SettingRow
@@ -1946,7 +2007,7 @@ export function Player({
                   </>
                 ) : (
                   <>
-                    {captionRows}
+                    {subtitleRows}
                     {narrationRows}
                   </>
                 )
@@ -2275,14 +2336,11 @@ function QualityMenu({
  * visible. The realtime engine has nothing to report — it translates a line at
  * the moment it speaks it — so it says so rather than showing an empty bar.
  */
-function NarrationStatus() {
-  const [p, setP] = useState(narrationProgress)
-
-  useEffect(() => {
-    const id = window.setInterval(() => setP(narrationProgress()), 500)
-    return () => window.clearInterval(id)
-  }, [])
-
+function NarrationStatus({
+  progress: p,
+}: {
+  progress: ReturnType<typeof narrationProgress>
+}) {
   // "Preparing" was true of a pass that had not started, one waiting on a
   // subtitle file, one whose subtitles never arrived, and one with nothing to
   // do because the cues were already Vietnamese. Four states behind one word is
