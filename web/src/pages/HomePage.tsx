@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
@@ -63,6 +64,7 @@ export function HomePage() {
   // Both extra rows belong to the unfiltered home. Under a topic the page is
   // answering a narrower question, and a global mix would be beside the point.
   const showCollections = active === 'All'
+  const railShown = showCollections && continueWatching.length > 0
 
   const videos = data?.pages.flatMap((page) => page.videos) ?? []
 
@@ -107,15 +109,25 @@ export function HomePage() {
               be finished rather than browsed. A rail, not a grid: as twelve
               cards this section arrived instead of the feed rather than before
               it — four rows on a desktop and twelve on a phone. */}
-          {showCollections && continueWatching.length > 0 && (
+          {railShown && (
             <section className="pt-3">
               <h2 className="mb-3 text-lg font-medium">Continue watching</h2>
               <VideoRail videos={continueWatching} />
+              {/* Space below the rule belongs to the grid that follows, so it
+                  is set there — matched to this margin. */}
               <hr className="mt-8 border-0 border-t border-line" />
             </section>
           )}
 
-          <div className="grid grid-cols-1 gap-x-4 gap-y-10 pt-3 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 ">
+          <div
+            className={clsx(
+              'grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3',
+              // Matched to the rule's own top margin so the divider sits
+              // centred between the rail and the feed, rather than tucked
+              // against the grid.
+              railShown ? 'pt-8' : 'pt-3',
+            )}
+          >
             {/* The mix leads the grid: it is the one entry that is a list
                 rather than a video, and it is what a returning viewer most
                 often wants. */}
