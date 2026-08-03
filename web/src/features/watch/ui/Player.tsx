@@ -31,7 +31,6 @@ import {
   tickNarration,
   resetNarration,
   loadViSubtitles,
-  setNarrationEngine,
   setNarrationVideo,
   cancelTranslationPass,
   startTranslationPass,
@@ -43,7 +42,6 @@ import {
   saveNarrationPrefs,
   type NarrationOutput,
 } from '@/features/watch/application/narration-prefs'
-import type { NarrationEngine } from '@/features/watch/infrastructure/narration-cache'
 import { NarrationSubtitles } from '@/features/watch/ui/NarrationSubtitles'
 import {
   canGoFullscreen,
@@ -664,15 +662,6 @@ export function Player({
     if (enSub) loadViSubtitles(enSub.url, 'en')
   }, [narrationOn, subtitles])
 
-  // The engine lives in two places — React state for the menu, a module
-  // variable for the code that translates — and only a click was keeping them
-  // in step. A preference restored from localStorage on load never reached the
-  // module, so a viewer who had chosen NLLB came back to a menu saying NLLB
-  // while the batch engine did the work.
-  useEffect(() => {
-    setNarrationEngine(narrationPrefs.engine)
-  }, [narrationPrefs.engine])
-
   // Tell narration which video it is for, so synthesised clips are filed beside
   // that video. Not folded into the translation pass: the realtime engine has
   // no pass, and its clips are worth keeping too.
@@ -683,10 +672,10 @@ export function Player({
   // Anchor the background translation pass wherever the viewer actually is.
   // Only the batch engine has a pass; NLLB translates as it speaks.
   useEffect(() => {
-    if (!narrationOn || narrationPrefs.engine === 'nllb') return
+    if (!narrationOn) return
     const el = front()
     startTranslationPass(videoId, el ? el.currentTime : 0)
-  }, [narrationOn, narrationPrefs.engine, videoId, subtitles, front])
+  }, [narrationOn, videoId, subtitles, front])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,
@@ -1014,27 +1003,8 @@ export function Player({
     })
   }, [])
 
-  const setEngine = useCallback((engine: NarrationEngine) => {
-    setNarrationPrefs((p) => {
-      const next = { ...p, engine }
-      saveNarrationPrefs(next)
-      return next
-    })
-    // Drops the cached answers of the engine being left behind, so the two are
-    // never blended in the comparison this menu exists for.
-    setNarrationEngine(engine)
-  }, [])
-
-  /**
-   * The narration group of the settings menu.
-   *
-   * Built once and used by both pointer types. It first went only into the
-   * touch branch of `extras`, which meant a mouse never saw it: with a mouse
-   * the bar has room for its own captions and narration buttons, so that branch
-   * renders nothing. The engine choice had nowhere to appear at all.
-   */
-  // Declared here rather than beside the other layout state: the narration
-  // settings below size their touch targets from it, and they are built first.
+  // Declared here rather than beside the other layout state: the settings below
+  // size their touch targets from it, and they are built first.
   const coarse = useCoarsePointer()
 
   /**
@@ -1080,30 +1050,7 @@ export function Player({
       />
       {narrationPrefs.output !== 'off' && (
         <>
-          <SegmentedSetting
-            label="Máy dịch"
-            value={narrationPrefs.engine}
-            onSelect={setEngine}
-            tall={coarse}
-            options={[
-              {
-                value: 'omniroute',
-                label: 'Tốt nhất',
-                hint: 'Omniroute — máy chủ AI trong mạng, không tốn GPU máy này',
-              },
-              {
-                value: 'qwen',
-                label: 'Ngoại tuyến',
-                hint: 'Qwen 8B chạy ngay trên máy này, không cần máy chủ nào',
-              },
-              {
-                value: 'nllb',
-                label: 'Nhanh',
-                hint: 'NLLB — dịch ngay từng câu, không có ngữ cảnh',
-              },
-            ]}
-          />
-          <NarrationStatus engine={narrationPrefs.engine} />
+          <NarrationStatus />
         </>
       )}
     </>
@@ -2325,21 +2272,13 @@ function QualityMenu({
  * visible. The realtime engine has nothing to report — it translates a line at
  * the moment it speaks it — so it says so rather than showing an empty bar.
  */
-function NarrationStatus({ engine }: { engine: NarrationEngine }) {
+function NarrationStatus() {
   const [p, setP] = useState(narrationProgress)
 
   useEffect(() => {
     const id = window.setInterval(() => setP(narrationProgress()), 500)
     return () => window.clearInterval(id)
   }, [])
-
-  if (engine === 'nllb') {
-    return (
-      <li className="px-4 pb-2 text-xs text-text-2">
-        Dịch từng câu ngay khi đọc, không chạy nền.
-      </li>
-    )
-  }
 
   // "Preparing" was true of a pass that had not started, one waiting on a
   // subtitle file, one whose subtitles never arrived, and one with nothing to

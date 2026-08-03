@@ -42,7 +42,7 @@ describe('translateBatch', () => {
         json: async () => ({ translations: ['một', 'hai'] }),
       }),
     )
-    expect(await translateBatch(['one', 'two'], [], 'qwen')).toEqual([
+    expect(await translateBatch(['one', 'two'], [])).toEqual([
       'một',
       'hai',
     ])
@@ -58,11 +58,11 @@ describe('translateBatch', () => {
         json: async () => ({ translations: ['một'] }),
       }),
     )
-    expect(await translateBatch(['one', 'two'], [], 'qwen')).toEqual(['một', ''])
+    expect(await translateBatch(['one', 'two'], [])).toEqual(['một', ''])
   })
 
   it('resolves to blanks when the request fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
-    expect(await translateBatch(['one', 'two'], [], 'qwen')).toEqual(['', ''])
+    expect(await translateBatch(['one', 'two'], [])).toEqual(['', ''])
   })
 })

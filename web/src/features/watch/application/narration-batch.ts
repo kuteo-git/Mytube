@@ -1,5 +1,3 @@
-import type { NarrationEngine } from '@/features/watch/infrastructure/narration-cache'
-
 /**
  * Cues in the opening batch.
  *
@@ -46,7 +44,6 @@ export function lastBatchError(): string {
 export async function translateBatch(
   cues: string[],
   context: string[],
-  engine: NarrationEngine,
 ): Promise<string[]> {
   const blank = cues.map(() => '')
   if (cues.length === 0) return []
@@ -54,7 +51,7 @@ export async function translateBatch(
     const resp = await fetch('/api/translate/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ engine, cues, context }),
+      body: JSON.stringify({ cues, context }),
     })
     if (!resp.ok) {
       _lastError = `máy chủ trả ${resp.status}`

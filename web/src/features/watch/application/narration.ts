@@ -13,7 +13,6 @@
  * on the audio timeline in order.
  */
 import { type CueText, parseVTT } from './narration-vtt'
-import { applyAfterTranslation, prepForTranslation } from './narration-translate'
 import {
   CONTEXT_CUES,
   lastBatchError,
@@ -28,7 +27,6 @@ import {
   saveNarrationCache,
   saveNarrationCues,
   saveNarrationVtt,
-  type NarrationEngine,
 } from '@/features/watch/infrastructure/narration-cache'
 import {
   DEFAULT_SPEED,
@@ -81,7 +79,6 @@ const _active = new Map<string, Promise<AudioBuffer>>()
 /** Cue text -> Vietnamese, for the engine currently selected. */
 const _tlCache = new Map<string, string>()
 
-let _engine: NarrationEngine = 'omniroute'
 let _passVideoId = ''
 let _passRunning = false
 let _passGeneration = 0
@@ -95,20 +92,6 @@ let _passStartedAt = 0
 let _passBaseline = 0
 /** Written since the last flush, so a flush posts only what is new. */
 const _unsaved = new Map<string, string>()
-
-export function setNarrationEngine(engine: NarrationEngine) {
-  if (engine === _engine) return
-  // Each engine has its own answers; keeping the old ones would mix the two
-  // and make the comparison this menu exists for meaningless.
-  _engine = engine
-  _tlCache.clear()
-  _unsaved.clear()
-  _passGeneration++
-  _passRunning = false
-  _passTotal = 0
-  _passDone = 0
-  _passPhase = 'idle'
-}
 
 /**
  * Which video narration is for, so synthesised clips can be filed beside it.
@@ -265,7 +248,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
     // otherwise leave `_passRunning` true forever — which is the one state that
     // stops a pass from ever being started again.
     try {
-      const byHash = await loadNarrationCache(videoId, _engine)
+      const byHash = await loadNarrationCache(videoId)
       if (generation !== _passGeneration) return
 
       // Wait for the cue list, which loadViSubtitles is fetching in parallel.
@@ -312,7 +295,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         if (missing.length === 0) continue
 
         const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
-        const out = await translateBatch(missing, context, _engine)
+        const out = await translateBatch(missing, context)
         if (generation !== _passGeneration) return
 
         missing.forEach((text, i) => {
@@ -328,7 +311,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         // that was paid for.
         const batchSaved = new Map(_unsaved)
         _unsaved.clear()
-        void saveNarrationCache(videoId, _engine, batchSaved)
+        void saveNarrationCache(videoId, batchSaved)
       }
 
       // Only now, with the whole pass behind it. Written mid-pass this would be
@@ -366,37 +349,11 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
   let viText = text
   if (_sourceLang === 'en') {
     const cached = _tlCache.get(text)
-    if (cached) {
-      viText = cached
-    } else if (_engine === 'nllb') {
-      // The realtime engine still translates on demand: it is the arm of the
-      // comparison that has no background pass, and taking that away would
-      // leave nothing to compare against.
-      const prepped = prepForTranslation(text)
-      const resp = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: prepped, src: 'eng_Latn', tgt: 'vie_Latn' }),
-      })
-      if (resp.ok) {
-        let translated = ((await resp.json()) as { translated: string }).translated
-        if (translated) {
-          translated = applyAfterTranslation(translated)
-          _tlCache.set(text, translated)
-          const vi = translated
-          void hashCue(text).then((h) =>
-            saveNarrationCache(_passVideoId, 'nllb', new Map([[h, vi]])),
-          )
-          viText = translated
-        }
-      }
-    }
-    // Under the batch engine an untranslated cue means the pass has not reached
-    // it yet. Speaking the English would be worse than saying nothing, so the
-    // cue is skipped and the loop carries on.
-    if (viText === text && _engine !== 'nllb') {
-      throw new Error('not translated yet')
-    }
+    // A cue the pass has not reached yet is skipped, not spoken in English:
+    // reading the source language aloud under a setting that promised
+    // Vietnamese is worse than saying nothing and carrying on.
+    if (!cached) throw new Error('not translated yet')
+    viText = cached
   }
 
   const cacheKey = `${viText}@@${speed.toFixed(2)}`

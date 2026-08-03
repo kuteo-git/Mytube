@@ -616,10 +616,10 @@ describe('a bar sized for a thumb', () => {
     expect(screen.getByRole('radio', { name: 'Phụ đề' })).toBeInTheDocument()
   })
 
-  it('hides the engine choice until narration is actually on', async () => {
-    // Which model translates is a question about narration. Put to someone who
-    // has narration switched off, it is a question about something that is not
-    // happening — so the menu opens with one decision on it, not three.
+  it('reports what the translator is doing once narration is on', async () => {
+    // The engine choice is gone — there is one translator now. What the panel
+    // still owes the viewer is whether it is working, since the pass runs for
+    // minutes in silence and "still going" and "broken" look identical.
     vi.stubGlobal(
       'AudioContext',
       class {
@@ -639,15 +639,13 @@ describe('a bar sized for a thumb', () => {
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
-    expect(
-      screen.queryByRole('radiogroup', { name: 'Máy dịch' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đang dịch|Đang tải|Chưa bắt đầu/)).toBeNull()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('radio', { name: 'Giọng đọc' }))
     })
     expect(
-      screen.getByRole('radiogroup', { name: 'Máy dịch' }),
+      screen.getByText(/Đang dịch|Đang tải phụ đề|Chưa bắt đầu|Dịch lỗi/),
     ).toBeInTheDocument()
   })
 

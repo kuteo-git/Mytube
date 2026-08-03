@@ -38,8 +38,8 @@ Hệ thống thuyết minh (narration) tự động đọc phụ đề tiếng V
 | `web/src/features/watch/application/narration.ts` | Parser VTT + scheduler TTS |
 | `web/src/features/watch/ui/Player.tsx` | UI button + AudioContext management |
 | `services/gateway/internal/api/tts.go` | Proxy TTS + ffmpeg atempo |
-| `services/gateway/internal/api/translate.go` | Proxy NLLB-200 |
-| `services/translate_server.py` | Translation server: Omniroute + Qwen + NLLB (port 8005) |
+| `services/gateway/internal/api/translate.go` | Proxy `/api/translate/batch` |
+| `services/translate_server.py` | Translation server → Omniroute (port 8005) |
 
 ---
 
@@ -115,15 +115,11 @@ IF buf.duration > slot:
 
 ---
 
-## You/Your Pronoun Replacement
+## Đại từ "bạn"
 
-NLLB dịch `you` → `anh` (formal). Pipeline thay thế:
-
-1. Trước translate: `you're` → `XXXX are`, `you'll` → `XXXX will`, `you` → `XXXX`, `your` → `YYYY`, v.v.
-2. Dịch qua NLLB
-3. Sau translate: `XXXX` → `bạn`, `YYYY` → `của bạn`
-
-Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you`, `yours`, `your`. `\b` boundary chống false positive (`young`, `youth`).
+Trước đây NLLB dịch `you` → `anh`, nên pipeline phải thay `you` → `XXXX` trước
+khi dịch rồi đổi lại sau. **Đã xoá cùng với NLLB** — prompt hiện yêu cầu thẳng
+*"xưng hô với người xem là bạn"*, đo được đúng 5/5.
 
 ---
 
@@ -142,7 +138,6 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 | Key | Ý nghĩa |
 |-----|---------|
 | `yt-narration-output-v1` | `off` / `subs` / `voice` / `both` |
-| `yt-narration-engine-v1` | `omniroute` (mặc định) / `qwen` / `nllb` |
 | `yt-narration-on` | **Cũ.** Boolean bật/tắt; chỉ còn được đọc một lần để chuyển `'1'` → `output: 'voice'` |
 | `yt-player-volume` | Volume người dùng |
 | `yt-player-muted` | Mute state |
@@ -164,100 +159,56 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 
 ---
 
-## Translation Models
+## Translation
 
-Config: `services/translate_server.py`. Port 8005. **Ba** engine, chọn trong menu
-⚙ của player dưới mục "Máy dịch".
+Một engine: **Omniroute**, router OpenAI-compatible trong mạng LAN.
+`services/translate_server.py`, port 8005.
 
-### Omniroute (mặc định, "Tốt nhất")
-
-Router OpenAI-compatible trong mạng LAN. Cấu hình **hoàn toàn từ biến môi
-trường**, key **không nằm trong git** — `scripts/dev.sh` nạp `.env.local`:
+Cấu hình **hoàn toàn từ biến môi trường**, key **không nằm trong git** —
+`scripts/dev.sh` nạp `.env.local` (đã gitignore):
 
 ```
 OMNIROUTE_BASE_URL  http://10.25.113.151:20128
 OMNIROUTE_MODEL     sub_translation      (router xuống deepseek-v4-flash)
-OMNIROUTE_API_KEY   …                    (.env.local, đã gitignore)
+OMNIROUTE_API_KEY   …
 ```
 
-**`stream: false` là bắt buộc, không phải tuỳ chọn** — server này stream mặc
-định kể cả khi không ai xin, và một thân SSE thì không phải JSON.
+**Hai cái bẫy của API này, không phải tuỳ chọn:**
 
-Chỉ đọc `content`, **bỏ `reasoning_content`**: model này là reasoning model, và
-phần nó tự nói với chính mình đôi khi cũng chứa dòng đánh số trông y như bản
-dịch.
+- **`stream: false` bắt buộc.** Server stream mặc định kể cả khi không ai xin;
+  một thân SSE thì không phải JSON.
+- **Chỉ đọc `content`, bỏ `reasoning_content`.** Đây là reasoning model, và phần
+  nó tự nói với chính mình đôi khi cũng chứa dòng đánh số trông y như bản dịch.
 
-Đo trên video thật (150 cue): lô đầu 3 câu **4.9s**, lô 15 câu **10–16s**,
-6.3 từ/giây, khớp dòng 15/15 không phải fallback lần nào. **Nhanh hơn Qwen ở câu
-đầu** vì không phải nạp model, và **không đụng GPU** — thứ mà yt-dlp với ffmpeg
-đã giành sẵn mỗi lần bấm play.
+Đo trên video thật (150 cue, 2026-08-03): lô đầu 3 câu **4.9s**, lô 15 câu
+**10–16s**, ~6.3 từ/giây, khớp dòng 15/15 không fallback lần nào.
 
-Mọi số đo trên máy này (M4, 24 GB) ngày 2026-08-03, dùng cue đã gộp bởi
-`parseVTT()` thật.
+**Lệch dòng vẫn phải phòng.** Server từ chối lô có số dòng không khớp và dịch
+lại từng cue. Không phải phòng xa thừa: đo với model local trước đây, cho ăn cue
+vụn thì trả 9/12 dòng, và vì client map theo vị trí nên một dòng thiếu **không**
+làm mất một cue mà làm **mọi cue sau đó đọc lệch nhịp**, âm thầm.
 
-| | NLLB-200-distilled-600M | Qwen3-8B-4bit (MLX) |
-|---|---|---|
-| Đường đi | 1 request/cue | lô 15, kèm 3 cue ngữ cảnh |
-| Throughput | ~10 từ/giây | 7.43 từ/giây |
-| Mỗi cue | 1.34s (20 từ), 1.71s (17 từ) | 1.36s |
-| Lần gọi đầu | 13.3s (cold) | 3.5s load model |
-| RAM | ~4 GB | ~4.5 GB |
-| Gọi người xem là "bạn" | chỉ khi có hack marker (không hack: sai 2/5) | 5/5 từ prompt |
-| Ngữ cảnh giữa các cue | không | có |
+### Đã gỡ: hai model chạy local (2026-08-03)
 
-**MLX không chạy được NLLB.** NLLB-200 là encoder-decoder (M2M100), mà `mlx-lm`
-chỉ có kiến trúc decoder-only — đã kiểm cả 120 file trong `mlx_lm/models/`.
-Muốn port thì phải tự viết model. Đây là *đã kiểm*, không phải phỏng đoán.
+NLLB-200 (MPS) và Qwen3-8B (MLX) đã bị gỡ khỏi service này. Lý do và số đo giữ
+lại vì chúng vẫn đúng nếu có ngày cần quay về chạy offline:
 
-**Đổi engine KHÔNG làm dịch nhanh hơn.** Cả hai ứng viên MLX đều đo được **chậm
-hơn** NLLB tính trên mỗi cue. Toàn bộ phần nhanh đến từ cache trong
-`{MEDIA_ROOT}/{videoId}/narration.vi.json`; đổi engine là mua **chất lượng**.
-Đừng với tay sang model to hơn để chữa một than phiền về độ trễ.
+| | NLLB-600M | Qwen3-8B-4bit | Omniroute |
+|---|---|---|---|
+| Throughput | ~10 từ/giây | 7.43 từ/giây | 6.3 từ/giây |
+| Câu đầu | 13.3s cold | 10.8s (nạp model) | **4.9s** |
+| GPU máy này | ~4 GB | ~4.5 GB | **không dùng** |
+| Xưng "bạn" | sai 2/5 nếu bỏ hack marker | 5/5 | 5/5 |
 
-**Lệch dòng theo lô là do đầu vào vụn, không phải do model.** Cho ăn dòng VTT
-thô đã khử trùng lặp: Qwen trả 9/12 dòng, Gemma-3-12B trả 44/60 — và vì client
-map theo vị trí, một dòng thiếu **không** làm mất một cue mà làm **mọi cue sau
-đó bị đọc lệch nhịp**, âm thầm. Cho ăn cue gộp bởi `parseVTT()`: cả hai đều
-60/60. Mọi benchmark sau này phải dùng cue đã gộp, không thì đo nhầm thứ.
-Server vẫn từ chối lô có số dòng không khớp và dịch lại từng cue.
-
-**Gemma-3-12B đã đo và đã loại.** Tiếng Việt tự nhiên nhất trong ba, nhưng nó
-**bịa thêm nội dung**: `"Just think about that."` trả về `"Nghĩ xem, đúng là bất
-ngờ."` Người nghe thuyết minh không có cách nào phân biệt câu bịa với câu người
-dẫn thật sự nói. Ngoài ra chậm hơn 1.7× (4.32 từ/giây), load 33s, cần 7 GB —
-không vừa ổ trong, chỉ nằm được trên SSD ngoài.
-
-**Đo end-to-end qua gateway thật (2026-08-03), video `Ersv1ogj7Jo`, resume ở
-giây 120 → bắt đầu từ cue 35 (bắt đầu lúc 115.2s, đúng playhead):**
-
-| | |
-|---|---|
-| Lô 1 (3 cue), server đã ấm | **3.0s** → câu đầu có tiếng |
-| Lô 1 (3 cue), lần gọi Qwen **đầu tiên của process** | **31.5s** — phải load model |
-| Lô 15 cue | 11.5–15.8s |
-| Lượt 2 cùng video | **0 request**, 4/4 lô đọc từ cache |
-
-Cái 31.5s là lý do `dev.sh` nên được để chạy chứ đừng restart giữa buổi xem.
-Model load một lần cho cả đời process.
-
-**Lô lệch dòng vẫn xảy ra dù cue đã gộp** — đo được 1 lần trong 8 lô. Server bắt
-được, dịch lại từng cue, trả đủ 15/15, client không thấy gì bất thường. Đó là
-lý do đường fallback tồn tại, không phải phòng xa thừa.
-
-**Mật độ lời nói**, đo trên 6 file phụ đề thật: **1.1–3.1 từ/giây video**. Nên
-Qwen đi trước playhead 2.4–3.7×, NLLB còn hơn. Biên đó không vô hạn: bấm play
-cũng khởi động một lượt tải yt-dlp và một lượt remux ffmpeg giành cùng GPU.
-
-`narration-vtt.ts` chạy được nguyên xi bằng `node --experimental-strip-types`
-(Node 25), nên nếu sau này muốn dịch sẵn phía server thì **không cần port**
-parser 348 dòng sang Python.
-
-### Cách đổi model
-
-1. Sửa `QWEN_MODEL` (hoặc `NLLB_MODEL`) trong `services/translate_server.py`
-2. Restart: `/tmp/nllb-venv/bin/python services/translate_server.py &`
-3. Cache phân vùng theo **id engine** — model mới mà dùng lại id cũ sẽ đọc phải
-   bản dịch của model trước. Đặt id mới.
+- **MLX không chạy được NLLB.** NLLB là encoder-decoder (M2M100), `mlx-lm` chỉ
+  có kiến trúc decoder-only — đã kiểm cả 120 file trong `mlx_lm/models/`.
+- **Đổi model KHÔNG làm nhanh hơn.** Phần nhanh đến từ cache trên đĩa.
+- **Gemma-3-12B đã đo và loại**: tiếng Việt tự nhiên nhất nhưng **bịa thêm nội
+  dung** — `"Just think about that."` → `"Nghĩ xem, đúng là bất ngờ."` Người nghe
+  thuyết minh không có cách nào phân biệt câu bịa với câu người dẫn nói thật.
+- Hack đại từ `XXXX`/`YYYY` (`narration-translate.ts`) **đã xoá** — nó chỉ tồn
+  tại vì NLLB dịch `you` → `anh`. Model biết nghe lệnh thì một dòng trong prompt
+  là đủ.
 
 ## Unit Tests
 

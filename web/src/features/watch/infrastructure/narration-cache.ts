@@ -14,8 +14,6 @@
 
 import { sha1Hex } from './sha1'
 
-export type NarrationEngine = 'omniroute' | 'nllb' | 'qwen'
-
 /**
  * Hex SHA-1 of a cue's text.
  *
@@ -33,13 +31,19 @@ export async function hashCue(text: string): Promise<string> {
   return sha1Hex(text)
 }
 
+/**
+ * The engine's name still partitions the file on disk. There is only one engine
+ * now, but files written while there were three carry their partitions, and a
+ * reader that ignored them would look at the wrong half.
+ */
+const ENGINE = 'omniroute'
+
 export async function loadNarrationCache(
   videoId: string,
-  engine: NarrationEngine,
 ): Promise<Map<string, string>> {
   try {
     const resp = await fetch(
-      `/api/videos/${videoId}/narration-cache?engine=${engine}`,
+      `/api/videos/${videoId}/narration-cache?engine=${ENGINE}`,
     )
     if (!resp.ok) return new Map()
     const body = (await resp.json()) as { entries?: Record<string, string> }
@@ -52,7 +56,6 @@ export async function loadNarrationCache(
 
 export async function saveNarrationCache(
   videoId: string,
-  engine: NarrationEngine,
   entries: Map<string, string>,
 ): Promise<void> {
   if (entries.size === 0) return
@@ -60,7 +63,7 @@ export async function saveNarrationCache(
     await fetch(`/api/videos/${videoId}/narration-cache`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ engine, entries: Object.fromEntries(entries) }),
+      body: JSON.stringify({ engine: ENGINE, entries: Object.fromEntries(entries) }),
     })
   } catch {
     // Same reason as above.

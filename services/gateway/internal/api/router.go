@@ -76,7 +76,6 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/topics/backfill", g.handleBackfillTopics)
 	mux.HandleFunc("GET /api/topics/backfill", g.handleBackfillStatus)
 	mux.HandleFunc("POST /api/tts", g.handleTTS)
-	mux.HandleFunc("POST /api/translate", g.handleTranslate)
 	mux.HandleFunc("POST /api/translate/batch", g.handleTranslateBatch)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)

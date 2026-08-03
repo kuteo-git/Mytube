@@ -4,11 +4,8 @@ import { loadNarrationPrefs, saveNarrationPrefs } from './narration-prefs'
 beforeEach(() => window.localStorage.clear())
 
 describe('loadNarrationPrefs', () => {
-  it('defaults to off, on the router', () => {
-    // Omniroute by default: it translates as well as the local model and does
-    // not compete for the GPU that yt-dlp and ffmpeg are already using every
-    // time someone presses play.
-    expect(loadNarrationPrefs()).toEqual({ engine: 'omniroute', output: 'off' })
+  it('defaults to off', () => {
+    expect(loadNarrationPrefs()).toEqual({ output: 'off' })
   })
 
   it('migrates the old on/off switch to spoken output', () => {
@@ -21,14 +18,13 @@ describe('loadNarrationPrefs', () => {
     expect(loadNarrationPrefs().output).toBe('off')
   })
 
-  it('ignores values that are not valid choices', () => {
-    window.localStorage.setItem('yt-narration-engine-v1', 'gemma')
+  it('ignores a value that is not a valid choice', () => {
     window.localStorage.setItem('yt-narration-output-v1', 'shout')
-    expect(loadNarrationPrefs()).toEqual({ engine: 'omniroute', output: 'off' })
+    expect(loadNarrationPrefs()).toEqual({ output: 'off' })
   })
 
   it('round-trips what was saved', () => {
-    saveNarrationPrefs({ engine: 'nllb', output: 'both' })
-    expect(loadNarrationPrefs()).toEqual({ engine: 'nllb', output: 'both' })
+    saveNarrationPrefs({ output: 'both' })
+    expect(loadNarrationPrefs()).toEqual({ output: 'both' })
   })
 })
