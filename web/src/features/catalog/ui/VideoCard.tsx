@@ -18,11 +18,17 @@ import { useCoarsePointer } from '@/shared/lib/pointer'
 /**
  * Grid card.
  *
- * No shadow, ring or scale on hover. The design system says so twice — "Hover
- * card: không transform, không shadow, không scale" and again in the
- * anti-patterns — and the card had grown a shadow and a ring anyway, which is
- * why these read as a different kind of item from every other row in the app.
- * What marks a card as live is the thing it reveals: the menu button.
+ * Hover is a background tint, the same one the sidebar's subscription rows use:
+ * surface-hover, 150ms, no shadow and no ring. The card had grown a shadow and
+ * a ring, which the design system forbids in two places — "Hover card: không
+ * transform, không shadow, không scale", and again in the anti-patterns — and
+ * which is why these read as a different kind of item from everything else in
+ * the app.
+ *
+ * The padding is what the tint sits in. Without it the card's own children
+ * cover the whole box and the colour shows only as slivers between them; the
+ * matching negative margin keeps the thumbnails the same width and the grid
+ * spacing untouched, so the tint costs no layout.
  */
 export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
@@ -48,7 +54,7 @@ export function VideoCard({ video }: { video: Video }) {
     // spend it here, where nobody is waiting, instead of after the click.
     // Focus counts too, so a keyboard or a remote gets the same head start.
     <article
-      className="group flex flex-col gap-3 rounded-xl"
+      className="group -m-2 flex flex-col gap-3 rounded-xl p-2 transition-colors duration-150 ease-out hover:bg-surface-hover"
       onPointerEnter={() => prefetch(video.id)}
       onPointerLeave={cancel}
       onFocus={() => prefetch(video.id)}
@@ -120,8 +126,12 @@ export function VideoCard({ video }: { video: Video }) {
               // text-2 at rest like every other icon button in the app; it was
               // inheriting full white, which made it the brightest thing on a
               // card whose own title is the point.
-              'grid place-items-center text-text-2 hover:bg-surface-hover hover:text-text',
-              menuOpen && 'opacity-100 bg-surface-hover',
+              //
+              // Its own hover is white/10 rather than surface-hover: the card
+              // underneath is surface-hover by the time this button can be
+              // hovered at all, so the same colour would be no feedback.
+              'grid place-items-center text-text-2 hover:bg-white/10 hover:text-text',
+              menuOpen && 'opacity-100 bg-white/10',
             )}
           >
             <MoreVertical size={20} />
