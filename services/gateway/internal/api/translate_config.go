@@ -56,19 +56,14 @@ func loadTranslateConfig(path string) translateConfig {
 }
 
 func saveTranslateConfig(path string, cfg translateConfig) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	blob, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	// 0600: this holds a credential.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, blob, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return withFileLock(path, func() error {
+		return writeFileAtomicMode(path, blob, 0o600)
+	})
 }
 
 // mergeSubmittedConfig applies a form submission over what is already stored.

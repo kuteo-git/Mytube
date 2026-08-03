@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -191,5 +194,63 @@ func TestAttachMachineTranslationIsIdempotent(t *testing.T) {
 	g.attachMachineTranslation(&v)
 	if len(v.Subtitles) != 1 {
 		t.Fatalf("added it twice: %d", len(v.Subtitles))
+	}
+}
+
+func TestConcurrentCacheWritesKeepEveryEntry(t *testing.T) {
+	// Every write is a read-modify-write of one file, and the pass fires them
+	// off after each batch without waiting. Unserialised, two overlapping saves
+	// lose whichever read first: the pass believes those lines are on disk and
+	// never translates them again.
+	root := t.TempDir()
+	var wg sync.WaitGroup
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			_ = writeNarrationCache(root, "vid1", "omniroute:m1",
+				map[string]string{fmt.Sprintf("h%02d", n): "vi"})
+		}(i)
+	}
+	wg.Wait()
+
+	got, err := readNarrationCache(root, "vid1", "omniroute:m1")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(got) != 40 {
+		t.Fatalf("lost entries: want 40, got %d", len(got))
+	}
+}
+
+func TestConcurrentWritesToOneFileDoNotFail(t *testing.T) {
+	// They shared a single "<path>.tmp": the first rename moved it away and the
+	// second had nothing left to rename, which surfaced as a 503 on the client.
+	root := t.TempDir()
+	dir := filepath.Join(root, "vid1")
+	_ = os.MkdirAll(dir, 0o755)
+	path := filepath.Join(dir, "narration-cues.json")
+
+	errs := make(chan error, 20)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			errs <- writeFileAtomic(path, []byte(fmt.Sprintf("payload %d", n)))
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("a concurrent write failed: %v", err)
+		}
+	}
+
+	// And the survivor is one whole payload, never a blend of two.
+	blob, _ := os.ReadFile(path)
+	if !strings.HasPrefix(string(blob), "payload ") {
+		t.Fatalf("torn write: %q", blob)
 	}
 }

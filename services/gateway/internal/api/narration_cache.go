@@ -61,27 +61,29 @@ func writeNarrationCache(root, videoID, engine string, entries map[string]string
 	}
 	path := filepath.Join(dir, narrationCacheFile)
 
-	all := map[string]map[string]string{}
-	if raw, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(raw, &all)
-	}
-	if all[engine] == nil {
-		all[engine] = map[string]string{}
-	}
-	for k, v := range entries {
-		all[engine][k] = v
-	}
+	// The lock spans the read as well as the write. This is a read-modify-write
+	// of one file and the pass fires saves off after every batch without
+	// waiting, so two of them overlap routinely; unserialised, the second reads
+	// before the first has written and drops that batch on the floor — silently,
+	// since the pass has already counted those lines as saved.
+	return withFileLock(path, func() error {
+		all := map[string]map[string]string{}
+		if raw, err := os.ReadFile(path); err == nil {
+			_ = json.Unmarshal(raw, &all)
+		}
+		if all[engine] == nil {
+			all[engine] = map[string]string{}
+		}
+		for k, v := range entries {
+			all[engine][k] = v
+		}
 
-	blob, err := json.Marshal(all)
-	if err != nil {
-		return err
-	}
-	// Write-then-rename so a reader never sees half a file.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, blob, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+		blob, err := json.Marshal(all)
+		if err != nil {
+			return err
+		}
+		return writeFileAtomic(path, blob)
+	})
 }
 
 // narrationTTSDir holds the synthesised clips for one video's narration.
@@ -140,13 +142,9 @@ func writeTTSCache(root, videoID, text string, speed float64, voice string, wav 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	// Write-then-rename: a half-written WAV that another request reads as a hit
-	// would be worse than no cache at all.
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, wav, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	// A half-written WAV that another request reads as a hit would be worse
+	// than no cache at all.
+	return writeFileAtomic(path, wav)
 }
 
 // narrationCuesFile is the cue list exactly as the browser grouped it.
@@ -178,14 +176,8 @@ func (g *Gateway) handlePutNarrationCues(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	path := filepath.Join(dir, narrationCuesFile)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+	if err := withFileLock(path, func() error { return writeFileAtomic(path, body) }); err != nil {
 		g.logger.Warn("narration cues write", "error", err)
-		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		g.logger.Warn("narration cues rename", "error", err)
 		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -285,14 +277,10 @@ func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) 
 	}
 	name := narrationVTTName(dir)
 	path := filepath.Join(dir, name)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+	// One file per video, rewritten after every batch — the writes that
+	// overlapped the most, and the ones that surfaced as a 503.
+	if err := withFileLock(path, func() error { return writeFileAtomic(path, body) }); err != nil {
 		g.logger.Warn("narration vtt write", "error", err)
-		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		g.logger.Warn("narration vtt rename", "error", err)
 		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
 		return
 	}
