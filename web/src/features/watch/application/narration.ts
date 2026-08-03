@@ -707,11 +707,23 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
  *
  * Returns a function that removes the listeners.
  */
-export function bindNarration(video: HTMLVideoElement): () => void {
-  const onPause = () => stopEverything()
+/** Where the pump has got to. Exposed so the effect of an interruption on it
+ *  can be asserted; nothing outside this module writes it. */
+export function narrationCursor(): number {
+  return _cursor
+}
 
-  const onSeeking = () => {
-    // Everything placed was placed against a playhead that no longer exists.
+export function bindNarration(video: HTMLVideoElement): () => void {
+  /**
+   * Throw away everything placed, and put the cursor back where the video is.
+   *
+   * Both halves matter, and pause used to do only the first. Clips are placed
+   * up to PREFETCH_SEC — a minute — ahead of the playhead, and the cursor moves
+   * with them. Stopping the sources without rewinding left the cursor a minute
+   * in the future, so pressing play again skipped every cue in between: the
+   * voice went quiet for up to a minute and read as broken.
+   */
+  const rewindToPlayhead = () => {
     _generation++
     stopEverything()
     _pumping = false
@@ -719,14 +731,14 @@ export function bindNarration(video: HTMLVideoElement): () => void {
     _lastTime = video.currentTime
   }
 
-  video.addEventListener('pause', onPause)
-  video.addEventListener('ended', onPause)
-  video.addEventListener('seeking', onSeeking)
+  video.addEventListener('pause', rewindToPlayhead)
+  video.addEventListener('ended', rewindToPlayhead)
+  video.addEventListener('seeking', rewindToPlayhead)
 
   return () => {
-    video.removeEventListener('pause', onPause)
-    video.removeEventListener('ended', onPause)
-    video.removeEventListener('seeking', onSeeking)
+    video.removeEventListener('pause', rewindToPlayhead)
+    video.removeEventListener('ended', rewindToPlayhead)
+    video.removeEventListener('seeking', rewindToPlayhead)
   }
 }
 

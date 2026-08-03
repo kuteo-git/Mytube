@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  bindNarration,
   cancelTranslationPass,
+  narrationCursor,
   loadViSubtitles,
   narrationCues,
   narrationProgress,
@@ -137,5 +139,84 @@ This is the second line.
     await loadCues()
     for (let i = 0; i < 5; i++) stopNarrationPlayback()
     expect(narrationCues().length).toBe(2)
+  })
+})
+
+describe('an interruption puts the cursor back where the video is', () => {
+  afterEach(() => {
+    resetNarration()
+    vi.unstubAllGlobals()
+  })
+
+  const VTT = `WEBVTT
+
+00:00:01.000 --> 00:00:03.000
+one
+
+00:00:20.000 --> 00:00:22.000
+two
+
+00:00:40.000 --> 00:00:42.000
+three
+`
+
+  async function withCues() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, text: async () => VTT }),
+    )
+    loadViSubtitles('/media/abc/en.vtt', 'vi')
+    await new Promise((r) => setTimeout(r, 10))
+  }
+
+  function fakeVideo(currentTime: number) {
+    const el = new EventTarget() as unknown as HTMLVideoElement
+    Object.defineProperty(el, 'currentTime', { value: currentTime, writable: true })
+    return el
+  }
+
+  it('rewinds on pause, not only on seek', async () => {
+    // Clips are placed up to a minute ahead and the cursor travels with them.
+    // Pause used to stop the sources and leave the cursor out there, so pressing
+    // play again skipped every cue in between — the voice went silent for up to
+    // a minute, which is what "TTS stopped working" turned out to mean.
+    await withCues()
+    const video = fakeVideo(41)
+    const unbind = bindNarration(video)
+
+    // Put the cursor at the end, the way a minute of prefetch would.
+    video.dispatchEvent(new Event('seeking'))
+    expect(narrationCursor()).toBe(3)
+
+    // Now pause near the start. Before this fix the cursor stayed at 3.
+    ;(video as { currentTime: number }).currentTime = 2
+    video.dispatchEvent(new Event('pause'))
+
+    expect(narrationCursor()).toBe(1)
+    unbind()
+  })
+
+  it('skips the cue already under way rather than repeating it', async () => {
+    // Cue 1 runs 20-22s. Interrupted at 21 its clip was stopped part-heard;
+    // starting it again would read the same words twice.
+    await withCues()
+    const video = fakeVideo(21)
+    const unbind = bindNarration(video)
+
+    video.dispatchEvent(new Event('pause'))
+
+    expect(narrationCursor()).toBe(2)
+    unbind()
+  })
+
+  it('does the same when the video ends', async () => {
+    await withCues()
+    const video = fakeVideo(41)
+    const unbind = bindNarration(video)
+
+    video.dispatchEvent(new Event('ended'))
+
+    expect(narrationCursor()).toBe(3)
+    unbind()
   })
 })
