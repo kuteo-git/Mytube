@@ -126,6 +126,12 @@ const settle = (ms = 20) => act(async () => void (await new Promise((r) => setTi
 
 beforeEach(() => {
   localReady = false
+  // Narration preferences persist. A test that switches narration on would
+  // otherwise leave it on for every test after it in this file, and those
+  // render a player that starts an audio scheduler jsdom has no clock for.
+  window.localStorage.removeItem('yt-narration-output-v1')
+  window.localStorage.removeItem('yt-narration-engine-v1')
+  window.localStorage.removeItem('yt-narration-on')
 })
 
 async function ready() {
@@ -556,11 +562,10 @@ describe('a bar sized for a thumb', () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
     // Autoplay only exists when there is a next video; narration is the row
-    // this fixture can show. "Thuyết minh" is now the group heading rather than
-    // a switch, and the switch that carries the old on/off behaviour is the
-    // spoken-output row.
+    // this fixture can show. Narration output is a segmented control now, so
+    // the control carrying the old on/off behaviour is a radio, not a switch.
     expect(
-      screen.getByRole('switch', { name: 'Chỉ giọng đọc' }),
+      screen.getByRole('radio', { name: 'Giọng đọc' }),
     ).toBeInTheDocument()
   })
 
@@ -589,10 +594,43 @@ describe('a bar sized for a thumb', () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
     expect(
-      screen.getByRole('switch', { name: 'Chỉ phụ đề tiếng Việt' }),
+      screen.getByRole('radiogroup', { name: 'Thuyết minh tiếng Việt' }),
     ).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Phụ đề' })).toBeInTheDocument()
+  })
+
+  it('hides the engine choice until narration is actually on', async () => {
+    // Which model translates is a question about narration. Put to someone who
+    // has narration switched off, it is a question about something that is not
+    // happening — so the menu opens with one decision on it, not three.
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        resume() {
+          return Promise.resolve()
+        }
+        suspend() {
+          return Promise.resolve()
+        }
+        close() {
+          return Promise.resolve()
+        }
+      },
+    )
+    await ready()
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
     expect(
-      screen.getByRole('switch', { name: 'Qwen (dịch nền, có ngữ cảnh)' }),
+      screen.queryByRole('radiogroup', { name: 'Máy dịch' }),
+    ).not.toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('radio', { name: 'Giọng đọc' }))
+    })
+    expect(
+      screen.getByRole('radiogroup', { name: 'Máy dịch' }),
     ).toBeInTheDocument()
   })
 

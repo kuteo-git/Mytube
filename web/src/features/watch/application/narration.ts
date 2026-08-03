@@ -76,6 +76,8 @@ let _engine: NarrationEngine = 'qwen'
 let _passVideoId = ''
 let _passRunning = false
 let _passGeneration = 0
+let _passTotal = 0
+let _passDone = 0
 /** Written since the last flush, so a flush posts only what is new. */
 const _unsaved = new Map<string, string>()
 
@@ -88,10 +90,28 @@ export function setNarrationEngine(engine: NarrationEngine) {
   _unsaved.clear()
   _passGeneration++
   _passRunning = false
+  _passTotal = 0
+  _passDone = 0
 }
 
 export function translatedCue(text: string): string | undefined {
   return _tlCache.get(text)
+}
+
+/**
+ * How far the background pass has got.
+ *
+ * The pass is the only part of narration that takes minutes and makes no sound
+ * while it does. Without something to report, a viewer waiting on the first
+ * line cannot tell translation-in-progress from translation-broken, and the two
+ * look identical: silence.
+ */
+export function narrationProgress(): {
+  done: number
+  total: number
+  running: boolean
+} {
+  return { done: _passDone, total: _passTotal, running: _passRunning }
 }
 
 /** The cue covering `time`, or null when nothing is being said. */
@@ -133,57 +153,70 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   _passVideoId = videoId
   _passRunning = true
   _passGeneration++
+  _passTotal = 0
+  _passDone = 0
   const generation = _passGeneration
 
   void (async () => {
-    const byHash = await loadNarrationCache(videoId, _engine)
-    if (generation !== _passGeneration) return
-
-    // Wait for the cue list, which loadViSubtitles is fetching in parallel.
-    for (let i = 0; i < 100 && _cues === null; i++) {
-      await new Promise((r) => setTimeout(r, 100))
-    }
-    const cues = _cues
-    if (!cues || cues.length === 0 || generation !== _passGeneration) return
-
-    const first = nearestCueIndex(cues, fromTime)
-    const texts = cues.slice(first).map((c) => c.text)
-    const hashes = await Promise.all(texts.map(hashCue))
-    if (generation !== _passGeneration) return
-
-    // Seed from disk. The cache is keyed by hash, the speaking path looks up by
-    // text, so the two are joined here rather than at every lookup.
-    texts.forEach((text, i) => {
-      const hit = byHash.get(hashes[i])
-      if (hit) _tlCache.set(text, hit)
-    })
-
-    for (const { start, end } of planBatches(texts.length)) {
+    // `finally`, not a flag cleared at the end: every guard below returns early
+    // when a newer pass has superseded this one, and each of those returns would
+    // otherwise leave `_passRunning` true forever — which is the one state that
+    // stops a pass from ever being started again.
+    try {
+      const byHash = await loadNarrationCache(videoId, _engine)
       if (generation !== _passGeneration) return
 
-      const slice = texts.slice(start, end)
-      const missing = slice.filter((t) => !_tlCache.has(t))
-      if (missing.length === 0) continue
+      // Wait for the cue list, which loadViSubtitles is fetching in parallel.
+      for (let i = 0; i < 100 && _cues === null; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+      }
+      const cues = _cues
+      if (!cues || cues.length === 0 || generation !== _passGeneration) return
 
-      const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
-      const out = await translateBatch(missing, context, _engine)
+      const first = nearestCueIndex(cues, fromTime)
+      const texts = cues.slice(first).map((c) => c.text)
+      const hashes = await Promise.all(texts.map(hashCue))
       if (generation !== _passGeneration) return
 
-      missing.forEach((text, i) => {
-        const vi = out[i]
-        if (!vi) return
-        _tlCache.set(text, vi)
-        const at = texts.indexOf(text)
-        if (at >= 0) _unsaved.set(hashes[at], vi)
+      // Seed from disk. The cache is keyed by hash, the speaking path looks up
+      // by text, so the two are joined here rather than at every lookup.
+      texts.forEach((text, i) => {
+        const hit = byHash.get(hashes[i])
+        if (hit) _tlCache.set(text, hit)
       })
+      const countDone = () => texts.filter((t) => _tlCache.has(t)).length
+      _passTotal = texts.length
+      _passDone = countDone()
 
-      // Flush as we go. A viewer who closes the tab halfway keeps the half
-      // that was paid for.
-      const batchSaved = new Map(_unsaved)
-      _unsaved.clear()
-      void saveNarrationCache(videoId, _engine, batchSaved)
+      for (const { start, end } of planBatches(texts.length)) {
+        if (generation !== _passGeneration) return
+
+        const slice = texts.slice(start, end)
+        const missing = slice.filter((t) => !_tlCache.has(t))
+        if (missing.length === 0) continue
+
+        const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
+        const out = await translateBatch(missing, context, _engine)
+        if (generation !== _passGeneration) return
+
+        missing.forEach((text, i) => {
+          const vi = out[i]
+          if (!vi) return
+          _tlCache.set(text, vi)
+          const at = texts.indexOf(text)
+          if (at >= 0) _unsaved.set(hashes[at], vi)
+        })
+        _passDone = countDone()
+
+        // Flush as we go. A viewer who closes the tab halfway keeps the half
+        // that was paid for.
+        const batchSaved = new Map(_unsaved)
+        _unsaved.clear()
+        void saveNarrationCache(videoId, _engine, batchSaved)
+      }
+    } finally {
+      if (generation === _passGeneration) _passRunning = false
     }
-    _passRunning = false
   })()
 }
 

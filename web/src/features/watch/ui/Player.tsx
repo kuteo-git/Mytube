@@ -2,7 +2,6 @@ import clsx from 'clsx'
 import {
   Captions,
   CaptionsOff,
-  Headphones,
   Maximize,
   Pause,
   PictureInPicture2,
@@ -34,6 +33,7 @@ import {
   loadViSubtitles,
   setNarrationEngine,
   startTranslationPass,
+  narrationProgress,
 } from '@/features/watch/application/narration'
 import {
   loadNarrationPrefs,
@@ -1008,49 +1008,41 @@ export function Player({
    * the bar has room for its own captions and narration buttons, so that branch
    * renders nothing. The engine choice had nowhere to appear at all.
    */
+  // Declared here rather than beside the other layout state: the narration
+  // settings below size their touch targets from it, and they are built first.
+  const coarse = useCoarsePointer()
+
   const narrationRows = narrationAvailable ? (
     <>
-      <li className="px-4 pt-2 pb-1 text-xs text-text-2">Thuyết minh</li>
-      {/* Not plain "Tắt": the captions group has a row by that name, and two
-          switches with the same accessible name in one menu are
-          indistinguishable to anyone not reading the group headings. */}
-      <SettingRow
-        label="Tắt thuyết minh"
-        on={narrationPrefs.output === 'off'}
-        onToggle={() => setNarrationOutput('off')}
+      <SegmentedSetting
+        label="Thuyết minh tiếng Việt"
+        value={narrationPrefs.output}
+        onSelect={setNarrationOutput}
+        tall={coarse}
+        options={[
+          { value: 'off', label: 'Tắt' },
+          { value: 'subs', label: 'Phụ đề', hint: 'Hiện bản dịch, không đọc' },
+          { value: 'voice', label: 'Giọng đọc', hint: 'Đọc thành tiếng' },
+          { value: 'both', label: 'Cả hai' },
+        ]}
       />
-      <SettingRow
-        label="Chỉ phụ đề tiếng Việt"
-        on={narrationPrefs.output === 'subs'}
-        onToggle={() => setNarrationOutput('subs')}
-      />
-      <SettingRow
-        label="Chỉ giọng đọc"
-        on={narrationPrefs.output === 'voice'}
-        onToggle={() => setNarrationOutput('voice')}
-      />
-      <SettingRow
-        label="Cả hai"
-        on={narrationPrefs.output === 'both'}
-        onToggle={() => setNarrationOutput('both')}
-      />
-      <li className="px-4 pt-2 pb-1 text-xs text-text-2">Máy dịch</li>
-      <SettingRow
-        label="Qwen (dịch nền, có ngữ cảnh)"
-        on={narrationPrefs.engine === 'qwen'}
-        onToggle={() => setEngine('qwen')}
-      />
-      <SettingRow
-        label="NLLB (dịch ngay từng câu)"
-        on={narrationPrefs.engine === 'nllb'}
-        onToggle={() => setEngine('nllb')}
-      />
+      {narrationPrefs.output !== 'off' && (
+        <>
+          <SegmentedSetting
+            label="Máy dịch"
+            value={narrationPrefs.engine}
+            onSelect={setEngine}
+            tall={coarse}
+            options={[
+              { value: 'qwen', label: 'Kỹ hơn', hint: 'Qwen — dịch nền theo lô, có ngữ cảnh' },
+              { value: 'nllb', label: 'Nhanh hơn', hint: 'NLLB — dịch ngay từng câu' },
+            ]}
+          />
+          <NarrationStatus engine={narrationPrefs.engine} />
+        </>
+      )}
     </>
   ) : undefined
-
-  const toggleNarration = useCallback(() => {
-    setNarrationOutput(narrationOn ? 'off' : 'voice')
-  }, [narrationOn, setNarrationOutput])
 
   const tapPicture = useCallback(() => {
     if (pointerKindRef.current !== 'touch') {
@@ -1316,7 +1308,6 @@ export function Player({
   // not be drawn at all (CLAUDE.md §5), and both of these were drawn and dead.
   // Finger-sized targets, and fewer of them. 36px is under the 44 Apple asks
   // for, which is most of why the bar felt cramped — not the count alone.
-  const coarse = useCoarsePointer()
   const controlButton = clsx(
     'grid place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10',
     coarse ? 'h-11 w-11' : 'h-9 w-9',
@@ -1898,21 +1889,11 @@ export function Player({
             />
           )}
 
-          {narrationAvailable && variant === 'full' && !coarse && (
-            <button
-              type="button"
-              aria-label={narrationOn ? 'Turn off narration' : 'Turn on Vietnamese narration'}
-              aria-pressed={narrationOn}
-              onClick={toggleNarration}
-              className={`p-2 rounded-full transition-colors duration-150 ease-out ${
-                narrationOn
-                  ? 'text-brand hover:bg-brand/10'
-                  : 'text-text-2 hover:text-text hover:bg-surface-hover'
-              }`}
-            >
-              <Headphones size={20} />
-            </button>
-          )}
+          {/* The headphone button is gone. It was a second control for the same
+              setting the gear now holds, and the two disagreed about what
+              narration is: the button knew only on and off, while narration has
+              four output modes. Turning it "on" from the bar could not say
+              whether that meant subtitles, a voice, or both. */}
 
           {/* Only offered when there is more than one way to play the video.
               A quality menu over a single source would be a control that
@@ -2281,6 +2262,123 @@ function QualityMenu({
  * A row rather than an icon, because the sheet has room for words and the bar
  * did not — which is the reason these moved here.
  */
+/**
+ * What the translator is doing right now.
+ *
+ * The batch engine works ahead of the playhead for minutes and makes no sound
+ * while it does, so "still translating" and "translation is broken" present
+ * identically: nothing happens. This is the only place either state is
+ * visible. The realtime engine has nothing to report — it translates a line at
+ * the moment it speaks it — so it says so rather than showing an empty bar.
+ */
+function NarrationStatus({ engine }: { engine: NarrationEngine }) {
+  const [p, setP] = useState(narrationProgress)
+
+  useEffect(() => {
+    const id = window.setInterval(() => setP(narrationProgress()), 500)
+    return () => window.clearInterval(id)
+  }, [])
+
+  if (engine !== 'qwen') {
+    return (
+      <li className="px-4 pb-2 text-xs text-text-2">
+        Dịch từng câu ngay khi đọc, không chạy nền.
+      </li>
+    )
+  }
+
+  const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
+  const done = p.total > 0 && p.done >= p.total
+
+  return (
+    <li className="px-4 pb-3" aria-live="polite">
+      <div className="flex items-baseline justify-between gap-2 pb-1 text-xs">
+        <span className="text-text-2">
+          {p.total === 0
+            ? 'Đang chuẩn bị…'
+            : done
+              ? 'Đã dịch xong'
+              : p.running
+                ? 'Đang dịch nền…'
+                : 'Tạm dừng'}
+        </span>
+        {p.total > 0 && (
+          <span className="tabular-nums text-text-2">
+            {p.done}/{p.total} câu
+          </span>
+        )}
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-white/15">
+        <div
+          className={clsx(
+            'h-full rounded-full transition-[width] duration-300 ease-out',
+            done ? 'bg-white/50' : 'bg-brand',
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </li>
+  )
+}
+
+/**
+ * One choice out of a few, laid out as a segmented control.
+ *
+ * Six switches were six independent yes/no questions to read, when narration
+ * only ever has one output mode and one engine — a switch invites you to work
+ * out which combinations are legal, a segment shows there is exactly one answer
+ * and what the alternatives are. Matches the Like/Dislike pair in the design
+ * system (MASTER.md), which is segmented for the same reason.
+ */
+function SegmentedSetting<T extends string>({
+  label,
+  options,
+  value,
+  onSelect,
+  tall,
+}: {
+  label: string
+  options: Array<{ value: T; label: string; hint?: string }>
+  value: T
+  onSelect: (v: T) => void
+  /** Touch targets need 44px; a mouse is happy with less. */
+  tall?: boolean
+}) {
+  return (
+    <li className="px-4 py-2">
+      <div className="pb-1.5 text-xs text-text-2">{label}</div>
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="flex overflow-hidden rounded-lg bg-white/10 p-0.5"
+      >
+        {options.map((o) => {
+          const on = o.value === value
+          return (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              title={o.hint}
+              onClick={() => onSelect(o.value)}
+              className={clsx(
+                'flex-1 rounded-md px-2 text-center text-xs font-medium transition-colors duration-150 ease-out',
+                tall ? 'py-2.5' : 'py-1.5',
+                on
+                  ? 'bg-invert-bg text-invert-text'
+                  : 'text-text-2 hover:bg-white/10 hover:text-text',
+              )}
+            >
+              {o.label}
+            </button>
+          )
+        })}
+      </div>
+    </li>
+  )
+}
+
 function SettingRow({
   label,
   on,
