@@ -32,18 +32,46 @@ export async function hashCue(text: string): Promise<string> {
 }
 
 /**
- * The engine's name still partitions the file on disk. There is only one engine
- * now, but files written while there were three carry their partitions, and a
- * reader that ignored them would look at the wrong half.
+ * Which partition of the on-disk file these translations belong in.
+ *
+ * The model is part of it. Two models translate the same line differently, and
+ * a shared partition would blend them into one subtitle file with nothing to
+ * say which line came from where — the same fault that made the engine name
+ * part of the key when there were several engines.
+ *
+ * Keeping old partitions rather than clearing them makes trying a model a
+ * reversible experiment: switch away and back, and the earlier work is still
+ * there.
  */
-const ENGINE = 'omniroute'
+let _partition = ''
+let _partitionWaiters: Array<() => void> = []
+
+export function setCachePartition(model: string) {
+  _partition = model ? `omniroute:${model}` : 'omniroute'
+  const waiters = _partitionWaiters
+  _partitionWaiters = []
+  waiters.forEach((w) => w())
+}
+
+/**
+ * Resolves once the configured model is known.
+ *
+ * The pass has to wait for it. Starting before the answer arrives would mean
+ * reading and writing a partition named after the wrong model — worse than a
+ * cold cache, because the translations land somewhere they will be read back as
+ * another model's work.
+ */
+export function whenPartitionReady(): Promise<void> {
+  if (_partition) return Promise.resolve()
+  return new Promise((resolve) => _partitionWaiters.push(resolve))
+}
 
 export async function loadNarrationCache(
   videoId: string,
 ): Promise<Map<string, string>> {
   try {
     const resp = await fetch(
-      `/api/videos/${videoId}/narration-cache?engine=${ENGINE}`,
+      `/api/videos/${videoId}/narration-cache?engine=${_partition}`,
     )
     if (!resp.ok) return new Map()
     const body = (await resp.json()) as { entries?: Record<string, string> }
@@ -63,7 +91,7 @@ export async function saveNarrationCache(
     await fetch(`/api/videos/${videoId}/narration-cache`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ engine: ENGINE, entries: Object.fromEntries(entries) }),
+      body: JSON.stringify({ engine: _partition, entries: Object.fromEntries(entries) }),
     })
   } catch {
     // Same reason as above.

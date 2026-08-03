@@ -1,9 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   hashCue,
   loadNarrationCache,
   saveNarrationCache,
+  setCachePartition,
 } from './narration-cache'
+
+// Translations are filed under the model that produced them, so a partition has
+// to be chosen before any of these calls mean anything.
+beforeEach(() => setCachePartition('m1'))
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -55,7 +60,7 @@ describe('saveNarrationCache', () => {
     const [url, init] = f.mock.calls[0]
     expect(url).toBe('/api/videos/vid/narration-cache')
     expect(JSON.parse(init.body)).toEqual({
-      engine: 'omniroute',
+      engine: 'omniroute:m1',
       entries: { h1: 'chào' },
     })
   })

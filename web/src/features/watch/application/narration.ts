@@ -28,6 +28,7 @@ import {
   saveNarrationCache,
   saveNarrationCues,
   saveNarrationVtt,
+  whenPartitionReady,
 } from '@/features/watch/infrastructure/narration-cache'
 import {
   DEFAULT_SPEED,
@@ -40,7 +41,12 @@ import {
   tooLateToPlay,
 } from './narration-schedule'
 
-const TTS_VOICE = 'Ngọc Linh'
+/** Whichever voice the viewer picked. The default is what shipped before. */
+let _voice = 'Ngọc Linh'
+
+export function setNarrationVoice(voice: string) {
+  if (voice) _voice = voice
+}
 
 /**
  * How far ahead of the playhead clips are prepared and placed.
@@ -70,8 +76,18 @@ const MAX_CONCURRENT = 2
 /** How many cues ahead of the one being committed are warmed in the background. */
 const LOOKAHEAD_CUES = 3
 
-/** Narration sits above the video so the voice carries over the original audio. */
-const NARRATION_GAIN = 2.5
+/**
+ * Gain on the narration bus, set by the player from the viewer's settings.
+ *
+ * It used to be a constant multiplied by `video.volume` — which is the ducked
+ * figure, so the two levels could not be moved independently. The player now
+ * works out both from levelsFor() and hands this one over.
+ */
+let _narrationGain = 0.5
+
+export function setNarrationGain(gain: number) {
+  _narrationGain = gain
+}
 
 // ---- cache ------------------------------------------------------------------
 const _cache = new Map<string, AudioBuffer>()
@@ -266,6 +282,12 @@ export function startTranslationPass(videoId: string, fromTime: number) {
     // otherwise leave `_passRunning` true forever — which is the one state that
     // stops a pass from ever being started again.
     try {
+      // Which model is configured decides which partition these belong in, and
+      // that answer comes from the server. Reading before it lands would file
+      // this video's work under the wrong model.
+      await whenPartitionReady()
+      if (generation !== _passGeneration) return
+
       const byHash = await loadNarrationCache(videoId)
       if (generation !== _passGeneration) return
 
@@ -394,7 +416,11 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     viText = cached
   }
 
-  const cacheKey = `${viText}@@${speed.toFixed(2)}`
+  // Voice belongs in the key for the same reason it belongs in the server's:
+  // without it, changing voice keeps playing whichever one was synthesised
+  // first, and this cache would go on doing so even after the disk cache was
+  // fixed.
+  const cacheKey = `${viText}@@${speed.toFixed(2)}@@${_voice}`
   const c = _cache.get(cacheKey)
   if (c) return c
   const inflight = _active.get(cacheKey)
@@ -411,7 +437,7 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
       // words at the same tempo, so it belongs on disk beside the video.
       body: JSON.stringify({
         text: viText,
-        voice: TTS_VOICE,
+        voice: _voice,
         speed,
         videoId: _passVideoId,
       }),
@@ -722,7 +748,7 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     _masterGain = ctx.createGain()
     connectOutput(ctx, _masterGain)
   }
-  _masterGain.gain.setValueAtTime(video.volume * NARRATION_GAIN, ctx.currentTime)
+  _masterGain.gain.setValueAtTime(_narrationGain, ctx.currentTime)
 
   // A jump in either direction abandons the timeline: everything scheduled was
   // placed against a playhead that no longer exists.

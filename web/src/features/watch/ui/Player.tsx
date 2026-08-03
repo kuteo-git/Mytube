@@ -33,6 +33,8 @@ import {
   stopNarrationPlayback,
   loadViSubtitles,
   setNarrationVideo,
+  setNarrationVoice,
+  setNarrationGain,
   cancelTranslationPass,
   startTranslationPass,
   narrationProgress,
@@ -43,6 +45,10 @@ import {
   saveNarrationPrefs,
 } from '@/features/watch/application/narration-prefs'
 import { centreCues } from '@/features/watch/application/cue-placement'
+import { levelsFor } from '@/features/watch/application/narration-levels'
+import { setCachePartition } from '@/features/watch/infrastructure/narration-cache'
+import { useTranslateConfig } from '@/features/settings/application/queries'
+import { loadNarrationAudioPrefs } from '@/features/settings/application/settings-prefs'
 import { useTranslatedTrack } from '@/features/watch/application/use-translated-track'
 import {
   canGoFullscreen,
@@ -659,16 +665,47 @@ export function Player({
   // Only applies when the video actually has Vietnamese subtitles — otherwise
   // narrationOn could be stuck true from localStorage with no button to turn
   // it off, permanently halving the volume.
-  const NARRATION_DUCK = 0.2
+  // Narration audio settings live on this device and are edited on /settings.
+  // Re-read on focus and on the storage event so a change made there — or in
+  // another tab — reaches a player that is already on screen, which is what
+  // makes dragging a slider audible against a running video.
+  const [audioPrefs, setAudioPrefs] = useState(loadNarrationAudioPrefs)
+  useEffect(() => {
+    const reread = () => setAudioPrefs(loadNarrationAudioPrefs())
+    window.addEventListener('focus', reread)
+    window.addEventListener('storage', reread)
+    window.addEventListener('yt-narration-audio-prefs', reread)
+    return () => {
+      window.removeEventListener('focus', reread)
+      window.removeEventListener('storage', reread)
+      window.removeEventListener('yt-narration-audio-prefs', reread)
+    }
+  }, [])
+
+  useEffect(() => {
+    setNarrationVoice(audioPrefs.voice)
+  }, [audioPrefs.voice])
+
   const ducking = narrationSpeaks && narrationAvailable
+  const levels = levelsFor({
+    master: volume,
+    muted,
+    narrating: ducking,
+    narrationLevel: audioPrefs.voiceLevel,
+    duckLevel: audioPrefs.duckLevel,
+  })
+
+  useEffect(() => {
+    setNarrationGain(levels.narration)
+  }, [levels.narration])
+
   useEffect(() => {
     const el = front()
     if (!el) return
-    const target = ducking ? volume * NARRATION_DUCK : volume
-    lastSetVolumeRef.current = target
+    lastSetVolumeRef.current = levels.video
     el.muted = muted
-    el.volume = target
-  }, [volume, muted, ducking, frontSrc])
+    el.volume = levels.video
+  }, [levels.video, muted, front, frontSrc])
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
@@ -1041,6 +1078,13 @@ export function Player({
     const id = window.setInterval(() => setProgress(narrationProgress()), 500)
     return () => window.clearInterval(id)
   }, [narrationOn])
+
+  // Translations are filed under the model that produced them, so the player
+  // has to know which model is configured before it reads or writes the cache.
+  const { data: translateConfig } = useTranslateConfig()
+  useEffect(() => {
+    if (translateConfig?.model) setCachePartition(translateConfig.model)
+  }, [translateConfig?.model])
 
   // The translated track only exists once the file behind it has been written,
   // and the subtitle list was fetched long before that.

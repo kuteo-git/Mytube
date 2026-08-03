@@ -63,6 +63,12 @@ beforeEach(() => {
   seen.length = 0
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     seen.push(String(url))
+    if (String(url).includes('/translate/config')) {
+      return {
+        ok: true,
+        json: async () => ({ baseUrl: 'http://x', model: 'm1', hasKey: true, keyHint: '…1234' }),
+      } as unknown as Response
+    }
     if (String(url).endsWith('.vtt')) {
       return { ok: true, text: async () => VTT } as unknown as Response
     }

@@ -7,6 +7,7 @@ import { ActivityPage } from './pages/ActivityPage'
 import { ChannelPage } from './pages/ChannelPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { HomePage } from './pages/HomePage'
+import { SettingsPage } from './pages/SettingsPage'
 import { SavedPage } from './pages/SavedPage'
 import { SearchResultsPage } from './pages/SearchResultsPage'
 import { StoragePage } from './pages/StoragePage'
@@ -30,6 +31,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/saved" element={<SavedPage />} />
             <Route path="/storage" element={<StoragePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="/channel/:channelId" element={<ChannelPage />} />
             <Route path="/watch/:videoId" element={<WatchPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
