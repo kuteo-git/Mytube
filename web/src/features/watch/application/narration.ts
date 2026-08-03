@@ -36,6 +36,8 @@ import {
   slotFor,
   speedFor,
   startTimeFor,
+  scheduleAt,
+  tooLateToPlay,
 } from './narration-schedule'
 
 const TTS_VOICE = 'Ngọc Linh'
@@ -67,9 +69,6 @@ const MAX_CONCURRENT = 2
 
 /** How many cues ahead of the one being committed are warmed in the background. */
 const LOOKAHEAD_CUES = 3
-
-/** Breath between clips, when there is room for one. */
-const GAP_BETWEEN_CLIPS = 0.25
 
 /** Narration sits above the video so the voice carries over the original audio. */
 const NARRATION_GAIN = 2.5
@@ -633,12 +632,17 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
 
     if (ctx.state === 'suspended') void ctx.resume()
 
-    let when = startTimeFor(cue.start, video.currentTime, ctx.currentTime)
+    const due = startTimeFor(cue.start, video.currentTime, ctx.currentTime)
     // Never on top of the clip before it. With commits ordered, _scheduledUntil
     // really is the previous clip's end, so this is a fact rather than a guess.
-    if (when < _scheduledUntil + GAP_BETWEEN_CLIPS) {
-      when = _scheduledUntil + GAP_BETWEEN_CLIPS
-    }
+    const when = scheduleAt(due, _scheduledUntil)
+
+    // Being queued behind an overrun is how narration slid behind the picture:
+    // a cue whose audio does not fit even at 3x pushes the next clip, which
+    // pushes the one after it, and nothing ever compared the moment a clip
+    // actually got against the line it was reading. Dropping one lets the queue
+    // catch up — the same trade shouldPlay already makes a few lines above.
+    if (tooLateToPlay(when, due)) continue
 
     _scheduledUntil = scheduleBuffer(ctx, buffer, when)
   }

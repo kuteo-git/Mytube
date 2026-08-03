@@ -7,6 +7,9 @@ import {
   slotFor,
   speedFor,
   startTimeFor,
+  latenessOf,
+  scheduleAt,
+  tooLateToPlay,
 } from './narration-schedule'
 import type { CueText } from './narration-vtt'
 
@@ -98,5 +101,55 @@ describe('startTimeFor', () => {
 
   it('never schedules into the past', () => {
     expect(startTimeFor(8, 10, 100)).toBe(100)
+  })
+})
+
+describe('lateness introduced by the clip before', () => {
+  it('accepts a clip that lands on its own moment', () => {
+    expect(latenessOf(10, 10)).toBe(0)
+    expect(tooLateToPlay(10, 10)).toBe(false)
+  })
+
+  it('tolerates a small push', () => {
+    // Clips run over their slot constantly and a fraction of a second late is
+    // not worth silencing a line for.
+    expect(tooLateToPlay(10.4, 10)).toBe(false)
+  })
+
+  it('drops a clip pushed past the tolerance', () => {
+    // This is the drift: a cue whose audio does not fit even at 3x pushes
+    // _scheduledUntil past the next cue, which pushes the one after that.
+    // Nothing in the old code ever compared the scheduled moment against the
+    // cue it belonged to, so the gap only ever grew.
+    expect(tooLateToPlay(11.5, 10)).toBe(true)
+  })
+
+  it('never treats an early clip as late', () => {
+    expect(tooLateToPlay(9, 10)).toBe(false)
+    expect(latenessOf(9, 10)).toBe(0)
+  })
+})
+
+describe('scheduleAt', () => {
+  it('leaves a breath when the clip before finished in good time', () => {
+    // Previous ends at 9, cue due at 10: room for the gap and then some.
+    expect(scheduleAt(10, 9)).toBe(10)
+  })
+
+  it('takes a shorter breath rather than start the line late', () => {
+    // Only 0.1s of room before this cue is due. Insisting on the full gap
+    // would delay the line to 10.15 for the sake of 0.15s of silence — and
+    // that delay is exactly what the next clip then inherits.
+    expect(scheduleAt(10, 9.9)).toBeCloseTo(10, 5)
+  })
+
+  it('gives up the breath rather than pass an overrun on', () => {
+    // Previous ran past this cue's moment. Adding a gap on top is what turned
+    // one overrun into drift that compounded for the rest of the video.
+    expect(scheduleAt(10, 10.3)).toBeCloseTo(10.3, 5)
+  })
+
+  it('never starts a clip before it is due', () => {
+    expect(scheduleAt(10, 0)).toBe(10)
   })
 })

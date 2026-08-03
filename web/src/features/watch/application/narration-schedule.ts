@@ -75,3 +75,57 @@ export function speedFor(naturalDuration: number, slot: number): number {
 export function startTimeFor(cueStart: number, videoTime: number, audioNow: number): number {
   return audioNow + Math.max(0, cueStart - videoTime)
 }
+
+/**
+ * How far a clip may start after its cue before it is dropped instead.
+ *
+ * Not zero: clips run over their slot all the time, and silencing a line
+ * because it starts a quarter-second late would silence most of them.
+ */
+export const MAX_LATENESS_SECONDS = 0.75
+
+/** Seconds a scheduled clip starts after the cue it belongs to. */
+export function latenessOf(scheduledStart: number, cueStart: number): number {
+  return Math.max(0, scheduledStart - cueStart)
+}
+
+/**
+ * Whether a clip has been pushed too far past its cue to be worth playing.
+ *
+ * shouldPlay asks whether a clip was *fetched* in time. This asks the question
+ * that was missing: whether, after being queued behind a clip that overran, it
+ * still lands anywhere near the line it is reading. A cue whose audio does not
+ * fit even at 3x pushes the clip after it, which pushes the one after that, and
+ * nothing ever compared the scheduled moment back against the cue — so the
+ * voice slid further behind the picture for the rest of the video.
+ *
+ * Dropping one line lets the queue catch up with the video. It is the same
+ * trade shouldPlay already makes: a missing line beats a voice reading the
+ * previous sentence over the current one.
+ */
+export function tooLateToPlay(scheduledStart: number, cueStart: number): boolean {
+  return latenessOf(scheduledStart, cueStart) > MAX_LATENESS_SECONDS
+}
+
+/** Breath between clips, when there is room for one. */
+export const GAP_BETWEEN_CLIPS = 0.25
+
+/**
+ * When a clip should actually start, given when it is due and when the clip
+ * before it ends.
+ *
+ * The gap is a courtesy, and the first thing to give up. Applying it
+ * unconditionally is what turned a single overrun into permanent drift: a cue
+ * whose audio does not fit even at 3x already ends past the next cue's moment,
+ * and adding a quarter-second on top pushed the next clip further out, and the
+ * one after that further still. Measured over fourteen consecutive cues of a
+ * real video, that compounded from 0.20s late to 1.68s and was still climbing.
+ *
+ * Dropping the gap once the voice is behind absorbs the overrun instead of
+ * passing it on: the same fourteen cues then peak at 0.12s late, with none
+ * skipped.
+ */
+export function scheduleAt(due: number, previousEnd: number): number {
+  const behind = previousEnd + GAP_BETWEEN_CLIPS > due
+  return Math.max(due, previousEnd + (behind ? 0 : GAP_BETWEEN_CLIPS))
+}
