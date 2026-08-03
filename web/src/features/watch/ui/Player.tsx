@@ -51,6 +51,10 @@ import { useTranslateConfig } from '@/features/settings/application/queries'
 import { loadNarrationAudioPrefs } from '@/features/settings/application/settings-prefs'
 import { useTranslatedTrack } from '@/features/watch/application/use-translated-track'
 import {
+  MACHINE_LANGUAGE,
+  hasHumanVietnamese,
+} from '@/features/watch/domain/subtitle-language'
+import {
   canGoFullscreen,
   canUsePiP,
   enterPiP,
@@ -562,7 +566,8 @@ export function Player({
   // until the <track> elements load, so we check via hasVietnameseSubs().
   // Narration is available when there are Vietnamese or English subtitles.
   // English cues are translated via NLLB-200 before TTS.
-  const hasVi = subtitles.some((s) => /^vi/.test(s.language))
+  // Our own translation does not count — see hasHumanVietnamese.
+  const hasVi = hasHumanVietnamese(subtitles)
   const hasEn = subtitles.some((s) => /^en/.test(s.language))
   const narrationAvailable = hasVi || hasEn
   // Translation only happens when there is nothing Vietnamese to read already:
@@ -1182,7 +1187,7 @@ export function Player({
           .map((t) => ({
             value: t.language,
             label:
-              t.language === 'vi-x-mt'
+              t.language === MACHINE_LANGUAGE
                 ? 'VI (auto)'
                 : /^en/.test(t.language)
                   ? 'EN'
