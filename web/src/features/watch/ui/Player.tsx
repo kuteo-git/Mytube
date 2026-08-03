@@ -44,6 +44,7 @@ import {
   type NarrationOutput,
 } from '@/features/watch/application/narration-prefs'
 import { NarrationSubtitles } from '@/features/watch/ui/NarrationSubtitles'
+import { centreCues } from '@/features/watch/application/cue-placement'
 import {
   canGoFullscreen,
   canUsePiP,
@@ -581,10 +582,34 @@ export function Player({
       for (let i = 0; i < element.textTracks.length; i++) {
         const track = element.textTracks[i]
         track.mode = track.language === captionsRef.current ? 'showing' : 'disabled'
+        // A cue's own align/position beats any stylesheet, and YouTube's
+        // auto-captions carry them on every line. The gateway strips them when
+        // it serves a subtitle, but in the LAN deployment Caddy takes that route
+        // over and would serve the file as it sits on disk — so the browser
+        // fixes them too, and the two subtitle sources agree either way.
+        centreCues(track.cues)
       }
     }
     frame = requestAnimationFrame(apply)
-    return () => cancelAnimationFrame(frame)
+
+    // Cues arrive after the track itself does, and a track only parses them
+    // once its mode leaves 'disabled' — so the pass above sees an empty list
+    // the first time and this is what catches the real one.
+    const onCues = (e: Event) => {
+      const track = (e.target as TextTrack | null) ?? null
+      if (track) centreCues(track.cues)
+    }
+    const tracks = element.textTracks
+    for (let i = 0; i < tracks.length; i++) {
+      tracks[i].addEventListener('cuechange', onCues)
+    }
+
+    return () => {
+      cancelAnimationFrame(frame)
+      for (let i = 0; i < tracks.length; i++) {
+        tracks[i].removeEventListener('cuechange', onCues)
+      }
+    }
   }, [captions, frontSrc, frontIsA, front, subtitles.length])
 
   // Create AudioContext when narration activates.  Must happen here — not just
