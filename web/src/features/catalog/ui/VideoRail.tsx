@@ -32,8 +32,18 @@ export function VideoRail({ videos }: { videos: Video[] }) {
       //
       // Vertically the same trick at 16px, which is the room the overhang needs
       // top and bottom without the row growing.
+      //
+      // scroll-pl is what makes any of that visible, and its absence is why
+      // four goes at bigger padding changed nothing. Snapping aligns an item's
+      // start with the scrollport's start, so on load the browser scrolled the
+      // padding out of view — measured: scrollLeft sat at exactly the padding,
+      // 24px, which is exactly how far the first card was displaced. Padding
+      // added to the box was padding the snap immediately scrolled away.
+      // scroll-padding moves the line the snap aligns to, so the room stays on
+      // screen.
       className="-mx-4 -my-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 py-4
-                 no-scrollbar min-[700px]:-mx-6 min-[700px]:px-6"
+                 scroll-pl-4 no-scrollbar min-[700px]:-mx-6 min-[700px]:px-6
+                 min-[700px]:scroll-pl-6"
     >
       {videos.map((video) => (
         <div
