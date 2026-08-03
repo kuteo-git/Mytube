@@ -204,6 +204,23 @@ ngờ."` Người nghe thuyết minh không có cách nào phân biệt câu b�
 dẫn thật sự nói. Ngoài ra chậm hơn 1.7× (4.32 từ/giây), load 33s, cần 7 GB —
 không vừa ổ trong, chỉ nằm được trên SSD ngoài.
 
+**Đo end-to-end qua gateway thật (2026-08-03), video `Ersv1ogj7Jo`, resume ở
+giây 120 → bắt đầu từ cue 35 (bắt đầu lúc 115.2s, đúng playhead):**
+
+| | |
+|---|---|
+| Lô 1 (3 cue), server đã ấm | **3.0s** → câu đầu có tiếng |
+| Lô 1 (3 cue), lần gọi Qwen **đầu tiên của process** | **31.5s** — phải load model |
+| Lô 15 cue | 11.5–15.8s |
+| Lượt 2 cùng video | **0 request**, 4/4 lô đọc từ cache |
+
+Cái 31.5s là lý do `dev.sh` nên được để chạy chứ đừng restart giữa buổi xem.
+Model load một lần cho cả đời process.
+
+**Lô lệch dòng vẫn xảy ra dù cue đã gộp** — đo được 1 lần trong 8 lô. Server bắt
+được, dịch lại từng cue, trả đủ 15/15, client không thấy gì bất thường. Đó là
+lý do đường fallback tồn tại, không phải phòng xa thừa.
+
 **Mật độ lời nói**, đo trên 6 file phụ đề thật: **1.1–3.1 từ/giây video**. Nên
 Qwen đi trước playhead 2.4–3.7×, NLLB còn hơn. Biên đó không vô hạn: bấm play
 cũng khởi động một lượt tải yt-dlp và một lượt remux ffmpeg giành cùng GPU.
