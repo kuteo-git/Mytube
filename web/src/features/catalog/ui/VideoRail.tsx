@@ -33,7 +33,13 @@ export function VideoRail({ videos }: { videos: Video[] }) {
       // with the feed grid below, and on a phone the row still reaches the
       // screen edge — where a scrolling row that stops short reads as having
       // ended rather than as continuing (CLAUDE.md §8b).
-      className="-m-4 flex snap-x snap-mandatory gap-4 overflow-x-auto p-4 no-scrollbar"
+      //
+      // Four more on the left than the other three sides. That edge is the only
+      // one a card is ever seen resting against — the row starts there and stays
+      // there until someone scrolls — so it is the only one where eight of
+      // clearance still reads as tight. The extra is cancelled the same way, so
+      // nothing about the alignment moves.
+      className="-m-4 -ml-5 flex snap-x snap-mandatory gap-4 overflow-x-auto p-4 pl-5 no-scrollbar"
     >
       {videos.map((video) => (
         <div
