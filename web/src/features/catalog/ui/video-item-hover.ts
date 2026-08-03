@@ -21,9 +21,8 @@ export const videoItemHover =
  * back to the layout, leaving thumbnail widths and grid gaps exactly as they
  * were.
  *
- * For grids only. Anything that scrolls clips what overhangs it, and no amount
- * of padding on the scroller reliably buys that overhang back — three attempts
- * at the right number said so. A scrolling row pads its own slots instead and
- * lets its cards sit inside them.
+ * A container that clips has to leave room for it: see VideoRail, which pads
+ * itself by the page gutter and gives that padding back with a margin, so the
+ * overhang has somewhere to go and the cards still line up with the grid.
  */
 export const videoItemBleed = '-m-2 p-2'

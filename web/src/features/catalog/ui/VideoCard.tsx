@@ -16,13 +16,8 @@ import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 
-/**
- * Grid card. Hover comes from videoItemHover, shared with every other item.
- *
- * `flush` is for containers that clip: a scrolling row gives its slots the
- * padding instead, so the card has no overhang to be cut off.
- */
-export function VideoCard({ video, flush = false }: { video: Video; flush?: boolean }) {
+/** Card. Hover comes from videoItemHover, shared with every other item. */
+export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -46,7 +41,7 @@ export function VideoCard({ video, flush = false }: { video: Video; flush?: bool
     // spend it here, where nobody is waiting, instead of after the click.
     // Focus counts too, so a keyboard or a remote gets the same head start.
     <article
-      className={clsx('group flex flex-col gap-3', videoItemHover, !flush && videoItemBleed)}
+      className={clsx('group flex flex-col gap-3', videoItemHover, videoItemBleed)}
       onPointerEnter={() => prefetch(video.id)}
       onPointerLeave={cancel}
       onFocus={() => prefetch(video.id)}
