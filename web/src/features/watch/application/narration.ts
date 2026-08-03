@@ -20,6 +20,12 @@ import {
   translateBatch,
   workOrder,
 } from './narration-batch'
+import {
+  BATCH_ATTEMPTS,
+  GIVE_UP_AFTER,
+  retryDelayMs,
+  worthRetrying,
+} from './narration-retry'
 import { toVTT } from './narration-vtt-write'
 import { estimateEtaSeconds } from './narration-eta'
 import {
@@ -326,6 +332,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       const texts = workOrder(allTexts.length, first).map((i) => allTexts[i])
 
       const countDone = () => allTexts.filter((t) => _tlCache.has(t)).length
+      let consecutiveFailures = 0
       _passTotal = allTexts.length
       _passDone = countDone()
       _passPhase = _passDone >= _passTotal ? 'done' : 'translating'
@@ -343,7 +350,32 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         if (missing.length === 0) continue
 
         const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
-        const out = await translateBatch(missing, context, signal)
+
+        // Try again rather than lose the batch. A failure used to end those
+        // cues for the rest of the pass — the loop moved on and never asked for
+        // them again, so one blip left a hole only a settings change could
+        // fill, because that restarts the pass.
+        let out: string[] = []
+        for (let attempt = 0; attempt < BATCH_ATTEMPTS; attempt++) {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, retryDelayMs(attempt)))
+            if (generation !== _passGeneration) return
+          }
+          out = await translateBatch(missing, context, signal)
+          if (out.some(Boolean)) break
+          if (!worthRetrying({ aborted: signal.aborted, error: lastBatchError() })) break
+        }
+
+        // Consecutive failures mean the translator is down, not that this batch
+        // was unlucky. A video's worth of retries against something that is down
+        // is a long argument nobody wins — the same lesson as the backfill that
+        // hammered a rate limit and made the block last longer (CLAUDE.md §8).
+        if (out.some(Boolean)) {
+          consecutiveFailures = 0
+        } else if (!signal.aborted) {
+          consecutiveFailures++
+          if (consecutiveFailures >= GIVE_UP_AFTER) return
+        }
 
         // Bank what came back before asking whether anyone still wants it.
         // These lines were translated and paid for; throwing them away because

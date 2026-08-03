@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { bindNarration, loadViSubtitles, resetNarration, tickNarration } from './narration'
+import {
+  bindNarration,
+  cancelTranslationPass,
+  loadViSubtitles,
+  narrationProgress,
+  resetNarration,
+  startTranslationPass,
+  tickNarration,
+} from './narration'
+import { setCachePartition } from '@/features/watch/infrastructure/narration-cache'
 
 /**
  * Clips reach the timeline in cue order, whatever order they arrive in.
@@ -380,4 +389,67 @@ describe('which element narration listens to', () => {
     expect(scheduled.map((s) => s.line)).toEqual([0, 1, 2])
     unbindSecond()
   })
+})
+
+describe('a batch that fails', () => {
+  it('is asked for again rather than lost', async () => {
+    // A failed batch used to end those cues for the whole pass: the loop moved
+    // on and never came back, so one blip left a permanent hole.
+    let batchCalls = 0
+    vi.stubGlobal('fetch', async (url: string, init?: { body?: string }) => {
+      if (url === '/subs.vtt') return { ok: true, text: async () => VTT }
+      if (url === '/api/translate/batch') {
+        batchCalls++
+        // Down for the first two tries, then back.
+        if (batchCalls <= 2) throw new Error('Failed to fetch')
+        const { cues } = JSON.parse(init?.body ?? '{}') as { cues: string[] }
+        return { ok: true, json: async () => ({ translations: cues.map((c) => 'VI ' + c) }) }
+      }
+      if (url.startsWith('/api/videos/')) {
+        return { ok: true, json: async () => ({ entries: {} }) }
+      }
+      if (url === '/api/tts') {
+        return { ok: true, arrayBuffer: async () => new Uint8Array([0]).buffer }
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+
+    setCachePartition('m1')
+    loadViSubtitles('/subs.vtt', 'en')
+    startTranslationPass('vid1', 0)
+
+    // Long enough for the two failures and their backoff.
+    await settle(5000)
+
+    expect(batchCalls).toBeGreaterThanOrEqual(3)
+    expect(narrationProgress().done).toBeGreaterThan(0)
+    cancelTranslationPass()
+  }, 20_000)
+
+  it('stops rather than argue with a translator that is down', async () => {
+    // Three failed batches in a row is not bad luck, and a video's worth of
+    // retries against something that is down is the mistake CLAUDE.md §8
+    // records: pushing at a block makes it last longer.
+    let batchCalls = 0
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url === '/subs.vtt') return { ok: true, text: async () => VTT }
+      if (url === '/api/translate/batch') {
+        batchCalls++
+        throw new Error('Failed to fetch')
+      }
+      if (url.startsWith('/api/videos/')) return { ok: true, json: async () => ({ entries: {} }) }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+
+    setCachePartition('m1')
+    loadViSubtitles('/subs.vtt', 'en')
+    startTranslationPass('vid1', 0)
+    await settle(12_000)
+
+    // Three attempts per batch, three batches, and then it gives up — not one
+    // attempt for every cue in the video.
+    expect(batchCalls).toBeLessThanOrEqual(9)
+    expect(narrationProgress().running).toBe(false)
+    cancelTranslationPass()
+  }, 30_000)
 })
