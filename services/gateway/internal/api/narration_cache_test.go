@@ -182,6 +182,31 @@ func TestAttachMachineTranslationWithNoFile(t *testing.T) {
 	}
 }
 
+// Once the file has been on disk long enough for the catalog's own scan to see
+// it, the catalog lists it too, under a language read off the filename. Measured
+// on a real video: en, vi-mt and vi-x-mt, the last two the same file.
+func TestAttachMachineTranslationAdoptsTheCatalogsOwnEntry(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "vid1")
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "1080p.mp4.vi-mt.vtt"), []byte("WEBVTT"), 0o644)
+
+	g := &Gateway{mediaRoot: root}
+	v := videoDTO{ID: "vid1", Subtitles: []subtitleDTO{
+		{Language: "en", Label: "English", URL: "/media/vid1/1080p.mp4.en.vtt"},
+		{Language: "vi-mt", Label: "vi-mt", URL: "/media/vid1/1080p.mp4.vi-mt.vtt"},
+	}}
+	g.attachMachineTranslation(&v)
+
+	if len(v.Subtitles) != 2 {
+		t.Fatalf("offered the same file twice: %+v", v.Subtitles)
+	}
+	got := v.Subtitles[1]
+	if got.Language != machineVTTLanguage || got.Label != machineVTTLabel || !got.Generated {
+		t.Fatalf("kept the catalog's raw entry instead of naming it: %+v", got)
+	}
+}
+
 func TestAttachMachineTranslationIsIdempotent(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "vid1")

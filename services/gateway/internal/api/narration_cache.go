@@ -234,6 +234,10 @@ const machineVTTSuffix = ".vi-mt.vtt"
 // without mistaking it for the human-written track a video may also carry.
 const machineVTTLanguage = "vi-x-mt"
 
+// machineVTTLabel is what the menu shows. Content, not code — this one string is
+// read by the viewer in the language it is written in.
+const machineVTTLabel = "Tiếng Việt (dịch máy)"
+
 // narrationVTTName picks the filename the track should take.
 //
 // The base is copied from a subtitle already in the folder ("1080p.mp4.en.vtt"
@@ -302,8 +306,17 @@ func (g *Gateway) attachMachineTranslation(v *videoDTO) {
 	if v == nil || v.ID == "" || g.mediaRoot == "" {
 		return
 	}
-	for _, t := range v.Subtitles {
-		if t.Language == machineVTTLanguage {
+	// Matched on the file, not on the language tag. Once the translation has been
+	// on disk long enough for the catalog's own scan to see it, the catalog lists
+	// it too — under "vi-mt", read straight off the filename. A tag comparison
+	// misses that and the menu ends up offering the same file twice under two
+	// names. Adopting the entry instead gives it the label and the tag it should
+	// have had, and there is still only one of it.
+	for i := range v.Subtitles {
+		if strings.HasSuffix(v.Subtitles[i].URL, machineVTTSuffix) {
+			v.Subtitles[i].Language = machineVTTLanguage
+			v.Subtitles[i].Label = machineVTTLabel
+			v.Subtitles[i].Generated = true
 			return
 		}
 	}
@@ -322,7 +335,7 @@ func (g *Gateway) attachMachineTranslation(v *videoDTO) {
 		}
 		v.Subtitles = append(v.Subtitles, subtitleDTO{
 			Language: machineVTTLanguage,
-			Label:    "Tiếng Việt (dịch máy)",
+			Label:    machineVTTLabel,
 			URL:      "/media/" + v.ID + "/" + name,
 			// Generated in the sense the player already means it: nobody wrote
 			// these by hand.

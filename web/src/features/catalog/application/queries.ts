@@ -8,6 +8,7 @@ import {
 import type { ReactionState } from '../domain/video'
 import type { Feed } from '../infrastructure/catalogRepository'
 import { hideVideo } from './hidden'
+import { videoPollInterval } from './video-poll'
 import { httpCatalogRepository as repo } from '../infrastructure/catalogRepository'
 
 /**
@@ -110,11 +111,10 @@ export function useVideo(id: string | undefined) {
     queryFn: () => repo.getVideoEnsuring(id!),
     enabled: Boolean(id),
     retry: false,
-    // Poll while the video is downloading so subtitles appear as soon as the
-    // worker publishes them — FetchSubtitles runs before the media download
-    // and subtitles land while mediaState is still DOWNLOADING.
+    // Poll until the media and its subtitles are both in — see video-poll.ts
+    // for why the media alone is not enough.
     refetchInterval: (query) =>
-      query.state.data?.mediaState !== 'READY' ? 3000 : false,
+      videoPollInterval(query.state.data, query.state.dataUpdateCount),
   })
 }
 
