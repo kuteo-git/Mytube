@@ -176,6 +176,24 @@ function announceCues(cues: CueText[]) {
  * VTT was sitting on disk and served a 200 the whole time. Waiting on the load
  * itself has no deadline to get wrong.
  */
+/**
+ * End the current translation pass, for good.
+ *
+ * Bumps the generation before releasing waiters, so a pass suspended on
+ * whenCuesReady exits at its generation check rather than concluding from the
+ * empty list that the video has no subtitles. Releasing them at all matters:
+ * a waiter left hanging holds _passRunning true, and that flag being stuck is
+ * the one state from which no pass can ever start again.
+ */
+export function cancelTranslationPass() {
+  _passGeneration++
+  _passRunning = false
+  _passPhase = 'idle'
+  _passTotal = 0
+  _passDone = 0
+  announceCues([])
+}
+
 export function whenCuesReady(): Promise<CueText[]> {
   if (_cues !== null) return Promise.resolve(_cues)
   return new Promise((resolve) => _cuesWaiters.push(resolve))
@@ -689,15 +707,20 @@ function firstCueAtOrAfter(cues: CueText[], time: number): number {
   return lo
 }
 
+/**
+ * Stop speaking and forget the cue list.
+ *
+ * Deliberately does NOT touch the translation pass. This runs from the cleanup
+ * of the narration tick effect, which tears down whenever the front <video>
+ * changes identity — a layer swap, not a new video. Cancelling the pass here
+ * killed it seconds after it started and left the status reading "not started"
+ * with nothing to restart it, because the effect that starts a pass has
+ * different dependencies and had no reason to run again.
+ *
+ * Ending a pass is cancelTranslationPass, and it belongs to changing video.
+ */
 export function resetNarration() {
   _generation++
-  // Cancel any translation pass and release anything waiting on cues. A waiter
-  // left hanging would hold _passRunning true, and that flag being stuck is the
-  // one state from which no pass can ever start again.
-  _passGeneration++
-  _passRunning = false
-  _passPhase = 'idle'
-  announceCues([])
   _cues = null
   _cuesURL = ''
   _cursor = 0

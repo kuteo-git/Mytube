@@ -33,6 +33,7 @@ import {
   loadViSubtitles,
   setNarrationEngine,
   setNarrationVideo,
+  cancelTranslationPass,
   startTranslationPass,
   narrationProgress,
 } from '@/features/watch/application/narration'
@@ -641,6 +642,12 @@ export function Player({
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
+
+  // Ending a pass belongs to leaving the video, and nothing else. It used to be
+  // folded into resetNarration, which also runs on every swap between the two
+  // <video> layers — so a pass was cancelled seconds after it began and the
+  // status sat on "not started".
+  useEffect(() => () => cancelTranslationPass(), [videoId])
 
   // When narration is turned on, fetch and parse the best available VTT:
   // Vietnamese first, then English (which will be translated via NLLB-200).

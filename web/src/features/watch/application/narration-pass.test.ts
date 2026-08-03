@@ -1,6 +1,58 @@
-import { describe, expect, it } from 'vitest'
-import { nearestCueIndex } from './narration'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  cancelTranslationPass,
+  narrationProgress,
+  nearestCueIndex,
+  resetNarration,
+  startTranslationPass,
+} from './narration'
 import type { CueText } from './narration-vtt'
+
+describe('who is allowed to end a translation pass', () => {
+  afterEach(() => {
+    cancelTranslationPass()
+    vi.unstubAllGlobals()
+  })
+
+  it('survives resetNarration, which fires on every layer swap', () => {
+    // resetNarration runs from the cleanup of the narration tick effect, and
+    // that effect tears down whenever the front <video> changes identity — a
+    // layer swap, not a new video. Cancelling the pass there killed it seconds
+    // after it started, leaving the status on "not started" with nothing to
+    // restart it. This is the second time that shape of bug has shipped.
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})))
+    startTranslationPass('vid1', 0)
+    expect(narrationProgress().phase).toBe('waiting-subtitles')
+
+    resetNarration()
+
+    expect(narrationProgress().phase).toBe('waiting-subtitles')
+    expect(narrationProgress().running).toBe(true)
+  })
+
+  it('ends when the pass is cancelled outright', () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})))
+    startTranslationPass('vid1', 0)
+
+    cancelTranslationPass()
+
+    expect(narrationProgress().phase).toBe('idle')
+    expect(narrationProgress().running).toBe(false)
+  })
+
+  it('can be started again after a cancel', () => {
+    // The running flag being stuck is the one state from which no pass ever
+    // starts again, so a cancel has to leave it clear.
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})))
+    startTranslationPass('vid1', 0)
+    cancelTranslationPass()
+
+    startTranslationPass('vid1', 0)
+
+    expect(narrationProgress().running).toBe(true)
+    expect(narrationProgress().phase).toBe('waiting-subtitles')
+  })
+})
 
 const cue = (start: number, end: number, text: string): CueText =>
   ({ start, end, text }) as CueText
