@@ -43,6 +43,7 @@ import {
   saveNarrationPrefs,
 } from '@/features/watch/application/narration-prefs'
 import { centreCues } from '@/features/watch/application/cue-placement'
+import { useTranslatedTrack } from '@/features/watch/application/use-translated-track'
 import {
   canGoFullscreen,
   canUsePiP,
@@ -1040,6 +1041,11 @@ export function Player({
     const id = window.setInterval(() => setProgress(narrationProgress()), 500)
     return () => window.clearInterval(id)
   }, [narrationOn])
+
+  // The translated track only exists once the file behind it has been written,
+  // and the subtitle list was fetched long before that.
+  useTranslatedTrack(videoId, progress.vttVersion, progress.phase === 'done')
+
 
   const toggleAutoTranslate = useCallback(() => {
     setNarrationPrefs((p) => {

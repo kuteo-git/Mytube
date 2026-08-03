@@ -99,16 +99,19 @@ export async function saveNarrationCues(
 export async function saveNarrationVtt(
   videoId: string,
   vtt: string,
-): Promise<void> {
-  if (!videoId || !vtt) return
+): Promise<boolean> {
+  if (!videoId || !vtt) return false
   try {
-    await fetch(`/api/videos/${videoId}/narration-vtt`, {
+    const resp = await fetch(`/api/videos/${videoId}/narration-vtt`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/vtt' },
       body: vtt,
     })
+    // Reported, because this file existing is what lets the gateway offer the
+    // translation as a subtitle track — the caller has to know when to go and
+    // ask for the list again.
+    return resp.ok
   } catch {
-    // The player reads its translations from memory. This file is for
-    // everything that is not the player.
+    return false
   }
 }

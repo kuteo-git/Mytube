@@ -58,6 +58,13 @@ func MediaHandler(root string) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "text/vtt; charset=utf-8")
+		// The machine translation grows while a video is being translated: it is
+		// rewritten after every batch. A cached copy would pin whichever version
+		// the browser happened to fetch first, which for a viewer who turned
+		// narration on is the one with three lines in it.
+		if strings.HasSuffix(r.URL.Path, machineVTTSuffix) {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		_, _ = w.Write(stripCuePositioning(blob))
 	})
 }

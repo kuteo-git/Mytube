@@ -89,6 +89,15 @@ let _passPhase: NarrationPhase = 'idle'
 let _passThrew = ''
 /** When translating actually began, and how much was already cached by then. */
 let _passAbort: AbortController | null = null
+/**
+ * Bumped each time the subtitle file is written.
+ *
+ * The file is what makes the translation a selectable track, and the track list
+ * is fetched once when the video loads — so without something to watch, a
+ * viewer who sat through a translation still had no VI option until they
+ * reloaded the page.
+ */
+let _vttVersion = 0
 let _passStartedAt = 0
 let _passBaseline = 0
 
@@ -134,12 +143,15 @@ export function narrationProgress(): {
   error: string
   /** Seconds of work left, or null while there is no rate worth quoting. */
   etaSeconds: number | null
+  /** Increments whenever the translated subtitle file has been written. */
+  vttVersion: number
 } {
   return {
     done: _passDone,
     total: _passTotal,
     running: _passRunning,
     phase: _passPhase,
+    vttVersion: _vttVersion,
     error: _passThrew || lastBatchError(),
     etaSeconds:
       _passPhase === 'translating'
@@ -334,13 +346,17 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         // translation a selectable subtitle track, so writing it once at the
         // finish meant a viewer had nothing to select for the several minutes
         // it took to get there.
-        void saveNarrationVtt(videoId, toVTT(cues, _tlCache))
+        void saveNarrationVtt(videoId, toVTT(cues, _tlCache)).then((ok) => {
+          if (ok) _vttVersion++
+        })
       }
 
       // A last write with everything in it, in case the final batch was all
       // cache hits and the loop wrote nothing.
       if (generation === _passGeneration) {
-        void saveNarrationVtt(videoId, toVTT(cues, _tlCache))
+        void saveNarrationVtt(videoId, toVTT(cues, _tlCache)).then((ok) => {
+          if (ok) _vttVersion++
+        })
       }
     } catch (e) {
       // An exception here used to vanish into the finally and surface as
