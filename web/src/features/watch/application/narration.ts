@@ -14,6 +14,13 @@
  */
 import { type CueText, parseVTT } from './narration-vtt'
 import { applyAfterTranslation, prepForTranslation } from './narration-translate'
+import { CONTEXT_CUES, planBatches, translateBatch } from './narration-batch'
+import {
+  hashCue,
+  loadNarrationCache,
+  saveNarrationCache,
+  type NarrationEngine,
+} from '@/features/watch/infrastructure/narration-cache'
 import {
   DEFAULT_SPEED,
   MAX_SPEED,
@@ -62,7 +69,110 @@ const NARRATION_GAIN = 2.5
 // ---- cache ------------------------------------------------------------------
 const _cache = new Map<string, AudioBuffer>()
 const _active = new Map<string, Promise<AudioBuffer>>()
-const _tlCache = new Map<string, string>() // EN text → VI translation
+/** Cue text -> Vietnamese, for the engine currently selected. */
+const _tlCache = new Map<string, string>()
+
+let _engine: NarrationEngine = 'qwen'
+let _passVideoId = ''
+let _passRunning = false
+let _passGeneration = 0
+/** Written since the last flush, so a flush posts only what is new. */
+const _unsaved = new Map<string, string>()
+
+export function setNarrationEngine(engine: NarrationEngine) {
+  if (engine === _engine) return
+  // Each engine has its own answers; keeping the old ones would mix the two
+  // and make the comparison this menu exists for meaningless.
+  _engine = engine
+  _tlCache.clear()
+  _unsaved.clear()
+  _passGeneration++
+  _passRunning = false
+}
+
+export function translatedCue(text: string): string | undefined {
+  return _tlCache.get(text)
+}
+
+/** Index of the cue playing at `time`, or the next one due. */
+export function nearestCueIndex(cues: CueText[], time: number): number {
+  if (cues.length === 0) return 0
+  for (let i = 0; i < cues.length; i++) {
+    if (cues[i].end > time) return i
+  }
+  return cues.length - 1
+}
+
+/**
+ * Translate forward from the playhead until the video runs out.
+ *
+ * Not from cue zero: a viewer resuming at minute thirty would otherwise wait
+ * while the opening is translated. Not one cue at a time either — a batch
+ * carries the preceding lines as context, which is what keeps pronouns and
+ * terminology steady across a video, and is the whole reason for using a model
+ * that can read more than one sentence.
+ *
+ * Runs ahead of playback by roughly two to four times on this machine, so it
+ * only has to keep going, not hurry.
+ */
+export function startTranslationPass(videoId: string, fromTime: number) {
+  if (_passRunning && videoId === _passVideoId) return
+  _passVideoId = videoId
+  _passRunning = true
+  _passGeneration++
+  const generation = _passGeneration
+
+  void (async () => {
+    const byHash = await loadNarrationCache(videoId, _engine)
+    if (generation !== _passGeneration) return
+
+    // Wait for the cue list, which loadViSubtitles is fetching in parallel.
+    for (let i = 0; i < 100 && _cues === null; i++) {
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    const cues = _cues
+    if (!cues || cues.length === 0 || generation !== _passGeneration) return
+
+    const first = nearestCueIndex(cues, fromTime)
+    const texts = cues.slice(first).map((c) => c.text)
+    const hashes = await Promise.all(texts.map(hashCue))
+    if (generation !== _passGeneration) return
+
+    // Seed from disk. The cache is keyed by hash, the speaking path looks up by
+    // text, so the two are joined here rather than at every lookup.
+    texts.forEach((text, i) => {
+      const hit = byHash.get(hashes[i])
+      if (hit) _tlCache.set(text, hit)
+    })
+
+    for (const { start, end } of planBatches(texts.length)) {
+      if (generation !== _passGeneration) return
+
+      const slice = texts.slice(start, end)
+      const missing = slice.filter((t) => !_tlCache.has(t))
+      if (missing.length === 0) continue
+
+      const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
+      const out = await translateBatch(missing, context, _engine)
+      if (generation !== _passGeneration) return
+
+      missing.forEach((text, i) => {
+        const vi = out[i]
+        if (!vi) return
+        _tlCache.set(text, vi)
+        const at = texts.indexOf(text)
+        if (at >= 0) _unsaved.set(hashes[at], vi)
+      })
+
+      // Flush as we go. A viewer who closes the tab halfway keeps the half
+      // that was paid for.
+      const batchSaved = new Map(_unsaved)
+      _unsaved.clear()
+      void saveNarrationCache(videoId, _engine, batchSaved)
+    }
+    _passRunning = false
+  })()
+}
 
 async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise<AudioBuffer> {
   // Translate EN → VI when the source subtitle is English.
@@ -71,7 +181,10 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     const cached = _tlCache.get(text)
     if (cached) {
       viText = cached
-    } else {
+    } else if (_engine === 'nllb') {
+      // The realtime engine still translates on demand: it is the arm of the
+      // comparison that has no background pass, and taking that away would
+      // leave nothing to compare against.
       const prepped = prepForTranslation(text)
       const resp = await fetch('/api/translate', {
         method: 'POST',
@@ -83,9 +196,19 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
         if (translated) {
           translated = applyAfterTranslation(translated)
           _tlCache.set(text, translated)
+          const vi = translated
+          void hashCue(text).then((h) =>
+            saveNarrationCache(_passVideoId, 'nllb', new Map([[h, vi]])),
+          )
           viText = translated
         }
       }
+    }
+    // Under the batch engine an untranslated cue means the pass has not reached
+    // it yet. Speaking the English would be worse than saying nothing, so the
+    // cue is skipped and the loop carries on.
+    if (viText === text && _engine === 'qwen') {
+      throw new Error('not translated yet')
     }
   }
 
