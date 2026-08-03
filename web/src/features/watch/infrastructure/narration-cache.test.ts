@@ -1,0 +1,68 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  hashCue,
+  loadNarrationCache,
+  saveNarrationCache,
+} from './narration-cache'
+
+afterEach(() => vi.unstubAllGlobals())
+
+describe('hashCue', () => {
+  it('is stable and differs on different text', async () => {
+    const a = await hashCue('Hello there.')
+    const b = await hashCue('Hello there.')
+    const c = await hashCue('Hello there!')
+    expect(a).toBe(b)
+    expect(a).not.toBe(c)
+    expect(a).toMatch(/^[0-9a-f]{40}$/)
+  })
+})
+
+describe('loadNarrationCache', () => {
+  it('returns the entries as a map', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ entries: { h1: 'xin chào' } }),
+      }),
+    )
+    const got = await loadNarrationCache('vid', 'qwen')
+    expect(got.get('h1')).toBe('xin chào')
+  })
+
+  it('returns an empty map when the request fails', async () => {
+    // MEDIA_ROOT can be an unmounted SSD. Narration must still work.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    const got = await loadNarrationCache('vid', 'qwen')
+    expect(got.size).toBe(0)
+  })
+})
+
+describe('saveNarrationCache', () => {
+  it('posts the engine and entries', async () => {
+    const f = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
+    vi.stubGlobal('fetch', f)
+    await saveNarrationCache('vid', 'nllb', new Map([['h1', 'chào']]))
+    const [url, init] = f.mock.calls[0]
+    expect(url).toBe('/api/videos/vid/narration-cache')
+    expect(JSON.parse(init.body)).toEqual({
+      engine: 'nllb',
+      entries: { h1: 'chào' },
+    })
+  })
+
+  it('does not throw when the write fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no disk')))
+    await expect(
+      saveNarrationCache('vid', 'qwen', new Map([['h', 'x']])),
+    ).resolves.toBeUndefined()
+  })
+
+  it('skips the request entirely when there is nothing to write', async () => {
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    await saveNarrationCache('vid', 'qwen', new Map())
+    expect(f).not.toHaveBeenCalled()
+  })
+})
