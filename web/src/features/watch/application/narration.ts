@@ -18,6 +18,7 @@ import {
   lastBatchError,
   planBatches,
   translateBatch,
+  workOrder,
 } from './narration-batch'
 import { toVTT } from './narration-vtt-write'
 import { estimateEtaSeconds } from './narration-eta'
@@ -267,18 +268,26 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       }
 
       const first = nearestCueIndex(cues, fromTime)
-      const texts = cues.slice(first).map((c) => c.text)
-      const hashes = await Promise.all(texts.map(hashCue))
+      const allTexts = cues.map((c) => c.text)
+      const hashes = await Promise.all(allTexts.map(hashCue))
       if (generation !== _passGeneration) return
 
-      // Seed from disk. The cache is keyed by hash, the speaking path looks up
-      // by text, so the two are joined here rather than at every lookup.
-      texts.forEach((text, i) => {
+      // Seed from disk for EVERY cue, not just the ones ahead of the playhead.
+      // Seeding is a lookup against a map already in hand, and restricting it
+      // meant a seek backwards fell silent over cues whose translations were
+      // sitting on disk the whole time.
+      const hashOf = new Map(allTexts.map((t, i) => [t, hashes[i]]))
+      allTexts.forEach((text, i) => {
         const hit = byHash.get(hashes[i])
         if (hit) _tlCache.set(text, hit)
       })
-      const countDone = () => texts.filter((t) => _tlCache.has(t)).length
-      _passTotal = texts.length
+
+      // Work outward from the playhead and wrap, so the whole video is covered
+      // and the viewer's next line is still first in the queue.
+      const texts = workOrder(allTexts.length, first).map((i) => allTexts[i])
+
+      const countDone = () => allTexts.filter((t) => _tlCache.has(t)).length
+      _passTotal = allTexts.length
       _passDone = countDone()
       _passPhase = _passDone >= _passTotal ? 'done' : 'translating'
       // The clock starts here, not when the pass was asked for: everything
@@ -302,8 +311,10 @@ export function startTranslationPass(videoId: string, fromTime: number) {
           const vi = out[i]
           if (!vi) return
           _tlCache.set(text, vi)
-          const at = texts.indexOf(text)
-          if (at >= 0) _unsaved.set(hashes[at], vi)
+          // By text, not by position: indexOf found the first cue with the same
+          // words, which is the wrong one whenever a line repeats.
+          const h = hashOf.get(text)
+          if (h) _unsaved.set(h, vi)
         })
         _passDone = countDone()
 

@@ -41,6 +41,22 @@ export function lastBatchError(): string {
   return _lastError
 }
 
+/**
+ * The order cues are translated in: from the playhead to the end, then back
+ * round to cover the beginning.
+ *
+ * Translating only from the playhead onwards left the earlier part of the video
+ * untranslated for good — a backward seek fell silent even though the answers
+ * were on disk, and the subtitle file written at the end began wherever the
+ * viewer happened to have started. Wrapping costs nothing and owes nobody
+ * anything: the next line the viewer needs is still first in the queue.
+ */
+export function workOrder(total: number, first: number): number[] {
+  const out: number[] = []
+  for (let i = 0; i < total; i++) out.push((first + i) % total)
+  return out
+}
+
 export async function translateBatch(
   cues: string[],
   context: string[],

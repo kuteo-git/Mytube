@@ -4,6 +4,7 @@ import {
   FIRST_BATCH,
   planBatches,
   translateBatch,
+  workOrder,
 } from './narration-batch'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -64,5 +65,28 @@ describe('translateBatch', () => {
   it('resolves to blanks when the request fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('down')))
     expect(await translateBatch(['one', 'two'], [])).toEqual(['', ''])
+  })
+})
+
+describe('workOrder', () => {
+  it('starts at the playhead and wraps to cover the beginning', () => {
+    // Everything gets translated eventually — what changes is the order. The
+    // viewer's next line comes first; the part before them is still owed, both
+    // for a backward seek and for the subtitle file written at the end.
+    expect(workOrder(6, 2)).toEqual([2, 3, 4, 5, 0, 1])
+  })
+
+  it('is the plain order when starting from the top', () => {
+    expect(workOrder(4, 0)).toEqual([0, 1, 2, 3])
+  })
+
+  it('covers every index exactly once', () => {
+    const order = workOrder(50, 37)
+    expect(new Set(order).size).toBe(50)
+    expect(order[0]).toBe(37)
+  })
+
+  it('has nothing to do with no cues', () => {
+    expect(workOrder(0, 0)).toEqual([])
   })
 })
