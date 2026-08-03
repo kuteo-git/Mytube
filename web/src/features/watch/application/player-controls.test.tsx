@@ -652,6 +652,65 @@ describe('a bar sized for a thumb', () => {
     ).toBeInTheDocument()
   })
 
+  it('puts the settings groups in a fixed order', async () => {
+    // Resolution, subtitles, read aloud, autoplay, then translation behind a
+    // rule. Translation is last because it is the only one describing work
+    // being done rather than a preference.
+    await ready()
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+
+    const groups = screen
+      .getAllByRole('radiogroup')
+      .map((g) => g.getAttribute('aria-label'))
+    expect(groups).toEqual(['Resolution', 'Subtitles'])
+
+    const switches = screen.getAllByRole('switch').map((b) => b.textContent)
+    expect(switches[0]).toContain('Read aloud')
+    expect(switches[switches.length - 1]).toContain('Auto translate')
+  })
+
+  it('hides the translation progress when auto translate is off', async () => {
+    // Off means the pass is not running, so a progress line would be a status
+    // for work that is not happening.
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        resume() {
+          return Promise.resolve()
+        }
+        suspend() {
+          return Promise.resolve()
+        }
+        close() {
+          return Promise.resolve()
+        }
+      },
+    )
+    await ready()
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: 'Read aloud' }))
+    })
+    expect(
+      screen.getByText(/Translating|Loading subtitles|Not started/),
+    ).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: 'Auto translate' }))
+    })
+    expect(
+      screen.queryByText(/Translating|Loading subtitles|Not started/),
+    ).toBeNull()
+    // The switch that turns it back on has to survive turning it off.
+    expect(
+      screen.getByRole('switch', { name: 'Auto translate' }),
+    ).toBeInTheDocument()
+  })
+
   it('holds the controls open while the settings are open', async () => {
     // Otherwise the sheet takes itself away mid-decision: the bar hides on a
     // timer, and the sheet lives on the bar.

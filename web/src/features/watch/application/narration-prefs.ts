@@ -7,11 +7,16 @@
 export type NarrationOutput = 'off' | 'subs' | 'voice' | 'both'
 
 const OUTPUT_KEY = 'yt-narration-output-v1'
+const AUTO_KEY = 'yt-narration-auto-translate-v1'
 const LEGACY_KEY = 'yt-narration-on'
 
 const OUTPUTS: NarrationOutput[] = ['off', 'subs', 'voice', 'both']
 
-export function loadNarrationPrefs(): { output: NarrationOutput } {
+export function loadNarrationPrefs(): {
+  output: NarrationOutput
+  /** Whether the background translation pass may run at all. */
+  autoTranslate: boolean
+} {
   const rawOutput = window.localStorage.getItem(OUTPUT_KEY)
 
   let output: NarrationOutput = 'off'
@@ -21,9 +26,16 @@ export function loadNarrationPrefs(): { output: NarrationOutput } {
     // Someone who had the old switch on wanted a voice, not subtitles.
     output = 'voice'
   }
-  return { output }
+  // Defaults on: a video with only English subtitles cannot be narrated without
+  // it, and someone switching narration on has already said what they want.
+  const autoTranslate = window.localStorage.getItem(AUTO_KEY) !== '0'
+  return { output, autoTranslate }
 }
 
-export function saveNarrationPrefs(p: { output: NarrationOutput }) {
+export function saveNarrationPrefs(p: {
+  output: NarrationOutput
+  autoTranslate: boolean
+}) {
   window.localStorage.setItem(OUTPUT_KEY, p.output)
+  window.localStorage.setItem(AUTO_KEY, p.autoTranslate ? '1' : '0')
 }

@@ -700,13 +700,19 @@ export function Player({
     setNarrationVideo(videoId)
   }, [videoId])
 
+  // Switching it off has to end the pass, not merely hide it: work carrying on
+  // out of sight is the thing the switch exists to stop.
+  useEffect(() => {
+    if (!narrationPrefs.autoTranslate) cancelTranslationPass()
+  }, [narrationPrefs.autoTranslate])
+
   // Anchor the background translation pass wherever the viewer actually is.
   // Only the batch engine has a pass; NLLB translates as it speaks.
   useEffect(() => {
-    if (!narrationOn) return
+    if (!narrationOn || !narrationPrefs.autoTranslate) return
     const el = front()
     startTranslationPass(videoId, el ? el.currentTime : 0)
-  }, [narrationOn, videoId, subtitles, front])
+  }, [narrationOn, narrationPrefs.autoTranslate, videoId, subtitles, front])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,
@@ -1059,7 +1065,12 @@ export function Player({
    * up offered subtitles as well. Two ways to put Vietnamese on screen, and no
    * way to tell from the menu which one you were choosing.
    */
-  const translatedAvailable = narrationAvailable && narrationSourceIsEnglish
+  // Two different questions. Whether this video could be translated decides
+  // whether the group appears at all — gating that on the switch would hide the
+  // switch that turns it back on. Whether a translation is actually on offer as
+  // a subtitle depends on the switch as well.
+  const canTranslate = narrationAvailable && narrationSourceIsEnglish
+  const translatedAvailable = canTranslate && narrationPrefs.autoTranslate
   const subtitleValue = narrationShows
     ? 'mt'
     : (captions ?? 'off')
@@ -1077,6 +1088,25 @@ export function Player({
     },
     [narrationSpeaks, setCaptions],
   )
+
+  const toggleAutoTranslate = useCallback(() => {
+    setNarrationPrefs((p) => {
+      const autoTranslate = !p.autoTranslate
+      // Turning it off takes the translated subtitle away, so anything selecting
+      // it has to let go: the alternative is a segmented control with nothing
+      // highlighted and a picture with nothing on it.
+      const showing = p.output === 'subs' || p.output === 'both'
+      const output =
+        !autoTranslate && showing
+          ? p.output === 'both'
+            ? 'voice'
+            : 'off'
+          : p.output
+      const next = { ...p, autoTranslate, output }
+      saveNarrationPrefs(next)
+      return next
+    })
+  }, [])
 
   const toggleSpeak = useCallback(() => {
     const showing = narrationShows
@@ -1097,6 +1127,32 @@ export function Player({
       : progress.phase === 'failed' || progress.phase === 'no-subtitles'
         ? 'VI (failed)'
         : 'VI (auto)'
+
+  /**
+   * Translation, last and behind a rule.
+   *
+   * Its own group because it is the only setting here that describes work being
+   * done rather than a preference: with the switch on there is a pass running,
+   * a count and an estimate; with it off there is nothing to report and nothing
+   * is shown.
+   */
+  const translateGroup = canTranslate ? (
+    <>
+      <li className="my-1 border-t border-line" aria-hidden />
+      <SettingRow
+        label="Auto translate"
+        on={narrationPrefs.autoTranslate}
+        onToggle={toggleAutoTranslate}
+      />
+      {/* Only while there is something to report. With the switch off nothing
+          runs, and with narration off nothing has been asked for yet — a
+          progress line in either case is a status for work that is not
+          happening. */}
+      {narrationPrefs.autoTranslate && narrationOn && (
+        <NarrationStatus progress={progress} />
+      )}
+    </>
+  ) : undefined
 
   const autoplayRow = onPlayNext ? (
     <SettingRow
@@ -1147,9 +1203,6 @@ export function Player({
         on={narrationSpeaks}
         onToggle={toggleSpeak}
       />
-      {(narrationSpeaks || narrationShows) && translatedAvailable && (
-        <NarrationStatus progress={progress} />
-      )}
     </>
   ) : undefined
 
@@ -1361,6 +1414,38 @@ export function Player({
     if (low) options.push({ value: 'low', label: `${low.height ?? 360}p` })
     return options
   }, [tiers])
+
+  /**
+   * Resolution, as a segmented control like everything else in this panel.
+   *
+   * It was a list of rows because it predates the panel; every setting added
+   * since is a segment, and one list among four segments read as an oversight
+   * rather than a distinction.
+   */
+  const resolutionRow =
+    qualityOptions.length > 1 ? (
+      <SegmentedSetting
+        label="Resolution"
+        value={quality}
+        tall={coarse}
+        onSelect={(next: QualityChoice) => {
+          // Choosing again is a fresh decision, so the attempt count starts
+          // over: someone asking for 1080p after auto gave up should get a try,
+          // not the memory of the last failure.
+          setRemuxAttempts(0)
+          setQuality(next)
+        }}
+        options={qualityOptions.map((o) => ({
+          value: o.value,
+          label: o.label,
+          hint:
+            o.value === 'auto' && quality === 'auto'
+              ? `Currently ${tierLabel}`
+              : undefined,
+        }))}
+      />
+    ) : undefined
+
 
   // Tell the operating system what is playing.
   //
@@ -1991,42 +2076,18 @@ export function Player({
               narrated, and those are reachable nowhere else. */}
           {(qualityOptions.length > 1 || coarse || narrationAvailable) &&
             variant === 'full' && (
-            <QualityMenu
-              choice={quality}
-              options={qualityOptions}
-              playingLabel={tierLabel}
-              buttonClassName={controlButton}
-              sheet={coarse}
-              onOpenChange={trackMenu}
-              // On a phone the gear is the only place left for the settings the
-              // bar no longer has room to show one by one.
-              extras={
-                coarse ? (
-                  <>
-                    {subtitleRows}
-                    {narrationRows}
-                    {autoplayRow}
-                  </>
-                ) : (
-                  <>
-                    {subtitleRows}
-                    {narrationRows}
-                    {autoplayRow}
-                  </>
-                )
-              }
-              onSelect={(next) => {
-                // Choosing again is a fresh decision: a viewer who asks for
-                // 1080p after auto gave up on it should get an attempt, not
-                // the memory of the last failure.
-                // Choosing again is a fresh decision, so the attempt count
-                // starts over: someone asking for 1080p after auto gave up
-                // should get a try, not the memory of the last failure.
-                setRemuxAttempts(0)
-                setQuality(next)
-              }}
-            />
-          )}
+              <SettingsMenu
+                buttonClassName={controlButton}
+                sheet={coarse}
+                onOpenChange={trackMenu}
+              >
+                {resolutionRow}
+                {subtitleRows}
+                {narrationRows}
+                {autoplayRow}
+                {translateGroup}
+              </SettingsMenu>
+            )}
 
           {/* Picture-in-picture, offered only where the browser has it.
               On iOS this is the *only* way playback survives leaving the page:
@@ -2194,27 +2255,24 @@ export function Player({
  * ffmpeg as 1080p and give a worse picture for it — see the grilling notes in
  * CLAUDE.md §8b.
  */
-function QualityMenu({
-  choice,
-  options,
-  playingLabel,
-  onSelect,
+/**
+ * The settings panel behind the gear.
+ *
+ * It used to be the quality menu with everything else bolted underneath, which
+ * is why quality was a list of rows while every setting added later was a
+ * segmented control. It renders what it is handed now, and quality is one group
+ * among four rather than the one the frame was built around.
+ */
+function SettingsMenu({
   onOpenChange,
   buttonClassName,
-  extras,
+  children,
   sheet,
 }: {
-  choice: QualityChoice
-  options: { value: QualityChoice; label: string }[]
   buttonClassName?: string
-  /** Extra rows below the quality list. On a phone this is where the settings
-   *  the bar no longer has room for end up. */
-  extras?: React.ReactNode
+  children?: React.ReactNode
   /** Render as a sheet at the foot of the screen rather than a dropdown. */
   sheet?: boolean
-  /** What is on screen right now, shown beside Auto so it is never a mystery. */
-  playingLabel: string
-  onSelect: (next: QualityChoice) => void
   /** Lets the player keep its chrome up while this is open. */
   onOpenChange: (open: boolean) => void
 }) {
@@ -2240,27 +2298,6 @@ function QualityMenu({
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  // One list, two frames around it.
-  const rows = options.map((option) => (
-    <li key={option.value}>
-      <button
-        type="button"
-        onClick={() => {
-          onSelect(option.value)
-          setOpen(false)
-        }}
-        className={
-          'flex w-full items-center justify-between gap-4 px-4 py-2 text-left transition-colors duration-150 ease-out hover:bg-surface-hover ' +
-          (choice === option.value ? 'font-medium' : '')
-        }
-      >
-        <span>{option.label}</span>
-        {option.value === 'auto' && choice === 'auto' && (
-          <span className="text-xs text-text-2">{playingLabel}</span>
-        )}
-      </button>
-    </li>
-  ))
 
   return (
     <div ref={ref} className="relative">
@@ -2285,9 +2322,7 @@ function QualityMenu({
           // and a count on one row. min-w-44 squeezed both onto two lines each.
           className="absolute right-0 bottom-11 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
         >
-          {rows}
-          {extras && <li className="my-1 border-t border-line" aria-hidden />}
-          {extras}
+          {children}
         </ul>
       )}
 
@@ -2313,9 +2348,7 @@ function QualityMenu({
               className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl bg-surface pt-2 text-sm shadow-2xl"
               style={{ paddingBottom: 'calc(0.5rem + var(--safe-bottom))' }}
             >
-              {rows}
-              {extras && <li className="my-1 border-t border-line" aria-hidden />}
-              {extras}
+              {children}
             </ul>
           </>,
           document.body,
