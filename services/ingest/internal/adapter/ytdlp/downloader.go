@@ -34,9 +34,25 @@ type Downloader struct {
 	mediaRoot string
 }
 
-// New prepares the downloader, installing yt-dlp and ffmpeg on first use.
+// New prepares the downloader, resolving yt-dlp on first use.
+//
+// AllowVersionMismatch, so the yt-dlp already on PATH is used rather than
+// rejected for not being the exact build this library pins. Two reasons, both
+// learned the hard way.
+//
+// The pinned version goes into ~/Library/Caches/go-ytdlp, and that directory is
+// not ours — it was emptied, the running service went on calling a path that no
+// longer existed, and every resolve and every download failed with "no such
+// file or directory" until someone read the log. A binary from the system
+// package manager does not evaporate between restarts.
+//
+// And the version this library pins is older than the one this project needs.
+// CLAUDE.md records yt-dlp 2026.02.04 returning only itag 18 — 360p, no
+// adaptive formats at all — where 2026.07.04 returns the full ladder. Pinning
+// backwards would reintroduce that silently: playback would still work, just
+// never above 360p.
 func New(ctx context.Context, mediaRoot string) *Downloader {
-	ytdlp.MustInstall(ctx, nil)
+	ytdlp.MustInstall(ctx, &ytdlp.InstallOptions{AllowVersionMismatch: true})
 	return &Downloader{mediaRoot: mediaRoot}
 }
 
