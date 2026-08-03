@@ -21,6 +21,7 @@ import {
   translateBatch,
 } from './narration-batch'
 import { toVTT } from './narration-vtt-write'
+import { estimateEtaSeconds } from './narration-eta'
 import {
   hashCue,
   loadNarrationCache,
@@ -89,6 +90,9 @@ let _passDone = 0
 let _passPhase: NarrationPhase = 'idle'
 /** The message of anything the pass threw, for the status line. */
 let _passThrew = ''
+/** When translating actually began, and how much was already cached by then. */
+let _passStartedAt = 0
+let _passBaseline = 0
 /** Written since the last flush, so a flush posts only what is new. */
 const _unsaved = new Map<string, string>()
 
@@ -146,6 +150,8 @@ export function narrationProgress(): {
   phase: NarrationPhase
   /** Why the last batch produced nothing, when it did. */
   error: string
+  /** Seconds of work left, or null while there is no rate worth quoting. */
+  etaSeconds: number | null
 } {
   return {
     done: _passDone,
@@ -153,6 +159,15 @@ export function narrationProgress(): {
     running: _passRunning,
     phase: _passPhase,
     error: _passThrew || lastBatchError(),
+    etaSeconds:
+      _passPhase === 'translating'
+        ? estimateEtaSeconds({
+            done: _passDone,
+            total: _passTotal,
+            baseline: _passBaseline,
+            elapsedMs: _passStartedAt ? Date.now() - _passStartedAt : 0,
+          })
+        : null,
   }
 }
 
@@ -240,6 +255,8 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   _passDone = 0
   _passPhase = 'waiting-subtitles'
   _passThrew = ''
+  _passStartedAt = 0
+  _passBaseline = 0
   const generation = _passGeneration
 
   void (async () => {
@@ -281,6 +298,11 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       _passTotal = texts.length
       _passDone = countDone()
       _passPhase = _passDone >= _passTotal ? 'done' : 'translating'
+      // The clock starts here, not when the pass was asked for: everything
+      // before this was fetching a subtitle file and reading the cache, and
+      // counting it would make the first estimate far too gloomy.
+      _passStartedAt = Date.now()
+      _passBaseline = _passDone
 
       for (const { start, end } of planBatches(texts.length)) {
         if (generation !== _passGeneration) return

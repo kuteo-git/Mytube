@@ -37,6 +37,7 @@ import {
   startTranslationPass,
   narrationProgress,
 } from '@/features/watch/application/narration'
+import { formatDuration as formatEta } from '@/features/watch/application/narration-eta'
 import {
   loadNarrationPrefs,
   saveNarrationPrefs,
@@ -2358,6 +2359,11 @@ function NarrationStatus({ engine }: { engine: NarrationEngine }) {
           </span>
         )}
       </div>
+      {p.etaSeconds !== null && (
+        <div className="pb-1 text-xs text-text-2">
+          Còn {formatEta(p.etaSeconds)}
+        </div>
+      )}
       {bar && (
         <div className="h-1 overflow-hidden rounded-full bg-white/15">
           <div
