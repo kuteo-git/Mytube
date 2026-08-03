@@ -14,7 +14,12 @@
  */
 import { type CueText, parseVTT } from './narration-vtt'
 import { applyAfterTranslation, prepForTranslation } from './narration-translate'
-import { CONTEXT_CUES, planBatches, translateBatch } from './narration-batch'
+import {
+  CONTEXT_CUES,
+  lastBatchError,
+  planBatches,
+  translateBatch,
+} from './narration-batch'
 import { toVTT } from './narration-vtt-write'
 import {
   hashCue,
@@ -137,12 +142,15 @@ export function narrationProgress(): {
   total: number
   running: boolean
   phase: NarrationPhase
+  /** Why the last batch produced nothing, when it did. */
+  error: string
 } {
   return {
     done: _passDone,
     total: _passTotal,
     running: _passRunning,
     phase: _passPhase,
+    error: lastBatchError(),
   }
 }
 

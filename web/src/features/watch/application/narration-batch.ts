@@ -30,6 +30,19 @@ export function planBatches(
   return out
 }
 
+/**
+ * Why the last batch produced nothing, or '' if it did not fail.
+ *
+ * Kept because the first version swallowed the error entirely, and a pass whose
+ * every translation came back empty could not be told apart from a pass that
+ * never ran. Diagnosing it cost two rounds of guessing at logs.
+ */
+let _lastError = ''
+
+export function lastBatchError(): string {
+  return _lastError
+}
+
 export async function translateBatch(
   cues: string[],
   context: string[],
@@ -43,14 +56,24 @@ export async function translateBatch(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ engine, cues, context }),
     })
-    if (!resp.ok) return blank
+    if (!resp.ok) {
+      _lastError = `máy chủ trả ${resp.status}`
+      return blank
+    }
     const body = (await resp.json()) as { translations?: string[] }
     const got = body.translations ?? []
+    const filled = cues.map((_, i) => got[i] ?? '')
+    if (filled.every((t) => !t)) {
+      _lastError = `nhận ${got.length}/${cues.length} dòng, tất cả rỗng`
+      return blank
+    }
+    _lastError = ''
     // Length is load-bearing: the caller maps these onto cues by position, so a
     // short answer must be padded rather than allowed to shift everything after
     // it onto the wrong cue.
-    return cues.map((_, i) => got[i] ?? '')
-  } catch {
+    return filled
+  } catch (e) {
+    _lastError = e instanceof Error ? e.message : 'không gọi được'
     return blank
   }
 }
