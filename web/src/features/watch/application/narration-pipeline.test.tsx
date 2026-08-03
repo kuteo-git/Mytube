@@ -105,7 +105,7 @@ describe('turning narration on', () => {
 
     await act(async () => { fireEvent.click(screen.getByLabelText('Settings')) })
     await act(async () => {
-      fireEvent.click(screen.getByRole('switch', { name: 'Đọc thành tiếng' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Read aloud' }))
     })
     await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
 

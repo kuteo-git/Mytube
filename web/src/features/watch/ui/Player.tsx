@@ -1065,34 +1065,34 @@ export function Player({
     setNarrationOutput(next)
   }, [narrationShows, narrationSpeaks])
 
-  /** "VI (đang dịch)" while there is work left, so the option carries its own state. */
+  /** The option carries its own state, where the eye already is. */
   const translatedLabel =
     progress.phase === 'translating'
-      ? 'VI (đang dịch)'
+      ? 'VI (translating)'
       : progress.phase === 'failed' || progress.phase === 'no-subtitles'
-        ? 'VI (lỗi)'
-        : 'VI (dịch)'
+        ? 'VI (failed)'
+        : 'VI (auto)'
 
   const subtitleRows = (
     <SegmentedSetting
-      label="Phụ đề"
+      label="Subtitles"
       value={subtitleValue}
       onSelect={chooseSubtitle}
       tall={coarse}
       options={[
-        { value: 'off', label: 'Tắt' },
+        { value: 'off', label: 'Off' },
         ...subtitles
           .filter((t) => /^(en|eng|vi|vie)$/.test(t.language))
           .map((t) => ({
             value: t.language,
             label: /^en/.test(t.language) ? 'EN' : 'VI',
-            hint: t.label + (t.generated ? ' (tự động)' : ''),
+            hint: t.label + (t.generated ? ' (auto-generated)' : ''),
           })),
         ...(translatedAvailable
           ? [{
               value: 'mt',
               label: translatedLabel,
-              hint: 'Bản dịch máy sang tiếng Việt',
+              hint: 'Machine translation into Vietnamese',
             }]
           : []),
       ]}
@@ -1110,7 +1110,7 @@ export function Player({
   const narrationRows = narrationAvailable ? (
     <>
       <SettingRow
-        label="Đọc thành tiếng"
+        label="Read aloud"
         on={narrationSpeaks}
         onToggle={toggleSpeak}
       />
@@ -1999,7 +1999,7 @@ export function Player({
                     {narrationRows}
                     {onPlayNext && (
                       <SettingRow
-                        label="Tự động phát"
+                        label="Autoplay"
                         on={autoplayEnabled}
                         onToggle={() => setAutoplayEnabled(!autoplayEnabled)}
                       />
@@ -2346,15 +2346,15 @@ function NarrationStatus({
   // do because the cues were already Vietnamese. Four states behind one word is
   // no better than no status at all — it was reported as "stuck on preparing".
   const label: Record<typeof p.phase, string> = {
-    idle: 'Chưa bắt đầu',
-    'waiting-subtitles': 'Đang tải phụ đề…',
-    'no-subtitles': 'Không lấy được phụ đề',
-    'not-needed': 'Phụ đề đã là tiếng Việt, không cần dịch',
-    translating: 'Đang dịch nền…',
-    done: 'Đã dịch xong',
+    idle: 'Not started',
+    'waiting-subtitles': 'Loading subtitles…',
+    'no-subtitles': 'No subtitles available',
+    'not-needed': 'Already Vietnamese — nothing to translate',
+    translating: 'Translating…',
+    done: 'Translated',
     failed: p.error
-      ? `Dịch lỗi: ${p.error}`
-      : 'Dịch lỗi — máy dịch không trả về kết quả',
+      ? `Translation failed: ${p.error}`
+      : 'Translation failed — nothing came back',
   }
   const bar =
     p.phase === 'translating' || p.phase === 'done' || p.phase === 'failed'
@@ -2368,13 +2368,13 @@ function NarrationStatus({
         </span>
         {bar && (
           <span className="tabular-nums text-text-2">
-            {p.done}/{p.total} câu
+            {p.done}/{p.total} lines
           </span>
         )}
       </div>
       {p.etaSeconds !== null && (
         <div className="pb-1 text-xs text-text-2">
-          Còn {formatEta(p.etaSeconds)}
+          {formatEta(p.etaSeconds)} left
         </div>
       )}
       {bar && (

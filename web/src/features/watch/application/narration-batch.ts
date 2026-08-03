@@ -72,14 +72,14 @@ export async function translateBatch(
       signal,
     })
     if (!resp.ok) {
-      _lastError = `máy chủ trả ${resp.status}`
+      _lastError = `server returned ${resp.status}`
       return blank
     }
     const body = (await resp.json()) as { translations?: string[] }
     const got = body.translations ?? []
     const filled = cues.map((_, i) => got[i] ?? '')
     if (filled.every((t) => !t)) {
-      _lastError = `nhận ${got.length}/${cues.length} dòng, tất cả rỗng`
+      _lastError = `got ${got.length}/${cues.length} lines, all empty`
       return blank
     }
     _lastError = ''
@@ -95,7 +95,7 @@ export async function translateBatch(
       ? ''
       : e instanceof Error
         ? e.message
-        : 'không gọi được'
+        : 'request failed'
     return blank
   }
 }

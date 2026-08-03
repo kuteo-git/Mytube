@@ -42,12 +42,14 @@ export function estimateEtaSeconds({
   return Math.round((total - done) / perSecond)
 }
 
+const plural = (n: number) => `about ${n} minute${n === 1 ? '' : 's'}`
+
 export function formatDuration(seconds: number): string {
-  if (seconds < 5) return 'vài giây'
-  if (seconds < 60) return `khoảng ${Math.round(seconds / 5) * 5} giây`
+  if (seconds < 5) return 'a few seconds'
+  if (seconds < 60) return `about ${Math.round(seconds / 5) * 5} seconds`
   const minutes = seconds / 60
-  if (minutes < 10) return `khoảng ${Math.round(minutes)} phút`
+  if (minutes < 10) return plural(Math.round(minutes))
   // Past ten minutes nobody acts on the difference between 47 and 52, and a
   // figure that precise invites watching it tick.
-  return `khoảng ${Math.round(minutes / 5) * 5} phút`
+  return plural(Math.round(minutes / 5) * 5)
 }

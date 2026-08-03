@@ -60,19 +60,19 @@ describe('estimateEtaSeconds', () => {
 
 describe('formatDuration', () => {
   it('reads in seconds under a minute', () => {
-    expect(formatDuration(0)).toBe('vài giây')
-    expect(formatDuration(8)).toBe('khoảng 10 giây')
-    expect(formatDuration(44)).toBe('khoảng 45 giây')
+    expect(formatDuration(0)).toBe('a few seconds')
+    expect(formatDuration(8)).toBe('about 10 seconds')
+    expect(formatDuration(44)).toBe('about 45 seconds')
   })
 
   it('reads in minutes above one', () => {
-    expect(formatDuration(60)).toBe('khoảng 1 phút')
-    expect(formatDuration(150)).toBe('khoảng 3 phút')
+    expect(formatDuration(60)).toBe('about 1 minute')
+    expect(formatDuration(150)).toBe('about 3 minutes')
   })
 
   it('rounds to a coarse figure past ten minutes', () => {
     // Precision no one can act on invites people to watch it tick.
-    expect(formatDuration(1000)).toBe('khoảng 15 phút')
-    expect(formatDuration(3000)).toBe('khoảng 50 phút')
+    expect(formatDuration(1000)).toBe('about 15 minutes')
+    expect(formatDuration(3000)).toBe('about 50 minutes')
   })
 })

@@ -48,9 +48,16 @@ export function NarrationSubtitles({
 
   if (!line) return null
 
+  // Deliberately matched to the ::cue rules in index.css: the video's own
+  // subtitles are drawn by the browser and this by us, and without one spec
+  // written in both places the text changes font, size and height when the
+  // viewer switches between them.
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-16 z-20 flex justify-center px-4">
-      <span className="rounded bg-black/70 px-2 py-1 text-center text-base leading-snug text-white sm:text-lg">
+    <div className="pointer-events-none absolute inset-x-0 bottom-[8%] z-20 flex justify-center px-[5%]">
+      <span
+        className="rounded bg-black/70 px-2 py-0.5 text-center text-white"
+        style={{ fontSize: '3.2vh', lineHeight: 1.35 }}
+      >
         {line}
       </span>
     </div>

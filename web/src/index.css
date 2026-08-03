@@ -93,6 +93,24 @@
      browsers is to strip those settings from the VTT before serving it.
      See services/gateway/internal/api/router.go — the /media/ handler
      intercepts *.vtt requests and removes align/position from each cue. */
+
+  /* The video's own subtitles are drawn by the browser and the machine
+     translation by an element of our own, and left to themselves the two agree
+     about nothing: different font, different size, and a different distance up
+     from the bottom. Switching between them made the text jump.
+
+     One spec, written twice — here for the browser's renderer, and in
+     NarrationSubtitles for ours. Sizes are in vh rather than px so both scale
+     with the picture the way captions are expected to, which is also what the
+     browser's own default does. */
+  ::cue {
+    font-family: inherit;
+    font-size: 3.2vh;
+    line-height: 1.35;
+    color: #fff;
+    background-color: rgb(0 0 0 / 0.7);
+    text-shadow: none;
+  }
 }
 
 @layer utilities {

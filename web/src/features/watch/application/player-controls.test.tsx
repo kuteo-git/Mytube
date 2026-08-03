@@ -579,7 +579,7 @@ describe('a bar sized for a thumb', () => {
     // this fixture can show. Reading aloud is a switch again — what is written
     // on the picture is the segmented control beside it.
     expect(
-      screen.getByRole('switch', { name: 'Đọc thành tiếng' }),
+      screen.getByRole('switch', { name: 'Read aloud' }),
     ).toBeInTheDocument()
   })
 
@@ -594,9 +594,9 @@ describe('a bar sized for a thumb', () => {
     })
     // Captions are a segmented control too, restricted to the two languages
     // this library narrates between.
-    const group = screen.getByRole('radiogroup', { name: 'Phụ đề' })
+    const group = screen.getByRole('radiogroup', { name: 'Subtitles' })
     expect(within(group).getByRole('radio', { name: 'EN' })).toBeInTheDocument()
-    expect(within(group).getByRole('radio', { name: 'Tắt' })).toBeInTheDocument()
+    expect(within(group).getByRole('radio', { name: 'Off' })).toBeInTheDocument()
   })
 
   it('offers the narration settings to a mouse as well', async () => {
@@ -612,10 +612,10 @@ describe('a bar sized for a thumb', () => {
     })
     // One subtitle control and one switch, not two overlapping groups.
     expect(
-      screen.getByRole('radiogroup', { name: 'Phụ đề' }),
+      screen.getByRole('radiogroup', { name: 'Subtitles' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('switch', { name: 'Đọc thành tiếng' }),
+      screen.getByRole('switch', { name: 'Read aloud' }),
     ).toBeInTheDocument()
   })
 
@@ -642,13 +642,13 @@ describe('a bar sized for a thumb', () => {
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
-    expect(screen.queryByText(/Đang dịch|Đang tải|Chưa bắt đầu/)).toBeNull()
+    expect(screen.queryByText(/Translating|Loading subtitles|Not started/)).toBeNull()
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('switch', { name: 'Đọc thành tiếng' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Read aloud' }))
     })
     expect(
-      screen.getByText(/Đang dịch|Đang tải phụ đề|Chưa bắt đầu|Dịch lỗi/),
+      screen.getByText(/Translating|Loading subtitles|Not started|Translation failed/),
     ).toBeInTheDocument()
   })
 
