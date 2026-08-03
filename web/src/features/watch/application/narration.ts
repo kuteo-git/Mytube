@@ -15,11 +15,13 @@
 import { type CueText, parseVTT } from './narration-vtt'
 import { applyAfterTranslation, prepForTranslation } from './narration-translate'
 import { CONTEXT_CUES, planBatches, translateBatch } from './narration-batch'
+import { toVTT } from './narration-vtt-write'
 import {
   hashCue,
   loadNarrationCache,
   saveNarrationCache,
   saveNarrationCues,
+  saveNarrationVtt,
   type NarrationEngine,
 } from '@/features/watch/infrastructure/narration-cache'
 import {
@@ -275,6 +277,13 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         const batchSaved = new Map(_unsaved)
         _unsaved.clear()
         void saveNarrationCache(videoId, _engine, batchSaved)
+      }
+
+      // Only now, with the whole pass behind it. Written mid-pass this would be
+      // a subtitle file that looks complete and stops halfway through the
+      // video — worse than not being there.
+      if (generation === _passGeneration) {
+        void saveNarrationVtt(videoId, toVTT(cues, _tlCache))
       }
     } finally {
       if (generation === _passGeneration) {

@@ -103,3 +103,29 @@ func TestNarrationCacheRejectsPathEscape(t *testing.T) {
 		t.Fatal("video id traversal must be rejected")
 	}
 }
+
+func TestNarrationVTTNameCopiesTheMediaBase(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "1080p.mp4.en.vtt"), []byte("WEBVTT"), 0o644)
+
+	if got := narrationVTTName(dir); got != "1080p.mp4.vi-mt.vtt" {
+		t.Fatalf("want 1080p.mp4.vi-mt.vtt, got %q", got)
+	}
+}
+
+func TestNarrationVTTNameIgnoresItsOwnOutput(t *testing.T) {
+	// Writing twice must not produce "1080p.mp4.vi-mt.vi-mt.vtt".
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "1080p.mp4.vi-mt.vtt"), []byte("WEBVTT"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "1080p.mp4.en.vtt"), []byte("WEBVTT"), 0o644)
+
+	if got := narrationVTTName(dir); got != "1080p.mp4.vi-mt.vtt" {
+		t.Fatalf("want 1080p.mp4.vi-mt.vtt, got %q", got)
+	}
+}
+
+func TestNarrationVTTNameWithNothingToCopy(t *testing.T) {
+	if got := narrationVTTName(t.TempDir()); got != "narration.vi-mt.vtt" {
+		t.Fatalf("want narration.vi-mt.vtt, got %q", got)
+	}
+}

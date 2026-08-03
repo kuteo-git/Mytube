@@ -223,3 +223,70 @@ func (g *Gateway) handlePutNarrationCache(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"written": len(body.Entries)})
 }
+
+// machineVTTSuffix marks the track as machine translation.
+//
+// Not plain ".vi.vtt": subtitleLabel() in the ingest service maps "vi" to
+// "Tiếng Việt", so a video that already carries a human Vietnamese track would
+// end up with two files claiming the same language, and one would quietly win.
+// "vi-mt" shows as VI-MT and is unmistakable.
+const machineVTTSuffix = ".vi-mt.vtt"
+
+// narrationVTTName picks the filename the track should take.
+//
+// The base is copied from a subtitle already in the folder ("1080p.mp4.en.vtt"
+// -> "1080p.mp4") so the machine track sits alongside its siblings under the
+// same media name, which is the convention collectSubtitles reads.
+func narrationVTTName(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err == nil {
+		for _, e := range entries {
+			n := e.Name()
+			if e.IsDir() || !strings.HasSuffix(n, ".vtt") || strings.HasSuffix(n, machineVTTSuffix) {
+				continue
+			}
+			// "1080p.mp4.en.vtt" -> "1080p.mp4"
+			trimmed := strings.TrimSuffix(n, ".vtt")
+			if i := strings.LastIndex(trimmed, "."); i > 0 {
+				return trimmed[:i] + machineVTTSuffix
+			}
+		}
+	}
+	// Nothing to copy a name from — a video narrated from cues that arrived
+	// some other way still deserves its file.
+	return "narration" + machineVTTSuffix
+}
+
+func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8<<20))
+	if err != nil || len(body) == 0 {
+		http.Error(w, "bad body", http.StatusBadRequest)
+		return
+	}
+	dir, err := safeVideoDir(g.mediaRoot, r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		g.logger.Warn("narration vtt mkdir", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	name := narrationVTTName(dir)
+	path := filepath.Join(dir, name)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+		g.logger.Warn("narration vtt write", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		g.logger.Warn("narration vtt rename", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	g.logger.Info("narration vtt", "file", name, "bytes", len(body))
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"file": name, "bytes": len(body)})
+}

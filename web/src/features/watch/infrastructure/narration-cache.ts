@@ -81,3 +81,21 @@ export async function saveNarrationCues(
     // An artifact for humans and future jobs. Nothing here depends on it.
   }
 }
+
+/** Store the finished translation as a subtitle track beside the video. */
+export async function saveNarrationVtt(
+  videoId: string,
+  vtt: string,
+): Promise<void> {
+  if (!videoId || !vtt) return
+  try {
+    await fetch(`/api/videos/${videoId}/narration-vtt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/vtt' },
+      body: vtt,
+    })
+  } catch {
+    // The player reads its translations from memory. This file is for
+    // everything that is not the player.
+  }
+}
