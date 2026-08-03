@@ -87,6 +87,8 @@ let _passGeneration = 0
 let _passTotal = 0
 let _passDone = 0
 let _passPhase: NarrationPhase = 'idle'
+/** The message of anything the pass threw, for the status line. */
+let _passThrew = ''
 /** Written since the last flush, so a flush posts only what is new. */
 const _unsaved = new Map<string, string>()
 
@@ -150,7 +152,7 @@ export function narrationProgress(): {
     total: _passTotal,
     running: _passRunning,
     phase: _passPhase,
-    error: lastBatchError(),
+    error: _passThrew || lastBatchError(),
   }
 }
 
@@ -237,6 +239,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   _passTotal = 0
   _passDone = 0
   _passPhase = 'waiting-subtitles'
+  _passThrew = ''
   const generation = _passGeneration
 
   void (async () => {
@@ -311,6 +314,14 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       // video — worse than not being there.
       if (generation === _passGeneration) {
         void saveNarrationVtt(videoId, toVTT(cues, _tlCache))
+      }
+    } catch (e) {
+      // An exception here used to vanish into the finally and surface as
+      // "failed" with nothing after it — which is how a crypto.subtle that does
+      // not exist outside a secure context looked from the outside.
+      if (generation === _passGeneration) {
+        _passThrew = e instanceof Error ? e.message : String(e)
+        _passPhase = 'failed'
       }
     } finally {
       if (generation === _passGeneration) {

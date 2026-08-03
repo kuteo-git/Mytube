@@ -16,6 +16,14 @@ describe('hashCue', () => {
     expect(a).not.toBe(c)
     expect(a).toMatch(/^[0-9a-f]{40}$/)
   })
+
+  it('works where crypto.subtle does not exist', async () => {
+    // Plain HTTP on a LAN address is not a secure context, so crypto.subtle is
+    // undefined there. Depending on it took the whole translation pass down on
+    // the first cue, while localhost — exempt from the rule — passed every test.
+    vi.stubGlobal('crypto', {})
+    expect(await hashCue('abc')).toBe('a9993e364706816aba3e25717850c26c9cd0d89d')
+  })
 })
 
 describe('loadNarrationCache', () => {

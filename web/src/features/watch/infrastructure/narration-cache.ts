@@ -12,15 +12,25 @@
  * the cues that actually changed.
  */
 
+import { sha1Hex } from './sha1'
+
 export type NarrationEngine = 'nllb' | 'qwen'
 
-/** Hex SHA-1 of a cue's text. */
+/**
+ * Hex SHA-1 of a cue's text.
+ *
+ * Computed in JavaScript rather than through `crypto.subtle`, which exists only
+ * in a secure context. This library is served over plain HTTP to a LAN address
+ * (CLAUDE.md §2), where that API is undefined — and `localhost` is exempt from
+ * the rule, so every test and every curl passed while the browser on the house
+ * network threw on the first cue and took the whole translation pass down with
+ * it, before it could send a single request to blame.
+ *
+ * Still async: the callers await it, and keeping the signature means the day
+ * this page is served over HTTPS nothing has to change back.
+ */
 export async function hashCue(text: string): Promise<string> {
-  const bytes = new TextEncoder().encode(text)
-  const digest = await crypto.subtle.digest('SHA-1', bytes)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return sha1Hex(text)
 }
 
 export async function loadNarrationCache(
