@@ -81,7 +81,7 @@ const _active = new Map<string, Promise<AudioBuffer>>()
 /** Cue text -> Vietnamese, for the engine currently selected. */
 const _tlCache = new Map<string, string>()
 
-let _engine: NarrationEngine = 'qwen'
+let _engine: NarrationEngine = 'omniroute'
 let _passVideoId = ''
 let _passRunning = false
 let _passGeneration = 0
@@ -394,7 +394,7 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     // Under the batch engine an untranslated cue means the pass has not reached
     // it yet. Speaking the English would be worse than saying nothing, so the
     // cue is skipped and the loop carries on.
-    if (viText === text && _engine === 'qwen') {
+    if (viText === text && _engine !== 'nllb') {
       throw new Error('not translated yet')
     }
   }

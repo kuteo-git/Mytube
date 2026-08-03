@@ -4,7 +4,7 @@ The model is not exercised here. What is exercised is the part that decides
 whether the model's answer may be trusted, which is the part that failed in
 measurement.
 """
-from translate_server import parse_numbered, aligned_or_none
+from translate_server import parse_numbered, aligned_or_none, openai_content
 
 
 def test_parse_numbered_reads_dot_and_paren():
@@ -34,3 +34,24 @@ def test_aligned_returns_none_on_short_answer():
 
 def test_aligned_returns_none_on_gap():
     assert aligned_or_none({1: "a", 3: "c"}, 3) is None
+
+
+def test_openai_content_reads_a_plain_response():
+    payload = {"choices": [{"message": {"content": "1. một\n2. hai"}}]}
+    assert openai_content(payload) == "1. một\n2. hai"
+
+
+def test_openai_content_ignores_reasoning():
+    # sub_translation routes to a reasoning model, which returns its working in
+    # a separate field. Only the answer is the translation.
+    payload = {
+        "choices": [
+            {"message": {"content": "1. một", "reasoning_content": "hmm 2. hai"}}
+        ]
+    }
+    assert openai_content(payload) == "1. một"
+
+
+def test_openai_content_survives_a_shape_it_does_not_know():
+    assert openai_content({"error": "nope"}) == ""
+    assert openai_content({"choices": []}) == ""

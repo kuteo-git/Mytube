@@ -14,7 +14,7 @@
 
 import { sha1Hex } from './sha1'
 
-export type NarrationEngine = 'nllb' | 'qwen'
+export type NarrationEngine = 'omniroute' | 'nllb' | 'qwen'
 
 /**
  * Hex SHA-1 of a cue's text.

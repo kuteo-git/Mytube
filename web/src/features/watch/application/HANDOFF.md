@@ -39,7 +39,7 @@ Hệ thống thuyết minh (narration) tự động đọc phụ đề tiếng V
 | `web/src/features/watch/ui/Player.tsx` | UI button + AudioContext management |
 | `services/gateway/internal/api/tts.go` | Proxy TTS + ffmpeg atempo |
 | `services/gateway/internal/api/translate.go` | Proxy NLLB-200 |
-| `services/translate_server.py` | Translation server, NLLB + Qwen (port 8005) |
+| `services/translate_server.py` | Translation server: Omniroute + Qwen + NLLB (port 8005) |
 
 ---
 
@@ -142,7 +142,7 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 | Key | Ý nghĩa |
 |-----|---------|
 | `yt-narration-output-v1` | `off` / `subs` / `voice` / `both` |
-| `yt-narration-engine-v1` | `nllb` / `qwen` |
+| `yt-narration-engine-v1` | `omniroute` (mặc định) / `qwen` / `nllb` |
 | `yt-narration-on` | **Cũ.** Boolean bật/tắt; chỉ còn được đọc một lần để chuyển `'1'` → `output: 'voice'` |
 | `yt-player-volume` | Volume người dùng |
 | `yt-player-muted` | Mute state |
@@ -166,8 +166,31 @@ Full list: `you're`, `you'll`, `you'd`, `you've`, `yourself`, `yourselves`, `you
 
 ## Translation Models
 
-Config: `services/translate_server.py`. Port 8005. Two engines, chọn trong menu
+Config: `services/translate_server.py`. Port 8005. **Ba** engine, chọn trong menu
 ⚙ của player dưới mục "Máy dịch".
+
+### Omniroute (mặc định, "Tốt nhất")
+
+Router OpenAI-compatible trong mạng LAN. Cấu hình **hoàn toàn từ biến môi
+trường**, key **không nằm trong git** — `scripts/dev.sh` nạp `.env.local`:
+
+```
+OMNIROUTE_BASE_URL  http://10.25.113.151:20128
+OMNIROUTE_MODEL     sub_translation      (router xuống deepseek-v4-flash)
+OMNIROUTE_API_KEY   …                    (.env.local, đã gitignore)
+```
+
+**`stream: false` là bắt buộc, không phải tuỳ chọn** — server này stream mặc
+định kể cả khi không ai xin, và một thân SSE thì không phải JSON.
+
+Chỉ đọc `content`, **bỏ `reasoning_content`**: model này là reasoning model, và
+phần nó tự nói với chính mình đôi khi cũng chứa dòng đánh số trông y như bản
+dịch.
+
+Đo trên video thật (150 cue): lô đầu 3 câu **4.9s**, lô 15 câu **10–16s**,
+6.3 từ/giây, khớp dòng 15/15 không phải fallback lần nào. **Nhanh hơn Qwen ở câu
+đầu** vì không phải nạp model, và **không đụng GPU** — thứ mà yt-dlp với ffmpeg
+đã giành sẵn mỗi lần bấm play.
 
 Mọi số đo trên máy này (M4, 24 GB) ngày 2026-08-03, dùng cue đã gộp bởi
 `parseVTT()` thật.

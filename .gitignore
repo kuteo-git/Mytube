@@ -11,3 +11,7 @@ data/
 # Downloaded media. Never committed — served from MEDIA_ROOT (an external
 # drive in this deployment; see CLAUDE.md §1 and §9).
 media/
+
+# Secrets for local services (API keys). Never committed — see scripts/dev.sh,
+# which sources this file if it exists.
+.env.local

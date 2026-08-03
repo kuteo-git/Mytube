@@ -12,7 +12,7 @@ const ENGINE_KEY = 'yt-narration-engine-v1'
 const OUTPUT_KEY = 'yt-narration-output-v1'
 const LEGACY_KEY = 'yt-narration-on'
 
-const ENGINES: NarrationEngine[] = ['nllb', 'qwen']
+const ENGINES: NarrationEngine[] = ['omniroute', 'nllb', 'qwen']
 const OUTPUTS: NarrationOutput[] = ['off', 'subs', 'voice', 'both']
 
 export function loadNarrationPrefs(): {
@@ -24,7 +24,7 @@ export function loadNarrationPrefs(): {
 
   const engine = ENGINES.includes(rawEngine as NarrationEngine)
     ? (rawEngine as NarrationEngine)
-    : 'qwen'
+    : 'omniroute'
 
   let output: NarrationOutput = 'off'
   if (OUTPUTS.includes(rawOutput as NarrationOutput)) {

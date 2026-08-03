@@ -16,9 +16,12 @@ it is chosen for quality, and the speed comes from caching results on disk.
 NLLB cannot be moved to MLX: it is encoder-decoder (M2M100) and mlx-lm ships
 only decoder-only architectures. This was checked, not assumed.
 """
+import json
 import os
 import re
 import time
+import urllib.error
+import urllib.request
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -28,6 +31,14 @@ from fastapi.responses import JSONResponse
 NLLB_MODEL = os.environ.get("NLLB_MODEL", "facebook/nllb-200-distilled-600M")
 QWEN_MODEL = os.environ.get("QWEN_MODEL", "mlx-community/Qwen3-8B-4bit")
 PORT = int(os.environ.get("NLLB_PORT", "8005"))
+
+# An OpenAI-compatible router on the LAN. Configured entirely from the
+# environment, and the key is never written down here — scripts/dev.sh sources
+# .env.local, which is not in git.
+OMNIROUTE_BASE_URL = os.environ.get("OMNIROUTE_BASE_URL", "")
+OMNIROUTE_MODEL = os.environ.get("OMNIROUTE_MODEL", "sub_translation")
+OMNIROUTE_API_KEY = os.environ.get("OMNIROUTE_API_KEY", "")
+OMNIROUTE_TIMEOUT = float(os.environ.get("OMNIROUTE_TIMEOUT", "300"))
 
 BATCH_PROMPT = """Dịch các câu phụ đề tiếng Anh sau sang tiếng Việt.
 
@@ -71,6 +82,58 @@ def aligned_or_none(parsed: dict[int, str], want: int) -> list[str] | None:
     if any(i not in parsed for i in range(1, want + 1)):
         return None
     return [parsed[i] for i in range(1, want + 1)]
+
+
+def openai_content(payload: dict) -> str:
+    """The assistant's answer out of an OpenAI-shaped response.
+
+    Reads `content` only. sub_translation routes to a reasoning model which also
+    returns `reasoning_content`, and that field contains the model talking to
+    itself — including, sometimes, numbered lines that would be mistaken for
+    translations.
+    """
+    try:
+        return payload["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError):
+        return ""
+
+
+def omniroute_batch(cues: list[str], context: list[str]) -> list[str] | None:
+    """Translate a batch through the LAN router.
+
+    `stream: False` is required, not optional: the server streams by default
+    even when nothing asked it to, and a body of SSE frames is not JSON.
+    """
+    if not OMNIROUTE_BASE_URL:
+        return None
+    ctx = ""
+    if context:
+        ctx = "\nNgữ cảnh (các câu ngay trước, KHÔNG dịch):\n" + \
+              "\n".join(f"- {c}" for c in context) + "\n"
+    body = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(cues))
+    payload = {
+        "model": OMNIROUTE_MODEL,
+        "stream": False,
+        "messages": [{
+            "role": "user",
+            "content": BATCH_PROMPT.format(n=len(cues), ctx=ctx, body=body),
+        }],
+    }
+    req = urllib.request.Request(
+        OMNIROUTE_BASE_URL.rstrip("/") + "/v1/chat/completions",
+        json.dumps(payload).encode(),
+        {
+            "Authorization": f"Bearer {OMNIROUTE_API_KEY}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=OMNIROUTE_TIMEOUT) as resp:
+            data = json.load(resp)
+    except (urllib.error.URLError, TimeoutError, ValueError) as e:
+        print(f"[omniroute] {e}", flush=True)
+        return None
+    return aligned_or_none(parse_numbered(openai_content(data)), len(cues))
 
 
 # ---- engines ----------------------------------------------------------------
@@ -142,7 +205,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 @app.get("/health")
 def health():
     return {"status": "ok",
-            "engines": {"nllb": _nllb is not None, "qwen": _qwen is not None}}
+            "engines": {
+                "nllb": _nllb is not None,
+                "qwen": _qwen is not None,
+                "omniroute": bool(OMNIROUTE_BASE_URL and OMNIROUTE_API_KEY),
+            }}
 
 
 @app.post("/translate")
@@ -169,7 +236,15 @@ async def translate_batch(req: Request):
     t0 = time.perf_counter()
     fell_back = False
 
-    if engine == "qwen":
+    if engine == "omniroute":
+        out = omniroute_batch(cues, context)
+        if out is None:
+            fell_back = True
+            out = []
+            for c in cues:
+                single = omniroute_batch([c], [])
+                out.append(single[0] if single else "")
+    elif engine == "qwen":
         out = qwen_batch(cues, context)
         if out is None:
             # The batch could not be trusted. Retry one cue at a time, where

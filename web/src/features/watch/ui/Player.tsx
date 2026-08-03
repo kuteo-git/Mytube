@@ -683,7 +683,7 @@ export function Player({
   // Anchor the background translation pass wherever the viewer actually is.
   // Only the batch engine has a pass; NLLB translates as it speaks.
   useEffect(() => {
-    if (!narrationOn || narrationPrefs.engine !== 'qwen') return
+    if (!narrationOn || narrationPrefs.engine === 'nllb') return
     const el = front()
     startTranslationPass(videoId, el ? el.currentTime : 0)
   }, [narrationOn, narrationPrefs.engine, videoId, subtitles, front])
@@ -1086,8 +1086,21 @@ export function Player({
             onSelect={setEngine}
             tall={coarse}
             options={[
-              { value: 'qwen', label: 'Kỹ hơn', hint: 'Qwen — dịch nền theo lô, có ngữ cảnh' },
-              { value: 'nllb', label: 'Nhanh hơn', hint: 'NLLB — dịch ngay từng câu' },
+              {
+                value: 'omniroute',
+                label: 'Tốt nhất',
+                hint: 'Omniroute — máy chủ AI trong mạng, không tốn GPU máy này',
+              },
+              {
+                value: 'qwen',
+                label: 'Ngoại tuyến',
+                hint: 'Qwen 8B chạy ngay trên máy này, không cần máy chủ nào',
+              },
+              {
+                value: 'nllb',
+                label: 'Nhanh',
+                hint: 'NLLB — dịch ngay từng câu, không có ngữ cảnh',
+              },
             ]}
           />
           <NarrationStatus engine={narrationPrefs.engine} />
@@ -2320,7 +2333,7 @@ function NarrationStatus({ engine }: { engine: NarrationEngine }) {
     return () => window.clearInterval(id)
   }, [])
 
-  if (engine !== 'qwen') {
+  if (engine === 'nllb') {
     return (
       <li className="px-4 pb-2 text-xs text-text-2">
         Dịch từng câu ngay khi đọc, không chạy nền.

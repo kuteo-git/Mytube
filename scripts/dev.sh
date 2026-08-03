@@ -60,6 +60,11 @@ for _ in $(seq 1 20); do
 done
 
 # --- translation server (EN → VI), NLLB and Qwen ---
+# Keys for local services live outside git. Absent is fine — the engines that
+# need them simply report themselves unavailable.
+# shellcheck disable=SC1091
+[ -f .env.local ] && . ./.env.local
+
 NLLB_VENV="${NLLB_VENV:-/tmp/nllb-venv}"
 if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/translate_server.py ]; then
   echo "starting translation server (port 8005)..."
