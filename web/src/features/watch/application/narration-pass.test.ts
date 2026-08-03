@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cancelTranslationPass,
+  loadViSubtitles,
+  narrationCues,
   narrationProgress,
   nearestCueIndex,
   resetNarration,
   startTranslationPass,
+  stopNarrationPlayback,
 } from './narration'
 import type { CueText } from './narration-vtt'
 
@@ -84,5 +87,55 @@ describe('nearestCueIndex', () => {
 
   it('is zero when there are no cues', () => {
     expect(nearestCueIndex([], 5)).toBe(0)
+  })
+})
+
+describe('cues survive the output mode changing', () => {
+  afterEach(() => {
+    resetNarration()
+    vi.unstubAllGlobals()
+  })
+
+  const VTT = `WEBVTT
+
+00:00:01.000 --> 00:00:04.000
+Hello there everyone.
+
+00:00:05.000 --> 00:00:09.000
+This is the second line.
+`
+
+  async function loadCues() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, text: async () => VTT }),
+    )
+    loadViSubtitles('/media/abc/en.vtt', 'en')
+    await new Promise((r) => setTimeout(r, 10))
+  }
+
+  it('keeps them when the voice is switched off', async () => {
+    // "Giọng đọc" to "Phụ đề" tears down the tick loop. That used to discard
+    // the cue list, and the effect that loads cues had no reason to run again —
+    // so switching back produced narration that never requested a single clip.
+    await loadCues()
+    expect(narrationCues().length).toBe(2)
+
+    stopNarrationPlayback()
+
+    expect(narrationCues().length).toBe(2)
+  })
+
+  it('forgets them only when the video is left behind', async () => {
+    await loadCues()
+    resetNarration()
+    expect(narrationCues().length).toBe(0)
+  })
+
+  it('can be stopped and resumed repeatedly without losing them', async () => {
+    // The report was that this happened when flipping options back and forth.
+    await loadCues()
+    for (let i = 0; i < 5; i++) stopNarrationPlayback()
+    expect(narrationCues().length).toBe(2)
   })
 })

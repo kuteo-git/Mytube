@@ -745,16 +745,35 @@ function firstCueAtOrAfter(cues: CueText[], time: number): number {
  *
  * Ending a pass is cancelTranslationPass, and it belongs to changing video.
  */
-export function resetNarration() {
+/**
+ * Stop speaking. Keep the cues.
+ *
+ * This is what the narration tick loop wants when it tears down, and the tick
+ * loop tears down whenever the output mode stops including a voice — switching
+ * from "Giọng đọc" to "Phụ đề" is enough. It used to call resetNarration, which
+ * also discarded the cue list; and the effect that loads cues depends on
+ * narration being on rather than on it speaking, so it had no reason to run
+ * again. Switching back left _cues null with nothing to refill it, and the tick
+ * returned at its first line without ever asking for a single clip.
+ */
+export function stopNarrationPlayback() {
   _generation++
-  _cues = null
-  _cuesURL = ''
   _cursor = 0
   _pumping = false
+  // Zeroed so the next tick reads as a jump and re-derives the cursor from
+  // wherever the video has got to in the meantime.
   _lastTime = 0
   _masterGain = null
   stopEverything()
 }
+
+/** Stop speaking and forget the cue list. For leaving the video behind. */
+export function resetNarration() {
+  _cues = null
+  _cuesURL = ''
+  stopNarrationPlayback()
+}
+
 
 export function isNarrationActive(): boolean {
   return _cues !== null && _cues.length > 0

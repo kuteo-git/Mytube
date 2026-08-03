@@ -30,6 +30,7 @@ import {
   bindNarration,
   tickNarration,
   resetNarration,
+  stopNarrationPlayback,
   loadViSubtitles,
   setNarrationVideo,
   cancelTranslationPass,
@@ -617,7 +618,9 @@ export function Player({
     return () => {
       clearInterval(id)
       unbind?.()
-      resetNarration()
+      // Stop the voice, keep the cues: this tears down whenever the output mode
+      // stops including a voice, which is not the same as leaving the video.
+      stopNarrationPlayback()
       audioCtxRef.current?.suspend()
     }
   }, [narrationSpeaks, front])
