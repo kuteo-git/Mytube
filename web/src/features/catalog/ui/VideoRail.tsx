@@ -18,20 +18,22 @@ export function VideoRail({ videos }: { videos: Video[] }) {
 
   return (
     <div
-      // Padding on all four sides, and a negative margin cancelling it.
+      // -m-4 p-4: sixteen of padding, cancelled by sixteen of margin.
       //
-      // The cards carry their own negative margin so the hover tint has a body
-      // without costing layout, so each bleeds 8px past its slot on every side.
-      // A scroller clips that bleed — overflow-x-auto clips vertically too —
-      // which cut the tops off, and on wide screens, where this had no side
-      // padding at all, took the left edge off the first card as it lit up.
+      // The cards bleed 8px past their slots on every side so their hover tint
+      // has a body without costing layout, and a scroller clips that bleed —
+      // overflow-x-auto clips vertically as well as scrolling horizontally.
       //
-      // So the room is here and the margin gives it back, leaving the cards
-      // lined up with the feed grid below exactly as before. Below 700px the
-      // row bleeds to the screen edge instead (CLAUDE.md §8b): a scrolling row
-      // that stops short of the edge reads as having ended.
-      className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 py-2
-                 no-scrollbar min-[700px]:-mx-2 min-[700px]:px-2"
+      // Eight of padding was not enough, which is why this took two goes: it
+      // put the clip edge exactly on the card's own edge, so the tint met the
+      // boundary with nothing to spare, and a rounded corner against a hard
+      // edge reads as a crop. Sixteen leaves eight of clearance all round.
+      //
+      // The margin gives every pixel of it back, so the cards still line up
+      // with the feed grid below, and on a phone the row still reaches the
+      // screen edge — where a scrolling row that stops short reads as having
+      // ended rather than as continuing (CLAUDE.md §8b).
+      className="-m-4 flex snap-x snap-mandatory gap-4 overflow-x-auto p-4 no-scrollbar"
     >
       {videos.map((video) => (
         <div
