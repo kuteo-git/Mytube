@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import {CheckCircle, EyeOff, MoreVertical} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -15,21 +16,7 @@ import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 
-/**
- * Grid card.
- *
- * Hover is a background tint, the same one the sidebar's subscription rows use:
- * surface-hover, 150ms, no shadow and no ring. The card had grown a shadow and
- * a ring, which the design system forbids in two places — "Hover card: không
- * transform, không shadow, không scale", and again in the anti-patterns — and
- * which is why these read as a different kind of item from everything else in
- * the app.
- *
- * The padding is what the tint sits in. Without it the card's own children
- * cover the whole box and the colour shows only as slivers between them; the
- * matching negative margin keeps the thumbnails the same width and the grid
- * spacing untouched, so the tint costs no layout.
- */
+/** Grid card. Hover comes from videoItemHover, shared with every other item. */
 export function VideoCard({ video }: { video: Video }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
@@ -54,7 +41,7 @@ export function VideoCard({ video }: { video: Video }) {
     // spend it here, where nobody is waiting, instead of after the click.
     // Focus counts too, so a keyboard or a remote gets the same head start.
     <article
-      className="group -m-2 flex flex-col gap-3 rounded-xl p-2 transition-colors duration-150 ease-out hover:bg-surface-hover"
+      className={clsx('group flex flex-col gap-3', videoItemHover)}
       onPointerEnter={() => prefetch(video.id)}
       onPointerLeave={cancel}
       onFocus={() => prefetch(video.id)}
