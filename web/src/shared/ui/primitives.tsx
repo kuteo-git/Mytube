@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { isMissingThumbnail } from '@/shared/ui/thumbnail-placeholder'
 import { type ButtonHTMLAttributes, type ReactNode, useState } from 'react'
 
 /**
@@ -121,11 +122,14 @@ export function ThumbnailSurface({
   rounded?: string
   children?: ReactNode
 }) {
-  // The stored URL as-is. We deliberately do not try to rewrite it to
-  // maxresdefault here, because YouTube returns a valid JPEG even for 404s, so
-  // <img onError> never fires and the fallback never runs — the user is left
-  // staring at a grey placeholder. The ingest picks the widest still available
-  // at scan time, so the stored URL is already the best we know exists.
+  // The stored URL as-is. We deliberately do not rewrite it to maxresdefault
+  // here: the ingest picks the widest still available at scan time, so the
+  // stored URL is already the best we know exists.
+  //
+  // A 404 from i.ytimg.com comes with a valid JPEG attached, so the browser
+  // decodes it and fires load rather than error — which is why onError alone
+  // left a grey YouTube tile on the card instead of the gradient below. onLoad
+  // catches that one by its size; see isMissingThumbnail.
   const [failed, setFailed] = useState(false)
 
   return (
@@ -145,6 +149,12 @@ export function ThumbnailSurface({
           decoding="async"
           className="h-full w-full object-cover"
           onError={() => setFailed(true)}
+          onLoad={(e) => {
+            const img = e.currentTarget
+            if (isMissingThumbnail(img.currentSrc || img.src, img.naturalWidth, img.naturalHeight)) {
+              setFailed(true)
+            }
+          }}
         />
       )}
       {children}
