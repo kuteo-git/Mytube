@@ -94,6 +94,19 @@ export function translatedCue(text: string): string | undefined {
   return _tlCache.get(text)
 }
 
+/** The cue covering `time`, or null when nothing is being said. */
+export function currentCueText(cues: CueText[], time: number): string | null {
+  for (const c of cues) {
+    if (time >= c.start && time < c.end) return c.text
+  }
+  return null
+}
+
+/** The parsed cues, for callers that render rather than speak. */
+export function narrationCues(): CueText[] {
+  return _cues ?? []
+}
+
 /** Index of the cue playing at `time`, or the next one due. */
 export function nearestCueIndex(cues: CueText[], time: number): number {
   if (cues.length === 0) return 0

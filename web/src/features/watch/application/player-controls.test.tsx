@@ -556,8 +556,12 @@ describe('a bar sized for a thumb', () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
     // Autoplay only exists when there is a next video; narration is the row
-    // this fixture can show.
-    expect(screen.getByRole('switch', { name: 'Thuyết minh' })).toBeInTheDocument()
+    // this fixture can show. "Thuyết minh" is now the group heading rather than
+    // a switch, and the switch that carries the old on/off behaviour is the
+    // spoken-output row.
+    expect(
+      screen.getByRole('switch', { name: 'Chỉ giọng đọc' }),
+    ).toBeInTheDocument()
   })
 
   it('puts captions behind the gear too', async () => {

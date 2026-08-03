@@ -27,7 +27,21 @@ import {
   useAutoplayPreference,
   useQualityPreference,
 } from '@/features/watch/application/autoplay'
-import { bindNarration, tickNarration, resetNarration, loadViSubtitles } from '@/features/watch/application/narration'
+import {
+  bindNarration,
+  tickNarration,
+  resetNarration,
+  loadViSubtitles,
+  setNarrationEngine,
+  startTranslationPass,
+} from '@/features/watch/application/narration'
+import {
+  loadNarrationPrefs,
+  saveNarrationPrefs,
+  type NarrationOutput,
+} from '@/features/watch/application/narration-prefs'
+import type { NarrationEngine } from '@/features/watch/infrastructure/narration-cache'
+import { NarrationSubtitles } from '@/features/watch/ui/NarrationSubtitles'
 import {
   canGoFullscreen,
   canUsePiP,
@@ -419,9 +433,14 @@ export function Player({
     setCaptionsRaw(next)
   }, [])
   const captionsRef = useRef<string | null>(null)
-  const [narrationOn, setNarrationOn] = useState(
-    () => window.localStorage.getItem('yt-narration-on') === '1',
-  )
+  const [narrationPrefs, setNarrationPrefs] = useState(loadNarrationPrefs)
+  const narrationOn = narrationPrefs.output !== 'off'
+  // Showing the translation and speaking it are separate: subtitles must not
+  // duck the video's own audio, and must not start the TTS scheduler.
+  const narrationSpeaks =
+    narrationPrefs.output === 'voice' || narrationPrefs.output === 'both'
+  const narrationShows =
+    narrationPrefs.output === 'subs' || narrationPrefs.output === 'both'
   const narrationOnRef = useRef(false)
   const audioCtxRef = useRef<AudioContext | null>(null)
   // Keep refs synchronised so callbacks that are intentionally stable (empty
@@ -578,7 +597,7 @@ export function Player({
   // keeps running when the tab is hidden (rAF is paused by the browser).
   // 100 ms is fast enough for TTS scheduling without wasting CPU.
   useEffect(() => {
-    if (!narrationOn) return
+    if (!narrationSpeaks) return
 
     // Pause and seek come from the element's own events, not from this timer.
     // A minute of narration is placed on the audio timeline in advance so it
@@ -600,7 +619,7 @@ export function Player({
       resetNarration()
       audioCtxRef.current?.suspend()
     }
-  }, [narrationOn, front])
+  }, [narrationSpeaks, front])
 
   // Restore stored volume/muted on the video element, and duck the video
   // audio when narration is active so the TTS voice is clearly audible.
@@ -609,7 +628,7 @@ export function Player({
   // narrationOn could be stuck true from localStorage with no button to turn
   // it off, permanently halving the volume.
   const NARRATION_DUCK = 0.2
-  const ducking = narrationOn && narrationAvailable
+  const ducking = narrationSpeaks && narrationAvailable
   useEffect(() => {
     const el = front()
     if (!el) return
@@ -635,6 +654,14 @@ export function Player({
     )
     if (enSub) loadViSubtitles(enSub.url, 'en')
   }, [narrationOn, subtitles])
+
+  // Anchor the background translation pass wherever the viewer actually is.
+  // Only the batch engine has a pass; NLLB translates as it speaks.
+  useEffect(() => {
+    if (!narrationOn || narrationPrefs.engine !== 'qwen') return
+    const el = front()
+    startTranslationPass(videoId, el ? el.currentTime : 0)
+  }, [narrationOn, narrationPrefs.engine, videoId, subtitles, front])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,
@@ -948,19 +975,34 @@ export function Player({
    * interrupting what you were watching, every time, and dismissing them would
    * mean interrupting it again.
    */
-  const toggleNarration = useCallback(() => {
+  const setNarrationOutput = useCallback((output: NarrationOutput) => {
     // The AudioContext has to be created and resumed inside the gesture, or the
     // browser's autoplay policy will not let it make a sound.
-    if (!narrationOn) {
+    if (output === 'voice' || output === 'both') {
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
       void audioCtxRef.current.resume()
     }
-    setNarrationOn((on) => {
-      const next = !on
-      window.localStorage.setItem('yt-narration-on', next ? '1' : '0')
+    setNarrationPrefs((p) => {
+      const next = { ...p, output }
+      saveNarrationPrefs(next)
       return next
     })
-  }, [narrationOn])
+  }, [])
+
+  const setEngine = useCallback((engine: NarrationEngine) => {
+    setNarrationPrefs((p) => {
+      const next = { ...p, engine }
+      saveNarrationPrefs(next)
+      return next
+    })
+    // Drops the cached answers of the engine being left behind, so the two are
+    // never blended in the comparison this menu exists for.
+    setNarrationEngine(engine)
+  }, [])
+
+  const toggleNarration = useCallback(() => {
+    setNarrationOutput(narrationOn ? 'off' : 'voice')
+  }, [narrationOn, setNarrationOutput])
 
   const tapPicture = useCallback(() => {
     if (pointerKindRef.current !== 'touch') {
@@ -1389,6 +1431,8 @@ export function Player({
           )}
         </div>
       )}
+
+      <NarrationSubtitles front={front} active={narrationShows} />
 
       {/* Reopening a muxed stream at a new mark takes a couple of seconds, and
           the old picture stays on screen throughout. Without this the seek
@@ -1857,11 +1901,48 @@ export function Player({
                       </>
                     )}
                     {narrationAvailable && (
-                      <SettingRow
-                        label="Thuyết minh"
-                        on={narrationOn}
-                        onToggle={toggleNarration}
-                      />
+                      <>
+                        <li className="px-4 pt-2 pb-1 text-xs text-text-2">
+                          Thuyết minh
+                        </li>
+                        {/* Not plain "Tắt": the captions group above has a row
+                            by that name, and two switches with the same
+                            accessible name in one menu are indistinguishable to
+                            anyone not reading the group headings. */}
+                        <SettingRow
+                          label="Tắt thuyết minh"
+                          on={narrationPrefs.output === 'off'}
+                          onToggle={() => setNarrationOutput('off')}
+                        />
+                        <SettingRow
+                          label="Chỉ phụ đề tiếng Việt"
+                          on={narrationPrefs.output === 'subs'}
+                          onToggle={() => setNarrationOutput('subs')}
+                        />
+                        <SettingRow
+                          label="Chỉ giọng đọc"
+                          on={narrationPrefs.output === 'voice'}
+                          onToggle={() => setNarrationOutput('voice')}
+                        />
+                        <SettingRow
+                          label="Cả hai"
+                          on={narrationPrefs.output === 'both'}
+                          onToggle={() => setNarrationOutput('both')}
+                        />
+                        <li className="px-4 pt-2 pb-1 text-xs text-text-2">
+                          Máy dịch
+                        </li>
+                        <SettingRow
+                          label="Qwen (dịch nền, có ngữ cảnh)"
+                          on={narrationPrefs.engine === 'qwen'}
+                          onToggle={() => setEngine('qwen')}
+                        />
+                        <SettingRow
+                          label="NLLB (dịch ngay từng câu)"
+                          on={narrationPrefs.engine === 'nllb'}
+                          onToggle={() => setEngine('nllb')}
+                        />
+                      </>
                     )}
                     {onPlayNext && (
                       <SettingRow
