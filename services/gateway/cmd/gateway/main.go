@@ -77,6 +77,7 @@ func main() {
 		logger,
 		devUserID,
 		ingestURL,
+		mediaRoot,
 	)
 
 	mux := http.NewServeMux()

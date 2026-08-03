@@ -36,6 +36,10 @@ type Gateway struct {
 	// response lasts as long as the video plays.
 	ingestBaseURL string
 	streamClient  *http.Client
+	// mediaRoot is where narration translations are kept, beside the media they
+	// belong to. It can be an external SSD that is not mounted (CLAUDE.md §8.1),
+	// so every read of it treats absence as an empty cache rather than an error.
+	mediaRoot string
 }
 
 func NewGateway(
@@ -45,6 +49,7 @@ func NewGateway(
 	logger *slog.Logger,
 	devUserID string,
 	ingestBaseURL string,
+	mediaRoot string,
 ) *Gateway {
 	return &Gateway{
 		catalog:       catalog,
@@ -54,6 +59,7 @@ func NewGateway(
 		devUserID:     devUserID,
 		ingestBaseURL: ingestBaseURL,
 		streamClient:  &http.Client{},
+		mediaRoot:     mediaRoot,
 	}
 }
 
@@ -71,6 +77,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/backfill", g.handleBackfillStatus)
 	mux.HandleFunc("POST /api/tts", g.handleTTS)
 	mux.HandleFunc("POST /api/translate", g.handleTranslate)
+	mux.HandleFunc("POST /api/translate/batch", g.handleTranslateBatch)
+	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
+	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/download/cancel", g.handleCancelVideoDownload)
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)
