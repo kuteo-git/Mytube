@@ -131,7 +131,9 @@ async function scrollPastPlayer(slot: Element) {
 
 describe('expanding from the miniplayer', () => {
   beforeEach(() => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    // The page scrolls inside <main>, not the window (see AppShell), and jsdom
+    // implements neither — so the method is installed rather than spied on.
+    Element.prototype.scrollTo = vi.fn()
   })
 
   it('folds into the corner when the slot scrolls out of view', async () => {
@@ -167,13 +169,15 @@ describe('expanding from the miniplayer', () => {
       fireEvent.click(screen.getAllByLabelText('Expand player')[0])
     })
 
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0 })
+    expect(Element.prototype.scrollTo).toHaveBeenCalledWith({ top: 0 })
   })
 })
 
 describe('closing the miniplayer while the watch page is open', () => {
   beforeEach(() => {
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    // The page scrolls inside <main>, not the window (see AppShell), and jsdom
+    // implements neither — so the method is installed rather than spied on.
+    Element.prototype.scrollTo = vi.fn()
   })
 
   it('returns the player to its slot instead of destroying it', async () => {

@@ -5,6 +5,7 @@ import {
   miniRectDesktop,
   miniRectMobile,
 } from './player-geometry'
+import { lerpRect, travelProgress } from './player-gesture'
 
 /**
  * Where the player host should be right now, and in which coordinate space.
@@ -100,6 +101,39 @@ export function miniPlacement(input: PlacementInput): HostPlacement {
       : miniRectDesktop(viewport.width, viewport.height),
     animate: true,
   }
+}
+
+/**
+ * Where the host is part-way through a drag towards the corner.
+ *
+ * Mobile only, and that is what makes it simple: on a phone both the full-size
+ * player and the bar are already `fixed`, so there is one coordinate space and
+ * nothing to convert between. `animate: false` because the finger is the
+ * animation — a transition here would put the player a fraction of a second
+ * behind the hand moving it, which is the whole difference between dragging an
+ * object and asking for one.
+ */
+export function draggingPlacement(input: PlacementInput, dy: number): HostPlacement {
+  const from = fullPlacement(input)
+  const to = miniPlacement(input)
+  return {
+    position: 'fixed',
+    rect: lerpRect(from.rect, to.rect, dragFraction(input, dy)),
+    animate: false,
+  }
+}
+
+/**
+ * How far through the journey a downward drag of `dy` pixels has taken it.
+ *
+ * Against the distance between the two rectangles, which is what makes the top
+ * edge land at exactly `start + dy`: the picture stays under the finger because
+ * the arithmetic puts it there.
+ */
+export function dragFraction(input: PlacementInput, dy: number): number {
+  const from = fullPlacement(input)
+  const to = miniPlacement(input)
+  return travelProgress(dy, to.rect.top - from.rect.top)
 }
 
 /** Document coordinates to viewport coordinates. */

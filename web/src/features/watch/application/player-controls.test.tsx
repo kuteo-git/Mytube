@@ -1017,7 +1017,9 @@ describe('changing topic on the home page', () => {
     // the feature is for. A chip is local state rather than navigation, so it
     // has to be pressed for real.
     await renderChips()
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    // <main> is what scrolls now, not the window, and jsdom implements neither.
+    const scrollTo = vi.fn()
+    Element.prototype.scrollTo = scrollTo
 
     await act(async () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Music' }))
@@ -1026,7 +1028,6 @@ describe('changing topic on the home page', () => {
     // Keeping the position across the change left the viewer partway down a
     // list they had not seen the top of, and often past the end of it.
     expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
-    scrollTo.mockRestore()
   })
 
   it('does not reset the scroll merely by being opened', async () => {
@@ -1035,11 +1036,11 @@ describe('changing topic on the home page', () => {
     // the viewer back where they were — so a scroll-to-top here undoes it a
     // frame later, and the scroll memory looks broken on the page people scroll
     // most.
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const scrollTo = vi.fn()
+    Element.prototype.scrollTo = scrollTo
     await renderChips()
 
     expect(scrollTo).not.toHaveBeenCalledWith({ top: 0 })
-    scrollTo.mockRestore()
   })
 })
 

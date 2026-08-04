@@ -38,6 +38,15 @@ export const MINI_MARGIN = 16
 
 /** Mobile miniplayer: a full-width bar, the shape the YouTube app uses. */
 export const BAR_HEIGHT = 72
+
+/**
+ * The picture's width in the mobile bar.
+ *
+ * Written once and read by both the video element and the text beside it. They
+ * are the same measurement — the row is laid out around the thumbnail — and as
+ * two numbers they drifted apart the moment either was touched.
+ */
+export const BAR_THUMB_WIDTH = 128
 /** Height of the mobile bottom navigation the bar has to sit on top of. */
 export const BOTTOM_NAV_HEIGHT = 56
 /** Height of the top bar the mobile full-size player is pinned beneath. */

@@ -26,12 +26,13 @@ function AppShellInner() {
   const isWatch = pathname.startsWith('/watch')
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { isMobile, mode, miniReserve, safeBottom } = usePlayer()
+  const { isMobile, mode, miniReserve, safeBottom, scrollerRef, scrollerEl } =
+    usePlayer()
 
   // Forward starts at the top, back returns you where you were — the manners a
   // phone taught everyone. A single-page router never reloads the document, so
   // without this the offset just stays where the previous page left it.
-  useScrollRestoration()
+  useScrollRestoration(scrollerEl)
 
   // Put back whatever this browser was in the middle of, in the corner, paused.
   const resuming = useResumeLastWatched(isWatch)
@@ -96,7 +97,19 @@ function AppShellInner() {
   }, [drawerOpen])
 
   return (
-    <div className="min-h-dvh bg-bg">
+    // A frame that exactly fills the screen, with the scrolling confined to the
+    // element inside it. The window itself never scrolls, and that is the
+    // point: on a phone, scrolling the window slides the browser's own address
+    // bar in and out, which resizes the viewport and moves everything pinned to
+    // the top edge. Restoring a scroll position therefore flickered the top bar
+    // on every tab switch. An element that scrolls inside a fixed frame is what
+    // a native app does, and the browser chrome stays where it is.
+    //
+    // The bar overlays the scrolling region rather than sitting above it, which
+    // is what gives it something to blur: content passes *behind* it. The room
+    // it needs is `pt-14` on the scroller — the same 56px it used to occupy as
+    // a sibling, so nothing else moves.
+    <div className="relative h-dvh overflow-hidden bg-bg">
       <TopBar
         onToggleSidebar={() => {
           if (isWatch) {
@@ -127,7 +140,16 @@ function AppShellInner() {
       )}
 
       <main
+        ref={scrollerRef}
         className={clsx(
+          // `relative` is what makes the host's `absolute` mean "within the
+          // scrolled content" — the same thing it used to mean against the
+          // document, now that the document is not what moves.
+          // The overscroll rule moves here with the scrolling. It was on the
+          // document, where CLAUDE.md §8b records why: a vertical bounce that
+          // chains out is read as a gesture, and the gesture it was read as
+          // threw away what you were watching.
+          'relative h-full overflow-y-auto overscroll-y-contain pt-14',
           slideMargin && 'transition-[margin] duration-200 ease-out',
           showFullSidebar && 'ml-60',
           showMiniSidebar && 'ml-[72px]',
@@ -135,9 +157,13 @@ function AppShellInner() {
         style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >
         <Outlet />
+        {/* Inside the scroller, because the full-size player is positioned
+            within the content and has to travel with it. The miniplayer is
+            `fixed`, which is measured from the viewport wherever it sits —
+            `overflow` does not trap it, only a transformed ancestor would. */}
+        <PlayerHost />
       </main>
 
-      <PlayerHost />
       <BottomNav />
     </div>
   )
@@ -161,6 +187,9 @@ function PlayerHost() {
     isMobile,
     isWatch,
     pauseToken,
+    scrollerEl: scroller,
+    setDragOffset,
+    dragFraction,
   } = usePlayer()
   const navigate = useNavigate()
 
@@ -180,12 +209,12 @@ function PlayerHost() {
   const onExpand = () => {
     if (!isWatch) navigate(`/watch/${state.videoId}`)
     restore()
-    // Not smooth, on purpose. The bridging frame reads window.scrollY to convert
-    // between fixed and absolute, and a smooth scroll would have it read a
-    // number still in motion — the player would jump, then animate. Scrolling
-    // synchronously means scrollY is already 0 by the time that runs, leaving a
-    // single movement: the corner to the frame.
-    window.scrollTo({ top: 0 })
+    // Not smooth, on purpose. The bridging frame reads the scroller's offset to
+    // convert between fixed and absolute, and a smooth scroll would have it
+    // read a number still in motion — the player would jump, then animate.
+    // Scrolling synchronously means the offset is already 0 by the time that
+    // runs, leaving a single movement: the corner to the frame.
+    scroller?.scrollTo({ top: 0 })
   }
 
   const onClose = () => (isWatch ? dismiss() : deactivate())
@@ -196,7 +225,21 @@ function PlayerHost() {
       // Below the navigation chrome, above the page. The miniplayer is content
       // that outstayed its page, not a layer over the app.
       className={clsx(
-        'z-30 overflow-hidden bg-black',
+        'z-30 overflow-hidden',
+        // Black behind the picture everywhere the picture fills the frame.
+        //
+        // The mobile bar is the exception worth making: there the video is only
+        // 128px wide (Player.tsx sizes it `w-32` in that variant), so the title
+        // and the controls beside it sit on the host's own background rather
+        // than on any part of the film. That strip is the one place a blur has
+        // something to work on, and it is the strip that reads as chrome.
+        //
+        // Not applied to the desktop miniplayer: there the video fills the
+        // frame, so a blurred backdrop would be covered by it entirely and
+        // would only cost a compositing layer.
+        variant === 'bar'
+          ? 'bg-bg/70 backdrop-blur-xl backdrop-saturate-150'
+          : 'bg-black',
         // A corner-resident player is a floating object and should read as one.
         // shadow-2xl alone did not: over a dark page a black shadow is nearly
         // invisible, so the ring is what actually draws the edge.
@@ -232,6 +275,23 @@ function PlayerHost() {
         nextVideoTitle={state.nextVideoTitle}
         onPlayNext={state.onPlayNext}
         variant={variant}
+        // Only from full size on a phone. Dragging is a request to go back to
+        // browsing, and leaving the watch page is exactly what turns the player
+        // into the bar — so the gesture needs no minimised state of its own.
+        onSwipeDown={
+          variant === 'full' && isMobile
+            ? () => {
+                navigate('/')
+                // Released on the next frame, once the navigation has been
+                // committed and the placement is the bar's own. At full
+                // progress the drag rectangle already *is* the corner, so
+                // handing over changes nothing on screen.
+                requestAnimationFrame(() => setDragOffset(null))
+              }
+            : undefined
+        }
+        onSwipeProgress={setDragOffset}
+        morph={dragFraction}
         onClose={onClose}
         onExpand={onExpand}
         pauseToken={pauseToken}

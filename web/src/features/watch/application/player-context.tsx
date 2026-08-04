@@ -22,6 +22,8 @@ import {
   type HostPlacement,
   bridgePlacement,
   deriveMode,
+  dragFraction,
+  draggingPlacement,
   needsBridge,
   placementFor,
   resolvePin,
@@ -76,6 +78,21 @@ export interface PlayerContextValue {
   miniReserve: number
   /** Callback ref for the watch page's layout slot. */
   slotRef: (el: HTMLDivElement | null) => void
+  /**
+   * Callback ref for the element that scrolls, and the element itself.
+   *
+   * The page scrolls inside `<main>` rather than the window, so that the
+   * browser's own address bar never collapses or reappears. On a phone that
+   * collapse resizes the viewport, and everything pinned to the top edge is
+   * repositioned with it — which is what a restored scroll position looked
+   * like: a flicker of the top bar on every tab switch.
+   *
+   * Everything here that used to read `window.scrollY` reads this instead. The
+   * two coordinate spaces are the same shape, so the arithmetic is unchanged;
+   * only what "the document" means has moved inward by one element.
+   */
+  scrollerRef: (el: HTMLElement | null) => void
+  scrollerEl: HTMLElement | null
   activate: (state: PlayerState) => void
   deactivate: () => void
   /** Puts the player into the corner while staying on the watch page. */
@@ -92,6 +109,18 @@ export interface PlayerContextValue {
    * pausing twice has to be able to happen twice.
    */
   pauseToken: number
+  /**
+   * How far the viewer has dragged the player towards the corner, or null when
+   * nobody is dragging.
+   *
+   * Held here rather than in the Player because the thing that moves is the
+   * host, and the host's position is this provider's business. The Player reads
+   * the finger; this decides what that means for the rectangle.
+   */
+  dragOffset: number | null
+  setDragOffset: (pixels: number | null) => void
+  /** 0..1 through the journey, for anything that has to fade with it. */
+  dragFraction: number
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
@@ -132,10 +161,12 @@ export function PlayerProvider({
   const [viewport, setViewport] = useState(readViewport)
   const [safeBottom, setSafeBottom] = useState(readSafeBottom)
   const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null)
+  const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null)
   const [slotDocRect, setSlotDocRect] = useState<ViewRect | null>(null)
   const [pinnedMini, setPinnedMini] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [pauseToken, setPauseToken] = useState(0)
+  const [dragOffset, setDragOffset] = useState<number | null>(null)
 
   // The observer callback needs the current dismissal, but rebuilding the
   // observer to capture it would be worse than useless: a fresh observer fires
@@ -154,6 +185,7 @@ export function PlayerProvider({
   // render that needed it. A callback ref sets state, so the measurement and the
   // render that uses it stay in step.
   const slotRef = useCallback((el: HTMLDivElement | null) => setSlotEl(el), [])
+  const scrollerRef = useCallback((el: HTMLElement | null) => setScrollerEl(el), [])
 
   useEffect(() => {
     // Rotating the phone changes which edge the home indicator is on, so the
@@ -176,9 +208,16 @@ export function PlayerProvider({
     }
     const measure = () => {
       const r = slotEl.getBoundingClientRect()
+      // Relative to the scroller's content, which is what `absolute` means for
+      // the host: it is a child of that same element, so the two share an
+      // origin and the browser scrolls them together with no listener of ours
+      // in the path. Before the page scrolled inside an element this was the
+      // document, and the sum was the same shape — viewport rect plus however
+      // far the thing had been scrolled.
+      const base = scrollerEl?.getBoundingClientRect()
       setSlotDocRect({
-        top: r.top + window.scrollY,
-        left: r.left + window.scrollX,
+        top: r.top - (base?.top ?? 0) + (scrollerEl?.scrollTop ?? 0),
+        left: r.left - (base?.left ?? 0) + (scrollerEl?.scrollLeft ?? 0),
         width: r.width,
         height: r.height,
       })
@@ -187,11 +226,14 @@ export function PlayerProvider({
     const observer = new ResizeObserver(measure)
     observer.observe(slotEl)
     window.addEventListener('resize', measure)
+    // The slot's position within the scroller does not change as it scrolls, so
+    // this does not listen for scrolling — the same reason there was never a
+    // scroll listener here before.
     return () => {
       observer.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [slotEl])
+  }, [slotEl, scrollerEl])
 
   // Scroll past the player and it folds into the corner, as it does on youtube.
   // An IntersectionObserver rather than a scroll handler: the browser works out
@@ -257,18 +299,27 @@ export function PlayerProvider({
 
   const mode: PlayerMode = deriveMode(Boolean(state), isWatch, pinnedMini)
 
-  const target = useMemo(
-    () =>
-      placementFor({
-        mode,
-        isMobile,
-        slotDocRect,
-        viewport,
-        safeBottom,
-        scrollY: 0,
-      }),
-    [mode, isMobile, slotDocRect, viewport, safeBottom],
-  )
+  const target = useMemo(() => {
+    const input = { mode, isMobile, slotDocRect, viewport, safeBottom, scrollY: 0 }
+    // A drag in flight overrides where the player would otherwise be. Only from
+    // full size and only on a phone: the gesture is a request to leave the
+    // watch page, and there is nothing to leave from a player already in the
+    // corner.
+    if (dragOffset !== null && isMobile && mode === 'full') {
+      return draggingPlacement(input, dragOffset)
+    }
+    return placementFor(input)
+  }, [mode, isMobile, slotDocRect, viewport, safeBottom, dragOffset])
+
+  // The same number the rectangle is built from, so the chrome that fades
+  // cannot drift out of step with the shape that is moving.
+  const dragFractionNow =
+    dragOffset === null || !isMobile || mode !== 'full'
+      ? 0
+      : dragFraction(
+          { mode, isMobile, slotDocRect, viewport, safeBottom, scrollY: 0 },
+          dragOffset,
+        )
 
   // CSS cannot transition across a change of `position`, and the two modes do
   // not share a coordinate space: full-size is `absolute` in the document,
@@ -296,11 +347,11 @@ export function PlayerProvider({
     }
     const previous = lastRef.current
     if (!bridge && needsBridge(previous, target)) {
-      setBridge(bridgePlacement(previous!, target!, window.scrollY))
+      setBridge(bridgePlacement(previous!, target!, scrollerEl?.scrollTop ?? 0))
       return
     }
     lastRef.current = rendered
-  }, [target, bridge, rendered, staleBridge])
+  }, [target, bridge, rendered, staleBridge, scrollerEl])
 
   useLayoutEffect(() => {
     if (!bridge) return
@@ -318,12 +369,17 @@ export function PlayerProvider({
       placement: rendered,
       miniReserve,
       slotRef,
+      scrollerRef,
+      scrollerEl,
       activate,
       deactivate,
       minimize,
       restore,
       dismiss,
       pauseToken,
+      dragOffset,
+      setDragOffset,
+      dragFraction: dragFractionNow,
     }),
     [
       state,
@@ -334,12 +390,16 @@ export function PlayerProvider({
       rendered,
       miniReserve,
       slotRef,
+      scrollerRef,
+      scrollerEl,
       activate,
       deactivate,
       minimize,
       restore,
       dismiss,
       pauseToken,
+      dragOffset,
+      dragFractionNow,
     ],
   )
 

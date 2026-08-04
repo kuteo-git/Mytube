@@ -49,7 +49,9 @@ import {
   saveNarrationPrefs,
 } from '@/features/watch/application/narration-prefs'
 import { centreCues } from '@/features/watch/application/cue-placement'
+import { useSwipeToMinimise } from '@/features/watch/application/use-swipe-to-minimise'
 import { levelsFor } from '@/features/watch/application/narration-levels'
+import { BAR_THUMB_WIDTH } from '@/features/watch/application/player-geometry'
 import {
   deleteNarrationClips,
   deleteNarrationVtt,
@@ -346,6 +348,9 @@ export function Player({
   title,
   channelTitle,
   variant = 'full',
+  onSwipeDown,
+  onSwipeProgress,
+  morph = 0,
   onClose,
   onExpand,
   pauseToken = 0,
@@ -382,6 +387,21 @@ export function Player({
    * is neither watchable nor tappable.
    */
   variant?: 'full' | 'mini' | 'bar'
+  /** Put the player away and go back to browsing. Absent where the gesture
+   *  makes no sense — a player already in the corner has nowhere to go. */
+  onSwipeDown?: () => void
+  /** Reports the drag so the host can follow the finger. */
+  onSwipeProgress?: (pixels: number | null) => void
+  /**
+   * 0..1 through a drag towards the corner.
+   *
+   * Nonzero only mid-gesture, and it cross-fades the chrome: the full player's
+   * controls go out as the bar's row of title and buttons comes in, so the
+   * shape and what is drawn in it arrive at the corner together. Without it the
+   * picture shrinks all the way down and the layout changes in one frame at the
+   * end, which is the moment the whole movement was smoothing over.
+   */
+  morph?: number
   /** Closes the miniplayer and stops playback entirely. */
   onClose?: () => void
   /** Navigates back to the full Watch page. */
@@ -395,6 +415,22 @@ export function Player({
 }) {
   const mini = variant !== 'full'
   const bar = variant === 'bar'
+
+  // Drag the picture down to put it away and go back to browsing.
+  //
+  // The charter records this gesture being removed in 2026-08-03 as useless,
+  // and it was: the old one minimised *in place*, leaving the player in the
+  // corner of the page it was already on. Pulling a player down is a request to
+  // go and look at something else, so this one navigates — which on a phone is
+  // also what turns the player into the bar, so there is no second state to
+  // maintain.
+  const surfaceRef = useRef<HTMLDivElement>(null)
+  const swipe = useSwipeToMinimise({
+    enabled: variant === 'full' && Boolean(onSwipeDown),
+    height: () => surfaceRef.current?.getBoundingClientRect().height ?? 0,
+    onDrag: onSwipeProgress ?? (() => {}),
+    onCommit: () => onSwipeDown?.(),
+  })
   const { data: sources, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
   // Playing from upstream always schedules a copy, so a job is coming even if
   // the queue has not caught up yet.
@@ -667,7 +703,13 @@ export function Player({
       }
       for (let i = 0; i < element.textTracks.length; i++) {
         const track = element.textTracks[i]
-        track.mode = track.language === captionsRef.current ? 'showing' : 'disabled'
+        // Off entirely in the bar. Subtitles are drawn by the browser at a size
+        // proportional to the video, and across a 128px thumbnail that is a
+        // couple of illegible pixels sitting over the only part of the picture
+        // there is. The preference is untouched, so they come back the moment
+        // the player is a picture again.
+        track.mode =
+          !bar && track.language === captionsRef.current ? 'showing' : 'disabled'
         // A cue's own align/position beats any stylesheet, and YouTube's
         // auto-captions carry them on every line. The gateway strips them when
         // it serves a subtitle, but in the LAN deployment Caddy takes that route
@@ -696,7 +738,7 @@ export function Player({
         tracks[i].removeEventListener('cuechange', onCues)
       }
     }
-  }, [captions, frontSrc, frontIsA, front, subtitles.length])
+  }, [captions, frontSrc, frontIsA, front, subtitles.length, bar])
 
   // Create AudioContext when narration activates.  Must happen here — not just
   // in onClick — because narrationOn can be restored from localStorage on page
@@ -2027,6 +2069,7 @@ export function Player({
 
   return (
     <div
+      ref={surfaceRef}
       className={clsx(
         'group/player relative h-full w-full overflow-hidden bg-black',
         // The cursor goes with the chrome. Leaving an arrow sitting on a film is
@@ -2046,11 +2089,18 @@ export function Player({
           pointerKindRef.current = 'mouse'
           wakeControls('mouse')
         }
+        swipe.move(e)
       }}
       onPointerDown={(e) => {
         pointerKindRef.current = e.pointerType === 'touch' ? 'touch' : 'mouse'
         wakeControls(pointerKindRef.current)
+        swipe.down(e)
       }}
+      onPointerUp={swipe.up}
+      // A pointer the browser takes away mid-drag — a system gesture, a call
+      // arriving — must not leave the player parked half-way to the corner with
+      // nothing coming to finish the movement.
+      onPointerCancel={swipe.cancel}
       // A mouse leaving takes the chrome with it: it is demonstrably elsewhere,
       // so there is nothing to wait for.
       //
@@ -2066,8 +2116,15 @@ export function Player({
         setOpenMenus(0) // dismiss menus so controls can hide
       }}
     >
-      {tier && tier.name !== 'local' && (
+      {/* Not in the bar, and fading out on the way into it.
+
+          At 128px wide the picture is a thumbnail: a badge on it covers a
+          quarter of what there is to see and is too small to read anyway. The
+          same is true of the subtitles, which are switched off with it — see
+          the caption effect above. */}
+      {tier && tier.name !== 'local' && !bar && (
         <div
+          style={morph > 0 ? { opacity: 1 - morph } : undefined}
           className={clsx(
             'absolute top-3 left-3 z-10 flex items-center gap-2 rounded-lg bg-badge px-2.5 py-1.5 text-xs font-medium',
             'transition-opacity duration-200 ease-out',
@@ -2159,11 +2216,33 @@ export function Player({
                   // In the bar the picture is a thumbnail on the left rather than
                   // the whole surface: stretched across a 72px-tall strip it would
                   // be a smear, and the row is mostly text at that size anyway.
-                  bar ? 'w-32 object-cover' : 'w-full',
+                  //
+                  // `object-cover` from the first moment of a drag, not at the
+                  // end of it. On a 16:9 host holding 16:9 video it changes
+                  // nothing at full width, so adopting it early costs nothing
+                  // and avoids the fit changing under the viewer at the exact
+                  // moment the shape stops moving.
+                  bar || morph > 0 ? 'object-cover' : 'w-full',
                 )}
                 // The hidden layer must stay laid out and decoding — display:none
                 // would stop it buffering, which is the entire point of it.
-                style={{ opacity: isFront ? 1 : 0, pointerEvents: isFront ? undefined : 'none' }}
+                //
+                // The width travels with the drag rather than switching at the
+                // end of it. The host was already shrinking towards the corner
+                // while the picture inside it stayed full-bleed until the last
+                // frame, so the layout the movement was building arrived all at
+                // once — exactly the jump the gesture exists to smooth over.
+                // `calc` between a percentage and a length is what lets one
+                // number carry it from "the whole surface" to "the thumbnail".
+                style={{
+                  opacity: isFront ? 1 : 0,
+                  pointerEvents: isFront ? undefined : 'none',
+                  width: bar
+                    ? BAR_THUMB_WIDTH
+                    : morph > 0
+                      ? `calc(${(1 - morph) * 100}% + ${morph * BAR_THUMB_WIDTH}px)`
+                      : undefined,
+                }}
                 aria-hidden={!isFront}
                 playsInline
                 // Only the visible layer: a poster on the hidden one would be
@@ -2444,6 +2523,10 @@ export function Player({
       {variant !== 'bar' && (
       <div
         data-player-controls
+        // Fades with the drag. `pointer-events` go the moment the fade starts:
+        // a control at 20% opacity is not a control, and a finger travelling
+        // over it should not be able to press it by accident.
+        style={morph > 0 ? { opacity: 1 - morph, pointerEvents: 'none' } : undefined}
         className={clsx(
           'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 pt-8 pb-2',
           'transition-opacity duration-200 ease-out',
@@ -2682,8 +2765,21 @@ export function Player({
 
       {/* Mobile bar. No hover state to hide behind on a touch screen, so both
           buttons are permanently visible and sized to be hit with a thumb. */}
-      {bar && (
-        <div className="absolute inset-0 flex items-center pl-32">
+      {(bar || morph > 0) && (
+        <div
+          className="absolute inset-0 flex items-center"
+          // The row is laid out around the thumbnail, so its left inset is the
+          // thumbnail's width — the same constant the picture is sized from,
+          // rather than a `pl-32` that has to be remembered separately.
+          //
+          // During a drag this is the shape being arrived at, drawn at the
+          // opacity the movement has reached. At rest in the corner it is
+          // simply the bar, at full strength.
+          style={{
+            paddingLeft: BAR_THUMB_WIDTH,
+            ...(bar ? undefined : { opacity: morph, pointerEvents: 'none' }),
+          }}
+        >
           <button
             type="button"
             onClick={onExpand}
