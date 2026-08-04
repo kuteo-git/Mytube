@@ -46,9 +46,6 @@ export function HomePage() {
   // order. isInProgress is the same 2%-to-95% window the feed ranks by, so a
   // video cannot be finished here and unfinished there.
   const { data: history } = useHistory()
-  const continueWatching = (history?.pages.flatMap((page) => page.videos) ?? [])
-    .filter(isInProgress)
-    .slice(0, 12)
 
   // Every section reads the same list. It used to be the feed alone, edited
   // through its query cache, so hiding a card in "Popular with you" removed it
@@ -56,6 +53,18 @@ export function HomePage() {
   const hidden = useHiddenVideos()
   const visible = <T extends { id: string }>(items: T[] | undefined) =>
     (items ?? []).filter((item) => !hidden.has(item.id))
+
+  // Filtered before the cut, not after, so marking one watched pulls the next
+  // one up rather than leaving eleven cards and a gap.
+  //
+  // This row is the one that most needed it and was the one that did not have
+  // it: "Watched" is a statement about a video you are part way through, so the
+  // card it is pressed on is nearly always in this rail — and nothing here
+  // removed it. The history query is not refetched by the mutation either, so
+  // the card sat there, still half-watched, until the page was reloaded.
+  const continueWatching = visible(history?.pages.flatMap((page) => page.videos))
+    .filter(isInProgress)
+    .slice(0, 12)
   // When browsing a topic, also show what YouTube has for it. The library is
   // what the topics chose to bring in; YouTube search stretches past that.
   const isTopic = active !== 'All'
