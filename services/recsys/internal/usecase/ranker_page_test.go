@@ -35,7 +35,7 @@ func emptyProfile() domain.UserProfile {
 	return domain.UserProfile{
 		WatchedFraction:   map[string]float32{},
 		Liked:             map[string]bool{},
-		Disliked:          map[string]bool{},
+		Disliked:          map[string]time.Time{},
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
 		RecentlyWatched:   map[string]bool{},

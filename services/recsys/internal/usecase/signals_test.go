@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -315,5 +316,104 @@ func TestTopicAffinityTakesTheBestMatchNotTheSum(t *testing.T) {
 	}
 	if twoLabels > 1.0 {
 		t.Fatalf("topic affinity %.2f exceeds the 0..1 each axis is normalised to", twoLabels)
+	}
+}
+
+// present reports whether a video survived into the ranking at all.
+func present(ranked []domain.RankedVideo, videoID string) bool {
+	for _, v := range ranked {
+		if v.VideoID == videoID {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDislikingMostOfAChannelSuppressesIt(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{}
+	for i, id := range []string{"a1", "a2", "a3", "a4", "a5"} {
+		features = append(features, domain.VideoFeatures{
+			VideoID: id, ChannelID: "ch_small", Topics: []string{"Gaming"}, AddedAt: now,
+		})
+		_ = i
+	}
+	profile := emptyProfile()
+	profile.Disliked["a1"] = now
+	profile.Disliked["a2"] = now
+	profile.Disliked["a3"] = now
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if present(ranked, "a4") || present(ranked, "a5") {
+		t.Fatal("three of five turned down is a verdict on the channel; the rest must go too")
+	}
+}
+
+func TestThreeDislikesInALargeChannelAreJustThreeDislikes(t *testing.T) {
+	// The rule used to be a bare count, so this case and the one above were
+	// indistinguishable: three rejections out of two hundred silenced a channel
+	// the viewer had barely disagreed with.
+	now := time.Now()
+	var features []domain.VideoFeatures
+	for i := 0; i < 200; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:   fmt.Sprintf("b%d", i),
+			ChannelID: "ch_big",
+			Topics:    []string{"Gaming"},
+			AddedAt:   now,
+		})
+	}
+	profile := emptyProfile()
+	profile.Disliked["b0"] = now
+	profile.Disliked["b1"] = now
+	profile.Disliked["b2"] = now
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if !present(ranked, "b100") {
+		t.Fatal("three rejections out of two hundred must not remove the channel")
+	}
+	for _, id := range []string{"b0", "b1", "b2"} {
+		if present(ranked, id) {
+			t.Fatalf("%s was turned down and must still be gone", id)
+		}
+	}
+}
+
+func TestRejectingATopicPushesTheRestOfItDown(t *testing.T) {
+	// What "not interested" is taken to mean beyond the video it was pressed
+	// on. The two candidates differ only in topic, so nothing else can explain
+	// the gap.
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "rejected", ChannelID: "ch_a", Topics: []string{"Reaction"}, AddedAt: now},
+		{VideoID: "sameTopic", ChannelID: "ch_b", Topics: []string{"Reaction"}, AddedAt: now},
+		{VideoID: "otherTopic", ChannelID: "ch_c", Topics: []string{"Cooking"}, AddedAt: now},
+	}
+	profile := emptyProfile()
+	profile.Disliked["rejected"] = now
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+
+	same := scoreOf(t, ranked, "sameTopic")
+	other := scoreOf(t, ranked, "otherTopic")
+	if same.Score >= other.Score {
+		t.Fatalf("a video sharing the rejected topic scored %.2f against %.2f for an "+
+			"unrelated one; the rejection taught the feed nothing", same.Score, other.Score)
+	}
+	// Tilted, not deleted: the point of the weight being a third of a like's.
+	if !present(ranked, "sameTopic") {
+		t.Fatal("one rejection must not empty a subject")
 	}
 }

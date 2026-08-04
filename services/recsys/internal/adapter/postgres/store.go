@@ -42,7 +42,7 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 	profile := domain.UserProfile{
 		WatchedFraction:   map[string]float32{},
 		Liked:             map[string]bool{},
-		Disliked:          map[string]bool{},
+		Disliked:          map[string]time.Time{},
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
 		RecentlyWatched:   map[string]bool{},
@@ -80,7 +80,7 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 	// Latest reaction and subscription state per target, so an undo actually
 	// takes effect instead of being outvoted by its own history.
 	rows, err = s.pool.Query(ctx, `
-		SELECT DISTINCT ON (video_id, type_group) video_id, type_group, type
+		SELECT DISTINCT ON (video_id, type_group) video_id, type_group, type, occurred_at
 		FROM (
 			SELECT video_id, occurred_at, type,
 			       CASE WHEN type IN ('LIKE', 'DISLIKE') THEN 'reaction'
@@ -95,8 +95,11 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		return profile, err
 	}
 	for rows.Next() {
-		var target, group, signalType string
-		if err := rows.Scan(&target, &group, &signalType); err != nil {
+		var (
+			target, group, signalType string
+			occurredAt                time.Time
+		)
+		if err := rows.Scan(&target, &group, &signalType, &occurredAt); err != nil {
 			rows.Close()
 			return profile, err
 		}
@@ -104,7 +107,9 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		case string(domain.SignalLike):
 			profile.Liked[target] = true
 		case string(domain.SignalDislike):
-			profile.Disliked[target] = true
+			// The row is already the latest of its kind for this video, so this
+			// is when the viewer last said it rather than when they first did.
+			profile.Disliked[target] = occurredAt
 		case string(domain.SignalSubscribe):
 			// SUBSCRIBE signals carry the channel id in video_id.
 			profile.Subscribed[target] = true

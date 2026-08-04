@@ -69,8 +69,14 @@ type UserProfile struct {
 	// a video belongs to.
 	WatchedFraction map[string]float32
 	Liked           map[string]bool
-	Disliked        map[string]bool
-	Subscribed      map[string]bool
+	// When each disliked video was turned down, not merely that it was.
+	//
+	// Presence is still the whole of the rule for the video itself — it is
+	// skipped, whenever it was pressed. The time is for what a dislike is taken
+	// to say about topics and channels in general, which ages like every other
+	// signal here.
+	Disliked   map[string]time.Time
+	Subscribed map[string]bool
 	// Videos shown recently, suppressed to keep the feed from repeating.
 	RecentImpressions map[string]bool
 	// Videos watched in the last few hours. Distinct from WatchedFraction,

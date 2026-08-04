@@ -144,6 +144,7 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
   | Affinity kênh (từ **xem**) | Σ fraction theo kênh, chuẩn hoá 0..1 | ×1.0 |
   | Affinity chủ đề (từ **xem**) | Σ fraction theo topic, chuẩn hoá 0..1 | ×1.0 |
   | Affinity từ **like** | topic 1.0 / kênh 0.8 / hashtag 0.5 | ×2.0 |
+  | Affinity từ **dislike** | cùng ba trục, **phai** half-life 90 ngày | **×−0.7** |
   | **Giữ chân toàn cục** | `avg(max(fraction) per viewer)` | ×1.5 |
   | Đã hiện trong 24h | | −2.0 |
 
@@ -180,6 +181,27 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 - **Dislike**: loại khỏi feed và up-next, **vẫn tìm được qua search và trang kênh**.
   Không phải tính năng phải làm — nó đúng sẵn nhờ ranh giới service: catalog không
   nhìn thấy signal của recsys nên không thể lọc theo nó.
+  **Mở rộng 2026-08-04 — dislike giờ cũng dạy được, nhưng chỉ một phần ba:**
+  - **Video bị bấm thì mất hẳn, mãi mãi.** Đó là quyết định, không phải sở thích;
+    không phai, không có đường quay lại trong feed. Ba mục dưới đây chỉ nói về
+    thứ dislike *dạy* cho hệ thống ngoài video đó.
+  - **`buildDislikeAffinity` đối xứng với like** — cùng ba trục topic/kênh/hashtag,
+    cùng trọng số trục — nhưng nhân **−0.7** so với **+2.0** của like. Lý do bất
+    đối xứng: like thường khen *loại nội dung*, dislike thường nhắm *video này*
+    (thumbnail, tiêu đề, hai giây đầu). Nghiêng feed, không xoá chủ đề.
+    Trước đó dislike **không dạy gì cả**: từ chối 10 video cùng loại thì mất đúng
+    10 video, cái thứ 11 đứng nguyên chỗ cũ.
+  - **Phai half-life 90 ngày.** Mọi tín hiệu khác trong ranker đều phai; riêng cái
+    này không, vì nó chỉ là `map[string]bool`. Giờ `UserProfile.Disliked` mang
+    `occurred_at` (query vốn đã `ORDER BY occurred_at DESC`, chỉ là không lấy ra).
+    Dislike không có ngày (dữ liệu cũ) tính **đủ 1.0**, không phải 0.
+  - **Chặn cả kênh cần tỉ lệ, không chỉ số đếm**: `≥3` video **và** `≥30%` số video
+    của kênh đó. Trước là đếm trần: 3/5 và 3/200 bị xử như nhau — cái đầu là phán
+    quyết, cái sau là ba lần từ chối bình thường trong một thư viện dùng nhiều tháng.
+    Kênh đã subscribe vẫn miễn nhiễm.
+  - `penaltyDisliked = 5.0` **chưa bao giờ được dùng cho dislike** — nơi đọc duy
+    nhất là `/2` cho video đã xem xong, mà video bị dislike thì `continue` từ mấy
+    dòng trước. Đổi tên thành `penaltyAlreadyWatched = 2.5`, số không đổi.
 - **`Next` (watch page) — ĐẢO 2026-07-29:** trước là *cùng kênh > cùng tag*. Giờ là
   **cùng thể loại là chính, kênh chỉ là một cách chia sẻ thể loại đó, không phải cách tốt
   hơn**: `weightSameChannel = weightSharedTags = 2.5`, cộng **theo từng tag trùng** nên

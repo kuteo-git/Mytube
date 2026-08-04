@@ -34,9 +34,24 @@ const (
 	// stay below "continue watching": an unfinished video is a stronger claim on
 	// attention than a preference.
 	weightLikeAffinity = 2.0
-	weightRewatch      = 0.3
-	penaltyImpression  = 2.0
-	penaltyDisliked    = 5.0
+	// A dislike reads the same three axes as a like but is trusted about a
+	// third as far. A like is usually approval of a kind of thing; a dislike is
+	// usually aimed at this video — its thumbnail, its title, the two seconds
+	// that were enough. So it tilts the feed away from a subject rather than
+	// emptying it, which is what a matching weight would do.
+	weightDislikeAffinity = 0.7
+	weightRewatch         = 0.3
+	penaltyImpression     = 2.0
+	// Already-seen videos sink but stay available.
+	//
+	// Named for what reads it. It was penaltyDisliked = 5.0, halved at its only
+	// use — and no disliked video ever reached it, because those are skipped
+	// outright several lines earlier. The number is unchanged.
+	penaltyAlreadyWatched = 2.5
+	// Suppressing a channel takes both a floor and a share: at least this many
+	// of its videos turned down, and at least this much of the channel.
+	channelDislikeFloor = 3
+	channelDislikeShare = 0.3
 	// Opening a video and leaving within the first few per cent is a judgement,
 	// not an absence of one. Before this existed such a video fell through to
 	// "never watched" and collected that bucket's boost, so the surest way to
@@ -248,25 +263,46 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	now := r.now()
 	ranked := make([]domain.RankedVideo, 0, len(features))
 
-	// Count dislikes per channel. Three or more disliked videos from an
-	// unsubscribed channel suppress the whole channel — its remaining videos
-	// are skipped. Subscribed channels are immune: following a channel is a
-	// deliberate statement that overrides passive dislike.
+	// Count dislikes per channel, against how many of that channel's videos
+	// there are to dislike. Both are needed: the count alone treated three out
+	// of five and three out of two hundred as the same verdict, and suppressed
+	// the channel either way. The first is a viewer telling you what they think
+	// of a channel; the second is three ordinary rejections in a library they
+	// have been using for months.
+	//
+	// Subscribed channels are immune: following a channel is a deliberate
+	// statement that overrides passive dislike.
 	dislikedPerChannel := map[string]int{}
+	videosPerChannel := map[string]int{}
 	for _, f := range features {
-		if profile.Disliked[f.VideoID] {
+		videosPerChannel[f.ChannelID]++
+		if _, disliked := profile.Disliked[f.VideoID]; disliked {
 			dislikedPerChannel[f.ChannelID]++
 		}
 	}
+	channelSuppressed := func(channelID string) bool {
+		if profile.Subscribed[channelID] {
+			return false
+		}
+		count := dislikedPerChannel[channelID]
+		total := videosPerChannel[channelID]
+		return count >= channelDislikeFloor &&
+			total > 0 &&
+			float64(count)/float64(total) >= channelDislikeShare
+	}
+
+	// What the dislikes say beyond the videos they were pressed on. Subtracted
+	// rather than added, and aged — see buildDislikeAffinity.
+	dislikes := buildDislikeAffinity(features, profile.Disliked, now)
 
 	for _, f := range features {
 		if !matchesTopic(f, topic) {
 			continue
 		}
-		if profile.Disliked[f.VideoID] {
+		if _, disliked := profile.Disliked[f.VideoID]; disliked {
 			continue
 		}
-		if dislikedPerChannel[f.ChannelID] >= 3 && !profile.Subscribed[f.ChannelID] {
+		if channelSuppressed(f.ChannelID) {
 			continue
 		}
 		if f.MediaState == "MEDIA_STATE_FAILED" {
@@ -341,6 +377,11 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 		score *= affinityMultiplier
 
 		score += weightLikeAffinity * likes.Score(f)
+		// The other half of the same sentence. Outside the multiplier for the
+		// same reason likes are: reactions are rare next to watch signals, and
+		// scaling a rejection by how much the viewer likes the channel it came
+		// from is not what the rejection said.
+		score -= weightDislikeAffinity * dislikes.Score(f)
 		score += weightRetention * float64(retention[f.VideoID])
 
 		if profile.RecentImpressions[f.VideoID] {
@@ -394,6 +435,7 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 	if err != nil {
 		retention = map[string]float32{}
 	}
+	dislikes := buildDislikeAffinity(features, profile.Disliked, r.now())
 
 	var current *domain.VideoFeatures
 	for i := range features {
@@ -413,7 +455,7 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 		if channelFilter != "" && f.ChannelID != channelFilter {
 			continue
 		}
-		if profile.Disliked[f.VideoID] {
+		if _, disliked := profile.Disliked[f.VideoID]; disliked {
 			continue
 		}
 
@@ -446,8 +488,7 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 			score += upNextTasteDamping * weightContinueWatching
 			reason = domain.ReasonContinueWatching
 		case isWatched(fraction):
-			// Already-seen videos sink but stay available.
-			score -= penaltyDisliked / 2
+			score -= penaltyAlreadyWatched
 		case opened:
 			// Offering back something abandoned seconds ago is the most visible
 			// way for a "next" rail to look broken.
@@ -477,9 +518,14 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 		// consecutive music videos, none sharing its channel or its topic,
 		// purely because that is what this viewer watches most. Damping keeps
 		// taste as the tie-breaker the charter says it is.
+		// Dislike affinity rides in the same damped group: it is general taste
+		// too, and it must not outrank the relationship to the video actually
+		// playing. Turning down some songs should not stop the rail following a
+		// song with a song.
 		score += upNextTasteDamping * (weightChannelAffinity*watchAffinity.Channels[f.ChannelID] +
 			weightTopicAffinity*watchAffinity.TopicScore(f) +
-			weightRetention*float64(retention[f.VideoID]))
+			weightRetention*float64(retention[f.VideoID]) -
+			weightDislikeAffinity*dislikes.Score(f))
 
 		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})
 	}
