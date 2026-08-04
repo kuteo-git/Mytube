@@ -431,7 +431,14 @@ func (r *Repository) SetMediaState(ctx context.Context, videoID string, state do
 		UPDATE videos
 		SET media_state = $2,
 		    media_path = CASE WHEN $3 <> '' THEN $3 ELSE media_path END,
-		    size_bytes = CASE WHEN $4 > 0 THEN $4 ELSE size_bytes END,
+		    -- Cast, or the file's own size decides whether it can be recorded.
+		    -- A parameter's type is inferred from where it is first used, and
+		    -- $4 is first used against the literal 0 — an int4 — so the whole
+		    -- parameter became an int4 and anything over 2.1 GB was rejected
+		    -- before the query ran: "3475035755 is greater than maximum value
+		    -- for int4", on a download that had already finished. The column
+		    -- has always been a bigint; nothing but the inference was wrong.
+		    size_bytes = CASE WHEN $4::bigint > 0 THEN $4::bigint ELSE size_bytes END,
 		    last_accessed_at = now()
 		WHERE id = $1`,
 		videoID, string(state), mediaPath, sizeBytes)
