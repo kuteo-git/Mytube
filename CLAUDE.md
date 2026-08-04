@@ -1,130 +1,148 @@
 # Local YouTube — Project Charter
 
-> Kết quả của phiên grilling ngày 2026-07-28. Đây là nguồn sự thật cho mọi quyết định kiến trúc.
-> Nếu một quyết định mới mâu thuẫn với file này, phải cập nhật file này chứ không được lặng lẽ đi hướng khác.
+> The result of the grilling session on 2026-07-28. This is the source of truth for every
+> architectural decision. If a new decision contradicts this file, update this file rather
+> than quietly going another way.
 
-## 1. Bản chất hệ thống
+## 1. What the system is
 
-Media library **tự host** chạy trên Mac M4 tại nhà. `yt-dlp` là **công cụ nhập liệu** (ingest), **không phải** proxy YouTube realtime — video được tải về đĩa một lần rồi phục vụ từ LAN.
+A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **ingest tool**,
+**not** a realtime YouTube proxy — a video is fetched to disk once and then served from the LAN.
 
-- 2–5 user trong nhà (multi-user nhẹ, không đăng ký công khai)
-- Đích cuối: xem trên **browser Smart TV**; **Phase 1 làm web desktop trước**
+- 2–5 users in one household (light multi-user, no public sign-up)
+- Final target: watching in a **Smart TV browser**; **Phase 1 builds desktop web first**
 - Reference layout: `Example/home.png`, `Example/play.png` (YouTube desktop)
 
-## 2. Ràng buộc cứng (đã xác minh trên máy)
+## 2. Hard constraints (verified on the machine)
 
 | | |
 |---|---|
-| Disk | ~~34 GiB free~~ **đã giải quyết (2026-07-28): SSD ngoài `/Volumes/Data2/Youtube`, 437 GiB trống.** `MEDIA_ROOT`/`STORAGE_BUDGET_BYTES`/`EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES` trỏ ra đó qua `scripts/dev.sh` (budget 300 GiB, sweep 350→300 GiB). Ổ trong máy không còn là ràng buộc cứng cho dev — vẫn là ràng buộc thật nếu deploy sang máy khác không có ổ ngoài. |
-| Máy | Apple M4, 10 core |
-| Đã cài | `ffmpeg`, `yt-dlp`, `go`, `node`, `python3` |
-| Chưa có | `docker`, `postgres`, `redis` (Postgres cần cài qua Homebrew) |
-| Mạng | Mac phải luôn bật, cần IP tĩnh LAN + HTTPS (cert nội bộ) để TV phát được |
+| Disk | ~~34 GiB free~~ **resolved (2026-07-28): external SSD at `/Volumes/Data2/Youtube`, 437 GiB free.** `MEDIA_ROOT`/`STORAGE_BUDGET_BYTES`/`EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES` point there via `scripts/dev.sh` (budget 300 GiB, sweep 350→300 GiB). The internal disk is no longer a hard constraint for development — it is still a real one for deploying to a machine without an external drive. |
+| Machine | Apple M4, 10 cores |
+| Installed | `ffmpeg`, `yt-dlp`, `go`, `node`, `python3` |
+| Not installed | `docker`, `postgres`, `redis` (Postgres via Homebrew) |
+| Network | The Mac must stay on; needs a static LAN IP + HTTPS (internal cert) for the TV to play |
 
-## 3. Kiến trúc
+## 3. Architecture
 
-| Hạng mục | Quyết định |
+| Item | Decision |
 |---|---|
-| Mô hình | Self-host library (KHÔNG proxy stream từ YouTube) |
-| Topology | **Microservices thật**: `identity` · `catalog` · `ingest` · `recsys` + **API Gateway** |
-| Ngôn ngữ | **Go toàn bộ**, dùng [`lrstanley/go-ytdlp`](https://github.com/lrstanley/go-ytdlp) |
-| Transport | **ConnectRPC + protobuf** (`buf` codegen). Gateway là nơi **duy nhất** nói REST/JSON ra ngoài |
-| DB | **1 Postgres instance**, mỗi service **1 schema + 1 DB user riêng** |
+| Model | Self-hosted library (NOT a stream proxy to YouTube) |
+| Topology | **Real microservices**: `identity` · `catalog` · `ingest` · `recsys` + **API Gateway** |
+| Language | **Go throughout**, using [`lrstanley/go-ytdlp`](https://github.com/lrstanley/go-ytdlp) |
+| Transport | **ConnectRPC + protobuf** (`buf` codegen). The gateway is the **only** place that speaks REST/JSON outward |
+| DB | **One Postgres instance**, each service with **its own schema + its own DB user** |
 | Queue | Postgres table + `SELECT … FOR UPDATE SKIP LOCKED` |
-| Serving | **Caddy** reverse proxy: TLS + serve `/media` static; proxy phần còn lại vào gateway |
-| Media URL | Không bảo vệ (tin cậy LAN) |
-| CDN | **Ngoài scope** — vô nghĩa trên LAN |
+| Serving | **Caddy** reverse proxy: TLS + serving `/media` statically; everything else proxied to the gateway |
+| Media URLs | Unprotected (the LAN is trusted) |
+| CDN | **Out of scope** — meaningless on a LAN |
 
-### Luật bất di bất dịch
-1. **Không service nào được query DB của service khác.** Ranh giới do DB permission ép, không do lời hứa. Vi phạm = distributed monolith.
-2. **Clean architecture = hướng phụ thuộc**, không phải số lượng process. `domain` không import DB/HTTP/framework.
-3. Ingest worker chạy **process riêng** (ffmpeg/yt-dlp blocking, chạy chung sẽ đơ API).
+### Immovable rules
+1. **No service queries another service's database.** The boundary is enforced by DB permissions, not by a promise. Breaking it makes this a distributed monolith.
+2. **Clean architecture is about the direction of dependencies**, not the number of processes. `domain` imports no DB, HTTP or framework.
+3. The ingest worker runs in **its own process** (ffmpeg/yt-dlp block; sharing would stall the API).
 
 ## 4. Media pipeline
 
-**Phase 1 (hybrid — chốt lại lần 3 ngày 2026-07-29):** video chưa có trên đĩa vẫn xem được ngay.
-`GET /api/videos/{id}/stream` **liệt kê** mọi nguồn phát được lúc này thay vì chọn hộ:
+**Phase 1 (hybrid — settled for the third time on 2026-07-29):** a video that is not yet on
+disk is still watchable immediately. `GET /api/videos/{id}/stream` **lists** every source that
+can play right now instead of choosing on the client's behalf:
 
-| Nguồn | Là gì | Seek |
+| Source | What it is | Seek |
 |---|---|---|
-| `local` | file trên đĩa. Có thì không cần nguồn nào khác | ✅ |
-| `instant` | URL progressive thô của YouTube (itag 18, 360p), browser tự range-request | ✅ |
-| `remux` | mux trực tiếp 2 luồng adaptive → fMP4, 1080p | ⚠️ mở lại |
+| `local` | the file on disk. When it exists, no other source is worth offering | ✅ |
+| `instant` | YouTube's raw progressive URL (itag 18, 360p), range-requested by the browser itself | ✅ |
+| `remux` | the two adaptive tracks muxed directly into fMP4, 1080p | ⚠️ reopens the stream |
 
-**Chặng 2 xong 2026-07-29 — player leo đủ 3 tầng:**
-`instant` phát trong ~17ms → dựng `remux` 1080p ở thẻ ẩn, lên khi sẵn sàng → `local` khi tải xong.
-Không transcode, không HLS.
+**Stage 2, finished 2026-07-29 — the player climbs all three tiers:**
+`instant` plays within ~17ms → a 1080p `remux` is built in a hidden element and taken up when
+ready → `local` once the download lands. No transcoding, no HLS.
 
-**Cờ ffmpeg chống lệch tiếng/hình (2026-07-29).** Hai input được seek **riêng biệt**, nên
-timestamp phải chuẩn hoá chứ không được tin: `-avoid_negative_ts make_zero` gộp chúng về
-cùng gốc, `-muxdelay 0 -muxpreload 0` bỏ độ trễ muxer tự chèn giữa hai luồng.
-Và `-frag_duration 1000000`: chỉ dùng `frag_keyframe` thì fragment dài **1.9–4.9 giây và
-không đều** (đo thật), mà trình duyệt đọc file đang lớn dần phải đợi trọn một fragment mới
-trình bày được — nên tiếng và hình tới theo từng khối lệch nhau. Cắt đều 1 giây thì fragment
-còn ~0.77s. Sau khi sửa: video và audio cùng `start_time`, trước đó lệch 0.04s.
+**The ffmpeg flags that stop audio drifting from video (2026-07-29).** The two inputs are
+seeked **separately**, so timestamps have to be normalised rather than trusted:
+`-avoid_negative_ts make_zero` brings them to a common origin, and `-muxdelay 0 -muxpreload 0`
+removes the delay the muxer inserts between the two streams. And `-frag_duration 1000000`:
+with `frag_keyframe` alone, fragments run **1.9–4.9 seconds and unevenly** (measured), and a
+browser reading a file that is still growing cannot present anything until it has a whole
+fragment — so sound and picture arrive in blocks that do not line up. Cutting evenly at one
+second brings fragments down to ~0.77s. After the fix, video and audio share a `start_time`;
+before it they differed by 0.04s.
 
-**Seek ở tầng remux = mở lại luồng.** fMP4 qua pipe không có index nên trình duyệt không seek
-được; player gửi `?t=<giây>` và ffmpeg dùng `-ss` **trước `-i`** (HTTP range seek, không phải
-decode-rồi-bỏ). Đo thật: mở từ đầu 4.4s, seek tới 120s mất **3.0s** — rẻ hơn vì URL đã cache.
-Chỉ bắn khi **thả tay** khỏi thanh seek; kéo thì chỉ số chạy. Có nhãn "Seeking…" vì 3 giây
-mà hình vẫn đứng yên thì trông như bị lơ.
+**Seeking in the remux tier means reopening the stream.** fMP4 through a pipe carries no index,
+so the browser cannot seek it; the player sends `?t=<seconds>` and ffmpeg uses `-ss` **before
+`-i`** (an HTTP range seek, not decode-and-discard). Measured: opening from the start takes
+4.4s, seeking to 120s takes **3.0s** — cheaper because the URL is already cached. Fired only on
+**release** of the seek bar; dragging just moves the number. There is a "Seeking…" label,
+because three seconds of a frozen picture looks like being ignored.
 
-**Toàn bộ vị trí là tuyệt đối.** Luồng remux mở tại mốc nào thì tự cho mình bắt đầu từ 0, nên
-mọi thứ ngoài thẻ video làm việc với `offset + currentTime`.
+**Every position is absolute.** A remux stream considers itself to start at zero wherever it was
+opened, so everything outside the video element works in `offset + currentTime`.
 
-**Menu Auto / 1080p / 360p** — chỉ hiện mục video thật sự phục vụ được. **Ghim là lệnh**:
-chọn tay thì không tự leo cũng không tự tụt. Auto mà remux không kịp trong 20s thì bỏ, về
-360p và **không thử lại cho video đó** — mạng vừa không kham nổi thì lần hai cũng vậy.
+**The Auto / 1080p / 360p menu** lists only what can actually be served. **Pinning is an
+order**: a manual choice neither climbs nor drops on its own. On Auto, if the remux cannot make
+it within 20 seconds it is abandoned, the player falls back to 360p and **does not try again for
+that video** — a network that could not manage it once will not manage it the second time.
 
-`?prefetch=1` = mới rê chuột lên card, chưa bấm play: resolve và cache URL để lần bấm sau
-tức thì, **không** xếp hàng tải. Thiếu vạch này thì lướt feed sẽ làm đầy ổ đĩa có trần cứng.
+`?prefetch=1` means the pointer has rested on a card without play being pressed: the URL is
+resolved and cached so a later press is instant, and **nothing is queued for download**. Without
+that line, scrolling a feed would fill a disk with a hard ceiling.
 
-> **Đánh đổi cố ý:** lần xem đầu là 360p. Đó là giá của "phát ngay + seek được ngay", và nó
-> chỉ kéo dài vài giây (xem số đo ở §8b). Player có nhãn báo rõ đang ở tầng nào.
+> **A deliberate trade:** the first viewing is 360p. That is the price of "plays immediately and
+> seeks immediately", and it lasts a few seconds (see the measurements in §8b). The player
+> labels which tier it is on.
 
-**Phase 2 (nâng cấp rẻ):** tải thêm rendition 720p **có sẵn của YouTube** + remux `-c copy` sang HLS → ABR thật với CPU ≈ 0.
-> Ghi nhớ: **"không transcode" ≠ "không ABR"**. Cái đắt là *encode lại*; YouTube đã encode sẵn nhiều mức.
+**Phase 2 (a cheap upgrade):** also fetch the 720p rendition **YouTube already publishes** and
+remux `-c copy` into HLS → real ABR at ≈ 0 CPU.
+> Remember: **"no transcoding" ≠ "no ABR"**. The expensive thing is *re-encoding*; YouTube has
+> already encoded several rungs.
 
 ### Eviction
-Mỗi video có `last_accessed_at` + `pinned`. Vượt ngưỡng ~22 GiB → xoá **file media** của LRU không pinned, **giữ metadata + thumbnail + history** → UI hiện "Đã gỡ — bấm để tải lại", re-ingest 1 click.
+Every video has `last_accessed_at` + `pinned`. Above ~22 GiB, the **media file** of the
+least-recently-used unpinned video is deleted, **keeping metadata + thumbnail + history** → the
+UI shows "Removed — press to fetch again", and re-ingesting is one click.
 
-### File biến mất ngoài ý muốn (2026-08-04)
+### Files that disappear without being evicted (2026-08-04)
 
-Xoá tay một file trong `MEDIA_ROOT` thì DB **vẫn nói READY**, `/stream` vẫn trả nguồn
-`local`, và player nhận URL `/media/...` trả 404 — video không phát được, chỉ có một vệt
-đỏ trong tab Network. Giờ `handleStream` **`os.Stat` file thật** trước khi đề nghị `local`:
+Deleting a file inside `MEDIA_ROOT` by hand left the database **still saying READY**, `/stream`
+still offering `local`, and the player holding a `/media/...` URL that 404s — the video simply
+did not play, with nothing but a red line in the network tab to say why. `handleStream` now
+**stats the file** before offering `local`:
 
-| Đĩa nói gì | Làm gì |
+| What the disk says | What happens |
 |---|---|
-| có file | trả `local` như cũ |
-| **root còn, file mất** | `SetMediaState(EVICTED)` → rơi xuống `instant`/`remux` + xếp hàng tải lại, kèm cờ `repaired: true` |
-| **root không đọc được** | **không ghi gì**, trả `streamError` "ổ chưa kết nối" |
+| the file is there | `local` as before |
+| **root present, file gone** | `SetMediaState(EVICTED)` → fall through to `instant`/`remux` + queue the download again, with `repaired: true` |
+| **root unreadable** | **write nothing**, return `streamError` about the drive |
 
-- **Thứ tự kiểm là toàn bộ độ an toàn của nó.** `MEDIA_ROOT` là SSD ngoài (§8 rủi ro 1);
-  rút dây thì **mọi** file đều "mất", và không phân biệt thì một sợi cáp lỏng sẽ đánh dấu
-  EVICTED cả thư viện. Kiểm root **trước**, một syscall, dứt khoát — `/Volumes/Data2` khi
-  tháo ổ thì biến mất khỏi hệ thống file chứ không rỗng.
-- **Xoá cả thư mục video vẫn là "file mất"**, không phải "hạ tầng hỏng" — vì xoá theo folder
-  mới là cách người ta xoá tay.
-- **`?prefetch=1` vẫn sửa DB nhưng vẫn không tải.** Thứ đắt và bị YouTube đếm là request
-  upstream, ranh giới đó không đổi; một `UPDATE` nội bộ cho video mà đĩa vừa nói là không có
-  thì rẻ, và không ghi nghĩa là lần rê chuột sau lại phát hiện lại từ đầu.
-- **Cờ `repaired` là bắt buộc, không phải trang trí.** Trang watch đã cầm bản ghi video nói
-  READY từ trước, mà `videoPollInterval` **dừng poll** khi thấy trạng thái đã settled — nên
-  không ai báo thì huy hiệu "đã tải" sai cho tới khi rời trang. Player thấy cờ thì invalidate
-  `['video', id]` đúng một lần.
-- **Không có lượt quét đối chiếu định kỳ.** Luật này nằm ở **một** chỗ; đặt ở hai chỗ là hai
-  chỗ sai được khác nhau, mà cái sai của lượt quét thì hàng loạt và im lặng. Giá phải trả:
-  video bị xoá file mà không ai mở thì Storage vẫn cộng dung lượng của nó, và vì sweep tính
-  theo `size_bytes` trong DB chứ không đọc đĩa nên nó sẽ **evict thừa**.
-- Đường sửa này **không xoá `media_path`** (sweep thì có). Vô hại: mọi chỗ đọc `media_path`
-  đều đã kiểm `media_state == READY` trước, và không UI nào đọc nó. Nó ghi lại file *từng*
-  nằm ở đâu.
-- **Đo thật 2026-08-04**: dời file của `XXplTbQR9to` → `/stream` trả `local:false,
-  instant:true, remux:true, repaired:true`, DB thành `EVICTED`, job tự chạy, **20 giây sau
-  READY trở lại**. Gateway trỏ vào `MEDIA_ROOT` không tồn tại → `streamError` đúng, DB
-  **không đổi một dòng nào** (175 dòng EVICTED trong DB đều là của sweep — `media_path=''`;
-  đường sửa này thì giữ path, nên phân biệt được).
+- **The order of the two checks is the whole safety of it.** `MEDIA_ROOT` is an external SSD
+  (§8, risk 1); unplug it and **every** file is "gone", so without the distinction one loose
+  cable would mark the entire library evicted. Check the root **first** — one syscall, decisive:
+  `/Volumes/Data2` disappears from the filesystem when the drive is removed rather than becoming
+  empty.
+- **Deleting the whole video folder is still "file gone"**, not "infrastructure broken" —
+  deleting by folder is how people delete things by hand.
+- **`?prefetch=1` still repairs the row and still downloads nothing.** The expensive, counted
+  thing is a request upstream, and that boundary is unchanged; an internal `UPDATE` for a video
+  the disk has just denied is cheap, and declining to record it only means discovering the same
+  fact again on the next hover.
+- **The `repaired` flag is required, not decoration.** The watch page is already holding a video
+  row that says READY, and `videoPollInterval` **stops polling** once the state looks settled —
+  so with nobody to tell it, the "downloaded" badge stays wrong until the page is left. On
+  seeing the flag the player invalidates `['video', id]` exactly once.
+- **There is no periodic reconciliation sweep.** This rule lives in **one** place; in two places
+  it is two places that can be wrong differently, and a sweep's mistakes are bulk and silent.
+  The price: a video whose file was deleted and which nobody opens still counts toward Storage,
+  and because the eviction sweep reads `size_bytes` from the database rather than the disk, it
+  will **evict more than it needs to**.
+- This repair path **does not clear `media_path`** (the sweep does). Harmless: everywhere that
+  reads `media_path` checks `media_state == READY` first, and no UI reads it. It records where
+  the file *used to* be.
+- **Measured 2026-08-04**: moving `XXplTbQR9to`'s file → `/stream` answered `local:false,
+  instant:true, remux:true, repaired:true`, the row became `EVICTED`, the job ran on its own,
+  and **twenty seconds later it was READY again**. A gateway pointed at a `MEDIA_ROOT` that does
+  not exist returned the right `streamError` and **changed not one row** (all 175 EVICTED rows in
+  the database came from the sweep — they have `media_path=''`; this path keeps the path, which
+  is how the two can be told apart).
 
 ## 4b. Code conventions
 
@@ -136,626 +154,690 @@ Xoá tay một file trong `MEDIA_ROOT` thì DB **vẫn nói READY**, `/stream` v
 
 ## 5. Frontend
 
-**Vite + React + TypeScript + Tailwind thuần + TanStack Query.**
+**Vite + React + TypeScript + plain Tailwind + TanStack Query.**
 
-- **KHÔNG dùng shadcn/ui** — clone pixel-perfect thì component library chỉ làm phải ghi đè. Tự dựng component theo design token trích từ `Example/*.png`.
-- Dùng skill `ui-ux-pro-max` khi thiết kế/xây UI.
+- **No shadcn/ui** — when the goal is a pixel-perfect clone, a component library is only
+  something to override. Components are built against design tokens taken from `Example/*.png`.
+- Use the `ui-ux-pro-max` skill when designing or building UI.
 
-### Cấu trúc feature-sliced
+### Feature-sliced structure
 ```
 src/features/<feature>/
-  domain/          # entity + type thuần, KHÔNG import React
-  application/     # use-case: hook gọi repository, KHÔNG biết HTTP
-  infrastructure/  # repository impl: gọi gateway REST
-  ui/              # component
+  domain/          # entities and plain types, NO React import
+  application/     # use cases: hooks calling repositories, knows no HTTP
+  infrastructure/  # repository implementations: call the gateway's REST API
+  ui/              # components
 ```
-`ui/` không bao giờ gọi `fetch` trực tiếp. Nhờ vậy khi làm `/tv` (Phase 3) chỉ phải viết lại **tầng `ui/`**.
+`ui/` never calls `fetch` directly. That is what makes `/tv` (Phase 3) a rewrite of the **`ui/`
+layer only**.
 
-### Nguyên tắc UI: KHÔNG RENDER NÚT CHẾT
-Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
+### UI principle: RENDER NO DEAD BUTTONS
+Every element either does something real or is dropped.
 
-| YouTube gốc | Trong hệ này |
+| YouTube's original | Here |
 |---|---|
-| Create (+) | → **"Add video"** (entry point ingest) |
-| Notification + badge | → **sự kiện ingest** ("3 video đã tải xong", "1 lỗi") |
-| Downloads | → **Storage** (dung lượng, pinned, sắp bị evict) |
-| Explore / chip filter | → đổ từ **tag & category thật** trong catalog |
-| Your videos, YT Music, YT Kids, footer, Shorts, Live | **BỎ** |
-| Subscribe | **Thật ngay ở P1**: thêm kênh thành nguồn ingest động, scanner quét như mọi source |
-| Share | Copy link LAN vào clipboard |
+| Create (+) | → **"Add video"** (the ingest entry point) |
+| Notifications + badge | → **ingest events** ("3 videos downloaded", "1 failed") |
+| Downloads | → **Storage** (usage, pinned, about to be evicted) |
+| Explore / chip filter | → driven by **real tags and categories** in the catalog |
+| Your videos, YT Music, YT Kids, footer, Shorts, Live | **DROPPED** |
+| Subscribe | **Real in P1**: adds the channel as a live ingest source, scanned like any other |
+| Share | Copies the LAN link to the clipboard |
 
 ## 6. Recommendation
 
-**Heuristic, KHÔNG ML.** Lý do: ~150 video và 5 user → collaborative filtering ra rác, embedding không hơn tag-matching mà lại không debug được.
+**Heuristic, NOT ML.** Why: ~150 videos and 5 users mean collaborative filtering returns
+nonsense, and embeddings beat tag matching by nothing while being impossible to debug.
 
-- **P1 (đã làm):** grid trộn 30% chưa xem / 25% mới / 20% kênh theo dõi / 15% xem dở /
-  10% xem lại; chống lặp impression 24h
-- **Hạn ngạch feed do người dùng chỉnh được (2026-08-04) — `/settings` → "Home feed".**
-  Ba thanh trượt, tổng luôn = 100, chia **82%** trang; 18% còn lại là **xem dở 10% +
-  xem lại 8%**, **cố định, không chỉnh được** (đó là trạng thái lịch sử xem, không phải
-  nguồn nội dung mới — bắt chúng tranh chỗ với gợi ý là sai bản chất).
+- **P1 (done):** a grid mixing 30% unwatched / 25% recently added / 20% subscribed channels /
+  15% continue watching / 10% rewatch; impressions suppressed for 24h.
+- **A feed mix the household can adjust (2026-08-04) — `/settings` → "Home feed".**
+  Three sliders that always total 100, dividing **82%** of the page; the other 18% is
+  **continue watching 10% + rewatch 8%**, **fixed and not adjustable** (those are states of the
+  watch history, not sources of new material — making them compete with recommendations
+  misreads what they are).
 
-  | Thanh | Nghĩa | Mặc định |
+  | Slider | Meaning | Default |
   |---|---|---|
   | Channels you follow | `profile.Subscribed[channel]` | 25% |
-  | More of what you watch | chưa subscribe, `combinedAffinity ≥ 0.15` | 60% |
-  | Something new | chưa subscribe, dưới ngưỡng đó | 15% |
+  | More of what you watch | not subscribed, `combinedAffinity ≥ 0.15` | 60% |
+  | Something new | not subscribed, below that threshold | 15% |
 
-  - **`feedSlot` tách khỏi `Reason`.** Reason trả lời *"vì sao video này ở đây"* — có 9 cái
-    và **chồng lấn** (vừa chưa-xem vừa kênh-theo-dõi). Slot trả lời *"nó chiếm phần của ai"* —
-    mỗi video đúng **một** slot. Gộp hai thứ này chính là lý do "hợp gu" trước đây không
-    chỉnh được: nó nằm rải trong `NeverWatched` + `RecentlyAdded`, lẫn với mọi thứ mới khác.
-    `dto.Reason` gửi cho client **không đổi**.
-  - **Mặc định = đúng hạn ngạch cũ, quy đổi.** `NeverWatched 30 + RecentlyAdded 15` → nhóm
-    hợp-gu; chuẩn hoá trên 82% ra 25/60/15. **Cài xong mà không kéo gì thì feed y hệt** —
-    nếu mặc định đổi thì không phân biệt được "thanh trượt chạy" với "mặc định mới".
-  - **0 là biến mất thật.** Bỏ sàn `take < 1` cho ba rổ này (giữ cho hai rổ cố định) —
-    thanh kéo hết cỡ mà vẫn ra nội dung là nút nói dối. Video bị nén xuống **cuối** danh
-    sách chứ không bị xoá: hạn ngạch chưa bao giờ bỏ video nào.
-  - **Lưu ở gateway** (`config/feed-mix.json`, khuôn mẫu `translate_config.go`), gửi kèm
-    trong `GetFeedRequest.mix`. **Recsys không giữ cấu hình nào** — xếp hạng vẫn là hàm
-    thuần của request + signal. **Chung cho cả nhà**, không theo user: 2 tài khoản seed,
-    chưa có màn đăng ký, nên "riêng từng người" là bảng + migration + RPC cho một sự riêng
-    tư chưa ai yêu cầu. Đổi thì chỉ đổi chỗ đọc.
-  - **Tỉ lệ, không phải số tuyệt đối**: 3/2/1 và 50/33/17 ra cùng một feed. UI ép tổng 100,
-    server chuẩn hoá lại — nơi nào cũng đúng.
-  - **Lưu xong huỷ cache `['feed']`** ở client. Feed đông cứng vào snapshot 30 phút, nên
-    không huỷ thì thay đổi vô hình suốt nửa tiếng — không phân biệt được với hỏng.
-    Đánh đổi: mất vị trí cuộn.
-- **Tín hiệu chấm điểm (2026-07-29)** — tất cả đều tất định, **không train gì cả**:
+  - **`feedSlot` is separate from `Reason`.** A reason answers *"why is this here"* — there are
+    nine of them and they **overlap** (a video can be both unwatched and from a subscribed
+    channel). A slot answers *"whose share of the page does it take"* — every video has exactly
+    **one**. Conflating the two is precisely why "more of what you watch" could not be adjusted
+    before: those videos were spread across `NeverWatched` and `RecentlyAdded`, mixed in with
+    everything else that happened to be new. `dto.Reason` sent to the client is **unchanged**.
+  - **The defaults are the old fixed quota, converted.** `NeverWatched 30 + RecentlyAdded 15`
+    becomes the affinity share; normalised over 82% that is 25/60/15. **Installing it and
+    touching nothing leaves the feed identical** — if the defaults shifted there would be no way
+    to tell a slider working from a default changing.
+  - **Zero means gone.** The `take < 1` floor is dropped for these three buckets (kept for the
+    two fixed ones) — a slider dragged to the bottom that still produces videos is a control
+    that lies. Those videos go to the **end** of the list rather than being dropped: the quota
+    has never dropped a video.
+  - **Stored at the gateway** (`config/feed-mix.json`, following `translate_config.go`), sent in
+    `GetFeedRequest.mix`. **Recsys holds no configuration** — ranking stays a pure function of
+    the request and the signals. **One mix for the household**, not per user: two seeded
+    accounts and no sign-up screen, so per-person taste would be a table, a migration and an RPC
+    bought for a privacy nobody has asked for. Changing that means changing only where it is read.
+  - **A ratio, not absolute numbers**: 3/2/1 and 50/33/17 produce the same feed. The UI forces
+    the total to 100 and the server normalises anyway — correct on both sides.
+  - **Saving drops the `['feed']` cache** on the client. The feed is frozen into a 30-minute
+    snapshot, so without that the change would be invisible for half an hour — indistinguishable
+    from it not working. The trade: the scroll position is lost.
+- **Scoring signals (2026-07-29)** — all deterministic, **nothing is trained**:
 
-  | Tín hiệu | Cách tính | Trọng số |
+  | Signal | How it is computed | Weight |
   |---|---|---|
-  | Đang xem dở | `0.02 < fraction <= 0.95` | +3.0 |
-  | Chưa từng mở | video **không có** trong `WatchedFraction` | +1.5 |
-  | **Mở rồi bỏ ngay** | có trong map, `fraction <= 0.02` | **−2.5** |
-  | Kênh theo dõi | | +1.2 |
-  | Mới thêm | `exp(-days/14)` | ×1.0 |
-  | Affinity kênh (từ **xem**) | Σ fraction theo kênh, chuẩn hoá 0..1 | ×1.0 |
-  | Affinity chủ đề (từ **xem**) | Σ fraction theo topic, chuẩn hoá 0..1 | ×1.0 |
-  | Affinity từ **like** | topic 1.0 / kênh 0.8 / hashtag 0.5 | ×2.0 |
-  | Affinity từ **dislike** | cùng ba trục, **phai** half-life 90 ngày | **×−0.7** |
-  | **Giữ chân toàn cục** | `avg(max(fraction) per viewer)` | ×1.5 |
-  | Đã hiện trong 24h | | −2.0 |
+  | Continue watching | `0.02 < fraction <= 0.95` | +3.0 |
+  | Never opened | the video is **absent** from `WatchedFraction` | +1.5 |
+  | **Opened and abandoned** | present in the map, `fraction <= 0.02` | **−2.5** |
+  | Subscribed channel | | +1.2 |
+  | Recently added | `exp(-days/14)` | ×1.0 |
+  | Channel affinity (from **watching**) | Σ fraction per channel, normalised 0..1 | ×1.0 |
+  | Topic affinity (from **watching**) | Σ fraction per topic, normalised 0..1 | ×1.0 |
+  | Affinity from **likes** | topic 1.0 / channel 0.8 / hashtag 0.5 | ×2.0 |
+  | Affinity from **dislikes** | the same three axes, **decaying** with a 90-day half-life | **×−0.7** |
+  | **Global retention** | `avg(max(fraction) per viewer)` | ×1.5 |
+  | Shown in the last 24h | | −2.0 |
 
-  Ba điểm đáng ghi:
-  - **`BOUNCED` là một Reason riêng.** Trước đây `fraction <= 0.02` rơi vào nhánh
-    `default` và được cộng +1.5 y như chưa xem — tức là **cách chắc chắn nhất để giữ
-    một video trong feed là từ chối nó**. Phân biệt bằng comma-ok, không phải giá trị 0.
-  - **Affinity đọc từ lịch sử xem, không chỉ từ Like.** Thư viện này có 9 like trên
-    2.045 tín hiệu xem; đọc sở thích từ Like thôi là gần như không đọc được gì.
-  - **Vừa xem xong ≠ đã từng xem.** `WatchedFraction` chỉ nói *có từng xem chưa*, không
-    nói *khi nào*. Up-next cần đúng cái "vừa nãy": hai video **cùng kênh + cùng chủ đề**
-    là gợi ý mạnh nhất của nhau (`weightSameChannel` 2.5 + `weightSharedTags` 1.5), nên
-    bấm Next hai lần là quay lại chỗ cũ — **vòng lặp 2 bài không thoát được**, đã gặp thật.
-    Thêm `RecentlyWatched` (cửa sổ **3 tiếng**) với `penaltyRecentlyWatched = 8.0` —
-    **cố ý lớn hơn tổng hai trọng số kia**, vì nhỏ hơn thì không gãy được vòng.
-    Sửa ở **server**, không phải ở client: bản trước dựa vào trail trong sessionStorage
-    của trình duyệt, mà một cái vòng lặp cấu trúc thì không nên phụ thuộc vào lưu trữ
-    phía client có hoạt động hay không.
-  - **Hạn ngạch theo lý do KHÔNG chống được một kênh chiếm cả trang.** Đo thật:
-    44% thời lượng xem dồn vào một kênh → affinity chuẩn hoá thành 1.0 trong khi kênh
-    kế chỉ 0.23 → **23/24 video trang đầu là một kênh**, mà mọi hạn ngạch vẫn "đạt".
-    Lý do: video của kênh đó **đồng thời** là chưa-xem, mới-thêm và kênh-theo-dõi, nên
-    nó lấp mọi rổ cùng lúc. Phải chặn theo **trục khác**: `applyChannelDiversity`, tối đa
-    **3 video/kênh trong mỗi cửa sổ 24**. Sau khi chặn: kênh áp đảo còn 12%, số kênh trên
-    trang đầu từ 2 → 10. Vẫn chỉ sắp xếp lại, không bỏ video nào.
-  - **Giữ chân tính trong recsys**, không hỏi catalog: catalog không biết ai xem bao
-    lâu, và ranh giới đó là thứ giữ cho đây là nhiều service chứ không phải một chương
-    trình chạy trong bốn process. Phải lấy `max` theo từng người xem **trước** rồi mới
-    trung bình — tín hiệu WATCH được ghi theo nhịp trong lúc phát, nên trung bình thẳng
-    trên các dòng sẽ đo "thời điểm trung bình ta lấy mẫu", tức khoảng nửa video bất kể
-    hay dở.
-- **Like:** cộng affinity theo topic 1.0 / kênh 0.8 / hashtag 0.5, cộng dồn qua từng like.
-  Đưa lên P1 vì like mà không đổi gì thì là nút chết.
-- **Dislike**: loại khỏi feed và up-next, **vẫn tìm được qua search và trang kênh**.
-  Không phải tính năng phải làm — nó đúng sẵn nhờ ranh giới service: catalog không
-  nhìn thấy signal của recsys nên không thể lọc theo nó.
-  **Mở rộng 2026-08-04 — dislike giờ cũng dạy được, nhưng chỉ một phần ba:**
-  - **Video bị bấm thì mất hẳn, mãi mãi.** Đó là quyết định, không phải sở thích;
-    không phai, không có đường quay lại trong feed. Ba mục dưới đây chỉ nói về
-    thứ dislike *dạy* cho hệ thống ngoài video đó.
-  - **`buildDislikeAffinity` đối xứng với like** — cùng ba trục topic/kênh/hashtag,
-    cùng trọng số trục — nhưng nhân **−0.7** so với **+2.0** của like. Lý do bất
-    đối xứng: like thường khen *loại nội dung*, dislike thường nhắm *video này*
-    (thumbnail, tiêu đề, hai giây đầu). Nghiêng feed, không xoá chủ đề.
-    Trước đó dislike **không dạy gì cả**: từ chối 10 video cùng loại thì mất đúng
-    10 video, cái thứ 11 đứng nguyên chỗ cũ.
-  - **Phai half-life 90 ngày.** Mọi tín hiệu khác trong ranker đều phai; riêng cái
-    này không, vì nó chỉ là `map[string]bool`. Giờ `UserProfile.Disliked` mang
-    `occurred_at` (query vốn đã `ORDER BY occurred_at DESC`, chỉ là không lấy ra).
-    Dislike không có ngày (dữ liệu cũ) tính **đủ 1.0**, không phải 0.
-  - **Chặn cả kênh cần tỉ lệ, không chỉ số đếm**: `≥3` video **và** `≥30%` số video
-    của kênh đó. Trước là đếm trần: 3/5 và 3/200 bị xử như nhau — cái đầu là phán
-    quyết, cái sau là ba lần từ chối bình thường trong một thư viện dùng nhiều tháng.
-    Kênh đã subscribe vẫn miễn nhiễm.
-  - `penaltyDisliked = 5.0` **chưa bao giờ được dùng cho dislike** — nơi đọc duy
-    nhất là `/2` cho video đã xem xong, mà video bị dislike thì `continue` từ mấy
-    dòng trước. Đổi tên thành `penaltyAlreadyWatched = 2.5`, số không đổi.
-- **`Next` (watch page) — ĐẢO 2026-07-29:** trước là *cùng kênh > cùng tag*. Giờ là
-  **cùng thể loại là chính, kênh chỉ là một cách chia sẻ thể loại đó, không phải cách tốt
-  hơn**: `weightSameChannel = weightSharedTags = 2.5`, cộng **theo từng tag trùng** nên
-  hai video trùng cả topic lẫn hashtag thắng một video chỉ trùng kênh.
-  Kèm **trần cứng 3 video/kênh** trong rail (`capPerChannel`).
-  Lý do đảo: giữ nguyên thứ tự cũ thì rail thành **20/20 một kênh** — đúng chủ đề nhưng
-  là ngõ cụt. Đo sau khi đảo: video *Entertainment* → **20/20 Entertainment qua 9 kênh**;
-  video *Music* → **20/20 Music qua 10 kênh**.
-  `capPerChannel` khác `applyChannelDiversity` (feed) ở chỗ **trần là tuyệt đối**, không
-  dồn phần bị giữ xuống cuối — với rail 20 phần tử thì "dồn xuống cuối" vẫn rơi vào trong
-  trang, và kênh bị chặn lặng lẽ chiếm 8 slot thay vì 3.
-  **Thứ tự đó phải được ép bằng trọng số, không phải bằng lời hứa (2026-07-29).** Đo thật:
-  xem một video *Entertainment* của kênh game → **20/20 gợi ý là nhạc SOOBIN**, không cùng
-  kênh cũng không cùng chủ đề. Ba nguyên nhân cộng lại, mỗi cái tự nó vô hại:
-  - `TopicScore` **cộng dồn** qua các chủ đề của một video → video gắn cả `Music` lẫn
-    `Vietnamese music` ăn affinity **hai lần**. Sửa: lấy **chủ đề khớp mạnh nhất**, không cộng.
-  - `weightContinueWatching` (+3.0) ở up-next **lớn hơn cùng-kênh + cùng-chủ-đề** (2.5+1.5).
-    "Xem dở" trả lời câu *"tôi nên xem gì"*, không phải *"cái này tiếp theo là gì"*.
-  - `weightRetention` với **1 user** chính là lịch sử của user đó → đếm sở thích lần hai.
+  Three things worth recording:
+  - **`BOUNCED` is a Reason of its own.** `fraction <= 0.02` used to fall into the `default`
+    branch and collect the same +1.5 as never having been watched — meaning **the surest way to
+    keep a video in the feed was to reject it**. Told apart with comma-ok, not by comparing to zero.
+  - **Affinity is read from watch history, not from likes alone.** This library holds 9 likes
+    against 2,045 watch signals; reading taste from likes alone is reading almost nothing.
+  - **Just watched ≠ ever watched.** `WatchedFraction` says *whether* something was watched, not
+    *when*. Up-next needs exactly "the one just now": two videos on the **same channel with the
+    same topic** are each other's strongest suggestion (`weightSameChannel` 2.5 +
+    `weightSharedTags` 1.5), so pressing Next twice returns you to where you started — an
+    **inescapable two-video loop**, observed for real. Added `RecentlyWatched` (a **3-hour**
+    window) with `penaltyRecentlyWatched = 8.0` — **deliberately larger than those two weights
+    combined**, because anything smaller cannot break the loop. Fixed on the **server**, not the
+    client: the previous attempt relied on a trail in the browser's sessionStorage, and a
+    structural loop should not depend on client-side storage working.
+  - **Quotas by reason CANNOT stop one channel taking the whole page.** Measured: 44% of watch
+    time concentrated in one channel → its affinity normalised to 1.0 while the next channel sat
+    at 0.23 → **23 of the first 24 videos were that one channel**, with every quota reported as
+    satisfied. The reason: that channel's videos are **simultaneously** unwatched, recently added
+    and subscribed, so they fill every bucket at once. It has to be blocked on **another axis**:
+    `applyChannelDiversity`, at most **3 videos per channel in each window of 24**. Afterwards
+    the dominant channel held 12%, and the number of channels on the first page went from 2 → 10.
+    Still only a reordering; nothing is dropped.
+  - **Retention is computed in recsys**, not asked of catalog: catalog does not know who watched
+    how much, and that boundary is what keeps this several services rather than one program
+    running in four processes. The `max` must be taken **per viewer first** and only then
+    averaged — WATCH signals are written periodically during playback, so averaging the rows
+    directly would measure "the average moment we sampled", which is about half of every video
+    regardless of how good it is.
+- **Likes:** add affinity by topic 1.0 / channel 0.8 / hashtag 0.5, accumulated over every like.
+  Brought forward to P1 because a like that changes nothing is a dead button.
+- **Dislikes**: removed from the feed and up-next, **still reachable through search and the
+  channel page**. Not a feature that had to be built — it is true by construction because of the
+  service boundary: catalog cannot see recsys signals, so it cannot filter by them.
+  **Extended 2026-08-04 — a dislike now teaches, but only a third as loudly:**
+  - **The video that was pressed is gone for good.** That is a decision, not a preference; it
+    does not decay and there is no way back into the feed. The three points below are only about
+    what a dislike *teaches* beyond that video.
+  - **`buildDislikeAffinity` mirrors likes** — the same three axes, the same per-axis weights —
+    but multiplied by **−0.7** against a like's **+2.0**. The asymmetry: a like usually approves
+    of *a kind of thing*, while a dislike is usually aimed at *this video* (its thumbnail, its
+    title, its first two seconds). It tilts the feed rather than emptying a subject.
+    Before this a dislike **taught nothing at all**: rejecting ten videos of a kind removed those
+    ten and left the eleventh exactly where it was.
+  - **A 90-day half-life.** Every other signal in the ranker decays; this one did not, because it
+    was only a `map[string]bool`. `UserProfile.Disliked` now carries `occurred_at` (the query was
+    already `ORDER BY occurred_at DESC` — it simply did not select it). A dislike with no date
+    (older data) counts in **full**, not as zero.
+  - **Suppressing a channel needs a share, not just a count**: `≥3` videos **and** `≥30%` of that
+    channel's videos. It used to be a bare count, so 3-of-5 and 3-of-200 were treated alike — the
+    first is a verdict, the second is three ordinary rejections in a library used for months.
+    Subscribed channels remain immune.
+  - `penaltyDisliked = 5.0` was **never applied to a dislike** — its only reader was `/2` for an
+    already-watched video, and disliked videos `continue` several lines earlier. Renamed
+    `penaltyAlreadyWatched = 2.5`; the number is unchanged.
+- **`Next` (watch page) — REVERSED 2026-07-29:** it used to be *same channel > same tag*. It is
+  now **the subject that leads, with the channel merely one way of sharing that subject rather
+  than a better way**: `weightSameChannel = weightSharedTags = 2.5`, added **per matching tag**,
+  so a video sharing both a topic and a hashtag beats one sharing only a channel.
+  With a **hard cap of 3 videos per channel** in the rail (`capPerChannel`).
+  Why it was reversed: the old order made the rail **20 out of 20 from one channel** — on topic,
+  but a dead end. Measured afterwards: an *Entertainment* video → **20/20 Entertainment across 9
+  channels**; a *Music* video → **20/20 Music across 10 channels**.
+  `capPerChannel` differs from `applyChannelDiversity` (the feed) in that **the cap is absolute**
+  — what it holds back is not pushed to the end. In a rail of twenty, "pushed to the end" is
+  still on the page, and the capped channel quietly takes 8 slots instead of 3.
+  **That order has to be enforced by weights, not by intent (2026-07-29).** Measured: watching an
+  *Entertainment* video from a gaming channel produced **20/20 SOOBIN music videos**, sharing
+  neither its channel nor its topic. Three causes compounded, each harmless alone:
+  - `TopicScore` **summed** across a video's topics → a video tagged both `Music` and
+    `Vietnamese music` collected the affinity **twice**. Fixed: take the **strongest matching
+    topic**, do not add.
+  - `weightContinueWatching` (+3.0) in up-next **exceeded same-channel + same-topic** (2.5+1.5).
+    "Continue watching" answers *"what should I watch"*, not *"what follows this"*.
+  - `weightRetention` with **one user** is that user's own history → counting their taste twice.
 
-  Sửa chung: ở **up-next**, mọi thứ **không phải quan hệ với video đang xem** (affinity kênh,
-  affinity chủ đề, retention, continue-watching) bị nhân `upNextTasteDamping = 0.35`.
-  Quan hệ đứng đầu, sở thích chỉ phá hoà. Feed **không** damp — ở đó sở thích *nên* thắng.
-  Đánh đổi đã biết: up-next giờ gần như toàn cùng một kênh, đúng như charter chốt.
+  The shared fix: in **up-next**, everything that is **not a relationship to the video playing**
+  (channel affinity, topic affinity, retention, continue-watching) is multiplied by
+  `upNextTasteDamping = 0.35`. Relatedness leads; taste only breaks ties. The feed is **not**
+  damped — there, taste *should* win.
+  A known trade: up-next is now nearly all one channel, exactly as the charter settled.
 
-> **Giới hạn đã ghi nhận:** với ~150 video tự tay import, recommendation chỉ là *sắp xếp lại tủ đồ của chính mình* — không tạo được cảm giác khám phá của YouTube. Muốn có, phải làm feed kéo video ngoài vào (Phase 3).
+> **A recorded limit:** with ~150 hand-imported videos, recommendation is only *rearranging your
+> own wardrobe* — it cannot produce YouTube's sense of discovery. Getting that requires a feed
+> that pulls in outside videos (Phase 3).
 
-## 7. Phạm vi
+## 7. Scope
 
-### Phase 1 — vòng lặp lõi
-**Có:** ingest 1 URL → xem được · Home (grid 3 cột) · Watch (player + info + sidebar Next) · login seed 2 tài khoản (chưa có màn đăng ký) · search full-text
+### Phase 1 — the core loop
+**Has:** ingest one URL → watchable · Home (3-column grid) · Watch (player + info + Next
+sidebar) · login with 2 seeded accounts (no sign-up screen) · full-text search
 
-**Chưa có:** comment · transcript panel · history/like/watch-later · chip filter động · ABR/hls.js · import playlist/channel · "Ask" (đã cắt)
+**Does not have:** comments · transcript panel · history/likes/watch-later · dynamic chip
+filters · ABR/hls.js · playlist/channel import · "Ask" (cut)
 
 ### Phase 2
-comment lồng nhau · transcript click-to-seek · history/like/playlist · recsys trộn · notification · Storage page + eviction · import playlist/channel · nâng lên ABR
+Nested comments · click-to-seek transcript · history/likes/playlists · a mixed recsys ·
+notifications · Storage page + eviction · playlist/channel import · move up to ABR
 
 ### Phase 3
-auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad · app mobile · *(tùy chọn)* feed kéo video ngoài
+Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad · a mobile app ·
+*(optional)* a feed that pulls in outside videos
 
-### Đã cắt dứt khoát
-- **CDN** — vô nghĩa trên LAN
-- **"Ask" AI** — cắt khỏi P1. Nếu làm lại, ưu tiên full-text search trong transcript (không LLM) hơn là nhét model 5GB vào ổ đĩa đã chật
-- **144p / 4K** — không ai xem 144p; 4K giết disk
-- **Flutter Web** — canvas render, không clone pixel-perfect được
+### Cut for good
+- **CDN** — meaningless on a LAN
+- **"Ask" AI** — cut from P1. If it comes back, prefer full-text search within transcripts (no
+  LLM) over putting a 5GB model on a disk that is already tight
+- **144p / 4K** — nobody watches 144p; 4K kills the disk
+- **Flutter Web** — canvas rendering, cannot be a pixel-perfect clone
 
-## 8. Rủi ro đã biết
+## 8. Known risks
 
-1. ~~34 GiB là chỗ đau nhất~~ **Đã giải quyết bằng SSD ngoài** (xem mục 2). Rủi ro còn lại: ổ ngoài rớt kết nối thì service ghi lỗi vào file trên đường dẫn không tồn tại — chưa có test cho trường hợp này.
-2. **Microservices + gRPC với người chưa từng làm gRPC** → P1 chậm hơn monolith đáng kể, thời gian đầu chủ yếu là setup. Đã chấp nhận với giá đã biết. Dùng **ConnectRPC** (curl debug được từng service) thay vì gRPC thuần.
-3. **HTTPS trên Smart TV chưa được chứng minh.** Phải thử sớm với TV thật, đừng để tới Phase 3.
-3b. **Phát nền trên iOS là bất khả thi từ web (xác định 2026-08-02).** iOS treo cả
-   `<video>` lẫn `AudioContext` khi tab vào nền hoặc khoá màn hình. Không có cờ nào,
-   không có PWA nào vượt qua được. Đã làm những gì web cho phép:
-   **Media Session** (metadata + nút trên màn khoá) và **Picture-in-Picture**.
+1. ~~34 GiB is the sorest point~~ **solved with an external SSD** (see §2). The remaining risk:
+   if the external drive drops, services write errors into a file on a path that does not exist —
+   there is no test for that case.
+2. **Microservices + gRPC with somebody who has never done gRPC** → P1 is considerably slower
+   than a monolith, and the early time goes mostly into setup. Accepted at a known price. Using
+   **ConnectRPC** (each service is debuggable with curl) rather than plain gRPC.
+3. **HTTPS on a Smart TV is unproven.** Try it early against a real TV; do not leave it to Phase 3.
+3b. **Background playback on iOS is impossible from the web (settled 2026-08-02).** iOS suspends
+   both `<video>` and `AudioContext` when the tab goes to the background or the screen locks. No
+   flag and no PWA gets past it. What the web does allow has been done:
+   **Media Session** (metadata + lock-screen controls) and **Picture-in-Picture**.
 
    | | Android Chrome | iOS Safari |
    |---|---|---|
-   | chuyển sang app khác | ✓ | ✓ **chỉ khi đang PiP** |
-   | khoá màn hình | ✓ | ✗ |
-   | điều khiển màn khoá | ✓ | ✗ |
-   | narration (TTS) ở nền | ✗ | ✗ |
+   | switching to another app | ✓ | ✓ **only while in PiP** |
+   | locking the screen | ✓ | ✗ |
+   | lock-screen controls | ✓ | ✗ |
+   | narration (TTS) in the background | ✗ | ✗ |
 
-   **Narration ở nền — sửa một nửa 2026-08-03, và hai nửa là hai nguyên nhân khác
-   nhau.** Ghi chú cũ ở đây gộp chúng làm một, sai:
+   **Background narration — half fixed 2026-08-03, and the two halves are two different
+   causes.** The older note here treated them as one, wrongly:
 
-   | Nguyên nhân | Ở đâu | Sửa được? |
+   | Cause | Where | Fixable? |
    |---|---|---|
-   | **timer bị bóp** → không đặt thêm lịch | Android, và tab ẩn trên desktop | **Đã sửa** |
-   | **OS treo `AudioContext`** | iOS nền/khoá máy | Không, từ web |
+   | **throttled timers** → nothing further is scheduled | Android, and hidden tabs on desktop | **Fixed** |
+   | **the OS suspends `AudioContext`** | iOS backgrounded/locked | Not from the web |
 
-   Cái thứ nhất mới là thứ người dùng gặp trên Android, và nó **không** phải giới hạn
-   của trình duyệt: `source.start(when)` do **luồng audio** thực thi, không cần JS
-   chạy. Nhưng tầm đặt lịch chỉ có 10 giây, nên vào nền là tick chết → im sau ≤10s.
-   Giờ `PREFETCH_SEC = 60`.
+   The first is what users actually hit on Android, and it is **not** a browser limit:
+   `source.start(when)` is executed by the **audio thread** and needs no JS running. But the
+   scheduling horizon was only ten seconds, so backgrounding killed the tick → silence within
+   ≤10s. It is now `PREFETCH_SEC = 60`.
 
-   **Kèm theo bắt buộc**: dừng/tua chuyển sang **nghe sự kiện** của thẻ video
-   (`bindNarration`) chứ không hỏi thăm mỗi 100ms. Đặt lịch xa mà vẫn dựa vào timer
-   thì bấm dừng từ màn khoá — nơi timer không chạy — sẽ nghe thuyết minh nói tiếp cả
-   phút sau khi hình đã đứng.
+   **A required companion**: pause and seek moved to **listening to the video element's events**
+   (`bindNarration`) rather than polling every 100ms. Scheduling far ahead while still relying on
+   a timer means pressing pause from the lock screen — where timers do not run — leaves the
+   narration talking for a minute after the picture has stopped.
 
-   **Đã thử `createMediaStreamDestination` → `<audio>` và ĐÃ BỎ (2026-08-03).**
-   Giả thuyết: điện thoại giữ media element sống ở nền nên định tuyến qua đó có thể
-   cứu iOS. Kết quả đo trên iPhone thật: **tệ hơn hẳn** — Safari đẩy MediaStream qua
-   đường xử lý real-time communication, tiếng TTS bị **rè** và **ngắt sau ~1 giây**
-   mỗi cue. Đã trả về `ctx.destination`. Đừng thử lại đường này.
+   **`createMediaStreamDestination` → `<audio>` was tried and ABANDONED (2026-08-03).**
+   The hypothesis: phones keep media elements alive in the background, so routing through one
+   might rescue iOS. Measured on a real iPhone: **distinctly worse** — Safari puts a MediaStream
+   through its real-time communication path, and the TTS came out **distorted** and **cut off
+   after ~1 second** of every cue. Reverted to `ctx.destination`. Do not try this road again.
 
-   **Tiếng rè còn một nguyên nhân thứ hai, có sẵn từ trước:** `NARRATION_GAIN = 2.5`
-   nhân với `video.volume`. Ở âm lượng tối đa thì mọi mẫu trên 0.4 biên độ bị cắt
-   ngọn, mà TTS vốn được chuẩn hoá gần mức đầy — nên nó rè cả ở foreground, chỉ là
-   không ai để ý cho tới khi có cái để so sánh. Giờ có `DynamicsCompressor` làm
-   limiter trước `destination`: giữ độ to, bỏ phần cắt ngọn.
+   **The distortion had a second, pre-existing cause:** `NARRATION_GAIN = 2.5` multiplied by
+   `video.volume`. At full volume every sample above 0.4 amplitude clips, and TTS is normalised
+   close to full scale — so it was distorting in the foreground too, just with nothing to compare
+   against. There is now a `DynamicsCompressor` acting as a limiter before `destination`: the
+   loudness stays, the clipping goes.
 
-   Narration vẫn vỡ ở nền trên iOS. Cách duy nhất là server dựng sẵn một track rồi
-   trộn vào file — và cái đó phải TTS toàn bộ video **trước khi nghe được câu đầu**,
-   tức xoá mất tính chất "nghe được sau vài giây" vừa xây. Việc của một phase.
+   Narration still breaks in the background on iOS. The only way through is for the server to
+   build a track and mix it into the file — and that would require TTS over the whole video
+   **before the first line could be heard**, destroying the "audible within seconds" property
+   just built. A phase's worth of work.
 
-   Đây là lý do kỹ thuật cụ thể cho "app mobile" ở Phase 3 (§7): không phải để đẹp
-   hơn, mà vì phát nền trên iPhone chỉ native mới làm được.
-   **Bẫy đi kèm:** player có hai thẻ `<video>`; khi đổi tầng phải xin PiP lại trên
-   thẻ mới **trước** khi xoá nguồn thẻ cũ, không thì cửa sổ PiP tắt giữa chừng.
-4. **yt-dlp hỏng định kỳ** khi YouTube đổi cơ chế → ingest phải xử lý lỗi tử tế + cho retry.
-5. **YouTube chặn theo IP nếu bắn quá nhiều full-metadata (ĐÃ XẢY RA 2026-07-29).**
-   Backfill topic chạy 8 luồng song song; tới ~800 video thì mọi full fetch trả về
-   *"Sign in to confirm you're not a bot"*. **Chặn này không giới hạn trong backfill** —
-   nó giết luôn `ResolveStream`, tức là **không phát được video nào chưa tải về đĩa**.
-   Flat listing (đường của scanner) **không** bị ảnh hưởng.
-   Bài học: full metadata fetch là thao tác **đắt và bị đếm**; flat listing thì không.
-   Giờ backfill chạy **1 luồng, cách nhau 4 giây, mặc định 200 video/lượt**, và **tự dừng
-   sau 15 lần hỏng liên tiếp** — cố đấm xuyên qua một cái chặn chỉ làm nó dài thêm.
+   This is the concrete technical reason for "a mobile app" in Phase 3 (§7): not to look nicer,
+   but because background playback on an iPhone is only possible natively.
+   **A trap that comes with it:** the player holds two `<video>` elements; when switching tiers,
+   PiP must be requested on the new element **before** the old one's source is cleared, or the
+   PiP window closes mid-switch.
+4. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures
+   gracefully and allow a retry.
+5. **YouTube blocks by IP if too many full-metadata fetches are made (THIS HAPPENED 2026-07-29).**
+   Topic backfill ran 8 threads in parallel; at around 800 videos every full fetch began
+   returning *"Sign in to confirm you're not a bot"*. **The block is not confined to backfill** —
+   it killed `ResolveStream` too, meaning **no video that was not already on disk could play**.
+   Flat listing (the scanner's path) was **unaffected**.
+   The lesson: a full metadata fetch is **expensive and counted**; flat listing is not.
+   Backfill now runs **one thread, 4 seconds apart, 200 videos per pass by default**, and **stops
+   itself after 15 consecutive failures** — pushing through a block only makes it longer.
 
-## 8b. Build status (cập nhật 2026-07-28)
+## 8b. Build status (updated 2026-07-28)
 
-### Chạy được, đã verify bằng request thật
+### Working, verified with real requests
 
-**Hạ tầng:** 4 service (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + web 5173.
-Đổi khỏi block 808x vì máy này có project khác chiếm cứng 8080 và 8082.
-Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST ra ngoài.
-`scripts/dev.sh` chạy cả stack — **6 tiến trình**: 4 service Go + sidecar dịch (8005) +
-TTS (8002, nằm ở repo `robot-esp32`, chỉ start nếu tìm thấy và chưa chạy) — rồi mới giao
-terminal cho Vite. `scripts/stop.sh` dừng lại, **làm việc theo cổng** nên dừng được cả
-service khởi động bằng tay sau khi rebuild hoặc chạy trong tmux.
-`make check` = buf lint + tsc + go build.
+**Infrastructure:** 4 services (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180
++ web 5173. Moved off the 808x block because another project on this machine holds 8080 and 8082
+permanently. Postgres 17, one schema and one role per service. ConnectRPC inside, REST outward.
+`scripts/dev.sh` runs the whole stack — **6 processes**: the 4 Go services + the translation
+sidecar (8005) + speech (8002, which lives in the `robot-esp32` repository and is started only if
+found and not already running) — before handing the terminal to Vite. `scripts/stop.sh` stops it
+again, **working by port**, so it also stops services started by hand after a rebuild or running
+inside tmux. `make check` = buf lint + tsc + go build.
 
-**dev.sh từ chối chạy khi cổng đang bận (2026-08-04).** Trước đó hai kiểu hỏng im lặng đều
-đã xảy ra thật: service Go in `address already in use` vào log không ai tail rồi script vẫn
-chạy tiếp như chưa có gì, còn Vite thì **lặng lẽ nhảy sang cổng khác** và báo trong một dòng
-khởi động không ai đọc — đến khi cái giữ 5173 chết thì tab trình duyệt thành trang chết
-trong lúc Vite vẫn đang chạy. Cả hai đều trông giống "app hỏng" chứ không giống "đang chạy
-hai bản". Kèm `strictPort: true` ở `vite.config.ts`. Và dev.sh **hỏi lại từng cổng sau khi
-start** rồi in `up`/`DOWN` — mọi dòng start đều là background nên không có cái nào hỏng
-**thấy được**.
+**dev.sh refuses to start on a held port (2026-08-04).** Both silent failures had happened for
+real: a Go service printed `address already in use` into a log nobody was tailing while the
+script carried on as though it had started, and Vite **quietly moved to another port**,
+announcing it in a line of startup output nobody reads — so when the server holding 5173 later
+stopped, the browser tab became a dead page while Vite was demonstrably running. Both look like
+"the app is broken" rather than "two copies are running". Paired with `strictPort: true` in
+`vite.config.ts`. And dev.sh **asks each port after starting** and prints `up`/`DOWN` — every
+start line is a background job, so none of them can fail **visibly**.
 
-**Bẫy đã gặp:** `trap cleanup EXIT` của dev.sh giết **mọi** tiến trình con khi nó thoát —
-kể cả khi nó thoát vì `npm run dev` (tiến trình foreground cuối) bị kill. Kill Vite cũ =
-giết luôn catalog và translate server, và triệu chứng hiện ra ở chỗ khác hẳn ("Could not
-reach the library service", "502 translate"). Đã gặp hai lần trong một buổi.
+**A trap already hit:** dev.sh's `trap cleanup EXIT` kills **every** child when it exits —
+including when it exits because `npm run dev` (its last foreground process) was killed. Killing
+an old Vite therefore killed catalog and the translation server too, and the symptom surfaced
+somewhere else entirely ("Could not reach the library service", "502 translate"). Hit twice in
+one session.
 
-**Nội dung:** `topics.yaml` là nguồn duy nhất của feed. Scanner quét **mỗi 1 tiếng**
-(đổi từ 12 tiếng ngày 2026-07-29; chỉnh qua `SCAN_INTERVAL`, vd `SCAN_INTERVAL=30m`).
-Chu kỳ này **chính là** độ tươi tối đa của feed — không gì đăng trên YouTube có thể
-xuất hiện ở đây trước khi một lượt quét nhìn thấy nó. Một lượt đi hết 63 nguồn mất
-~3 phút và dùng flat listing (rẻ); thứ đắt là fetch metadata từng video, mà scanner
-cố ý **không** làm (xem §8b). `POST /api/topics/refresh` để quét ngay. Hiện **280 video / 6 chủ đề / 7 nguồn**,
-quét hết trong ~8 giây, chỉ lấy metadata.
+**Content:** `topics.yaml` is the feed's only source. The scanner runs **every hour** (changed
+from twelve hours on 2026-07-29; adjustable through `SCAN_INTERVAL`, e.g. `SCAN_INTERVAL=30m`).
+That interval **is** the feed's maximum freshness — nothing posted to YouTube can appear here
+before a pass has seen it. A pass walks 63 sources in ~3 minutes using flat listings (cheap); the
+expensive part is per-video metadata, which the scanner deliberately **does not** fetch (see
+§8b). `POST /api/topics/refresh` scans now. Currently **280 videos / 6 topics / 7 sources**,
+scanned in ~8 seconds, metadata only.
 
-**Phát ngay từ giây đầu, seek được ngay (2026-07-29):** bấm play → `/stream` liệt kê nguồn
-(§4), player phát `instant` trong ~17ms và **tự enqueue tải nền**; tải xong thì đổi sang
-`local`. Rê chuột lên card 250ms → prefetch resolve, nên lúc bấm play thường **không còn
-request nào** phải chờ. Cache resolve trong ingest: đo thật **1.85s → 0.008s**.
-**Seek luôn bật** trừ khi đang ở tầng `remux`.
-**Hai thẻ `<video>`** chồng nhau: nguồn mới nạp và seek sẵn ở thẻ ẩn tại mốc
-`hiện tại + 0.6s`, tới mốc thì hoán đổi opacity. Không chớp đen, không tua lùi. Đổi một thẻ
-tại chỗ chính là thứ gây chớp trước đây.
-Player: autoplay (bị trình duyệt chặn thì **để nguyên ở khung hình đầu**, không tự bật muted —
-một video rõ ràng chưa chạy dễ hiểu hơn một video trông như đang chạy mà không có tiếng).
-**Code đã từng trôi khỏi luật này và bị kéo về 2026-08-03**: có lúc nó tự bật muted rồi phát
-tiếp, kèm một bộ "khôi phục tiếng ở cử chỉ đầu tiên". Trên desktop nghe như một sự tiện lợi;
-trên iPhone thì Safari từ chối autoplay có tiếng gần như luôn luôn, nên nhánh dự phòng **chính
-là** kết quả bình thường — video phát câm. Và gỡ câm không chỉ là gán `muted = false`: Safari
-đòi gọi lại `play()` trong cùng cử chỉ, mà không chỗ nào làm. Đó là lý do luật này tồn tại.
+**Plays from the first second and seeks immediately (2026-07-29):** pressing play → `/stream`
+lists the sources (§4), the player starts `instant` within ~17ms and **queues a background
+download**; when it lands, it switches to `local`. Resting the pointer on a card for 250ms
+prefetches the resolve, so pressing play usually has **no request left** to wait for. The resolve
+cache in ingest measured **1.85s → 0.008s**.
+**Seeking is always enabled** except in the `remux` tier.
+**Two stacked `<video>` elements**: the new source is loaded and pre-seeked in the hidden one at
+`now + 0.6s`, and at that moment their opacity is swapped. No black flash, no jumping backwards.
+Changing one element in place is what caused the flash before.
+The player autoplays (and if the browser blocks it, **stays on the first frame** rather than
+muting itself — a video that clearly has not started is easier to understand than one that looks
+like it is playing with no sound).
+**The code drifted from that rule and was pulled back on 2026-08-03**: for a while it muted
+itself and played on, with a "restore sound on the first gesture" mechanism attached. On desktop
+that reads as a convenience; on an iPhone, Safari refuses autoplay with sound almost always, so
+the fallback branch **is** the normal outcome — the video plays silently. And unmuting is not
+just assigning `muted = false`: Safari requires `play()` to be called again within the same
+gesture, which nothing did. That is why the rule exists.
 
-Điều khiển **tự ẩn sau 3 giây** với chuột, **5 giây với ngón tay** (hiện lại khi rê/bấm/focus,
-luôn hiện khi pause hoặc đang mở menu). **Chuột: click = play/pause. Cảm ứng: chạm = bật/tắt
-menu** — ngón tay không rê được nên chạm là cách duy nhất gọi menu lên, mà nếu nó cũng
-play/pause thì mỗi lần nhìn điều khiển đều cắt ngang cái đang xem. Phân biệt bằng `pointerType`
-của chính sự kiện, không đoán theo bề rộng màn hình.
-**`pointerleave` KHÔNG được dùng để ẩn trên cảm ứng**: con trỏ chạm không rời đi mà *ngừng tồn
-tại*, trình duyệt báo bằng cùng sự kiện — nên mọi cú chạm tự ẩn menu lúc nhấc tay, và vì chuỗi
-là `pointerdown → pointerup → pointerleave → click`, thanh bị tắt `pointer-events` đúng một sự
-kiện trước cú click dành cho nó. Đó là lý do "bấm menu không ăn" trên iPhone.
-Trên cảm ứng, thanh gọn lại: bỏ slider âm lượng (có nút cứng), còn phụ đề/chất lượng/thuyết
-minh/tự động phát gom vào nút ⚙; vùng chạm 44px thay vì 36.
-**Bảng ⚙ trên cảm ứng phải portal ra `document.body`**, không được là dropdown trong player:
-player có `overflow-hidden` (cần, để giữ bo góc) và trên điện thoại chỉ cao ~220px, nên một
-danh sách mở lên trên bị **cắt mất phần đầu**. Đã gặp thật.
-**Cử chỉ vuốt-xuống-thu-nhỏ đã BỎ (2026-08-03)** — người dùng thấy vô dụng. Gỡ cả bộ máy chứ
-không chỉ ngắt dây. Hệ quả: trên điện thoại, trang watch **không còn** trạng thái mini nào,
-vì `IntersectionObserver` vốn chỉ chạy ở desktop. Bar chỉ xuất hiện khi rời trang watch.
-**Mute không được ghi từ `volumechange`.** Sự kiện đó bắn cho cả thay đổi của chính player
-(ducking cho thuyết minh, và trước đây là autoplay policy tự tắt tiếng). Nó từng ghi vào
-`localStorage`, nên một lần bị chặn autoplay là im lặng được lưu như **sở thích** và trả lại ở
-mọi lần mở sau — không cách nào phân biệt với lựa chọn thật. Đã đổi khoá sang
-`yt-player-muted-v2` để bỏ các giá trị cũ, và chỉ ghi từ nút tắt tiếng và thanh âm lượng.
-**Toàn cảnh và PiP: có `webkit*` thì ƯU TIÊN `webkit*`, không phải ngược lại (sửa 2026-08-03).**
-Lần đầu tôi cho API chuẩn đi trước và chỉ rơi xuống webkit khi chuẩn vắng mặt — sai. Safari
-trên iPhone **có** báo hỗ trợ Fullscreen API, nhưng thứ nó cho là phần tử phóng to *trong
-trang*: **không xoay ngang**, và không có trình phát hệ thống để bàn giao trạng thái phát lúc
-thoát. `webkitEnterFullscreen` mới mở trình phát gốc của Apple. Cùng lý do cho
-`webkitSetPresentationMode`.
-Khả năng "trình duyệt có biết khái niệm này không" hỏi từ `HTMLVideoElement.prototype` (ref
-rỗng ở render đầu). Nhưng "video NÀY có đủ điều kiện không" thì chỉ phần tử trả lời được —
-`webkitSupportsPresentationMode`, hỏi trong effect sau khi phần tử tồn tại.
-**Thoát toàn cảnh trên iOS trả video về ở trạng thái dừng** dù lúc vào đang chạy. Nghe
-`webkitbeginfullscreen`/`webkitendfullscreen` để nhớ và trả lại — không thì rời một video, quay
-về một khung hình đứng. **Hai cái bẫy, bản sửa đầu dính cả hai:**
-(a) trí nhớ "lúc vào đang chạy" **không được** để trong closure của effect — nguồn có thể đổi
-giữa chừng (file local tải xong) làm effect chạy lại và mang trí nhớ đi mất; phải là ref.
-(b) `pause` **không chắc** đến trước `webkitendfullscreen`; kiểm một lần tại thời điểm đó có
-thể thấy video chưa dừng, rồi nó dừng ngay sau. Phải bắt cả cú `pause` đến muộn.
-**Mở lại app thì video dở dang được đưa lại vào góc, ĐANG DỪNG (2026-08-03).**
-`last-watched.ts` giữ `{videoId, position, savedAt}` trong localStorage, ghi cùng nhịp với
-`recordProgress`. Ba luật: xem quá **95%** thì coi như xong và **quên**; quá **7 ngày** thì
-không còn là "vừa nãy" nữa; bấm ✕ là câu trả lời cho lời mời, nên cũng quên.
-**Không tự phát** — tiếng phát ra từ góc màn hình của một trang vừa mở là giật mình, và đây sẽ
-là lần thứ hai trong dự án video tự chạy khi không ai bảo.
-**Không dùng history của server** cho việc này: history nói *đã từng xem gì, trên mọi máy*, còn
-đây nói *trình duyệt NÀY đang xem dở gì*. Dùng history sẽ mời lại thứ đã xem xong ở máy khác.
-Vị trí thì ưu tiên số của server, chỉ dùng số local khi tab đóng trước lần báo cuối.
+The controls **hide after 3 seconds** with a mouse and **5 seconds with a finger** (reappearing
+on move/press/focus, always visible while paused or with a menu open). **Mouse: click =
+play/pause. Touch: tap = show/hide the controls** — a finger cannot hover, so tapping is the only
+way to bring the controls up, and if it also toggled playback then every look at the controls
+would interrupt what you were watching. Told apart by the event's own `pointerType`, not guessed
+from screen width.
+**`pointerleave` must NOT be used to hide on touch**: a touch pointer does not leave, it *ceases
+to exist*, and the browser reports that with the same event — so every tap hid the controls on
+lift, and because the sequence is `pointerdown → pointerup → pointerleave → click`, the bar had
+`pointer-events` disabled exactly one event before the click meant for it. That is why "the menu
+button does nothing" on an iPhone.
+On touch the bar is trimmed: the volume slider goes (there are hardware buttons), and
+subtitles/quality/narration/autoplay collapse into a ⚙ button; touch targets are 44px rather
+than 36.
+**The ⚙ panel on touch must portal to `document.body`** rather than being a dropdown inside the
+player: the player has `overflow-hidden` (needed, to keep its rounded corners) and on a phone is
+only ~220px tall, so a list opening upward **has its top cut off**. Observed for real.
+**The swipe-down-to-minimise gesture was REMOVED (2026-08-03)** — users found it useless. The
+whole mechanism went, not just the wiring. A consequence: on a phone the watch page **no longer
+has** a mini state at all, because `IntersectionObserver` only ran on desktop. The bar appears
+only when leaving the watch page.
+**Mute must not be recorded from `volumechange`.** That event also fires for the player's own
+changes (ducking for narration, and formerly the autoplay policy muting itself). It used to write
+to `localStorage`, so one blocked autoplay stored silence as a **preference** and returned it on
+every later visit — indistinguishable from a real choice. The key moved to `yt-player-muted-v2`
+to discard the old values, and only the mute button and the volume slider write it.
+**Fullscreen and PiP: where `webkit*` exists, PREFER `webkit*`, not the other way round (fixed
+2026-08-03).** The first attempt put the standard API first and fell back to webkit only when the
+standard was absent — wrong. Safari on iPhone **does** report Fullscreen API support, but what it
+gives is an element enlarged *within the page*: **it does not rotate to landscape**, and there is
+no system player to hand playback state back to on exit. Only `webkitEnterFullscreen` opens
+Apple's native player. The same reasoning applies to `webkitSetPresentationMode`.
+"Does this browser know the concept" is asked of `HTMLVideoElement.prototype` (the ref is empty
+on the first render). But "does THIS video qualify" can only be answered by the element —
+`webkitSupportsPresentationMode`, asked in an effect once the element exists.
+**Leaving fullscreen on iOS returns the video paused** even when it was playing on the way in.
+Listen for `webkitbeginfullscreen`/`webkitendfullscreen` to remember and restore it — otherwise
+you leave a video and come back to a still frame. **Two traps, and the first fix hit both:**
+(a) the memory of "it was playing on the way in" **must not** live in the effect's closure — the
+source can change mid-flight (the local file finishing) and re-run the effect, taking the memory
+with it; it has to be a ref.
+(b) `pause` does **not** reliably arrive before `webkitendfullscreen`; checking once at that
+moment can see a video still playing which then pauses immediately after. The late `pause` has to
+be caught too.
+**Reopening the app puts an unfinished video back in the corner, PAUSED (2026-08-03).**
+`last-watched.ts` keeps `{videoId, position, savedAt}` in localStorage, written on the same
+cadence as `recordProgress`. Three rules: past **95%** counts as finished and is **forgotten**;
+past **7 days** is no longer "just now"; pressing ✕ is an answer to the offer, so that is
+forgotten too.
+**It does not autoplay** — sound coming out of the corner of a page you have just opened is a
+fright, and this would be the second time in this project that a video started when nobody asked.
+**The server's history is not used for this**: history says *what has been watched, on any
+device*, while this says *what THIS browser is part way through*. Using history would re-offer
+something already finished on another machine.
+For the position, the server's number wins; the local one is used only when the tab closed before
+the last report.
 
-**Padding thống nhất: `px-4` trên điện thoại, `px-6` từ 700px.** Áp cho mọi trang.
-Riêng `ChipBar` ở Home tràn ra mép trên điện thoại (`-mx-4` + `px-4` bên trong): một dãy cuộn
-ngang mà dừng trước mép trông như đã hết chứ không như còn tiếp.
-**Bẫy đã gặp:** WatchPage từng chừa `pt-[calc(3.5rem+56.25vw)]` — cộng **thừa** chiều cao
-`TopBar`, vì `sticky` **vẫn chiếm chỗ trong luồng** nên nội dung đã bắt đầu ở dưới nó rồi. Thừa
-đúng 56px giữa hình và tiêu đề. Giờ chỉ còn `pt-[56.25vw]`.
+**Uniform padding: `px-4` on phones, `px-6` from 700px.** Applied to every page.
+The exception is Home's `ChipBar`, which bleeds to the edge on phones (`-mx-4` plus `px-4`
+inside): a horizontally scrolling row that stops short of the edge looks finished rather than
+continuing.
+**A trap already hit:** WatchPage used to reserve `pt-[calc(3.5rem+56.25vw)]` — adding the
+`TopBar`'s height **twice**, because `sticky` **still occupies space in the flow** so the content
+already began below it. Exactly 56px of extra space between the picture and the title. It is now
+just `pt-[56.25vw]`.
 
-`Space`/`←`/`→`/`m`, volume slider, buffered range thật, phụ đề (en/vi) với menu CC — phụ đề
-được tải **trước** file video nên xem được ngay trong lúc còn phát upstream. Hết video thì
-đếm ngược 5 giây rồi phát video kế (có công tắc Autoplay, tự dừng sau 3 video không ai tương tác).
+`Space`/`←`/`→`/`m`, a volume slider, a real buffered range, subtitles (en/vi) with a CC menu —
+subtitles are fetched **before** the media file, so they are usable while the upstream copy is
+still playing. At the end of a video there is a 5-second countdown before the next one (with an
+Autoplay switch, stopping itself after 3 videos with no interaction).
 
-**Search:** **luôn** hỏi YouTube song song với thư viện. Trang kết quả 2 khối
-(In your library / On YouTube). Autocomplete từ local (chủ đề → kênh → tiêu đề).
-Bỏ dấu tiếng Việt hai chiều qua `unaccent`. Mở video từ YouTube → ghi metadata
-**không gán chủ đề**, feed vẫn do topics.yaml quyết định.
+**Search:** **always** asks YouTube alongside the library. The results page has two blocks (In
+your library / On YouTube). Autocomplete comes from local data (topics → channels → titles).
+Vietnamese diacritics are handled both ways through `unaccent`. Opening a video from YouTube
+writes its metadata **without assigning a topic**; the feed is still decided by topics.yaml.
 
-**Phân trang:** feed + search dùng `useInfiniteQuery`, tự nạp trước 600px, kèm nút
-"Load more" thật cho bàn phím/remote.
+**Pagination:** feed and search use `useInfiniteQuery`, prefetching 600px ahead, with a real
+"Load more" button for keyboards and remotes.
 
-**Activity:** trang `/activity` gộp hàng đợi tải (kèm lỗi yt-dlp nguyên văn) và **lịch sử
-quét** (kèm nguồn nào hỏng). Có nút "Scan now" thật. Không phải log viewer —
-log 4 service vẫn ra stdout.
+**Activity:** `/activity` brings together the download queue (with yt-dlp's error verbatim) and
+the **scan history** (naming any source that failed). It has a real "Scan now" button. It is not
+a log viewer — the four services still log to stdout.
 
-**Mở rộng 2026-08-04:**
-- **Lịch sử quét, không phải một lượt.** Trước đây `Scanner.lastScan` là **một biến trong
-  RAM**: chỉ trả lời được "lượt gần nhất thế nào", và restart là mất luôn cả câu đó. Câu
-  người dùng thật sự hỏi trải dài nhiều ngày ("kênh này im mấy hôm rồi, quét có chạy
-  không"). Giờ có bảng `ingest.scans`, ghi sau mỗi lượt, **tự xoá dòng cũ hơn 30 ngày ngay
-  trong lần ghi** — buộc cái làm bảng phình cũng là cái làm nó co, không cần lịch thứ hai.
-  Dọn **theo tuổi chứ không theo số dòng**: 500 dòng là 3 tuần ở nhịp 1 tiếng nhưng 10 ngày
-  ở `SCAN_INTERVAL=30m` — ý nghĩa đổi mà không ai đụng vào. `GET /api/scans?limit=&offset=`,
-  **phân trang thật ở server** vì bảng này tăng 1 dòng/giờ, mãi mãi.
-- **"View more" 10 một lần.** Jobs phân trang **ở client** (`usePagedList`): ba nhóm
-  Failed/In progress/Completed đến từ **cùng một request**, nên phân trang server sẽ thành
-  ba query ba con trỏ cho một trang chẩn đoán. Scans thì ngược lại — phân trang server.
-- **`[X]` trên mọi dòng job, hai nghĩa theo trạng thái**: đang chạy = **huỷ tải**; đã xong
-  hoặc đã lỗi = **ẩn** (`jobs.dismissed_at`, `POST /api/ingest/jobs/{id}/dismiss`). Cùng vị
-  trí cùng icon, phân biệt bằng `aria-label`/tooltip — nút mà đổi chỗ là nút phải đi tìm.
-  Store chỉ cho ẩn **trạng thái kết thúc**: giấu việc đang chạy là thứ duy nhất nút này
-  không được phép làm.
-- **`hideDismissed` là tham số, không phải luật.** Hai bên đọc cùng `GET /api/ingest/jobs`
-  vì hai lý do khác nhau: trang Activity đang dọn dẹp, còn **player đọc để biết bản tải đã
-  về chưa**. Lọc mặc định thì ẩn một job xong có thể để player chờ mãi một bản đã có — đúng
-  hình dạng sự cố "job rớt khỏi danh sách → kẹt 360p" ở trên, từ hướng khác. Cùng lý do,
-  query key của React Query **tách riêng** (`['ingest-jobs','activity',limit]`): chung khoá
-  thì trang Activity nạp 200 sẽ đè cache 50 của player.
-- **Retry trên mỗi dòng Failed** (`POST .../retry`): tạo **job mới** với cùng `sourceUrl` và
-  cùng `preferredHeight`, rồi ẩn dòng cũ. Không reset dòng cũ tại chỗ — `attempts`, thời
-  điểm và thông báo lỗi **chính là** thứ trang này tồn tại để hiện. Từ chối job chưa kết
-  thúc: hai transfer cùng một video là đúng thứ đã làm địa chỉ này bị chặn (§8 rủi ro 5).
-  Có Retry vì **không có đường hoàn tác cho `[X]`** (đã chốt): nếu thứ duy nhất làm được với
-  một lỗi là giấu nó thì giấu sẽ thành cách xử lý lỗi mặc định.
-- **Lịch sử quét không có `[X]`** — nó không đòi hành động nào, và ẩn một dòng tạo ra một lỗ
-  trong thứ vốn để đọc như chuỗi liên tục: "tuần trước có chạy không" sẽ trả lời sai.
+**Extended 2026-08-04:**
+- **A scan history, not a single pass.** `Scanner.lastScan` used to be **a variable in memory**:
+  it could answer "how did the most recent pass go" and nothing else, and a restart lost even
+  that. The question people actually bring spans days ("this channel has been quiet for a few
+  days, has the scan been running?"). There is now an `ingest.scans` table, written after each
+  pass, which **deletes rows older than 30 days in the same write** — tying what makes the table
+  shrink to the only thing that makes it grow, with no second schedule. Pruned **by age rather
+  than by row count**: 500 rows is three weeks at hourly and ten days at `SCAN_INTERVAL=30m` —
+  the meaning would change with nobody touching it. `GET /api/scans?limit=&offset=`, **paged at
+  the server**, because this table grows by a row an hour, forever.
+- **"View more", ten at a time.** Jobs are paged **on the client** (`usePagedList`): the three
+  groups Failed/In progress/Completed come from **one request**, so paging them at the server
+  would be three queries and three cursors for a diagnostics page. Scans are the opposite case —
+  paged at the server.
+- **`[X]` on every job row, with two meanings by state**: running = **cancel the download**;
+  finished or failed = **dismiss** (`jobs.dismissed_at`, `POST /api/ingest/jobs/{id}/dismiss`).
+  Same place, same icon, told apart by `aria-label`/tooltip — a control that moves is a control
+  you have to look for. The store allows dismissing **terminal states only**: hiding work that is
+  still running is the one thing this button must never do.
+- **`hideDismissed` is a parameter, not a rule.** Two callers read the same
+  `GET /api/ingest/jobs` for different reasons: the Activity page is being tidied, while the
+  **player reads it to learn its download has landed**. Filtering by default would let a
+  dismissed, completed job leave the player waiting for a copy that had already arrived — the
+  same shape as the "job falls off the list → stuck at 360p" incident above, from another
+  direction. For the same reason the React Query key is **separate**
+  (`['ingest-jobs','activity',limit]`): sharing one, the Activity page's fetch of 200 would
+  overwrite the player's 50.
+- **Retry on every Failed row** (`POST .../retry`): creates a **new job** with the same
+  `sourceUrl` and `preferredHeight`, then dismisses the old row. The old row is not reset in
+  place — `attempts`, the timings and the error reported **are** what this page exists to show.
+  A job that has not finished is refused: two transfers of one video is exactly what got this
+  address blocked (§8, risk 5).
+  Retry exists because **there is no undo for `[X]`** (settled): if the only thing you can do
+  with a failure is hide it, hiding becomes the default way failures are handled.
+- **The scan history has no `[X]`** — it asks for no action, and hiding a row puts a hole in
+  something meant to be read as a continuous sequence: "did it run last week" would then answer
+  wrongly.
 
-**Feed vô tận:** `GetFeedPage` đông cứng thứ tự rank vào một snapshot theo phiên (memory
-recsys, TTL 30 phút) — trang sau đọc từ snapshot đó thay vì rank lại, nên không trùng video.
-Khi snapshot còn dưới 48 video, gateway tự gọi `ExpandLibrary` (ingest) chạy nền: đào sâu
-source trong topics.yaml (có cursor lưu Postgres để lần sau tiếp tục từ chỗ cũ) → related qua
-InnerTube (`/youtubei/v1/next`, tự viết, không có contract) → search theo tên chủ đề. Chỉ một
-lượt expand chạy cùng lúc.
+**An endless feed:** `GetFeedPage` freezes the ranking into a per-session snapshot (in recsys
+memory, TTL 30 minutes) — later pages read from that snapshot rather than re-ranking, so videos
+do not repeat. When a snapshot falls below 48 videos, the gateway calls `ExpandLibrary` (ingest)
+in the background: deepening the sources in topics.yaml (with a cursor in Postgres so the next
+pass continues where it left off) → related videos through InnerTube (`/youtubei/v1/next`,
+hand-written, no contract) → searching by topic name. Only one expansion runs at a time.
 
-**Huỷ tải khi rời video (2026-07-29).** Bấm play xếp hàng một bản tải để lần sau xem từ đĩa —
-nhưng bản tải mà **không còn ai chờ** thì cũng là request tới YouTube không còn ai chờ, và
-địa chỉ này đã bị chặn một lần vì làm quá nhiều (§8 rủi ro 5). Rời trang watch →
-`POST /api/videos/{id}/download/cancel`. Gắn ở **cleanup của effect** nên phủ cả hai chiều
-rời đi: chuyển sang video kế, và đóng trang.
-**Đánh đổi đã biết:** `NoPart()` đang bật nên yt-dlp **không resume** — huỷ nửa chừng là mất
-sạch phần đã tải, lần sau bắt đầu lại từ 0.
+**Cancelling a download on leaving a video (2026-07-29).** Pressing play queues a copy so the
+next viewing comes from disk — but a copy **nobody is waiting for** is also a request to YouTube
+nobody is waiting for, and this address has been blocked once for making too many (§8, risk 5).
+Leaving the watch page sends `POST /api/videos/{id}/download/cancel`. Attached in the **effect's
+cleanup**, so it covers both ways of leaving: moving to the next video, and closing the page.
+**A known trade:** `NoPart()` is on, so yt-dlp **cannot resume** — cancelling midway loses
+everything fetched so far, and the next attempt starts from zero.
 
-**Eviction:** catalog chạy sweep mỗi giờ (`services/catalog/internal/usecase/evict.go`).
-Vượt 20 GiB → xoá file media của LRU không pinned về 16 GiB, giữ metadata + thumbnail +
-history. Ngưỡng chỉnh qua `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
+**Eviction:** catalog runs a sweep every hour
+(`services/catalog/internal/usecase/evict.go`). Above 20 GiB it deletes the media files of
+least-recently-used unpinned videos down to 16 GiB, keeping metadata, thumbnails and history.
+The thresholds are set by `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 
-### Chưa làm — thứ tự đề xuất khi làm tiếp
+### Not done — suggested order when picking this up again
 
-(Nội dung bên dưới đã lỗi thời sau session 2026-07-31; xem mục mới bên dưới.)
+(What follows became out of date after the 2026-07-31 session; see the newer sections below.)
 
-1. ~~**3 trang còn thiếu**: `/history` · `/saved` · `/storage`. API đã có sẵn
-   (`ListHistory`, `GetStorageUsage`, `SetPinned`) — chỉ thiếu tầng `ui/`.
-   **Đang là link chết trong sidebar.**~~ **ĐÃ LÀM 2026-07-31.**
+1. ~~**Three missing pages**: `/history` · `/saved` · `/storage`. The APIs already exist
+   (`ListHistory`, `GetStorageUsage`, `SetPinned`) — only the `ui/` layer is missing.
+   **They are dead links in the sidebar.**~~ **DONE 2026-07-31.**
 
-### Đã làm 2026-07-31 — session "nine bugs" follow-up
+### Done 2026-07-31 — the "nine bugs" follow-up session
 
-#### 3 trang mới
-| Trang | Thành phần |
+#### Three new pages
+| Page | Components |
 |---|---|
-| `/history` | `HistoryPage.tsx` — infinite scroll `GET /api/history`, grid `VideoCard` |
-| `/saved` | `SavedPage.tsx` — infinite scroll `GET /api/pinned` (pinned videos), grid `VideoCard` |
-| `/storage` | `StoragePage.tsx` — stats cards (`usedBytes`/`budgetBytes`/etc.) + eviction candidates grid with inline Pin/Unpin |
+| `/history` | `HistoryPage.tsx` — infinite scroll over `GET /api/history`, a grid of `VideoCard` |
+| `/saved` | `SavedPage.tsx` — infinite scroll over `GET /api/pinned` (pinned videos), a grid of `VideoCard` |
+| `/storage` | `StoragePage.tsx` — stat cards (`usedBytes`/`budgetBytes`/etc.) plus an eviction-candidates grid with inline Pin/Unpin |
 
 #### Sidebar
-- Thêm 3 link: `Bookmark` → `/saved`, `Clock` → `/history`, `HardDrive` → `/storage`
+- Three links added: `Bookmark` → `/saved`, `Clock` → `/history`, `HardDrive` → `/storage`
 
-#### Backend mới
-- `POST /api/videos/{id}/pinned` — REST route cho `SetPinned` RPC (trước đó RPC có nhưng chưa expose)
-- `ListPinnedVideos` RPC — thêm proto → domain → postgres repo → use case → RPC server → gateway `GET /api/pinned`
+#### New backend
+- `POST /api/videos/{id}/pinned` — a REST route for the `SetPinned` RPC (which existed but was not exposed)
+- `ListPinnedVideos` RPC — added through proto → domain → postgres repo → use case → RPC server → gateway `GET /api/pinned`
 
 #### Keep/Pin UI
-- `VideoActions.tsx`: nút "Keep"/"Kept" đã có onClick gọi `useSetPinned`, bookmark fill khi pinned
-- `VideoCard.tsx`: nút ⋮ mở dropdown menu "Keep"/"Unkeep"
-- `StorageBanner.tsx`: nút "Manage storage" dead link → `<Link to="/storage">`
+- `VideoActions.tsx`: the "Keep"/"Kept" button already had an onClick calling `useSetPinned`; the bookmark fills when pinned
+- `VideoCard.tsx`: the ⋮ button opens a "Keep"/"Unkeep" dropdown
+- `StorageBanner.tsx`: the dead "Manage storage" link became `<Link to="/storage">`
 
-#### Cải thiện feed ranking (`ranker.go`)
-- **Lọc FAILED**: `f.MediaState == "MEDIA_STATE_FAILED"` → skip
-- **Lọc EVICTED**: `f.MediaState == "MEDIA_STATE_EVICTED"` → skip
-- **Lọc 85%+ watched**: `fraction >= 0.85` → skip (giữ trong up-next, chỉ lọc ở Home)
-- **Penalty publishedAt**: `score *= exp(-days/365)` với 365-day half-life; nếu >1yr thì trừ thêm -4.0 flat. **Đã lỗi thời: giờ hard filter skip toàn bộ video >1yr, dùng AddedAt fallback khi không có PublishedAt (2026-07-31).** Xem session "old videos" follow-up.
+#### Feed ranking improvements (`ranker.go`)
+- **Filter FAILED**: `f.MediaState == "MEDIA_STATE_FAILED"` → skip
+- **Filter EVICTED**: `f.MediaState == "MEDIA_STATE_EVICTED"` → skip
+- **Filter 85%+ watched**: `fraction >= 0.85` → skip (kept in up-next; filtered only on Home)
+- **publishedAt penalty**: `score *= exp(-days/365)` with a 365-day half-life, plus a flat −4.0 beyond a year. **Out of date: there is now a hard filter skipping every video older than a year, using AddedAt as a fallback when PublishedAt is missing (2026-07-31).** See the "old videos" follow-up.
 
-#### Cải thiện "Popular with you" (`collections.go`)
-- **Chỉ READY**: lọc `dto.MediaState != "READY"`
-- **Composite hot score**: `viewCount × recencyMultiplier(addedAt, <30d) × log2(duration+1) × exp(-pubDays/365)` — thay vì chỉ sort theo view_count
-- **Recency decay**: addedAt 0→30 ngày: 1.0→0.3; publishedAt dùng exponential decay 365-day half-life
+#### "Popular with you" improvements (`collections.go`)
+- **READY only**: filter out `dto.MediaState != "READY"`
+- **A composite hot score**: `viewCount × recencyMultiplier(addedAt, <30d) × log2(duration+1) × exp(-pubDays/365)` — rather than sorting by view_count alone
+- **Recency decay**: addedAt 0→30 days maps 1.0→0.3; publishedAt uses exponential decay with a 365-day half-life
 
 #### YouTube topic injection (`HomePage.tsx`)
-- Khi browse topic (không phải "All"), gọi `useDiscover(topicName, 6)` → hiện row "From YouTube · {topic}" dùng `ExternalVideoCard`
+- When browsing a topic (not "All"), call `useDiscover(topicName, 6)` → show a "From YouTube · {topic}" row using `ExternalVideoCard`
 
 #### Superpowers plugin
-- Thêm `"plugin": ["superpowers@git+https://github.com/obra/superpowers.git"]` vào `~/.config/opencode/opencode.json` (global)
+- Added `"plugin": ["superpowers@git+https://github.com/obra/superpowers.git"]` to `~/.config/opencode/opencode.json` (global)
 
-### Đã làm 2026-07-31 — session "old videos" follow-up
+### Done 2026-07-31 — the "old videos" follow-up session
 
-#### Hard filter homepage videos >1yr (`ranker.go`)
-- **`maxPublishedAgeDays = 365`** (constant at `ranker.go:132`): hard filter trong `rankAll` — skip video published >365 ngày trước. Penalty cũ (multiplicative + -4.0 flat) không đủ vì `applyDiscoveryQuota` xếp lại theo reason bucket bất kể absolute score.
-- **Epoch detection**: `hasPub = !PublishedAt.IsZero() && PublishedAt.Unix() > 0` — protobuf decode nil `Timestamp` thành `1970-01-01T00:00:00Z`, **KHÔNG** phải Go zero time (`0001-01-01`). `IsZero()` trả false cho epoch, thành ra `20665 days > 365` filter hết toàn bộ video (3567/3722). Dùng `Unix() > 0` để bắt cả hai trường hợp.
-- **AddedAt fallback**: video không có `PublishedAt` (824 video, do flat-listing scan không trả) thì dùng `AddedAt` làm proxy.
+#### Hard filter on homepage videos older than a year (`ranker.go`)
+- **`maxPublishedAgeDays = 365`** (a constant at `ranker.go:132`): a hard filter in `rankAll` — skip videos published more than 365 days ago. The old penalty (multiplicative + a flat −4.0) was not enough, because `applyDiscoveryQuota` reorders by reason bucket regardless of absolute score.
+- **Epoch detection**: `hasPub = !PublishedAt.IsZero() && PublishedAt.Unix() > 0` — protobuf decodes a nil `Timestamp` as `1970-01-01T00:00:00Z`, **not** as Go's zero time (`0001-01-01`). `IsZero()` returns false for the epoch, so `20665 days > 365` filtered out the entire library (3567/3722). Using `Unix() > 0` catches both cases.
+- **AddedAt fallback**: videos with no `PublishedAt` (824 of them, because a flat-listing scan does not return one) use `AddedAt` as a proxy.
 
-#### Backfill mở rộng: điền `published_at` cho video thiếu
-- **`server.go:288` bug**: `ListVideoFeatures` RPC không populate `PublishedAt` vào proto response → ingest client không thấy field này. Fix: thêm `if !f.PublishedAt.IsZero() { feat.PublishedAt = timestamppb.New(f.PublishedAt) }`.
-- **Rename `ListVideosMissingTopics` → `ListVideosNeedingBackfill`**: thay vì chỉ chọn video thiếu topic, giờ chọn video thiếu topic **hoặc** thiếu `published_at` (có topic từ `topics.yaml` nhưng chưa có date).
-- **`VideoRef.MissingPublishedAt`**: flag để `backfillOne` biết video này cần date chứ không cần topic → bỏ qua `preview.Category == ""` check, luôn upsert để ghi date.
-- **Không đổi proto hay endpoint**: `POST /api/topics/backfill` vẫn hoạt động như cũ, chỉ rộng hơn.
-- **824 video thiếu date** cần ~55 phút chạy backfill (1 luồng, 4s giữa các call).
+#### Backfill widened: filling in `published_at` where it is missing
+- **`server.go:288` bug**: the `ListVideoFeatures` RPC did not populate `PublishedAt` into the proto response, so the ingest client never saw the field. Fixed by adding `if !f.PublishedAt.IsZero() { feat.PublishedAt = timestamppb.New(f.PublishedAt) }`.
+- **Renamed `ListVideosMissingTopics` → `ListVideosNeedingBackfill`**: instead of selecting only videos with no topic, it now selects videos missing a topic **or** missing `published_at` (a topic from `topics.yaml` but no date).
+- **`VideoRef.MissingPublishedAt`**: a flag telling `backfillOne` that this video needs a date rather than a topic → skip the `preview.Category == ""` check and always upsert, so the date is written.
+- **No proto or endpoint changes**: `POST /api/topics/backfill` works as before, just more widely.
+- **824 videos are missing a date**, needing ~55 minutes of backfill (one thread, 4s between calls).
 
-#### Bugfix ingest service stale binary
-- Binary `/tmp/local-youtube/ingest` compile trước commit port-change (17:54 vs 18:03 Jul 28), default catalog URL = `:8081` thay vì `:8181` → "connection refused". Rebuild + restart.
+#### Bugfix: a stale ingest binary
+- `/tmp/local-youtube/ingest` had been compiled before the port-change commit (17:54 vs 18:03 on Jul 28), so its default catalog URL was `:8081` rather than `:8181` → "connection refused". Rebuilt and restarted.
 
-#### Bugfix gateway missing MEDIA_ROOT
-- Gateway chạy không có env `MEDIA_ROOT`, default về `./media` thay vì `/Volumes/Data2/Youtube` → `/media/...` trả 404. Restart với `MEDIA_ROOT=/Volumes/Data2/Youtube`.
+#### Bugfix: gateway without MEDIA_ROOT
+- The gateway was running without the `MEDIA_ROOT` env var, defaulting to `./media` instead of `/Volumes/Data2/Youtube` → `/media/...` returned 404. Restarted with `MEDIA_ROOT=/Volumes/Data2/Youtube`.
 
-### Quyết định đã bị đảo trong quá trình làm
+### Decisions reversed along the way
 
-- **"Stream không seek được" → SAI, đã đo lại (2026-07-29)**: mục dưới từng kết luận stream
-  remux "không seek được cho tới khi file local tải xong". Sai. `ffmpeg -ss 120` trên URL
-  adaptive seek bằng HTTP range và ra fragment đầu sau **2.1s** — đắt, không phải bất khả thi.
-  Ghi lại để không ai trích lại câu cũ như một ràng buộc vật lý.
-- **Số đo nền, máy này, mạng này (2026-07-29)** — mọi quyết định playback phải đối chiếu:
+- **"The stream cannot seek" → WRONG, remeasured (2026-07-29)**: an earlier note concluded that
+  the remux stream "cannot seek until the local file has downloaded". Not so. `ffmpeg -ss 120` on
+  an adaptive URL seeks by HTTP range and produces its first fragment after **2.1s** — expensive,
+  not impossible. Recorded so nobody quotes the old sentence as a law of physics.
+- **Baseline measurements, this machine, this network (2026-07-29)** — every playback decision
+  must be checked against these:
   | | |
   |---|---|
-  | `yt-dlp -J` một lần (ra **cả** itag18 lẫn adaptive) | 1.37s |
-  | itag 18: TTFB / range | 17ms / `206` — seek native |
-  | remux → fragment đầu | 2.2s (chưa kể resolve) |
-  | **tải trọn 1080p, video 289s/42MB, cold** | **2.3s** |
-  | **tải trọn 1080p, video 850s/67MB, cold** | **7.6s** |
-  | đọc tuần tự 1 kết nối | bị bóp còn 3.15 Mbps (yt-dlp không dính) |
+  | one `yt-dlp -J` (returning **both** itag18 and adaptive) | 1.37s |
+  | itag 18: TTFB / range | 17ms / `206` — native seeking |
+  | remux → first fragment | 2.2s (before resolving) |
+  | **full 1080p download, a 289s/42MB video, cold** | **2.3s** |
+  | **full 1080p download, an 850s/67MB video, cold** | **7.6s** |
+  | sequential read on one connection | throttled to 3.15 Mbps (yt-dlp is not affected) |
 
-  **Hệ quả**: tải xong toàn bộ file còn **nhanh hơn** remux đẻ ra fragment đầu. Nên remux
-  bị đẩy xuống làm dự phòng cho video không có progressive, không còn là đường chính.
-- **Serve-while-downloading → remux fMP4**: charter từng chốt "gateway serve file **đang được
-  ghi**, trả 206 cho phần đã có". **Bất khả thi, đã đo**: tải 1080p là 2 luồng riêng
-  (`1080p.f399.mp4` + `1080p.f251.webm`) rồi mới merge — file `1080p.mp4` **không tồn tại**
-  cho tới giây cuối. Không có gì để serve.
-  **Thay bằng**: ffmpeg remux 2 URL adaptive → **fragmented MP4** đẩy thẳng qua pipe
-  (`-movflags frag_keyframe+empty_moov+default_base_moof`). MP4 thường để index ở cuối nên
-  chưa xong là chưa phát được; fMP4 phát được từ fragment đầu. `-c copy`, không encode lại,
-  CPU ≈ 0 — đúng luật "không transcode" của §4.
-  **Giá phải trả**: stream không có index → **không seek được** cho tới khi file local tải xong
-  (seek bar bị disable, có nói rõ). Ưu tiên h264 hơn AV1/VP9 vì TV cũ giải mã được h264.
-  **Bối cảnh**: YouTube đã bỏ hết progressive độ nét cao — chỉ còn itag 18, tối đa 360p.
-  Đó là lý do lần xem đầu trước đây luôn mờ.
-- **yt-dlp cũ làm mất adaptive format**: bản 2026.02.04 chỉ thấy itag 18; nâng lên 2026.07.04
-  thì đủ 144p→1080p. Đúng rủi ro §8.4 — **kiểm tra version yt-dlp trước khi kết luận
-  "YouTube không có định dạng đó"**.
+  **The consequence**: downloading the whole file is **faster** than the remux producing its
+  first fragment. So the remux was demoted to a fallback for videos with no progressive format,
+  rather than the main path.
+- **Serve-while-downloading → remux fMP4**: the charter once settled on "the gateway serves the
+  file **as it is being written**, answering 206 for the part it has". **Impossible, measured**: a
+  1080p download is two separate streams (`1080p.f399.mp4` + `1080p.f251.webm`) merged at the
+  end — the file `1080p.mp4` **does not exist** until the last second. There is nothing to serve.
+  **Replaced by**: ffmpeg remuxing the two adaptive URLs into a **fragmented MP4** pushed straight
+  through a pipe (`-movflags frag_keyframe+empty_moov+default_base_moof`). An ordinary MP4 puts
+  its index at the end, so an unfinished one cannot play; fMP4 plays from the first fragment.
+  `-c copy`, no re-encoding, CPU ≈ 0 — which honours §4's "no transcoding" rule.
+  **The price**: the stream has no index → **it cannot seek** until the local file arrives (the
+  seek bar is disabled, and says so). h264 is preferred over AV1/VP9 because older TVs can decode
+  h264.
+  **Context**: YouTube has dropped every high-resolution progressive format — only itag 18
+  remains, at 360p. That is why the first viewing used to be blurry.
+- **An old yt-dlp hid the adaptive formats**: version 2026.02.04 saw only itag 18; upgrading to
+  2026.07.04 produced the full 144p→1080p set. Exactly risk §8.4 — **check the yt-dlp version
+  before concluding "YouTube does not publish that format"**.
 
-- **Search**: từng chốt "chỉ tìm local" (Câu 3/12) → **đảo lại**: search luôn hỏi YouTube.
-  Lý do: feed là thứ được phục vụ, search là thứ chủ động đi tìm — không có lý do bó search
-  trong nguồn của feed.
-- **Playlist**: từng định làm bảng `playlists` + watch-later → **bỏ hẳn**. Chủ đề thay thế,
-  "Keep" (pin) là bộ sưu tập cá nhân duy nhất.
-- **`categories` → `topics`, lần 1**: YouTube chỉ có ~15 category toàn cục → chốt bỏ, dùng
-  topics.yaml curate tay.
-- **`categories` → `topics`, lần 2 (2026-07-28, đảo lại lần 1)**: topic của video lấy từ
-  category thật của YouTube (vd "Science & Technology"), giống taxonomy YouTube dùng cho chip
-  Subscriptions/Explore. Video cũ giữ nguyên tên topic cũ (Tech, Gaming...) — hai tập tên
-  cùng tồn tại trong sidebar.
-  **Category lấy ở đâu**: `--flat-playlist` (cách scan) **không** trả category — chỉ full fetch
-  mỗi video (`Preview`, ~2.2s) mới có. Nên scan/expand **không bao giờ** gọi Preview; category
-  được nhặt **miễn phí** ở hai chỗ vốn đã gọi Preview sẵn: `EnsureVideo` (mở video từ search /
-  trang kênh) và worker tải video. Đánh đổi: video chưa ai mở thì chưa có topic.
-  **Đã thử cách khác và bỏ**: từng cho scan tự fetch category từng video mới. Đo thật:
-  scan 8 giây → 101 giây cho 40 video mới; với 55 kênh subscribe thì thành ~73 phút. Không đáng.
-  **Bổ sung 2026-07-29 — không đảo quyết định trên, mà bù cho hệ quả của nó**: vì scan
-  không gán topic nên 2.337/3.092 video (¾ thư viện) không có topic, và chúng gần như vô
-  hình với chip lọc lẫn với nửa "chủ đề" của affinity. Thêm `BackfillTopics`
-  (`POST /api/topics/backfill`, tuỳ chọn `?limit=`): **một lượt riêng, chạy khi được gọi**,
-  8 luồng song song. Đo thật: 0,32s/video → ~12 phút cho cả thư viện, so với ~96 phút nếu
-  chạy tuần tự. Lượt này tự nối tiếp được vì nó chọn theo "chưa có topic".
-  An toàn nhờ chính upsert của catalog: `media_state`, `media_path`, `added_at` **không**
-  nằm trong `DO UPDATE SET`, và `topics` thì hợp nhất chứ không thay thế — nên backfill
-  không thể hạ cấp video đã tải hay xoá topic do topics.yaml gán.
-- **Trang kênh**: từng đọc từ catalog local (`ListChannelVideos`) → **đảo lại**: đọc **live từ
-  YouTube**, phân trang theo offset (`ListChannelUploads`). Lý do: scan chỉ mang về ~40 video mới
-  nhất, nên trang kênh đọc catalog sẽ bị chặn ở con số đó vì lý do người xem không nhìn thấy.
-  Bấm vào video chưa có trong thư viện → `EnsureVideo` ghi metadata rồi mở, đúng luồng của
-  kết quả search. Subscribe **không cần đợi scan** mới xem được kênh.
-- **Feed**: từng chốt "topics.yaml là nguồn duy nhất của feed" → **đảo lại**: khi feed sắp cạn,
-  gateway gọi `ExpandLibrary` để kéo thêm — đào sâu chính các source trong topics.yaml trước,
-  rồi related qua InnerTube, cuối cùng mới là search. Lý do: cuộn vô tận là yêu cầu, mà 280 video
-  thì hết sau ~12 trang. Thứ tự các lớp là có chủ đích — lớp đào sâu không thể hỏng, nên
-  InnerTube vỡ thì feed vẫn vô tận, chỉ kém đa dạng.
-- **Nguồn nội dung**: từng chốt "topics.yaml là nguồn duy nhất" → **đảo lại**: có hai nguồn,
-  topics.yaml (curate trước, nằm trong git) và subscription (chọn trong lúc dùng, nằm trong DB).
-  Cả hai đổ vào cùng scanner. Lý do: subscribe một kênh lạ mà không kéo nội dung về thì nó là
-  nút chết — catalog chỉ có 1 video của kênh đó, feed không có gì để đẩy lên.
-  **App không bao giờ tự ghi vào topics.yaml** — file đó là của người dùng.
-- **Phân trang feed**: offset trên bảng xếp hạng vừa rank lại → **snapshot đông cứng theo phiên**
-  (memory recsys, TTL 30 phút). Lý do: `recordImpressions` trừ điểm chính những video vừa hiện,
-  nên trang sau rank trên bảng đã khác trang trước và sinh ra video trùng.
+- **Search**: once settled as "local only" (question 3 of 12) → **reversed**: search always asks
+  YouTube. The reason: the feed is what is served to you, search is what you go looking for —
+  there is no reason to confine search to the feed's sources.
+- **Playlists**: once planned as a `playlists` table plus watch-later → **dropped entirely**.
+  Topics take their place, and "Keep" (pin) is the only personal collection.
+- **`categories` → `topics`, first time**: YouTube has only ~15 global categories → dropped in
+  favour of a hand-curated topics.yaml.
+- **`categories` → `topics`, second time (2026-07-28, reversing the first)**: a video's topic
+  comes from YouTube's own category (e.g. "Science & Technology"), the same taxonomy YouTube uses
+  for its Subscriptions/Explore chips. Older videos keep their old topic names (Tech, Gaming…) —
+  the two sets of names coexist in the sidebar.
+  **Where the category comes from**: `--flat-playlist` (how scanning works) does **not** return a
+  category — only a full per-video fetch (`Preview`, ~2.2s) does. So scanning and expansion
+  **never** call Preview; the category is picked up **for free** in the two places that already
+  call it: `EnsureVideo` (opening a video from search or a channel page) and the download worker.
+  The trade: a video nobody has opened has no topic yet.
+  **An alternative was tried and dropped**: having the scan fetch a category for each new video.
+  Measured: an 8-second scan became 101 seconds for 40 new videos; across 55 subscribed channels
+  that is ~73 minutes. Not worth it.
+  **Added 2026-07-29 — not reversing the above, but compensating for its consequence**: because
+  scanning assigns no topics, 2,337 of 3,092 videos (three quarters of the library) had none, and
+  they were nearly invisible both to the filter chips and to the "topic" half of affinity. Added
+  `BackfillTopics` (`POST /api/topics/backfill`, optional `?limit=`): **a separate pass, run when
+  called**, 8 threads in parallel. Measured: 0.32s per video → ~12 minutes for the whole library,
+  against ~96 minutes sequentially. The pass resumes naturally because it selects by "has no
+  topic".
+  It is safe because of catalog's own upsert: `media_state`, `media_path` and `added_at` are
+  **not** in the `DO UPDATE SET`, and `topics` are merged rather than replaced — so a backfill
+  cannot downgrade a downloaded video or erase a topic assigned by topics.yaml.
+- **The channel page**: once read from the local catalog (`ListChannelVideos`) → **reversed**:
+  read **live from YouTube**, paged by offset (`ListChannelUploads`). The reason: a scan brings
+  back only the ~40 newest videos, so a channel page reading the catalog would stop at that
+  number for a reason the viewer cannot see. Clicking a video that is not in the library →
+  `EnsureVideo` writes its metadata and opens it, the same flow as a search result. Subscribing
+  **does not require waiting for a scan** before the channel is browsable.
+- **The feed**: once settled as "topics.yaml is the feed's only source" → **reversed**: when the
+  feed runs low, the gateway calls `ExpandLibrary` to pull in more — deepening the sources in
+  topics.yaml first, then related videos through InnerTube, and only then search. The reason:
+  infinite scrolling is a requirement, and 280 videos run out after ~12 pages. The order of the
+  layers is deliberate — the deepening layer cannot break, so if InnerTube fails the feed is
+  still endless, only less varied.
+- **Content sources**: once settled as "topics.yaml is the only source" → **reversed**: there are
+  two, topics.yaml (curated ahead of time, in git) and subscriptions (chosen while using the app,
+  in the database). Both feed the same scanner. The reason: subscribing to an unfamiliar channel
+  without pulling its content in makes it a dead button — the catalog holds one video of that
+  channel and the feed has nothing to promote.
+  **The app never writes to topics.yaml** — that file belongs to the user.
+- **Feed pagination**: an offset into a freshly re-ranked list → **a per-session frozen snapshot**
+  (in recsys memory, TTL 30 minutes). The reason: `recordImpressions` penalises exactly the videos
+  just shown, so the next page ranked against an already-different list and produced duplicates.
 
-### Bẫy đã gặp, đừng lặp lại
+### Traps already hit — do not repeat them
 
-- **Lỗi phụ đề từng giết cả video**: gộp `--write-subs` vào lệnh tải → 429 ở endpoint caption
-  làm yt-dlp exit 1 → mất video đã tải xong. Giờ tách lượt riêng, không được gộp lại.
-- **Nâng chất lượng từng phụ thuộc vào một danh sách bị cắt (sửa 2026-07-29)**: player
-  biết "file local đã về" bằng cách tìm job trong `GET /api/ingest/jobs` — danh sách
-  **mọi** job, giới hạn 50, sắp theo `created_at DESC`. Một loạt job vừa xong (một lần
-  quét, hay vài video mở liên tiếp) đẩy job **đang chạy** rớt khỏi danh sách → player
-  không bao giờ thấy nó xong → **hình kẹt ở 360p cho tới khi reload trang**, và thanh
-  tiến độ cũng không hiện. Sửa hai chỗ: (a) `List` sắp việc **chưa xong lên trước** rồi
-  mới tới recency; (b) **`useStream` tự poll 5 giây/lần khi chưa có `local`** — endpoint
-  đó mới là nơi biết "phát bằng gì", nên việc nâng tầng không được phụ thuộc vào hàng đợi.
-- **Đường TẢI XUỐNG không lọc codec, chỉ đường remux có (sửa 2026-07-29)**: `Download`
-  dùng `bestvideo[height<=N]+bestaudio` trần, nên yt-dlp lấy "tốt nhất" = **AV1**.
-  Đo thật trên đĩa: **28 file AV1 + 4 AV1 + 2 VP9, không một file h264 nào**. Trái thẳng
-  quyết định "ưu tiên h264 vì TV cũ" ở mục trên — và trớ trêu là **bản local (thứ thay thế
-  stream) mới là bản có nguy cơ không phát được**, trong khi stream remux thì h264.
-  Giờ `downloadFormat` sao chép đúng `remuxFormat`. Kiểm trên `rYap5zVNYf8`:
-  cũ → `av01` itag 399; mới → `avc1` itag 299, **vẫn 1080p**.
-  **File đã tải trước đây vẫn là AV1** — phải xoá và tải lại mới đổi được.
-- **`watch_ratio` từng bị thổi phồng ngay tại nguồn (sửa 2026-07-29)**: client tính
-  `element.currentTime / element.duration`, mà stream remux fMP4 khai báo độ dài **đang lớn
-  dần** — nên phân số tiến về 1.0 ngay từ giây đầu. Ca đo được: video 243s xem tới 0:41 bị
-  ghi là **92% hoàn thành**. Vì ranking coi watch_ratio là bằng chứng "video đáng mở", một
-  phép chia đó âm thầm nói với nó rằng mọi thứ bị bỏ dở sớm đều xuất sắc. Giờ mẫu số lấy từ
-  độ dài catalog. **Dữ liệu cũ vẫn còn lệch** — `BuildProfile` lấy `max()` nên giá trị bị
-  thổi không tự phai đi.
-- **Trang kênh từng dùng handle thay vì id (sửa 2026-07-29)**: gateway đổi `UC…` id thành
-  `@handle` trước khi gọi `ListChannelUploads`, với lý do ghi trong comment là "YouTube giải
-  handle đáng tin hơn". **Ngược lại**: `UC…` id **chính là** `browseId` của InnerTube, không
-  cần giải; handle cần thêm một bước và bước đó hỏng thật (`@tinhte`, `@guinnessworldrecords`).
-  Hỏng → rơi xuống flat listing → **cả trang kênh không có ngày đăng và view = 0**, trong khi
-  kênh khác đủ cả. Sau khi ưu tiên id: **0/30 → 30/30**.
-  **Còn lại**: scanner vẫn dùng handle vì `topics.yaml` ghi nguồn dạng `youtube.com/@x/videos`,
-  nên video quét về từ những kênh handle-hỏng vẫn thiếu ngày/view.
-- **`--flat-playlist` thiếu rất nhiều field**: không có channel per-entry (dùng `playlist_uploader`),
-  không có view count, không có ngày đăng, không có `thumbnail` (dùng mảng `thumbnails`).
-  **Không được default ngày đăng = now** — nó hiện thành "1 minute ago" trên mọi card.
-- **yt-dlp đặt cùng tên file cho phụ đề người làm và máy làm** → phải chạy 2 lượt mới phân biệt được.
-  **Sửa 2026-08-02 — vẫn 2 lượt, nhưng song song.** Trước đây hai lượt chạy tuần tự và phân
-  biệt authored/auto bằng **thứ tự**: cái gì có mặt sau lượt một là do người làm. Nghĩa là lượt
-  hai phải đợi lượt một chỉ vì một va chạm tên file. Giờ mỗi lượt ghi vào **thư mục tạm riêng**
-  (`.subs-authored` / `.subs-auto`), chạy đồng thời, rồi hợp nhất — cùng câu hỏi nhưng trả lời
-  bằng **chỗ ghi** thay vì thứ tự, và không ai phải đợi ai.
-  **Và chỗ gọi đã đổi**: `FetchSubtitles` trước chỉ chạy trong worker, tức phải xếp hàng sau
-  `pollInterval` (3s) rồi sau `Preview` (~2s) rồi mới tới hai lượt tuần tự — đo được **5–12
-  giây**, rơi đúng vào cửa sổ phụ đề cần nhất (lúc đang xem bản upstream chất lượng thấp).
-  Giờ `Submit` bắn nó ngay khi **bấm play**, chạy nền. `FetchSubtitles` tự bỏ qua nếu file đã
-  có trên đĩa, nên worker và đường mới không làm hai lần.
-  **Không bao giờ chạy khi `?prefetch=1`** — rê chuột qua feed là hàng chục card, mỗi card một
-  full extract cho video chưa ai chọn xem. Đó đúng hình dạng sự cố §8 rủi ro 5. Chỉ bấm play
-  mới tới được `Submit`, nên ranh giới nằm sẵn ở đó chứ không phải một cái `if` phải nhớ.
-- **`ffmpeg` nuốt stdin** trong vòng lặp bash → luôn dùng `-nostdin`.
-- **pgx encode nil slice thành NULL** → vi phạm NOT NULL của cột mảng.
+- **A subtitle failure used to kill the whole video**: folding `--write-subs` into the download
+  command meant a 429 from the caption endpoint made yt-dlp exit 1 → losing a video that had
+  already downloaded. It is a separate pass now, and must not be folded back in.
+- **Upgrading quality depended on a truncated list (fixed 2026-07-29)**: the player learned "the
+  local file has arrived" by looking for its job in `GET /api/ingest/jobs` — a list of **every**
+  job, capped at 50 and ordered by `created_at DESC`. A burst of finished jobs (a scan, or
+  several videos opened in a row) pushed the **running** job off the list → the player never saw
+  it finish → **the picture stayed at 360p until the page was reloaded**, with no progress bar
+  either. Fixed in two places: (a) `List` orders unfinished work **first** and only then by
+  recency; (b) **`useStream` polls every 5 seconds while there is no `local`** — that endpoint is
+  what knows "what can play", so climbing a tier must not depend on the queue.
+- **The DOWNLOAD path did not filter codecs; only the remux path did (fixed 2026-07-29)**:
+  `Download` used a bare `bestvideo[height<=N]+bestaudio`, so yt-dlp took "best" = **AV1**.
+  Measured on disk: **28 AV1 files + 4 AV1 + 2 VP9, and not a single h264**. Directly against the
+  "prefer h264 for older TVs" decision above — and ironically **the local copy (the thing that
+  replaces the stream) was the one at risk of not playing**, while the remux stream was h264.
+  `downloadFormat` now copies `remuxFormat` exactly. Checked on `rYap5zVNYf8`: before, `av01`
+  itag 399; after, `avc1` itag 299, **still 1080p**.
+  **Files downloaded earlier are still AV1** — only deleting and re-downloading changes them.
+- **`watch_ratio` was inflated at the source (fixed 2026-07-29)**: the client computed
+  `element.currentTime / element.duration`, but an fMP4 remux stream reports a duration that is
+  **still growing** — so the fraction approached 1.0 from the first second. A measured case: a
+  243s video watched to 0:41 was recorded as **92% complete**. Because ranking treats watch_ratio
+  as evidence that a video was worth opening, that one division quietly told it that everything
+  abandoned early was excellent. The denominator now comes from the catalog's duration.
+  **The old data is still skewed** — `BuildProfile` takes `max()`, so an inflated value does not
+  fade on its own.
+- **The channel page used a handle instead of an id (fixed 2026-07-29)**: the gateway converted a
+  `UC…` id into an `@handle` before calling `ListChannelUploads`, with a comment giving the
+  reason as "YouTube resolves handles more reliably". **The opposite is true**: a `UC…` id **is**
+  InnerTube's `browseId` and needs no resolving, while a handle needs an extra step that does
+  fail in practice (`@tinhte`, `@guinnessworldrecords`). Failing dropped it to flat listing → **a
+  whole channel page with no upload dates and 0 views**, while other channels had both. After
+  preferring the id: **0/30 → 30/30**.
+  **Still outstanding**: the scanner still uses handles, because `topics.yaml` records sources as
+  `youtube.com/@x/videos`, so videos scanned from the handle-broken channels still lack dates and
+  view counts.
+- **`--flat-playlist` omits a great many fields**: no per-entry channel (use `playlist_uploader`),
+  no view count, no upload date, no `thumbnail` (use the `thumbnails` array).
+  **Never default the upload date to now** — it renders as "1 minute ago" on every card.
+- **yt-dlp gives human-written and machine-generated subtitles the same filename** → two passes
+  are needed to tell them apart.
+  **Fixed 2026-08-02 — still two passes, but in parallel.** They used to run one after the other
+  and tell authored from automatic by **order**: whatever existed after the first pass was
+  human-written. That meant the second pass waited on the first purely because of a filename
+  collision. Each pass now writes into **its own temporary directory** (`.subs-authored` /
+  `.subs-auto`), they run at the same time, and the results are merged — the same question
+  answered by **where it was written** rather than by order, and nobody waits for anybody.
+  **And the call site moved**: `FetchSubtitles` used to run only in the worker, meaning it queued
+  behind `pollInterval` (3s), then `Preview` (~2s), then two sequential passes — measured at
+  **5–12 seconds**, landing exactly in the window where subtitles matter most (while the
+  low-quality upstream copy is playing). `Submit` now fires it the moment **play is pressed**, in
+  the background. `FetchSubtitles` skips itself when the files are already on disk, so the worker
+  and the new path do not duplicate work.
+  **It never runs for `?prefetch=1`** — hovering across a feed is dozens of cards, each a full
+  extract for a video nobody chose to watch. That is exactly the shape of the incident in §8, risk
+  5. Only pressing play reaches `Submit`, so the boundary is already there rather than being an
+  `if` somebody has to remember.
+- **`ffmpeg` eats stdin** inside a bash loop → always pass `-nostdin`.
+- **pgx encodes a nil slice as NULL** → violating an array column's NOT NULL constraint.
 
-## 9. Câu còn để ngỏ
-- TV nhà là hãng gì? (ảnh hưởng cách xử lý cert)
-- ~~Có SSD ngoài không?~~ **Có — `/Volumes/Data2/Youtube`, 437 GiB (2026-07-28).** Xem mục 2.
+## 9. Open questions
+- What make is the TV at home? (it affects how certificates have to be handled)
+- ~~Is there an external SSD?~~ **Yes — `/Volumes/Data2/Youtube`, 437 GiB (2026-07-28).** See §2.
