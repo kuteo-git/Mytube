@@ -99,6 +99,46 @@ func TestASecondPressDoesNotStartASecondFetch(t *testing.T) {
 	}
 }
 
+func TestTheWorkerDoesNotFetchCaptionsAlongsideThePlayRequest(t *testing.T) {
+	// The reported bug: both callers checked only whether the video folder held
+	// a .vtt yet, and a running fetch keeps its files in temporary directories
+	// until both passes finish — so the folder looks empty and both ran. The
+	// second to finish published the subset it managed to move, and publishing
+	// replaces the whole list, so a complete en+vi list became en-only. The
+	// translator then saw a video with no Vietnamese and started spending.
+	d := &captionDownloader{entered: make(chan struct{}, 1), release: make(chan struct{})}
+	i := newSubtitleIngest(d)
+	url := "https://www.youtube.com/watch?v=abc123"
+
+	if _, err := i.Submit(context.Background(), url, "u1", 1080); err != nil {
+		t.Fatal(err)
+	}
+	<-d.entered // the play-time fetch is in flight and held there
+
+	// The download worker reaching the same video while that is happening.
+	i.fetchSubtitlesOnce(context.Background(), url, "abc123", 1080)
+
+	close(d.release)
+	time.Sleep(50 * time.Millisecond)
+
+	if got := d.count(); got != 1 {
+		t.Fatalf("caption fetches = %d, want 1", got)
+	}
+}
+
+func TestTheWorkerFetchesCaptionsWhenNobodyPressedPlay(t *testing.T) {
+	// Scans and re-ingests reach the worker without anyone opening the video,
+	// and captions still have to arrive for those.
+	d := &captionDownloader{}
+	i := newSubtitleIngest(d)
+
+	i.fetchSubtitlesOnce(context.Background(), "https://www.youtube.com/watch?v=abc123", "abc123", 1080)
+
+	if got := d.count(); got != 1 {
+		t.Fatalf("caption fetches = %d, want 1", got)
+	}
+}
+
 func TestAUrlWithNoRecoverableIDIsLeftToTheWorker(t *testing.T) {
 	d := &captionDownloader{}
 	i := newSubtitleIngest(d)

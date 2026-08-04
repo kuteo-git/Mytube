@@ -75,21 +75,47 @@ func (i *Ingest) startSubtitleFetch(sourceURL string, height int32) {
 		ctx, cancel := context.WithTimeout(context.Background(), subtitleFetchTimeout)
 		defer cancel()
 
-		tracks := i.downloader.FetchSubtitles(ctx, sourceURL, videoID, height)
-		if len(tracks) == 0 {
-			// Either there are no captions, or they are already on disk from an
-			// earlier run. Neither is worth publishing.
-			return
-		}
-
-		// Downloading is what pressing play means: Submit has already queued the
-		// job that will set exactly this state itself. Saying it a few seconds
-		// earlier alongside the captions introduces no state the job was not
-		// about to introduce anyway.
-		if err := i.library.SetMediaState(ctx, videoID, "DOWNLOADING", "", 0, tracks); err != nil {
-			i.logger.Warn("publish subtitles", "video", videoID, "error", err)
-		}
+		i.fetchAndPublishSubtitles(ctx, sourceURL, videoID, height)
 	}()
+}
+
+// fetchSubtitlesOnce is the download worker's way in. It runs the same fetch as
+// the play-time path, under the same claim, and does nothing when the claim
+// fails.
+//
+// Sharing the claim is the point. Both callers used to test "does the video
+// folder hold a .vtt yet" and skip on that alone — but a running fetch keeps its
+// files in .subs-authored/.subs-auto until both passes finish, so the folder
+// looks empty for the whole duration and both callers could run a full fetch.
+// The one that finished second found its files already moved, published the
+// subset it managed to rename, and SetMediaState replaces the list wholesale —
+// so a complete en+vi list could be overwritten by an en-only one, which is
+// exactly what made the translator run on a video that has Vietnamese.
+func (i *Ingest) fetchSubtitlesOnce(ctx context.Context, sourceURL, videoID string, height int32) {
+	if videoID == "" || !i.subtitles.begin(videoID) {
+		// Someone else holds it and will publish what they find.
+		return
+	}
+	defer i.subtitles.done(videoID)
+	i.fetchAndPublishSubtitles(ctx, sourceURL, videoID, height)
+}
+
+// fetchAndPublishSubtitles assumes the claim is already held.
+func (i *Ingest) fetchAndPublishSubtitles(ctx context.Context, sourceURL, videoID string, height int32) {
+	tracks := i.downloader.FetchSubtitles(ctx, sourceURL, videoID, height)
+	if len(tracks) == 0 {
+		// Either there are no captions, or they are already on disk from an
+		// earlier run. Neither is worth publishing.
+		return
+	}
+
+	// Downloading is what pressing play means: Submit has already queued the
+	// job that will set exactly this state itself. Saying it a few seconds
+	// earlier alongside the captions introduces no state the job was not
+	// about to introduce anyway.
+	if err := i.library.SetMediaState(ctx, videoID, "DOWNLOADING", "", 0, tracks); err != nil {
+		i.logger.Warn("publish subtitles", "video", videoID, "error", err)
+	}
 }
 
 // videoIDFromURL reads the id back out of a watch URL.

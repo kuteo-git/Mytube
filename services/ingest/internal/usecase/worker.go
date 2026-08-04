@@ -125,11 +125,11 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 	// a few hundred megabytes, and they are wanted most during the window when
 	// the viewer is watching the lower-quality upstream stream. Failure here is
 	// silent by design — a video without captions is still a video.
-	if subtitles := i.downloader.FetchSubtitles(ctx, job.SourceURL, meta.ID, job.PreferredHeight); len(subtitles) > 0 {
-		if err := i.library.SetMediaState(ctx, meta.ID, "DOWNLOADING", "", 0, subtitles); err != nil {
-			w.logger.Warn("publish subtitles", "video", meta.ID, "error", err)
-		}
-	}
+	//
+	// Behind the same claim as the play-time fetch: pressing play starts one of
+	// these already, and two fetches racing publish two different lists over
+	// each other. See fetchSubtitlesOnce.
+	i.fetchSubtitlesOnce(ctx, job.SourceURL, meta.ID, job.PreferredHeight)
 
 	// 3. Transfer, heartbeating so the lease stays alive and the UI can show a
 	// real progress bar rather than a spinner.

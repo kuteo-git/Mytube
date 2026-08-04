@@ -143,3 +143,22 @@ export async function saveNarrationVtt(
     return false
   }
 }
+
+/**
+ * Drop the machine translation for a video.
+ *
+ * For the case where the video's own Vietnamese track turns up while a pass is
+ * running: the translation is then redundant, and leaving the file behind puts
+ * a second Vietnamese entry in the caption menu for good.
+ *
+ * The cache is not touched. It cost real tokens, nothing reads it while a human
+ * track exists, and throwing it away only means paying again.
+ */
+export async function deleteNarrationVtt(videoId: string): Promise<void> {
+  if (!videoId) return
+  try {
+    await fetch(`/api/videos/${videoId}/narration-vtt`, { method: 'DELETE' })
+  } catch {
+    // Best effort. A file left on disk is untidy, not broken.
+  }
+}

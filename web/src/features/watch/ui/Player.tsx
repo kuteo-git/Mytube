@@ -46,12 +46,16 @@ import {
 } from '@/features/watch/application/narration-prefs'
 import { centreCues } from '@/features/watch/application/cue-placement'
 import { levelsFor } from '@/features/watch/application/narration-levels'
-import { setCachePartition } from '@/features/watch/infrastructure/narration-cache'
+import {
+  deleteNarrationVtt,
+  setCachePartition,
+} from '@/features/watch/infrastructure/narration-cache'
 import { useTranslateConfig } from '@/features/settings/application/queries'
 import { loadNarrationAudioPrefs } from '@/features/settings/application/settings-prefs'
 import { useTranslatedTrack } from '@/features/watch/application/use-translated-track'
 import {
   MACHINE_LANGUAGE,
+  captionsSettled,
   hasHumanVietnamese,
 } from '@/features/watch/domain/subtitle-language'
 import {
@@ -743,6 +747,10 @@ export function Player({
   // Vietnamese first, then English (which will be translated via NLLB-200).
   useEffect(() => {
     if (!narrationOn) return
+    // Nothing has been published yet, so "no Vietnamese" is not an answer, it is
+    // the absence of one. Choosing English from an empty list is how the
+    // realtime engine started translating a video that had Vietnamese coming.
+    if (!captionsSettled(subtitles)) return
     const viSub = subtitles.find(
       (s) => s.language === 'vi' || s.language === 'vie',
     )
@@ -770,9 +778,40 @@ export function Player({
   // Only the batch engine has a pass; NLLB translates as it speaks.
   useEffect(() => {
     if (!narrationOn || !narrationPrefs.autoTranslate) return
+    // Same gate as the source-choice effect above, for the same reason and at
+    // greater cost: a pass started against an empty caption list spends tokens
+    // on a video whose own Vietnamese track is seconds away.
+    if (!captionsSettled(subtitles) || hasVi) return
     const el = front()
     startTranslationPass(videoId, el ? el.currentTime : 0)
-  }, [narrationOn, narrationPrefs.autoTranslate, videoId, subtitles, front])
+  }, [narrationOn, narrationPrefs.autoTranslate, videoId, subtitles, hasVi, front])
+
+  // A human Vietnamese track arriving mid-pass ends the pass and takes its
+  // output with it.
+  //
+  // The gates above stop this happening in the first place; this is for the
+  // orders they cannot cover — captions republished later, or a pass already
+  // running from before. Leaving the file behind would put two Vietnamese
+  // entries in the caption menu permanently, which is what was reported.
+  //
+  // The stop is unconditional and local, so it costs nothing to be sure of. The
+  // delete waits until the machine track is actually listed: most videos with
+  // Vietnamese never had a translation written for them, and firing a DELETE at
+  // every one of them is a request per video to remove a file that was never
+  // there.
+  useEffect(() => {
+    if (!hasVi) return
+    cancelTranslationPass()
+  }, [hasVi, videoId])
+
+  const droppedTranslationRef = useRef('')
+  const hasMachineTrack = subtitles.some((s) => s.language === MACHINE_LANGUAGE)
+  useEffect(() => {
+    if (!hasVi || !hasMachineTrack) return
+    if (droppedTranslationRef.current === videoId) return
+    droppedTranslationRef.current = videoId
+    void deleteNarrationVtt(videoId)
+  }, [hasVi, hasMachineTrack, videoId])
 
   // useLayoutEffect, not useEffect: this runs synchronously after React commits
   // the new src to the DOM and before the browser can dispatch any media event,

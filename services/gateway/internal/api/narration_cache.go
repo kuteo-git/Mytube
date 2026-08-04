@@ -293,6 +293,43 @@ func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(map[string]any{"file": name, "bytes": len(body)})
 }
 
+// handleDeleteNarrationVTT removes the machine-translated track.
+//
+// Called when a human Vietnamese track turns up for a video the translator had
+// already started on — captions are published a moment after the page opens, so
+// a pass can be under way before the list it should have consulted exists. The
+// translation is then both redundant and a second "Tiếng Việt" in the menu.
+//
+// The translation *cache* is deliberately left alone. It has already been paid
+// for, nothing reads it while a real track exists, and deleting it only means
+// paying again if the viewer ever asks for a translation by hand.
+func (g *Gateway) handleDeleteNarrationVTT(w http.ResponseWriter, r *http.Request) {
+	dir, err := safeVideoDir(g.mediaRoot, r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		// No folder is the state being asked for, so it is not a failure.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, machineVTTSuffix) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			g.logger.Warn("narration vtt delete", "error", err)
+			http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		g.logger.Info("narration vtt removed", "file", name)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // attachMachineTranslation adds the generated Vietnamese track to a video's
 // subtitle list when one has been written.
 //
