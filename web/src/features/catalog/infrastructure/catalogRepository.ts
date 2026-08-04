@@ -202,6 +202,16 @@ export interface StreamSources {
   /** When every source is unavailable — membership, age restriction, geo-block —
    *  this carries the yt-dlp error so the player can tell the viewer why. */
   streamError?: string
+  /**
+   * Set when this request found the catalogue claiming a file the disk does not
+   * have, and corrected the row.
+   *
+   * The video was fetched before this was known, so the copy the page is
+   * holding still says READY — and the poll that would refresh it stops once
+   * the state looks settled. Without being told, the page would go on showing
+   * the video as downloaded for as long as it stayed open.
+   */
+  repaired?: boolean
 }
 
 export type JobState = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'

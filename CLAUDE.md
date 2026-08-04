@@ -88,6 +88,44 @@ tức thì, **không** xếp hàng tải. Thiếu vạch này thì lướt feed 
 ### Eviction
 Mỗi video có `last_accessed_at` + `pinned`. Vượt ngưỡng ~22 GiB → xoá **file media** của LRU không pinned, **giữ metadata + thumbnail + history** → UI hiện "Đã gỡ — bấm để tải lại", re-ingest 1 click.
 
+### File biến mất ngoài ý muốn (2026-08-04)
+
+Xoá tay một file trong `MEDIA_ROOT` thì DB **vẫn nói READY**, `/stream` vẫn trả nguồn
+`local`, và player nhận URL `/media/...` trả 404 — video không phát được, chỉ có một vệt
+đỏ trong tab Network. Giờ `handleStream` **`os.Stat` file thật** trước khi đề nghị `local`:
+
+| Đĩa nói gì | Làm gì |
+|---|---|
+| có file | trả `local` như cũ |
+| **root còn, file mất** | `SetMediaState(EVICTED)` → rơi xuống `instant`/`remux` + xếp hàng tải lại, kèm cờ `repaired: true` |
+| **root không đọc được** | **không ghi gì**, trả `streamError` "ổ chưa kết nối" |
+
+- **Thứ tự kiểm là toàn bộ độ an toàn của nó.** `MEDIA_ROOT` là SSD ngoài (§8 rủi ro 1);
+  rút dây thì **mọi** file đều "mất", và không phân biệt thì một sợi cáp lỏng sẽ đánh dấu
+  EVICTED cả thư viện. Kiểm root **trước**, một syscall, dứt khoát — `/Volumes/Data2` khi
+  tháo ổ thì biến mất khỏi hệ thống file chứ không rỗng.
+- **Xoá cả thư mục video vẫn là "file mất"**, không phải "hạ tầng hỏng" — vì xoá theo folder
+  mới là cách người ta xoá tay.
+- **`?prefetch=1` vẫn sửa DB nhưng vẫn không tải.** Thứ đắt và bị YouTube đếm là request
+  upstream, ranh giới đó không đổi; một `UPDATE` nội bộ cho video mà đĩa vừa nói là không có
+  thì rẻ, và không ghi nghĩa là lần rê chuột sau lại phát hiện lại từ đầu.
+- **Cờ `repaired` là bắt buộc, không phải trang trí.** Trang watch đã cầm bản ghi video nói
+  READY từ trước, mà `videoPollInterval` **dừng poll** khi thấy trạng thái đã settled — nên
+  không ai báo thì huy hiệu "đã tải" sai cho tới khi rời trang. Player thấy cờ thì invalidate
+  `['video', id]` đúng một lần.
+- **Không có lượt quét đối chiếu định kỳ.** Luật này nằm ở **một** chỗ; đặt ở hai chỗ là hai
+  chỗ sai được khác nhau, mà cái sai của lượt quét thì hàng loạt và im lặng. Giá phải trả:
+  video bị xoá file mà không ai mở thì Storage vẫn cộng dung lượng của nó, và vì sweep tính
+  theo `size_bytes` trong DB chứ không đọc đĩa nên nó sẽ **evict thừa**.
+- Đường sửa này **không xoá `media_path`** (sweep thì có). Vô hại: mọi chỗ đọc `media_path`
+  đều đã kiểm `media_state == READY` trước, và không UI nào đọc nó. Nó ghi lại file *từng*
+  nằm ở đâu.
+- **Đo thật 2026-08-04**: dời file của `XXplTbQR9to` → `/stream` trả `local:false,
+  instant:true, remux:true, repaired:true`, DB thành `EVICTED`, job tự chạy, **20 giây sau
+  READY trở lại**. Gateway trỏ vào `MEDIA_ROOT` không tồn tại → `streamError` đúng, DB
+  **không đổi một dòng nào** (175 dòng EVICTED trong DB đều là của sweep — `media_path=''`;
+  đường sửa này thì giữ path, nên phân biệt được).
+
 ## 4b. Code conventions
 
 - **All source code, identifiers, comments, commit messages and in-app UI copy MUST be in English.**

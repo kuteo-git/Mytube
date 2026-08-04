@@ -146,9 +146,20 @@ export function useComments(videoId: string | undefined) {
  * re-resolving costs one cheap request.
  */
 export function useStream(videoId: string | undefined) {
+  const queryClient = useQueryClient()
   return useQuery({
     queryKey: ['stream', videoId],
-    queryFn: () => repo.getStream(videoId!),
+    queryFn: async () => {
+      const stream = await repo.getStream(videoId!)
+      // The gateway found the catalogue claiming a file the disk does not have
+      // and put the row right. The copy this page is holding was fetched before
+      // that, and nothing else will refresh it: videoPollInterval stops once
+      // the media state looks settled, and READY looks settled.
+      if (stream.repaired && videoId) {
+        void queryClient.invalidateQueries({ queryKey: ['video', videoId] })
+      }
+      return stream
+    },
     enabled: Boolean(videoId),
     staleTime: 5 * 60_000,
     retry: false,

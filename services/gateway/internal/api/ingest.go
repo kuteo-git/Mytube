@@ -73,6 +73,9 @@ type streamDTO struct {
 	// or YouTube outage — this carries the yt-dlp error so the player can tell
 	// the viewer why rather than sitting blank.
 	StreamError string `json:"streamError,omitempty"`
+	// True when this request corrected a catalog row that claimed a file the
+	// disk does not have. The client refetches the video once on seeing it.
+	Repaired bool `json:"repaired,omitempty"`
 }
 
 func toJobDTO(j *ingestv1.Job) jobDTO {
@@ -413,18 +416,63 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 
 	v := video.Msg.GetVideo()
 
+	// Whether the row is telling the truth about the disk.
+	//
+	// Repaired here rather than by a sweep because this is the one place that
+	// holds both answers at once — the catalog says READY, the disk says no —
+	// and it sits on the path somebody has just pressed play on, so the lie can
+	// be corrected in the request that found it.
+	repaired := false
 	if v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_READY && v.GetMediaPath() != "" {
-		// On disk: nothing upstream is worth offering beside it. Touching
-		// last_accessed_at happens through watch progress, so the eviction
-		// sweep sees actual viewing rather than mere resolution.
-		writeJSON(w, http.StatusOK, streamDTO{
-			Local: &sourceDTO{
-				URL:      "/media/" + v.GetMediaPath(),
-				MimeType: "video/mp4",
-				Seekable: true,
-			},
-		})
-		return
+		switch checkMedia(g.mediaRoot, v.GetMediaPath()) {
+		case mediaPresent:
+			// On disk: nothing upstream is worth offering beside it. Touching
+			// last_accessed_at happens through watch progress, so the eviction
+			// sweep sees actual viewing rather than mere resolution.
+			writeJSON(w, http.StatusOK, streamDTO{
+				Local: &sourceDTO{
+					URL:      "/media/" + v.GetMediaPath(),
+					MimeType: "video/mp4",
+					Seekable: true,
+				},
+			})
+			return
+
+		case mediaMissing:
+			// Deleted by hand. EVICTED is the state the rest of the system
+			// already understands for "the metadata is here and the bytes are
+			// not" — the feed skips it, the card offers to fetch it again — so
+			// this is a correction rather than a new condition.
+			//
+			// Done even for a prefetch. The expensive, counted thing is a
+			// request upstream, and that boundary is untouched: hovering still
+			// downloads nothing. Declining to record what the disk just said
+			// would only mean discovering it again on the next hover.
+			if _, err := g.catalog.SetMediaState(ctx, connect.NewRequest(&catalogv1.SetMediaStateRequest{
+				VideoId:    videoID,
+				MediaState: catalogv1.MediaState_MEDIA_STATE_EVICTED,
+			})); err != nil {
+				// The playback path must not fail over bookkeeping: the video
+				// can still be streamed and fetched again regardless.
+				g.logger.Warn("mark missing media evicted", "video", videoID, "error", err)
+			} else {
+				repaired = true
+				g.logger.Info("media file missing, marked evicted",
+					"video", videoID, "path", v.GetMediaPath())
+			}
+			// Falls through to the upstream sources below, and to the download
+			// that puts the file back.
+
+		case mediaRootUnavailable:
+			// The drive is not answering, so every file in the library looks
+			// missing and none of them are. Nothing is written: one loose cable
+			// must not blank the whole catalog (CLAUDE.md §8, risk 1).
+			g.logger.Warn("media root unavailable", "root", g.mediaRoot, "video", videoID)
+			writeJSON(w, http.StatusOK, streamDTO{
+				StreamError: "The media drive is not available. Check that it is connected.",
+			})
+			return
+		}
 	}
 
 	// Pressing play is what schedules a download. Enqueue is idempotent per
@@ -434,6 +482,12 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := streamDTO{
+		// Set when this request found the catalog claiming a file the disk does
+		// not have, and corrected it. The player has already been handed a video
+		// row saying READY, and it stops asking for a new one once the state
+		// looks settled — so without being told, it would go on showing the
+		// video as downloaded for as long as the page stayed open.
+		Repaired: repaired,
 		// Full resolution before the copy lands means muxing YouTube's separate
 		// video and audio tracks ourselves. No index, so no seeking — which is
 		// why it is the fallback rather than the opening move.
@@ -458,18 +512,18 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		// Not every video publishes a progressive format. That is not an error
 		// worth failing the request over — it just means starting at the remux.
 		g.logger.Info("no instant source", "video", videoID, "error", resolveErr)
-			// When no local copy exists and the instant URL is gone, the
-			// remux is the only path. If ResolveStream failed because YouTube
-			// blocked access, the remux fails too. Tell the player why.
-			if out.Local == nil {
-				// Strip the gRPC framing ("internal: ") from the yt-dlp message
-				// so the player shows a readable reason instead of a stack trace.
-				msg := resolveErr.Error()
-				if code := connect.CodeOf(resolveErr).String(); code != "" {
-					msg = strings.TrimPrefix(msg, code+": ")
-				}
-				out.StreamError = msg
+		// When no local copy exists and the instant URL is gone, the
+		// remux is the only path. If ResolveStream failed because YouTube
+		// blocked access, the remux fails too. Tell the player why.
+		if out.Local == nil {
+			// Strip the gRPC framing ("internal: ") from the yt-dlp message
+			// so the player shows a readable reason instead of a stack trace.
+			msg := resolveErr.Error()
+			if code := connect.CodeOf(resolveErr).String(); code != "" {
+				msg = strings.TrimPrefix(msg, code+": ")
 			}
+			out.StreamError = msg
+		}
 	} else {
 		out.Instant = &sourceDTO{
 			URL:       resolved.Msg.GetUrl(),
