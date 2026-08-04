@@ -32,6 +32,16 @@ const PRIMARY: Item[] = [
   { icon: Activity, label: 'Activity', to: '/activity' },
 ]
 
+/**
+ * Where the sidebar can take you.
+ *
+ * Exported so the mobile bar can be checked against it. The two carry different
+ * subsets — five fit across a phone, six down a rail — but a path in one that
+ * exists in neither the router nor the other is a link to the not-found page,
+ * and nothing about rendering it would say so.
+ */
+export const SIDEBAR_ROUTES = PRIMARY.map((i) => i.to)
+
 function Row({ item, mini }: { item: Item; mini: boolean }) {
   const { icon: Icon, label, to } = item
   return (

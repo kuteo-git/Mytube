@@ -1,22 +1,31 @@
 import clsx from 'clsx'
-import { Activity, Bookmark, Clock, HardDrive, Home } from 'lucide-react'
+import { Activity, Bookmark, Clock, Home, Settings } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 
 /**
  * The mobile shell's navigation, replacing the sidebar rail below the breakpoint.
  *
- * The five entries are the same five the sidebar shows, and every one of them
- * has a real route. youtube's own bar carries Shorts, Subscriptions and You,
- * none of which exist here — putting them in would be exactly the dead button
- * the charter forbids, so the bar reflects this app rather than that one.
+ * Five entries, every one with a real route. youtube's own bar carries Shorts,
+ * Subscriptions and You, none of which exist here — putting them in would be
+ * exactly the dead button the charter forbids, so the bar reflects this app
+ * rather than that one.
+ *
+ * Five is also the ceiling rather than a coincidence: past that the targets fall
+ * below the 44px a finger needs. So the sidebar's six entries have to lose one
+ * here, and **Storage is the one that goes**. It is a page you visit when the
+ * disk is filling up — occasionally, deliberately, and it announces itself
+ * through the storage banner when it matters. Settings is the opposite: the
+ * narration voice, its levels and the feed mix all live there, and on a phone it
+ * had no way in at all. Storage is still reachable on a phone through that
+ * banner's "Manage storage" link, so nothing is stranded.
  */
 const ITEMS: { icon: ComponentType<{ size?: number }>; label: string; to: string }[] = [
   { icon: Home, label: 'Home', to: '/' },
   { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: Clock, label: 'History', to: '/history' },
-  { icon: HardDrive, label: 'Storage', to: '/storage' },
   { icon: Activity, label: 'Activity', to: '/activity' },
+  { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
 export function BottomNav() {

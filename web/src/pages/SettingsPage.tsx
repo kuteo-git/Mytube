@@ -1,5 +1,13 @@
-import { Eye, EyeOff, Headphones, Languages } from 'lucide-react'
+import {
+  ChevronRight,
+  Eye,
+  EyeOff,
+  HardDrive,
+  Headphones,
+  Languages,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   useSaveTranslateConfig,
   useTestTranslate,
@@ -31,6 +39,35 @@ export function SettingsPage() {
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
+      <StorageLink />
+    </div>
+  )
+}
+
+/**
+ * The way to Storage on a phone.
+ *
+ * The bottom bar holds five entries — past that the targets fall under the 44px
+ * a finger needs — so Storage gave up its place to Settings, which had no way in
+ * on mobile at all. That left /storage with no entry point: the storage banner
+ * on Home is the only other one, and it appears only above 75% full and can be
+ * dismissed, so on a healthy disk the page was simply unreachable.
+ *
+ * Hidden on desktop, where the sidebar still lists it and a second route to the
+ * same page would just be clutter.
+ */
+function StorageLink() {
+  return (
+    <div className="mt-8 border-t border-line pt-6 min-[700px]:hidden">
+      <Link
+        to="/storage"
+        className="flex items-center gap-3 rounded-xl px-1 py-3 text-sm
+                   transition-colors hover:bg-surface-hover"
+      >
+        <HardDrive size={18} className="shrink-0 text-text-2" />
+        <span className="flex-1">Storage</span>
+        <ChevronRight size={18} className="shrink-0 text-text-2" />
+      </Link>
     </div>
   )
 }
