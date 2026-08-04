@@ -125,8 +125,10 @@ export function WatchPage() {
       {/* The reserve is the player's height and nothing else.
 
           It used to add the top bar's height as well, which was counted twice:
-          the bar is `sticky`, and a sticky element still takes its place in the
-          flow, so the content already begins below it. The result was a gap of
+          the content already begins below the bar. That was true when the bar
+          was `sticky` — a sticky element still takes its place in the flow —
+          and it is true now for a plainer reason, since the bar sits above the
+          scrolling region rather than inside it. The result was a gap of
           exactly one top bar between the picture and the title.
 
           56.25vw is 9/16 of the width — the same 16:9 the player host computes

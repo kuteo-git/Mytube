@@ -17,6 +17,7 @@ import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
 import { VideoRail } from '@/features/catalog/ui/VideoRail'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
+import { usePlayer } from '@/features/watch/application/player-context'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
 /**
@@ -42,13 +43,15 @@ export function HomePage() {
   //
   // Chips are local state rather than navigation, so useScrollRestoration
   // cannot see this and the effect has to stay.
+  const { scrollerEl } = usePlayer()
   const lastTopicRef = useRef<string | null>(null)
   useEffect(() => {
     const previous = lastTopicRef.current
     lastTopicRef.current = active
     if (previous === null || previous === active) return
-    window.scrollTo({ top: 0 })
-  }, [active])
+    // The page scrolls inside <main>, not the window — see AppShell.
+    scrollerEl?.scrollTo({ top: 0 })
+  }, [active, scrollerEl])
 
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useFeed(active)

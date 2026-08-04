@@ -65,6 +65,17 @@
     color-scheme: dark;
   }
 
+  /* The window itself does not scroll; <main> does. Without pinning the
+     document to the viewport the two would both be scrollable, and a phone
+     would still slide its address bar around on the outer one — which is the
+     whole thing this arrangement exists to stop. */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     margin: 0;
     background-color: var(--color-bg);

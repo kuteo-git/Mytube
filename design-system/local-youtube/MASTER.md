@@ -95,6 +95,33 @@ Hover card: **không transform, không shadow, không scale** — YouTube không
 
 **Sidebar item:** height 40px, radius 10px, padding trái 12px, icon 24px cách label 24px. Hover `--surface-hover`. Active: nền `--surface-hover` + label weight 500.
 
+**Top bar (sửa 2026-08-05 — lệch có chủ đích khỏi ảnh tham chiếu):** nền `--bg` ở **70%** phủ
+`backdrop-blur-xl` + `backdrop-saturate-150`, **không** đục như `Example/home.png`. Lý do: trang
+cuộn bên trong `<main>` chứ không cuộn cửa sổ (xem `CLAUDE.md`), và thanh bar **đè lên** vùng
+cuộn — nội dung đi *phía sau* nó. Đục thì phần đè đó vô nghĩa.
+Blur là thứ giữ cho chữ đọc được: 70% trên thumbnail đang trôi, chữ đặt trên tấm trong suốt
+phẳng sẽ bơi. Kiểm `--text #F1F1F1` vẫn đạt tương phản trên nền tối nhất lẫn sáng nhất mà
+thumbnail có thể đưa ra.
+**ChipBar thì ĐỤC** (`--bg`) — thử blur rồi bỏ. **Hai lớp `backdrop-filter` cạnh nhau không bao
+giờ khớp**: mỗi lớp làm mờ backdrop *của riêng nó* rồi cắt theo biên của chính nó, nên dọc mép
+giáp ranh hai bên bịa pixel từ hai vùng khác nhau. Đường nối nằm ở **kỹ thuật**, không phải ở
+tham số — chỉnh cùng bán kính, cùng độ trong vẫn lộ. Một mặt đục cạnh một mặt blur ít ra còn đọc
+như một quyết định. Muốn liền mạch thì phải **một lớp blur duy nhất** phủ cả hai, và cái giá là
+trang phải khai báo chiều cao phần mở rộng cho AppShell.
+
+**Padding ngang của ChipBar nằm trên VÙNG CUỘN, không nằm trên wrapper.** Đặt ở wrapper thì nó
+rút ngắn chính vùng cuộn, chip biến mất trước mép màn hình 16px và hàng đọc như bị cắt cụt thay
+vì đang tiếp diễn. Kèm `scroll-px-4` để khi *trình duyệt* cuộn hàng này (nút mũi tên, focus bàn
+phím) chip cũng dừng cách mép đúng chừng đó.
+
+**Miniplayer:** blur **chỉ ở biến thể `bar` trên mobile**, nơi video chỉ rộng 128px nên tiêu đề
+và nút nằm trên nền của chính host. Miniplayer desktop thì video phủ kín khung — blur ở đó bị che
+hoàn toàn, chỉ tốn thêm một lớp compositing.
+**Vị trí dính: `top-0`, KHÔNG phải `top-14`.** Ngưỡng sticky đo từ mép content của vùng cuộn, mà
+vùng cuộn đã mang sẵn `pt-14`. Ghi thêm chiều cao bar là đếm hai lần → ngưỡng 112px, và sticky
+**đẩy phần tử xuống** cho tới ngưỡng, nên hàng chip tụt đúng một header ngay cả khi chưa cuộn.
+Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
+
 **Search:** input nền `--surface-input`, border `--border`, radius full trái; nút search nền `--surface` radius full phải; focus → border `--ring`.
 
 **Chip:** mặc định nền `--surface` text `--text`; active nền `--invert-bg` text `--invert-text`. Thanh chip scroll ngang, có nút mũi tên 2 đầu, **ẩn scrollbar**.

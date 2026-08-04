@@ -66,7 +66,14 @@ function disabled(): boolean {
   }
 }
 
-export function useScrollRestoration() {
+/**
+ * @param scroller the element that scrolls, or null before it is mounted. The
+ * page scrolls inside `<main>` rather than the window so that the browser's own
+ * address bar never collapses — on a phone that collapse resizes the viewport
+ * and moves everything pinned to the top edge, which is what a restored
+ * position looked like: the top bar flickering on every tab switch.
+ */
+export function useScrollRestoration(scroller: HTMLElement | null) {
   const { key, pathname } = useLocation()
   const navigationType = useNavigationType() as NavKind
   const currentRef = useRef({ key, pathname })
@@ -74,9 +81,11 @@ export function useScrollRestoration() {
   /** What the layout effect decided, for the after-paint check below. */
   const targetRef = useRef<number | null>(null)
 
-  // Take the browser's own restoration out of the argument. Left on automatic
-  // it also restores on POP, a frame or two after this does and from its own
-  // idea of the position — so the page would land, then jump.
+  // Take the browser's own restoration out of the argument.
+  //
+  // It has nothing to restore now that the window does not scroll, but saying
+  // so costs one line and the alternative is a rule that quietly starts
+  // applying again the day anything makes the document scrollable.
   useEffect(() => {
     const previous = window.history.scrollRestoration
     window.history.scrollRestoration = 'manual'
@@ -91,6 +100,7 @@ export function useScrollRestoration() {
   // already moved.
   useEffect(() => {
     currentRef.current = { key, pathname }
+    if (!scroller) return
     let frame = 0
     const onScroll = () => {
       if (frame) return
@@ -100,19 +110,19 @@ export function useScrollRestoration() {
       // frame that lands after the router has already moved on, and the old
       // page's offset would be filed under the new page's name.
       const at = currentRef.current
-      const y = window.scrollY
+      const y = scroller.scrollTop
       frame = window.requestAnimationFrame(() => {
         frame = 0
         write(ENTRY_PREFIX, at.key, y)
         write(PATH_PREFIX, at.pathname, y)
       })
     }
-    window.addEventListener('scroll', onScroll, { passive: true })
+    scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => {
-      window.removeEventListener('scroll', onScroll)
+      scroller.removeEventListener('scroll', onScroll)
       if (frame) window.cancelAnimationFrame(frame)
     }
-  }, [key, pathname])
+  }, [key, pathname, scroller])
 
   // A layout effect, not an ordinary one, and the difference is visible.
   //
@@ -127,7 +137,7 @@ export function useScrollRestoration() {
   // The retry loop below still paints early when the content genuinely is not
   // there yet; nothing can scroll to an offset a page does not have.
   useLayoutEffect(() => {
-    if (disabled()) return
+    if (disabled() || !scroller) return
     const samePath = previousPathRef.current === pathname
     previousPathRef.current = pathname
 
@@ -146,24 +156,22 @@ export function useScrollRestoration() {
     // resizes the viewport and shifts the sticky top bar. Two tabs both at the
     // top — the ordinary case — would otherwise pay for a scroll that changes
     // nothing and be seen doing it.
-    if (window.scrollY === target) return
+    if (scroller.scrollTop === target) return
 
     // Instantly, never smoothly. The player host converts between fixed and
     // absolute positioning by reading window.scrollY during a layout effect
     // (player-context.tsx), and a scroll still in motion would have it read a
     // number that is about to be wrong — the miniplayer jumps, then animates.
     if (target === 0) {
-      window.scrollTo(0, 0)
+      scroller.scrollTop = 0
       return
     }
 
     let frames = 0
     let raf = 0
     const attempt = () => {
-      if (
-        canReach(target, document.documentElement.scrollHeight, window.innerHeight)
-      ) {
-        window.scrollTo(0, target)
+      if (canReach(target, scroller.scrollHeight, scroller.clientHeight)) {
+        scroller.scrollTop = target
         return
       }
       // Still shorter than the offset it is being asked for, which on a feed
@@ -176,7 +184,7 @@ export function useScrollRestoration() {
     return () => {
       if (raf) window.cancelAnimationFrame(raf)
     }
-  }, [key, pathname, navigationType])
+  }, [key, pathname, navigationType, scroller])
 
   // Say it once more after paint, and only if something moved.
   //
@@ -189,12 +197,10 @@ export function useScrollRestoration() {
   // Normally a no-op — the position is already the target, and nothing is
   // called — so it adds no second scroll and no second flicker of its own.
   useEffect(() => {
-    if (disabled()) return
+    if (disabled() || !scroller) return
     const target = targetRef.current
-    if (target === null || window.scrollY === target) return
-    if (!canReach(target, document.documentElement.scrollHeight, window.innerHeight)) {
-      return
-    }
-    window.scrollTo(0, target)
-  }, [key, pathname, navigationType])
+    if (target === null || scroller.scrollTop === target) return
+    if (!canReach(target, scroller.scrollHeight, scroller.clientHeight)) return
+    scroller.scrollTop = target
+  }, [key, pathname, navigationType, scroller])
 }

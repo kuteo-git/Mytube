@@ -5,39 +5,49 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useScrollRestoration } from './use-scroll-restoration'
 
 /**
- * The window's scroll, faked.
+ * The element the app scrolls, faked.
  *
- * jsdom has no layout, so `scrollTo` does nothing and `scrollY` never moves.
- * Both are stubbed to a plain number, which is all this hook actually reads or
- * writes — and it means a test can say "the viewer scrolled to 900" without a
- * rendering engine.
+ * The page scrolls inside `<main>` rather than the window, so that a phone's
+ * address bar never collapses and drags the top bar with it. jsdom has no
+ * layout, so scrollTop and the two heights are backed by plain numbers here —
+ * which is all this hook reads or writes.
  */
 let scrollY = 0
+let contentHeight = 5000
+let scroller: HTMLElement
 
 function setHeight(px: number) {
-  Object.defineProperty(document.documentElement, 'scrollHeight', {
-    value: px,
-    configurable: true,
-  })
+  contentHeight = px
 }
 
 beforeEach(() => {
   scrollY = 0
+  contentHeight = 5000
   window.sessionStorage.clear()
-  setHeight(5000)
-  Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true })
-  Object.defineProperty(window, 'scrollY', {
+
+  scroller = document.createElement('main')
+  Object.defineProperty(scroller, 'scrollTop', {
     get: () => scrollY,
+    set: (y: number) => {
+      scrollY = y
+      scroller.dispatchEvent(new Event('scroll'))
+    },
     configurable: true,
   })
-  // Both call forms, because the app uses both: this hook scrolls with two
-  // arguments and HomePage with an options object. A stub that understood only
-  // one would let the other silently write `undefined`.
-  vi.stubGlobal('scrollTo', (a: number | ScrollToOptions, b?: number) => {
-    scrollY = typeof a === 'number' ? (b ?? 0) : (a.top ?? 0)
+  Object.defineProperty(scroller, 'scrollHeight', {
+    get: () => contentHeight,
+    configurable: true,
   })
-  // The hook restores across animation frames while it waits for a page to be
-  // tall enough. Running them immediately keeps the tests synchronous.
+  Object.defineProperty(scroller, 'clientHeight', { value: 800, configurable: true })
+  // HomePage scrolls with an options object; the hook assigns scrollTop. Both
+  // have to work, or one of them silently writes nothing.
+  scroller.scrollTo = ((a: number | ScrollToOptions, b?: number) => {
+    scrollY = typeof a === 'number' ? (b ?? 0) : (a.top ?? 0)
+  }) as HTMLElement['scrollTo']
+  document.body.appendChild(scroller)
+
+  // The hook restores across animation frames while it waits for the content to
+  // be tall enough. Running them immediately keeps the tests synchronous.
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
     cb(0)
     return 1
@@ -45,7 +55,10 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', () => {})
 })
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  scroller.remove()
+})
 
 function Page({ name }: { name: string }) {
   const navigate = useNavigate()
@@ -63,7 +76,7 @@ function Page({ name }: { name: string }) {
 }
 
 function App() {
-  useScrollRestoration()
+  useScrollRestoration(scroller)
   return (
     <Routes>
       <Route path="/" element={<Page name="home" />} />
@@ -90,11 +103,11 @@ function click(name: string) {
   })
 }
 
-/** Move the window and let the hook's scroll listener record it. */
+/** Move the scroller and let the hook's listener record it. */
 function scrollTo(y: number) {
   act(() => {
     scrollY = y
-    window.dispatchEvent(new Event('scroll'))
+    scroller.dispatchEvent(new Event('scroll'))
   })
 }
 
@@ -199,7 +212,7 @@ describe('scrolling across a navigation', () => {
     function Selfish() {
       useEffect(() => {
         // The exact call HomePage makes, options object and all.
-        window.scrollTo({ top: 0 })
+        scroller.scrollTo({ top: 0 })
       }, [])
       return (
         <div>
@@ -210,7 +223,7 @@ describe('scrolling across a navigation', () => {
       )
     }
     function SelfishApp() {
-      useScrollRestoration()
+      useScrollRestoration(scroller)
       return (
         <Routes>
           <Route path="/" element={<Selfish />} />

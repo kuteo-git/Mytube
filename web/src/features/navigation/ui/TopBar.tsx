@@ -20,10 +20,26 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
   const pendingIngest = active + failed
 
   return (
-    // Above the player host, which the search suggestions depend on: `sticky`
-    // with a z-index makes this a stacking context, so anything inside it is
-    // capped at whatever this header is worth.
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-2 bg-bg px-4">
+    // Pinned to the frame, not sticky to the flow.
+    //
+    // The page scrolls inside <main>, which fills the whole frame and carries
+    // 56px of top padding for this bar — so the bar never moves and content
+    // passes behind it. Sticky was what flickered: a sticky element is
+    // repositioned every time the viewport resizes, which on a phone is every
+    // time the browser's address bar slides in or out.
+    //
+    // Translucent over a blur, so what is behind reads as depth rather than as
+    // a seam. A deliberate step away from the reference screenshots, where the
+    // bar is opaque — design-system MASTER.md should be updated rather than
+    // quietly contradicted. The blur is what keeps it legible: at 70% over
+    // moving thumbnails, text on a flat translucent panel would swim.
+    //
+    // `absolute` with a z-index keeps the stacking context the search
+    // suggestions depend on, which `sticky` used to provide.
+    <header
+      className="absolute inset-x-0 top-0 z-40 flex h-14 items-center gap-2 px-4
+                 bg-bg/70 backdrop-blur-xl backdrop-saturate-150"
+    >
       <div className="flex shrink-0 items-center gap-1">
         {/* Desktop only. There it does two jobs — collapsing the rail, and on the
             watch page opening the drawer, which is the only way off that page
