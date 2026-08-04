@@ -788,6 +788,28 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     return
   }
 
+  // A suspended context has a frozen clock, and every time in this file is
+  // measured against it.
+  //
+  // This is what made narration silent until the switch was turned off and on
+  // again. Read aloud is remembered across page loads, so on a fresh page the
+  // context is built during render — with no user gesture behind it, which is
+  // the one condition under which the browser starts it suspended. `currentTime`
+  // then stays at zero however long the video plays, so clips were scheduled
+  // against a clock that had never started: placed in what the context still
+  // considered its opening moment, and dropped as too late to be worth playing.
+  // Toggling the switch appeared to fix it because that path creates and resumes
+  // the context inside the click, which is exactly what the policy asks for.
+  //
+  // Resuming here covers the browsers that allow it once the page has been
+  // interacted with at all; the player also asks at the next real gesture, for
+  // the ones that do not. Either way nothing is scheduled until the clock runs.
+  if (ctx.state !== 'running') {
+    void ctx.resume()
+    _lastTime = now
+    return
+  }
+
   if (!_masterGain) {
     _masterGain = ctx.createGain()
     connectOutput(ctx, _masterGain)

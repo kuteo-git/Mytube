@@ -149,6 +149,47 @@ async function settle(ms = 400) {
   await new Promise((r) => setTimeout(r, ms))
 }
 
+describe('a context that has not started', () => {
+  // The bug: Read aloud is remembered across page loads, so the context is
+  // built during render with no gesture behind it and the browser starts it
+  // suspended. Its clock is frozen at zero, and clips scheduled against a
+  // frozen clock are placed in the past and dropped — silence until the switch
+  // was toggled off and on, which creates the context inside a click.
+  it('schedules nothing and asks to be resumed', async () => {
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    let resumed = 0
+    const ctx = { ...fakeAudioContext(), state: 'suspended', currentTime: 0 }
+    ctx.resume = () => {
+      resumed++
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(fakeVideo(0) as any, ctx as any)
+    await settle()
+
+    expect(resumed).toBeGreaterThan(0)
+    expect(scheduled).toHaveLength(0)
+  })
+
+  it('speaks once the clock is running', async () => {
+    loadViSubtitles('/subs.vtt', 'vi')
+    await settle(20)
+
+    const suspended = { ...fakeAudioContext(), state: 'suspended', currentTime: 0 }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(fakeVideo(0) as any, suspended as any)
+    await settle()
+
+    const ctx = fakeAudioContext()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tickNarration(fakeVideo(0) as any, ctx as any)
+    await settle()
+
+    expect(scheduled.map((s) => s.line)).toEqual([0, 1, 2])
+  })
+})
+
 describe('scheduling order', () => {
   it('places clips in cue order even when the audio arrives backwards', async () => {
     loadViSubtitles('/subs.vtt', 'vi')

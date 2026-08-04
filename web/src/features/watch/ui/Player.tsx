@@ -636,6 +636,37 @@ export function Player({
     }
   }, [narrationOn])
 
+  // ...and start it at the first gesture, because one built that way is born
+  // suspended.
+  //
+  // Some browsers accept a resume from anywhere once the page has been touched
+  // at all, and for those the narration tick's own attempt is enough. Safari
+  // does not: it wants the call inside the handler for the gesture. So the
+  // handler is here, on the document, listening for whatever the viewer does
+  // first — pressing play being the likeliest.
+  //
+  // It removes itself the moment the context is running, so this is one listener
+  // for one gesture, not a permanent fixture.
+  useEffect(() => {
+    if (!narrationOn) return
+    const start = () => {
+      const ctx = audioCtxRef.current
+      if (!ctx) return
+      if (ctx.state === 'running') {
+        detach()
+        return
+      }
+      void ctx.resume().then(detach, () => undefined)
+    }
+    const detach = () => {
+      document.removeEventListener('pointerdown', start)
+      document.removeEventListener('keydown', start)
+    }
+    document.addEventListener('pointerdown', start)
+    document.addEventListener('keydown', start)
+    return detach
+  }, [narrationOn])
+
   // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
   // TTS audio and plays clips at their scheduled times through Web Audio API.
   // Use setInterval instead of requestAnimationFrame so the tick loop
