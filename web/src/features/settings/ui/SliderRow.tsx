@@ -10,6 +10,7 @@ export function SliderRow({
   label,
   value,
   max,
+  step = 0.05,
   onChange,
   format,
   hint,
@@ -17,6 +18,8 @@ export function SliderRow({
   label: string
   value: number
   max: number
+  /** Whole numbers for shares of a feed; fractions for volumes. */
+  step?: number
   onChange: (v: number) => void
   format: (v: number) => string
   hint?: string
@@ -34,7 +37,7 @@ export function SliderRow({
         type="range"
         min={0}
         max={max}
-        step={0.05}
+        step={step}
         value={value}
         aria-label={label}
         // Every change, not on release: hearing the balance move while dragging

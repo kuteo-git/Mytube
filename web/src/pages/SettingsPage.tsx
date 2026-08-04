@@ -14,6 +14,7 @@ import {
   saveNarrationAudioPrefs,
   type NarrationAudioPrefs,
 } from '@/features/settings/application/settings-prefs'
+import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
 import {
   SettingRow,
@@ -27,6 +28,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">Settings</h1>
+      <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
     </div>

@@ -222,6 +222,80 @@ func (x *RankedVideo) GetReason() RecommendationReason {
 	return RecommendationReason_RECOMMENDATION_REASON_UNSPECIFIED
 }
 
+// How much of the feed each source of new material is entitled to.
+//
+// Sent with the request rather than stored here, so this service keeps no
+// configuration of its own: the setting belongs to whoever is asking, and the
+// ranking is a pure function of the request and the signals.
+//
+// The three are percentages of the room left once continue-watching and
+// rewatching have taken their fixed share, and they are normalised on arrival —
+// a caller that sends 3/2/1 gets the same feed as one that sends 50/33/17.
+// All three zero means "unset", and the defaults apply.
+type FeedMix struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Channels the viewer subscribed to.
+	SubscribedPercent int32 `protobuf:"varint,1,opt,name=subscribed_percent,json=subscribedPercent,proto3" json:"subscribed_percent,omitempty"`
+	// Not subscribed, but matching what this viewer watches.
+	AffinityPercent int32 `protobuf:"varint,2,opt,name=affinity_percent,json=affinityPercent,proto3" json:"affinity_percent,omitempty"`
+	// Not subscribed and outside their affinity — the window kept open so the
+	// feed does not converge on the familiar.
+	DiscoveryPercent int32 `protobuf:"varint,3,opt,name=discovery_percent,json=discoveryPercent,proto3" json:"discovery_percent,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *FeedMix) Reset() {
+	*x = FeedMix{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FeedMix) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FeedMix) ProtoMessage() {}
+
+func (x *FeedMix) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FeedMix.ProtoReflect.Descriptor instead.
+func (*FeedMix) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *FeedMix) GetSubscribedPercent() int32 {
+	if x != nil {
+		return x.SubscribedPercent
+	}
+	return 0
+}
+
+func (x *FeedMix) GetAffinityPercent() int32 {
+	if x != nil {
+		return x.AffinityPercent
+	}
+	return 0
+}
+
+func (x *FeedMix) GetDiscoveryPercent() int32 {
+	if x != nil {
+		return x.DiscoveryPercent
+	}
+	return 0
+}
+
 type GetFeedRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -231,14 +305,16 @@ type GetFeedRequest struct {
 	PageToken string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	// Local wall-clock hour at the client, 0-23. Time of day is one of the
 	// behaviour signals the brief called for.
-	ClientHour    int32 `protobuf:"varint,5,opt,name=client_hour,json=clientHour,proto3" json:"client_hour,omitempty"`
+	ClientHour int32 `protobuf:"varint,5,opt,name=client_hour,json=clientHour,proto3" json:"client_hour,omitempty"`
+	// Optional. Absent means the built-in mix.
+	Mix           *FeedMix `protobuf:"bytes,6,opt,name=mix,proto3" json:"mix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetFeedRequest) Reset() {
 	*x = GetFeedRequest{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[1]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -250,7 +326,7 @@ func (x *GetFeedRequest) String() string {
 func (*GetFeedRequest) ProtoMessage() {}
 
 func (x *GetFeedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[1]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -263,7 +339,7 @@ func (x *GetFeedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFeedRequest.ProtoReflect.Descriptor instead.
 func (*GetFeedRequest) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{1}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetFeedRequest) GetUserId() string {
@@ -301,6 +377,13 @@ func (x *GetFeedRequest) GetClientHour() int32 {
 	return 0
 }
 
+func (x *GetFeedRequest) GetMix() *FeedMix {
+	if x != nil {
+		return x.Mix
+	}
+	return nil
+}
+
 type GetFeedResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Videos        []*RankedVideo         `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
@@ -314,7 +397,7 @@ type GetFeedResponse struct {
 
 func (x *GetFeedResponse) Reset() {
 	*x = GetFeedResponse{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[2]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -326,7 +409,7 @@ func (x *GetFeedResponse) String() string {
 func (*GetFeedResponse) ProtoMessage() {}
 
 func (x *GetFeedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[2]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +422,7 @@ func (x *GetFeedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFeedResponse.ProtoReflect.Descriptor instead.
 func (*GetFeedResponse) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{2}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetFeedResponse) GetVideos() []*RankedVideo {
@@ -373,7 +456,7 @@ type GetMostWatchedRequest struct {
 
 func (x *GetMostWatchedRequest) Reset() {
 	*x = GetMostWatchedRequest{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[3]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +468,7 @@ func (x *GetMostWatchedRequest) String() string {
 func (*GetMostWatchedRequest) ProtoMessage() {}
 
 func (x *GetMostWatchedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[3]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +481,7 @@ func (x *GetMostWatchedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMostWatchedRequest.ProtoReflect.Descriptor instead.
 func (*GetMostWatchedRequest) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{3}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetMostWatchedRequest) GetUserId() string {
@@ -424,7 +507,7 @@ type GetMostWatchedResponse struct {
 
 func (x *GetMostWatchedResponse) Reset() {
 	*x = GetMostWatchedResponse{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[4]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +519,7 @@ func (x *GetMostWatchedResponse) String() string {
 func (*GetMostWatchedResponse) ProtoMessage() {}
 
 func (x *GetMostWatchedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[4]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +532,7 @@ func (x *GetMostWatchedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMostWatchedResponse.ProtoReflect.Descriptor instead.
 func (*GetMostWatchedResponse) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{4}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetMostWatchedResponse) GetVideos() []*RankedVideo {
@@ -472,7 +555,7 @@ type GetUpNextRequest struct {
 
 func (x *GetUpNextRequest) Reset() {
 	*x = GetUpNextRequest{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[5]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -484,7 +567,7 @@ func (x *GetUpNextRequest) String() string {
 func (*GetUpNextRequest) ProtoMessage() {}
 
 func (x *GetUpNextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[5]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -497,7 +580,7 @@ func (x *GetUpNextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpNextRequest.ProtoReflect.Descriptor instead.
 func (*GetUpNextRequest) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{5}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetUpNextRequest) GetUserId() string {
@@ -537,7 +620,7 @@ type GetUpNextResponse struct {
 
 func (x *GetUpNextResponse) Reset() {
 	*x = GetUpNextResponse{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[6]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +632,7 @@ func (x *GetUpNextResponse) String() string {
 func (*GetUpNextResponse) ProtoMessage() {}
 
 func (x *GetUpNextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[6]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +645,7 @@ func (x *GetUpNextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpNextResponse.ProtoReflect.Descriptor instead.
 func (*GetUpNextResponse) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{6}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetUpNextResponse) GetVideos() []*RankedVideo {
@@ -589,7 +672,7 @@ type RecordSignalRequest struct {
 
 func (x *RecordSignalRequest) Reset() {
 	*x = RecordSignalRequest{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[7]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -601,7 +684,7 @@ func (x *RecordSignalRequest) String() string {
 func (*RecordSignalRequest) ProtoMessage() {}
 
 func (x *RecordSignalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[7]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -614,7 +697,7 @@ func (x *RecordSignalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordSignalRequest.ProtoReflect.Descriptor instead.
 func (*RecordSignalRequest) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{7}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RecordSignalRequest) GetUserId() string {
@@ -667,7 +750,7 @@ type RecordSignalResponse struct {
 
 func (x *RecordSignalResponse) Reset() {
 	*x = RecordSignalResponse{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[8]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -679,7 +762,7 @@ func (x *RecordSignalResponse) String() string {
 func (*RecordSignalResponse) ProtoMessage() {}
 
 func (x *RecordSignalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[8]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +775,7 @@ func (x *RecordSignalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordSignalResponse.ProtoReflect.Descriptor instead.
 func (*RecordSignalResponse) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{8}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{9}
 }
 
 type RecordImpressionsRequest struct {
@@ -705,7 +788,7 @@ type RecordImpressionsRequest struct {
 
 func (x *RecordImpressionsRequest) Reset() {
 	*x = RecordImpressionsRequest{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[9]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -717,7 +800,7 @@ func (x *RecordImpressionsRequest) String() string {
 func (*RecordImpressionsRequest) ProtoMessage() {}
 
 func (x *RecordImpressionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[9]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -730,7 +813,7 @@ func (x *RecordImpressionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordImpressionsRequest.ProtoReflect.Descriptor instead.
 func (*RecordImpressionsRequest) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{9}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RecordImpressionsRequest) GetUserId() string {
@@ -755,7 +838,7 @@ type RecordImpressionsResponse struct {
 
 func (x *RecordImpressionsResponse) Reset() {
 	*x = RecordImpressionsResponse{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[10]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +850,7 @@ func (x *RecordImpressionsResponse) String() string {
 func (*RecordImpressionsResponse) ProtoMessage() {}
 
 func (x *RecordImpressionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[10]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +863,7 @@ func (x *RecordImpressionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordImpressionsResponse.ProtoReflect.Descriptor instead.
 func (*RecordImpressionsResponse) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{10}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{11}
 }
 
 var File_recsys_v1_recsys_proto protoreflect.FileDescriptor
@@ -791,7 +874,11 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\vRankedVideo\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x14\n" +
 	"\x05score\x18\x02 \x01(\x02R\x05score\x127\n" +
-	"\x06reason\x18\x03 \x01(\x0e2\x1f.recsys.v1.RecommendationReasonR\x06reason\"\xa2\x01\n" +
+	"\x06reason\x18\x03 \x01(\x0e2\x1f.recsys.v1.RecommendationReasonR\x06reason\"\x90\x01\n" +
+	"\aFeedMix\x12-\n" +
+	"\x12subscribed_percent\x18\x01 \x01(\x05R\x11subscribedPercent\x12)\n" +
+	"\x10affinity_percent\x18\x02 \x01(\x05R\x0faffinityPercent\x12+\n" +
+	"\x11discovery_percent\x18\x03 \x01(\x05R\x10discoveryPercent\"\xc8\x01\n" +
 	"\x0eGetFeedRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x1b\n" +
@@ -799,7 +886,8 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\n" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1f\n" +
 	"\vclient_hour\x18\x05 \x01(\x05R\n" +
-	"clientHour\"\x92\x01\n" +
+	"clientHour\x12$\n" +
+	"\x03mix\x18\x06 \x01(\v2\x12.recsys.v1.FeedMixR\x03mix\"\x92\x01\n" +
 	"\x0fGetFeedResponse\x12.\n" +
 	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12'\n" +
@@ -872,45 +960,47 @@ func file_recsys_v1_recsys_proto_rawDescGZIP() []byte {
 }
 
 var file_recsys_v1_recsys_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_recsys_v1_recsys_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_recsys_v1_recsys_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_recsys_v1_recsys_proto_goTypes = []any{
 	(RecommendationReason)(0),         // 0: recsys.v1.RecommendationReason
 	(SignalType)(0),                   // 1: recsys.v1.SignalType
 	(*RankedVideo)(nil),               // 2: recsys.v1.RankedVideo
-	(*GetFeedRequest)(nil),            // 3: recsys.v1.GetFeedRequest
-	(*GetFeedResponse)(nil),           // 4: recsys.v1.GetFeedResponse
-	(*GetMostWatchedRequest)(nil),     // 5: recsys.v1.GetMostWatchedRequest
-	(*GetMostWatchedResponse)(nil),    // 6: recsys.v1.GetMostWatchedResponse
-	(*GetUpNextRequest)(nil),          // 7: recsys.v1.GetUpNextRequest
-	(*GetUpNextResponse)(nil),         // 8: recsys.v1.GetUpNextResponse
-	(*RecordSignalRequest)(nil),       // 9: recsys.v1.RecordSignalRequest
-	(*RecordSignalResponse)(nil),      // 10: recsys.v1.RecordSignalResponse
-	(*RecordImpressionsRequest)(nil),  // 11: recsys.v1.RecordImpressionsRequest
-	(*RecordImpressionsResponse)(nil), // 12: recsys.v1.RecordImpressionsResponse
-	(*timestamppb.Timestamp)(nil),     // 13: google.protobuf.Timestamp
+	(*FeedMix)(nil),                   // 3: recsys.v1.FeedMix
+	(*GetFeedRequest)(nil),            // 4: recsys.v1.GetFeedRequest
+	(*GetFeedResponse)(nil),           // 5: recsys.v1.GetFeedResponse
+	(*GetMostWatchedRequest)(nil),     // 6: recsys.v1.GetMostWatchedRequest
+	(*GetMostWatchedResponse)(nil),    // 7: recsys.v1.GetMostWatchedResponse
+	(*GetUpNextRequest)(nil),          // 8: recsys.v1.GetUpNextRequest
+	(*GetUpNextResponse)(nil),         // 9: recsys.v1.GetUpNextResponse
+	(*RecordSignalRequest)(nil),       // 10: recsys.v1.RecordSignalRequest
+	(*RecordSignalResponse)(nil),      // 11: recsys.v1.RecordSignalResponse
+	(*RecordImpressionsRequest)(nil),  // 12: recsys.v1.RecordImpressionsRequest
+	(*RecordImpressionsResponse)(nil), // 13: recsys.v1.RecordImpressionsResponse
+	(*timestamppb.Timestamp)(nil),     // 14: google.protobuf.Timestamp
 }
 var file_recsys_v1_recsys_proto_depIdxs = []int32{
 	0,  // 0: recsys.v1.RankedVideo.reason:type_name -> recsys.v1.RecommendationReason
-	2,  // 1: recsys.v1.GetFeedResponse.videos:type_name -> recsys.v1.RankedVideo
-	2,  // 2: recsys.v1.GetMostWatchedResponse.videos:type_name -> recsys.v1.RankedVideo
-	2,  // 3: recsys.v1.GetUpNextResponse.videos:type_name -> recsys.v1.RankedVideo
-	1,  // 4: recsys.v1.RecordSignalRequest.type:type_name -> recsys.v1.SignalType
-	13, // 5: recsys.v1.RecordSignalRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	3,  // 6: recsys.v1.RecommendationService.GetFeed:input_type -> recsys.v1.GetFeedRequest
-	7,  // 7: recsys.v1.RecommendationService.GetUpNext:input_type -> recsys.v1.GetUpNextRequest
-	5,  // 8: recsys.v1.RecommendationService.GetMostWatched:input_type -> recsys.v1.GetMostWatchedRequest
-	9,  // 9: recsys.v1.RecommendationService.RecordSignal:input_type -> recsys.v1.RecordSignalRequest
-	11, // 10: recsys.v1.RecommendationService.RecordImpressions:input_type -> recsys.v1.RecordImpressionsRequest
-	4,  // 11: recsys.v1.RecommendationService.GetFeed:output_type -> recsys.v1.GetFeedResponse
-	8,  // 12: recsys.v1.RecommendationService.GetUpNext:output_type -> recsys.v1.GetUpNextResponse
-	6,  // 13: recsys.v1.RecommendationService.GetMostWatched:output_type -> recsys.v1.GetMostWatchedResponse
-	10, // 14: recsys.v1.RecommendationService.RecordSignal:output_type -> recsys.v1.RecordSignalResponse
-	12, // 15: recsys.v1.RecommendationService.RecordImpressions:output_type -> recsys.v1.RecordImpressionsResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	3,  // 1: recsys.v1.GetFeedRequest.mix:type_name -> recsys.v1.FeedMix
+	2,  // 2: recsys.v1.GetFeedResponse.videos:type_name -> recsys.v1.RankedVideo
+	2,  // 3: recsys.v1.GetMostWatchedResponse.videos:type_name -> recsys.v1.RankedVideo
+	2,  // 4: recsys.v1.GetUpNextResponse.videos:type_name -> recsys.v1.RankedVideo
+	1,  // 5: recsys.v1.RecordSignalRequest.type:type_name -> recsys.v1.SignalType
+	14, // 6: recsys.v1.RecordSignalRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	4,  // 7: recsys.v1.RecommendationService.GetFeed:input_type -> recsys.v1.GetFeedRequest
+	8,  // 8: recsys.v1.RecommendationService.GetUpNext:input_type -> recsys.v1.GetUpNextRequest
+	6,  // 9: recsys.v1.RecommendationService.GetMostWatched:input_type -> recsys.v1.GetMostWatchedRequest
+	10, // 10: recsys.v1.RecommendationService.RecordSignal:input_type -> recsys.v1.RecordSignalRequest
+	12, // 11: recsys.v1.RecommendationService.RecordImpressions:input_type -> recsys.v1.RecordImpressionsRequest
+	5,  // 12: recsys.v1.RecommendationService.GetFeed:output_type -> recsys.v1.GetFeedResponse
+	9,  // 13: recsys.v1.RecommendationService.GetUpNext:output_type -> recsys.v1.GetUpNextResponse
+	7,  // 14: recsys.v1.RecommendationService.GetMostWatched:output_type -> recsys.v1.GetMostWatchedResponse
+	11, // 15: recsys.v1.RecommendationService.RecordSignal:output_type -> recsys.v1.RecordSignalResponse
+	13, // 16: recsys.v1.RecommendationService.RecordImpressions:output_type -> recsys.v1.RecordImpressionsResponse
+	12, // [12:17] is the sub-list for method output_type
+	7,  // [7:12] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_recsys_v1_recsys_proto_init() }
@@ -924,7 +1014,7 @@ func file_recsys_v1_recsys_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_recsys_v1_recsys_proto_rawDesc), len(file_recsys_v1_recsys_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   11,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

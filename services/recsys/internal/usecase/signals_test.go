@@ -49,7 +49,7 @@ func TestBouncedVideoScoresBelowOneNeverOpened(t *testing.T) {
 	store := stubStore{profile: profileWith(map[string]float32{"bounced": 0.01})}
 	ranker := NewRanker(store, stubFeatures{features: twoVideos(now)})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestUnopenedVideoIsNotTreatedAsBounced(t *testing.T) {
 		stubFeatures{features: twoVideos(now)},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestRetentionLiftsVideosThatHoldAnAudience(t *testing.T) {
 	}
 	ranker := NewRanker(store, stubFeatures{features: features})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestWatchingBuildsTopicAffinityWithoutAnyLikes(t *testing.T) {
 	})}
 	ranker := NewRanker(store, stubFeatures{features: features})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestRetentionFailureDoesNotEmptyTheFeed(t *testing.T) {
 		stubFeatures{features: twoVideos(now)},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestDislikingMostOfAChannelSuppressesIt(t *testing.T) {
 	profile.Disliked["a3"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestThreeDislikesInALargeChannelAreJustThreeDislikes(t *testing.T) {
 	profile.Disliked["b2"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -401,7 +401,7 @@ func TestRejectingATopicPushesTheRestOfItDown(t *testing.T) {
 	profile.Disliked["rejected"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}

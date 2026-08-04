@@ -1,0 +1,200 @@
+import { Info, LayoutGrid, RotateCcw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useFeedMix, useSaveFeedMix } from '@/features/settings/application/queries'
+import {
+  ADJUSTABLE_PERCENT,
+  FEED_WINDOW,
+  FIXED_SHARES,
+  type FeedMix,
+  type FeedMixKey,
+  setShare,
+  videosPerWindow,
+} from '@/features/settings/domain/feed-mix'
+import { SettingsSection } from '@/features/settings/ui/SettingsSection'
+import { SliderRow } from '@/features/settings/ui/SliderRow'
+
+/**
+ * What the home feed is made of.
+ *
+ * The three sliders are the three sources of new material, and they always add
+ * to a hundred: this is a division of one page, not three independent dials, so
+ * moving one has to take from the others. The other two absorb it in proportion
+ * to where they already were — see setShare.
+ *
+ * Saved explicitly rather than on every drag. The narration sliders write
+ * straight through because you hear the result while dragging; this one is
+ * bought by re-ranking the feed and losing your scroll position, which is not
+ * something to do sixty times on the way to a number.
+ */
+export function FeedMixSettings() {
+  const { data: stored } = useFeedMix()
+  const save = useSaveFeedMix()
+  const [mix, setMix] = useState<FeedMix | null>(null)
+
+  // The server's copy is the starting point, and only until the first drag —
+  // after that the local one is the truth or the slider would fight the hand
+  // holding it.
+  useEffect(() => {
+    if (stored && !mix) {
+      setMix({
+        subscribedPercent: stored.subscribedPercent,
+        affinityPercent: stored.affinityPercent,
+        discoveryPercent: stored.discoveryPercent,
+      })
+    }
+  }, [stored, mix])
+
+  if (!stored || !mix) {
+    return (
+      <SettingsSection
+        icon={<LayoutGrid size={18} />}
+        title="Home feed"
+        description="Loading…"
+      >
+        <div className="h-24 animate-pulse rounded-lg bg-surface-input" />
+      </SettingsSection>
+    )
+  }
+
+  const defaults = stored.defaults
+  const saved: FeedMix = {
+    subscribedPercent: stored.subscribedPercent,
+    affinityPercent: stored.affinityPercent,
+    discoveryPercent: stored.discoveryPercent,
+  }
+  const dirty = !sameMix(mix, saved)
+  const isDefault = sameMix(mix, defaults)
+  const drag = (key: FeedMixKey) => (value: number) =>
+    setMix((current) => (current ? setShare(current, key, value) : current))
+
+  return (
+    <SettingsSection
+      icon={<LayoutGrid size={18} />}
+      title="Home feed"
+      description="Where the new videos on your home page come from. The three add up to one page, so raising one lowers the others."
+    >
+      <FeedMixSlider
+        label="Channels you follow"
+        value={mix.subscribedPercent}
+        onChange={drag('subscribedPercent')}
+      />
+      <FeedMixSlider
+        label="More of what you watch"
+        value={mix.affinityPercent}
+        onChange={drag('affinityPercent')}
+        hint="Channels you have not subscribed to, on subjects you keep coming back to."
+      />
+      <FeedMixSlider
+        label="Something new"
+        value={mix.discoveryPercent}
+        onChange={drag('discoveryPercent')}
+        hint="Outside your usual subjects. Set this to zero and none will appear."
+      />
+
+      <DefaultsNote defaults={defaults} />
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled={!dirty || save.isPending}
+          onClick={() => save.mutate(mix)}
+          className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
+        >
+          {save.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          disabled={isDefault || save.isPending}
+          onClick={() => setMix(defaults)}
+          className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-50"
+        >
+          <RotateCcw size={14} />
+          Reset to default
+        </button>
+        {/* Confirmation, not decoration: without it a save that changed nothing
+            visible on this page is indistinguishable from a save that failed. */}
+        {!dirty && save.isSuccess && (
+          <span className="text-sm text-text-2">Saved — your feed has been rebuilt.</span>
+        )}
+        {save.isError && (
+          <span className="text-sm text-brand">Could not save. Is the gateway running?</span>
+        )}
+      </div>
+    </SettingsSection>
+  )
+}
+
+function FeedMixSlider({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string
+  value: number
+  onChange: (v: number) => void
+  hint?: string
+}) {
+  return (
+    <SliderRow
+      label={label}
+      value={value}
+      max={100}
+      step={1}
+      onChange={onChange}
+      // Both, because neither alone is the answer. The percentage is what was
+      // set; the count is what it means on the page you are about to look at.
+      format={(v) => `${v}% · ${videosPerWindow(v)} of ${FEED_WINDOW}`}
+      hint={hint}
+    />
+  )
+}
+
+/**
+ * The defaults, spelled out.
+ *
+ * Two things are invisible without it: what the numbers were before anybody
+ * touched them, and the fact that eighteen per cent of the page is never up for
+ * division. A viewer who sets 25/60/15 and counts five subscribed videos on a
+ * page of twenty-four should be able to find out why it was not six.
+ */
+function DefaultsNote({ defaults }: { defaults: FeedMix }) {
+  const rows: Array<[string, number]> = [
+    ['Channels you follow', defaults.subscribedPercent],
+    ['More of what you watch', defaults.affinityPercent],
+    ['Something new', defaults.discoveryPercent],
+  ]
+
+  return (
+    <div className="rounded-lg bg-surface-input p-3 text-sm">
+      <div className="flex items-center gap-2 font-medium">
+        <Info size={15} className="text-text-2" />
+        Defaults
+      </div>
+      <dl className="mt-2 space-y-1">
+        {rows.map(([label, percent]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3">
+            <dt className="text-text-2">{label}</dt>
+            <dd className="tabular-nums">
+              {percent}% <span className="text-text-2">· {videosPerWindow(percent)} of {FEED_WINDOW}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 leading-relaxed text-text-2">
+        These three divide {ADJUSTABLE_PERCENT}% of the page. The rest is kept for
+        videos you are part way through ({FIXED_SHARES.continueWatching}%) and ones you
+        have finished and might want again ({FIXED_SHARES.rewatch}%) — those are watch
+        history rather than new material, so they are not divided here.
+      </p>
+    </div>
+  )
+}
+
+function sameMix(a: FeedMix, b: FeedMix): boolean {
+  return (
+    a.subscribedPercent === b.subscribedPercent &&
+    a.affinityPercent === b.affinityPercent &&
+    a.discoveryPercent === b.discoveryPercent
+  )
+}

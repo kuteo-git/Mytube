@@ -56,8 +56,17 @@ func toProto(ranked []domain.RankedVideo) []*recsysv1.RankedVideo {
 func (s *Server) GetFeed(ctx context.Context, req *connect.Request[recsysv1.GetFeedRequest]) (*connect.Response[recsysv1.GetFeedResponse], error) {
 	snapshotID, offset := decodeToken(req.Msg.GetPageToken())
 
+	// An absent mix leaves every field zero, which normalised() reads as
+	// "unset" and answers with the defaults — so a caller that has never heard
+	// of the setting gets exactly the feed it always got.
+	mix := usecase.FeedMix{
+		Subscribed: int(req.Msg.GetMix().GetSubscribedPercent()),
+		Affinity:   int(req.Msg.GetMix().GetAffinityPercent()),
+		Discovery:  int(req.Msg.GetMix().GetDiscoveryPercent()),
+	}
+
 	page, err := s.ranker.GetFeedPage(ctx, req.Msg.GetUserId(), req.Msg.GetCategory(),
-		snapshotID, req.Msg.GetPageSize(), offset)
+		snapshotID, req.Msg.GetPageSize(), offset, mix)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

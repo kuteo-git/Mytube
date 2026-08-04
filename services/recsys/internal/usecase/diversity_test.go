@@ -52,7 +52,7 @@ func TestOneChannelCannotOwnThePage(t *testing.T) {
 		stubFeatures{features: features},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "")
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}

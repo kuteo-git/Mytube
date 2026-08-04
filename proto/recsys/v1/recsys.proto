@@ -54,6 +54,26 @@ message RankedVideo {
   RecommendationReason reason = 3;
 }
 
+// How much of the feed each source of new material is entitled to.
+//
+// Sent with the request rather than stored here, so this service keeps no
+// configuration of its own: the setting belongs to whoever is asking, and the
+// ranking is a pure function of the request and the signals.
+//
+// The three are percentages of the room left once continue-watching and
+// rewatching have taken their fixed share, and they are normalised on arrival —
+// a caller that sends 3/2/1 gets the same feed as one that sends 50/33/17.
+// All three zero means "unset", and the defaults apply.
+message FeedMix {
+  // Channels the viewer subscribed to.
+  int32 subscribed_percent = 1;
+  // Not subscribed, but matching what this viewer watches.
+  int32 affinity_percent = 2;
+  // Not subscribed and outside their affinity — the window kept open so the
+  // feed does not converge on the familiar.
+  int32 discovery_percent = 3;
+}
+
 message GetFeedRequest {
   string user_id = 1;
   // Chip filter selected in the UI. Empty means no filter.
@@ -63,6 +83,8 @@ message GetFeedRequest {
   // Local wall-clock hour at the client, 0-23. Time of day is one of the
   // behaviour signals the brief called for.
   int32 client_hour = 5;
+  // Optional. Absent means the built-in mix.
+  FeedMix mix = 6;
 }
 
 message GetFeedResponse {

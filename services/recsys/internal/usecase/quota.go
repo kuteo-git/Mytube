@@ -7,27 +7,81 @@ import (
 	"github.com/lucnguyen/local-youtube/services/recsys/internal/domain"
 )
 
-// The mix, fixed by CLAUDE.md §6 P2.
+// Which share of the feed a video competes for.
+//
+// Deliberately not the same thing as domain.Reason. A reason answers "why is
+// this here" and there are nine of them, several of which can be true at once;
+// a slot answers "whose share of the page does this take", and every video has
+// exactly one. Keeping them separate is what lets the viewer be given three
+// sliders they can hold in their head — subscribed, more of what I like,
+// something new — without the feed losing the finer-grained reason it reports
+// per video.
+type feedSlot int
+
+const (
+	slotOther feedSlot = iota
+	slotContinueWatching
+	slotRewatch
+	slotSubscribed
+	slotAffinity
+	slotDiscovery
+)
+
+// The two shares the viewer cannot adjust.
+//
+// Finishing something already started and going back to something already
+// finished are states of the watch history, not sources of new material. The
+// setting is about where new material comes from, and making these compete for
+// it would mean a viewer who wants more discovery is asked to give up the video
+// they were halfway through.
+const (
+	shareContinueWatching = 0.10
+	shareRewatch          = 0.08
+	// What is left for the three the viewer does control.
+	shareAdjustable = 1 - shareContinueWatching - shareRewatch
+)
+
+// FeedMix is how the adjustable share is divided, in percent.
 //
 // This exists because scoring alone does not stay open. Likes and subscriptions
 // both push the feed toward what is already familiar, and over a library of a
 // few hundred videos that convergence happens within a few dozen likes — far
 // faster than it would on a catalogue of millions. The quota reserves room for
-// material the score would otherwise bury.
+// material the score would otherwise bury; the mix decides how much.
 //
 // It reorders and never drops: everything ranked is still reachable by
 // scrolling, just not in pure score order.
-var quotaBuckets = []struct {
-	reason domain.Reason
-	share  float64
-}{
-	{domain.ReasonNeverWatched, 0.30},
-	{domain.ReasonSubscribedChannel, 0.20},
-	{domain.ReasonRecentlyAdded, 0.15},  // was 0.25
-	{domain.ReasonDiscovery, 0.12},       // NEW — bounded window for unfamiliar content
-	{domain.ReasonContinueWatching, 0.10}, // was 0.15
-	{domain.ReasonRewatch, 0.08},         // was 0.10
-	// Sum: 0.95 — remaining 5% fills from Bounced and other un-bucketed reasons
+type FeedMix struct {
+	Subscribed int
+	Affinity   int
+	Discovery  int
+}
+
+// DefaultFeedMix reproduces the fixed quota this replaced.
+//
+// The old buckets were NeverWatched 30, Subscribed 20, RecentlyAdded 15,
+// Discovery 12 — and the first and third are both "not subscribed, matches what
+// they watch", which is the affinity share. Normalised over the 82% left after
+// the two fixed shares, that is 25/60/15. Chosen so that installing this
+// changes nothing until somebody moves a slider: if the feed shifted on upgrade
+// there would be no way to tell a setting working from a default changing.
+var DefaultFeedMix = FeedMix{Subscribed: 25, Affinity: 60, Discovery: 15}
+
+// normalised turns whatever the caller sent into shares of the adjustable part.
+//
+// Percentages that do not add to a hundred are honoured by ratio rather than
+// rejected: 3/2/1 and 50/33/17 describe the same feed, and a service is not the
+// place to argue about arithmetic the UI already does.
+func (m FeedMix) normalised() (subscribed, affinity, discovery float64) {
+	total := m.Subscribed + m.Affinity + m.Discovery
+	if total <= 0 {
+		m = DefaultFeedMix
+		total = m.Subscribed + m.Affinity + m.Discovery
+	}
+	scale := shareAdjustable / float64(total)
+	return float64(m.Subscribed) * scale,
+		float64(m.Affinity) * scale,
+		float64(m.Discovery) * scale
 }
 
 // quotaWindow is the span the ratios apply over. Matching the default page size
@@ -35,59 +89,103 @@ var quotaBuckets = []struct {
 // several.
 const quotaWindow = 24
 
-func applyDiscoveryQuota(ranked []domain.RankedVideo) []domain.RankedVideo {
+type quotaBucket struct {
+	slot  feedSlot
+	share float64
+	// Whether an empty share still gets one place per window.
+	//
+	// The floor exists so a thinly-stocked bucket is not starved, which is a
+	// good rule for a share nobody chose and a bad one for a share somebody set
+	// to zero on purpose: a slider dragged to the bottom that still produces
+	// videos is a control that lies about what it does.
+	floor bool
+}
+
+func bucketsFor(mix FeedMix) []quotaBucket {
+	subscribed, affinity, discovery := mix.normalised()
+	return []quotaBucket{
+		{slot: slotAffinity, share: affinity},
+		{slot: slotSubscribed, share: subscribed},
+		{slot: slotDiscovery, share: discovery},
+		{slot: slotContinueWatching, share: shareContinueWatching, floor: true},
+		{slot: slotRewatch, share: shareRewatch, floor: true},
+	}
+}
+
+// applyDiscoveryQuota interleaves the ranking into the requested mix.
+//
+// The slot each video belongs to is passed in rather than read off the video:
+// it is a decision the ranker already made while scoring, and domain.RankedVideo
+// crosses the wire to the gateway, which has no use for it.
+func applyDiscoveryQuota(
+	ranked []domain.RankedVideo,
+	slots map[string]feedSlot,
+	mix FeedMix,
+) []domain.RankedVideo {
 	if len(ranked) == 0 {
 		return ranked
 	}
+	buckets := bucketsFor(mix)
 
-	// Split by reason, preserving the score order within each bucket.
-	byReason := make(map[domain.Reason][]domain.RankedVideo, len(quotaBuckets))
+	// Split by slot, preserving the score order within each bucket.
+	bySlot := make(map[feedSlot][]domain.RankedVideo, len(buckets))
 	var other []domain.RankedVideo
-	known := make(map[domain.Reason]bool, len(quotaBuckets))
-	for _, b := range quotaBuckets {
-		known[b.reason] = true
-	}
 	for _, v := range ranked {
-		if known[v.Reason] {
-			byReason[v.Reason] = append(byReason[v.Reason], v)
+		slot, ok := slots[v.VideoID]
+		if !ok || slot == slotOther {
+			other = append(other, v)
 			continue
 		}
-		other = append(other, v)
+		bySlot[slot] = append(bySlot[slot], v)
 	}
 
-	// Shuffle each reason bucket so the feed looks different on each refresh.
+	// Shuffle each bucket so the feed looks different on each refresh.
 	// Seeded by the minute so it changes often enough to feel dynamic without
 	// flipping every request.
 	rng := rand.New(rand.NewSource(time.Now().Truncate(time.Minute).UnixNano()))
-	for _, bucket := range quotaBuckets {
-		shuffleSlice(byReason[bucket.reason], rng)
+	for _, bucket := range buckets {
+		shuffleSlice(bySlot[bucket.slot], rng)
 	}
 	shuffleSlice(other, rng)
 
+	// A share of zero is an instruction, not a shortage: those videos are held
+	// back entirely rather than filling gaps later, which is the difference
+	// between "show me less of this" and "show me none of this".
+	var suppressed []domain.RankedVideo
+	for _, bucket := range buckets {
+		if bucket.share <= 0 && !bucket.floor {
+			suppressed = append(suppressed, bySlot[bucket.slot]...)
+			bySlot[bucket.slot] = nil
+		}
+	}
+
 	out := make([]domain.RankedVideo, 0, len(ranked))
-	for len(out) < len(ranked) {
+	for len(out) < len(ranked)-len(suppressed) {
 		before := len(out)
 
-		for _, bucket := range quotaBuckets {
+		for _, bucket := range buckets {
 			take := int(bucket.share * quotaWindow)
-			if take < 1 {
+			if take < 1 && bucket.floor {
 				take = 1
 			}
-			available := byReason[bucket.reason]
+			available := bySlot[bucket.slot]
 			if take > len(available) {
 				take = len(available)
 			}
+			if take <= 0 {
+				continue
+			}
 			out = append(out, available[:take]...)
-			byReason[bucket.reason] = available[take:]
+			bySlot[bucket.slot] = available[take:]
 		}
 
-		// Buckets can empty at different rates. Whatever is left over — reasons
+		// Buckets can empty at different rates. Whatever is left over — slots
 		// outside the quota, or the remainder of an over-full bucket — fills the
 		// gap in score order rather than leaving the page short.
 		if len(out) == before {
-			for _, bucket := range quotaBuckets {
-				out = append(out, byReason[bucket.reason]...)
-				byReason[bucket.reason] = nil
+			for _, bucket := range buckets {
+				out = append(out, bySlot[bucket.slot]...)
+				bySlot[bucket.slot] = nil
 			}
 			out = append(out, other...)
 			other = nil
@@ -96,10 +194,13 @@ func applyDiscoveryQuota(ranked []domain.RankedVideo) []domain.RankedVideo {
 	}
 
 	// Anything the loop did not reach.
-	for _, bucket := range quotaBuckets {
-		out = append(out, byReason[bucket.reason]...)
+	for _, bucket := range buckets {
+		out = append(out, bySlot[bucket.slot]...)
 	}
-	return append(out, other...)
+	out = append(out, other...)
+	// Last, and only so nothing becomes unreachable by scrolling — the quota
+	// has never dropped a video and does not start here.
+	return append(out, suppressed...)
 }
 
 // Most videos from one channel allowed in a single window of the feed.

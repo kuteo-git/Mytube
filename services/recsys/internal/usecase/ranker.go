@@ -204,12 +204,17 @@ type FeedPage struct {
 //
 // An unknown or expired snapshotID silently starts a new session. Thirty
 // minutes into a scroll, re-ranking is a smaller surprise than an error page.
-func (r *Ranker) GetFeedPage(ctx context.Context, userID, topic, snapshotID string, pageSize, offset int32) (FeedPage, error) {
+func (r *Ranker) GetFeedPage(
+	ctx context.Context,
+	userID, topic, snapshotID string,
+	pageSize, offset int32,
+	mix FeedMix,
+) (FeedPage, error) {
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 24
 	}
 
-	fresh, err := r.rankAll(ctx, userID, topic)
+	fresh, err := r.rankAll(ctx, userID, topic, mix)
 	if err != nil {
 		return FeedPage{}, err
 	}
@@ -239,7 +244,11 @@ func (r *Ranker) GetFeedPage(ctx context.Context, userID, topic, snapshotID stri
 	}, nil
 }
 
-func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.RankedVideo, error) {
+func (r *Ranker) rankAll(
+	ctx context.Context,
+	userID, topic string,
+	mix FeedMix,
+) ([]domain.RankedVideo, error) {
 	features, err := r.features.ListVideoFeatures(ctx)
 	if err != nil {
 		return nil, err
@@ -295,6 +304,12 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	// rather than added, and aged — see buildDislikeAffinity.
 	dislikes := buildDislikeAffinity(features, profile.Disliked, now)
 
+	// Which share of the page each video competes for. Recorded here because
+	// this loop is where subscription and affinity are already being weighed;
+	// asking again afterwards would be asking the same questions twice and
+	// risking a different answer.
+	slots := make(map[string]feedSlot, len(features))
+
 	for _, f := range features {
 		if !matchesTopic(f, topic) {
 			continue
@@ -325,15 +340,21 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 		}
 		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now)
 		reason := domain.ReasonRecentlyAdded
+		// Assigned alongside the reason but not from it. The watch states come
+		// first because they describe a video the viewer has already committed
+		// to; where it came from only decides the rest.
+		slot := slotOther
 
 		switch {
 		case isContinueWatching(fraction):
 			score += weightContinueWatching
 			reason = domain.ReasonContinueWatching
+			slot = slotContinueWatching
 		case isWatched(fraction):
 			// Rewatching is allowed but must not crowd out fresh material.
 			score += weightRewatch
 			reason = domain.ReasonRewatch
+			slot = slotRewatch
 		case opened:
 			// Opened and left almost immediately.
 			score -= penaltyBounced
@@ -347,6 +368,9 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 			score += weightSubscribed
 			if reason == domain.ReasonRecentlyAdded || reason == domain.ReasonNeverWatched {
 				reason = domain.ReasonSubscribedChannel
+			}
+			if slot == slotOther {
+				slot = slotSubscribed
 			}
 		}
 
@@ -367,11 +391,24 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 		affinityMultiplier := 0.5 + 2.0*combinedAffinity
 
 		// Discovery: outside the viewer's affinity and not a channel they
-		// chose to follow. Gets a dedicated reason so the quota (12%) can
-		// reserve a small window for unfamiliar material.
-		if combinedAffinity < discoveryAffinityThreshold && !profile.Subscribed[f.ChannelID] {
-			reason = domain.ReasonDiscovery
-			score += weightDiscoveryBase
+		// chose to follow. Gets a dedicated reason so the quota can reserve a
+		// window for unfamiliar material.
+		//
+		// The complement of that test is the affinity slot: not subscribed, but
+		// matching what this viewer watches. It had no share of its own before,
+		// which is why "more of what I like" could not be turned up or down —
+		// those videos were spread across the never-watched and recently-added
+		// buckets, mixed in with everything else that happened to be new.
+		if !profile.Subscribed[f.ChannelID] {
+			if combinedAffinity < discoveryAffinityThreshold {
+				reason = domain.ReasonDiscovery
+				score += weightDiscoveryBase
+				if slot == slotOther {
+					slot = slotDiscovery
+				}
+			} else if slot == slotOther {
+				slot = slotAffinity
+			}
 		}
 
 		score *= affinityMultiplier
@@ -393,6 +430,7 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 			score -= 4.0
 		}
 
+		slots[f.VideoID] = slot
 		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})
 	}
 
@@ -411,7 +449,7 @@ func (r *Ranker) rankAll(ctx context.Context, userID, topic string) ([]domain.Ra
 	// Both apply to the feed, which is what someone browses. Up-next is a
 	// different question — "what follows this?" — and deliberately keeps its
 	// pure same-channel-first ordering.
-	return applyChannelDiversity(applyDiscoveryQuota(ranked), channelOf,
+	return applyChannelDiversity(applyDiscoveryQuota(ranked, slots, mix), channelOf,
 		maxPerChannelPerWindow, quotaWindow), nil
 }
 

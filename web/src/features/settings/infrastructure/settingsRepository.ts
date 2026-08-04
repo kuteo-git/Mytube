@@ -6,6 +6,19 @@
  * last four characters, which is enough to recognise and not enough to use.
  */
 
+import type { FeedMix } from '@/features/settings/domain/feed-mix'
+
+/**
+ * The saved mix, with the defaults the server would fall back to.
+ *
+ * The defaults come down the wire rather than being written into the page a
+ * second time, so "Reset to default" and the note explaining what the default
+ * is cannot disagree with what the gateway actually does.
+ */
+export interface StoredFeedMix extends FeedMix {
+  defaults: FeedMix
+}
+
 export interface TranslateConfig {
   baseUrl: string
   model: string
@@ -68,5 +81,18 @@ export const settingsRepository = {
       body: JSON.stringify(input),
     })
     return json<TranslateTestResult>(r)
+  },
+
+  async getFeedMix(): Promise<StoredFeedMix> {
+    return json<StoredFeedMix>(await fetch('/api/settings/feed-mix'))
+  },
+
+  async saveFeedMix(mix: FeedMix): Promise<FeedMix> {
+    const r = await fetch('/api/settings/feed-mix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mix),
+    })
+    return json<FeedMix>(r)
   },
 }

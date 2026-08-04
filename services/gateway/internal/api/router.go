@@ -84,6 +84,8 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/backfill", g.handleBackfillStatus)
 	mux.HandleFunc("POST /api/tts", g.handleTTS)
 	mux.HandleFunc("POST /api/translate/batch", g.handleTranslateBatch)
+	mux.HandleFunc("GET /api/settings/feed-mix", g.handleGetFeedMix)
+	mux.HandleFunc("POST /api/settings/feed-mix", g.handleSaveFeedMix)
 	mux.HandleFunc("GET /api/translate/config", g.handleGetTranslateConfig)
 	mux.HandleFunc("POST /api/translate/config", g.handleSaveTranslateConfig)
 	mux.HandleFunc("GET /api/translate/models", g.handleTranslateModels)
@@ -199,6 +201,11 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 	userID := g.userID(r)
 	pageSize := intParam(r, "pageSize", 24)
 
+	// Read per request rather than held in memory: this is a small file, the
+	// read is local, and it means a change takes effect on the next request
+	// instead of the next restart.
+	mix := loadFeedMix(g.feedMixPath())
+
 	// 1. Ranking, from the service that owns ranking.
 	ranked, err := g.recsys.GetFeed(ctx, connect.NewRequest(&recsysv1.GetFeedRequest{
 		UserId:     userID,
@@ -206,6 +213,11 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 		PageSize:   pageSize,
 		PageToken:  r.URL.Query().Get("pageToken"),
 		ClientHour: int32(time.Now().Hour()),
+		Mix: &recsysv1.FeedMix{
+			SubscribedPercent: int32(mix.Subscribed),
+			AffinityPercent:   int32(mix.Affinity),
+			DiscoveryPercent:  int32(mix.Discovery),
+		},
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)

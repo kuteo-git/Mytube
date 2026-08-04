@@ -132,6 +132,38 @@ Mỗi phần tử hoặc có chức năng thật, hoặc bị bỏ.
 
 - **P1 (đã làm):** grid trộn 30% chưa xem / 25% mới / 20% kênh theo dõi / 15% xem dở /
   10% xem lại; chống lặp impression 24h
+- **Hạn ngạch feed do người dùng chỉnh được (2026-08-04) — `/settings` → "Home feed".**
+  Ba thanh trượt, tổng luôn = 100, chia **82%** trang; 18% còn lại là **xem dở 10% +
+  xem lại 8%**, **cố định, không chỉnh được** (đó là trạng thái lịch sử xem, không phải
+  nguồn nội dung mới — bắt chúng tranh chỗ với gợi ý là sai bản chất).
+
+  | Thanh | Nghĩa | Mặc định |
+  |---|---|---|
+  | Channels you follow | `profile.Subscribed[channel]` | 25% |
+  | More of what you watch | chưa subscribe, `combinedAffinity ≥ 0.15` | 60% |
+  | Something new | chưa subscribe, dưới ngưỡng đó | 15% |
+
+  - **`feedSlot` tách khỏi `Reason`.** Reason trả lời *"vì sao video này ở đây"* — có 9 cái
+    và **chồng lấn** (vừa chưa-xem vừa kênh-theo-dõi). Slot trả lời *"nó chiếm phần của ai"* —
+    mỗi video đúng **một** slot. Gộp hai thứ này chính là lý do "hợp gu" trước đây không
+    chỉnh được: nó nằm rải trong `NeverWatched` + `RecentlyAdded`, lẫn với mọi thứ mới khác.
+    `dto.Reason` gửi cho client **không đổi**.
+  - **Mặc định = đúng hạn ngạch cũ, quy đổi.** `NeverWatched 30 + RecentlyAdded 15` → nhóm
+    hợp-gu; chuẩn hoá trên 82% ra 25/60/15. **Cài xong mà không kéo gì thì feed y hệt** —
+    nếu mặc định đổi thì không phân biệt được "thanh trượt chạy" với "mặc định mới".
+  - **0 là biến mất thật.** Bỏ sàn `take < 1` cho ba rổ này (giữ cho hai rổ cố định) —
+    thanh kéo hết cỡ mà vẫn ra nội dung là nút nói dối. Video bị nén xuống **cuối** danh
+    sách chứ không bị xoá: hạn ngạch chưa bao giờ bỏ video nào.
+  - **Lưu ở gateway** (`config/feed-mix.json`, khuôn mẫu `translate_config.go`), gửi kèm
+    trong `GetFeedRequest.mix`. **Recsys không giữ cấu hình nào** — xếp hạng vẫn là hàm
+    thuần của request + signal. **Chung cho cả nhà**, không theo user: 2 tài khoản seed,
+    chưa có màn đăng ký, nên "riêng từng người" là bảng + migration + RPC cho một sự riêng
+    tư chưa ai yêu cầu. Đổi thì chỉ đổi chỗ đọc.
+  - **Tỉ lệ, không phải số tuyệt đối**: 3/2/1 và 50/33/17 ra cùng một feed. UI ép tổng 100,
+    server chuẩn hoá lại — nơi nào cũng đúng.
+  - **Lưu xong huỷ cache `['feed']`** ở client. Feed đông cứng vào snapshot 30 phút, nên
+    không huỷ thì thay đổi vô hình suốt nửa tiếng — không phân biệt được với hỏng.
+    Đánh đổi: mất vị trí cuộn.
 - **Tín hiệu chấm điểm (2026-07-29)** — tất cả đều tất định, **không train gì cả**:
 
   | Tín hiệu | Cách tính | Trọng số |
