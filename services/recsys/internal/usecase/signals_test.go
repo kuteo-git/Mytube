@@ -417,3 +417,65 @@ func TestRejectingATopicPushesTheRestOfItDown(t *testing.T) {
 		t.Fatal("one rejection must not empty a subject")
 	}
 }
+
+func TestEnoughRejectionsSuppressALargeChannelWhateverTheShare(t *testing.T) {
+	// The case the share alone could never reach, taken from the library:
+	// NoCopyrightSounds at 162 videos, twenty of them turned down. That is 12%,
+	// so the channel needed forty-nine rejections before it counted — and every
+	// scan added more of its videos, growing the denominator, so pressing "not
+	// interested" again moved the share *down*. The one thing a viewer will try
+	// when a control seems not to work is to use it more, and here that made it
+	// work less.
+	now := time.Now()
+	var features []domain.VideoFeatures
+	for i := 0; i < 162; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:   fmt.Sprintf("c%d", i),
+			ChannelID: "ch_large",
+			Topics:    []string{"Music"},
+			AddedAt:   now,
+		})
+	}
+	profile := emptyProfile()
+	for i := 0; i < 20; i++ {
+		profile.Disliked[fmt.Sprintf("c%d", i)] = now
+	}
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if present(ranked, "c100") {
+		t.Fatal("twenty rejections is a verdict on the channel, whatever share of it they are")
+	}
+}
+
+func TestSubscribingStillOverridesEnoughRejections(t *testing.T) {
+	// Following a channel is a deliberate statement and outranks the passive
+	// one. The ceiling must not become a way to lose a channel you asked for.
+	now := time.Now()
+	var features []domain.VideoFeatures
+	for i := 0; i < 162; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:   fmt.Sprintf("d%d", i),
+			ChannelID: "ch_followed",
+			Topics:    []string{"Music"},
+			AddedAt:   now,
+		})
+	}
+	profile := emptyProfile()
+	profile.Subscribed["ch_followed"] = true
+	for i := 0; i < 20; i++ {
+		profile.Disliked[fmt.Sprintf("d%d", i)] = now
+	}
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if !present(ranked, "d100") {
+		t.Fatal("a followed channel must survive its own rejections")
+	}
+}

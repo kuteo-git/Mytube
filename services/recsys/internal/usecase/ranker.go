@@ -52,6 +52,19 @@ const (
 	// of its videos turned down, and at least this much of the channel.
 	channelDislikeFloor = 3
 	channelDislikeShare = 0.3
+	// And a count that stands on its own, whatever the share says.
+	//
+	// The share is measured against everything the channel has in the library,
+	// which quietly made large channels unsuppressible: NoCopyrightSounds sat at
+	// 162 videos, so twenty rejections came to 12% and needed **forty-nine** to
+	// count. Worse, every scan added more of them — the denominator grew, so
+	// pressing "not interested" again moved the share *down*. The control could
+	// not be made to work by using it more, which is the one thing a viewer will
+	// try.
+	//
+	// Eight is above the floor by enough that it cannot be reached by idle
+	// tapping, and far below the point where somebody is still asking politely.
+	channelDislikeCeiling = 8
 	// Opening a video and leaving within the first few per cent is a judgement,
 	// not an absence of one. Before this existed such a video fell through to
 	// "never watched" and collected that bucket's boost, so the surest way to
@@ -295,6 +308,13 @@ func (r *Ranker) rankAll(
 		}
 		count := dislikedPerChannel[channelID]
 		total := videosPerChannel[channelID]
+		// Enough rejections is a verdict on its own. The share below still
+		// catches the small channel turned down three times out of five; this
+		// catches the large one turned down again and again, which the share
+		// alone never could.
+		if count >= channelDislikeCeiling {
+			return true
+		}
 		return count >= channelDislikeFloor &&
 			total > 0 &&
 			float64(count)/float64(total) >= channelDislikeShare
