@@ -162,3 +162,28 @@ export async function deleteNarrationVtt(videoId: string): Promise<void> {
     // Best effort. A file left on disk is untidy, not broken.
   }
 }
+
+/**
+ * Drop every synthesised clip for a video.
+ *
+ * For a change of voice. The voice is already part of each clip's key, so a new
+ * voice never plays as the old one — it simply synthesises alongside it, and
+ * the old recording sits on disk unread. That was of no consequence when clips
+ * were made a few seconds ahead of the playhead; now that a whole video is
+ * prepared in advance, every voice tried leaves a couple of hundred megabytes
+ * of a reading nobody will hear again.
+ *
+ * The translations next to them are deliberately left alone: Vietnamese text
+ * does not depend on who reads it, and re-translating would spend tokens on a
+ * service shared with everything else on this machine to arrive at the same
+ * words.
+ */
+export async function deleteNarrationClips(videoId: string): Promise<void> {
+  if (!videoId) return
+  try {
+    await fetch(`/api/videos/${videoId}/narration-tts`, { method: 'DELETE' })
+  } catch {
+    // Best effort. Clips left behind cost disk, not correctness — the new
+    // voice's clips are keyed separately and will be made regardless.
+  }
+}

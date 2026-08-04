@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  deleteNarrationClips,
   hashCue,
   loadNarrationCache,
   saveNarrationCache,
@@ -77,5 +78,55 @@ describe('saveNarrationCache', () => {
     vi.stubGlobal('fetch', f)
     await saveNarrationCache('vid', new Map())
     expect(f).not.toHaveBeenCalled()
+  })
+})
+
+describe('deleteNarrationClips', () => {
+  it('asks the gateway to clear that video\'s clips', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deleteNarrationClips('vid1')
+
+    // The URL is the whole contract. A wrong path answers 404, the catch below
+    // swallows it, and the disk quietly fills with readings in voices nobody
+    // chose — a failure with no symptom until the drive is full.
+    expect(fetchMock).toHaveBeenCalledWith('/api/videos/vid1/narration-tts', {
+      method: 'DELETE',
+    })
+  })
+
+  it('leaves the translations alone', async () => {
+    const seen: string[] = []
+    const fetchMock = vi.fn(async (url: string) => {
+      seen.push(url)
+      return new Response(null, { status: 204 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deleteNarrationClips('vid1')
+
+    // Vietnamese text does not depend on who reads it. Clearing it here would
+    // re-spend tokens on a translator shared with the whole machine to arrive
+    // at exactly the same words.
+    expect(seen.some((u) => u.includes('narration-cache'))).toBe(false)
+    expect(seen.some((u) => u.includes('narration-vtt'))).toBe(false)
+  })
+
+  it('does nothing without a video id', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await deleteNarrationClips('')
+    // The route would resolve to a different video's folder.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('survives the gateway being unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('network down')
+    }))
+    // Clips left behind cost disk, not correctness: the new voice is keyed
+    // separately and gets synthesised either way.
+    await expect(deleteNarrationClips('vid1')).resolves.toBeUndefined()
   })
 })

@@ -31,17 +31,77 @@ OMNIROUTE_MODEL = os.environ.get("OMNIROUTE_MODEL", "sub_translation")
 OMNIROUTE_API_KEY = os.environ.get("OMNIROUTE_API_KEY", "")
 OMNIROUTE_TIMEOUT = float(os.environ.get("OMNIROUTE_TIMEOUT", "300"))
 
-BATCH_PROMPT = """Dịch các câu phụ đề tiếng Anh sau sang tiếng Việt.
+# The prompt is written in English because the model spends fewer tokens reading
+# it that way, and this text is prepended to every batch of every video.
+#
+# The budget in brackets is the one part that is not a style preference. These
+# lines are read aloud over a video, so each has only the time until the next
+# subtitle. A translation that runs long is not trimmed — it is *sped up*, and
+# past about 3x Vietnamese TTS stops being followable, at which point the line is
+# dropped entirely. Telling the model how much room each line has moves that
+# problem to where it can actually be solved: shorter phrasing, not faster
+# speech. Lines with room to spare are translated normally, which is why the
+# budget is stated per line rather than as one blanket instruction to be terse.
+BATCH_PROMPT = """Translate the following English subtitles into Vietnamese.
 
-Quy tắc:
-- Xưng hô với người xem là "bạn", không dùng "anh"/"chị"/"quý vị".
-- Văn nói tự nhiên, không dịch từng chữ.
-- Dịch đúng nội dung câu gốc. KHÔNG thêm ý, KHÔNG bình luận.
-- Giữ nguyên thuật ngữ tiếng Anh đã quen dùng, nhưng dịch từ thông thường.
-- Trả về ĐÚNG {n} dòng, mỗi dòng dạng "số. bản dịch". Không giải thích.
+Rules:
+- Address the viewer as "bạn". Never "anh", "chị" or "quý vị".
+- Natural spoken Vietnamese. Do not translate word by word.
+- Translate what the line says. Do NOT add ideas, do NOT comment.
+- Keep English technical terms that Vietnamese speakers already use; translate
+  ordinary words.
+- Translate idioms, slang and figures of speech by their MEANING, never
+  literally. A literal idiom is worse than a plain paraphrase.
+- Each line is prefixed with the seconds available to say it, like "[2.4s]".
+  Treat it as a budget: the Vietnamese must be short enough to be spoken
+  comfortably in that time at a normal pace.
+  - To fit, drop filler, circumlocution and repeated subjects, and prefer the
+    shorter of two correct wordings.
+  - NEVER drop information to fit. Meaning outranks the budget.
+  - A line with plenty of time needs no shortening at all.
+- Do NOT repeat the "[2.4s]" prefix in your answer.
+- Return EXACTLY {n} lines, each as "number. translation". No explanations.
 {ctx}
-Cần dịch:
+To translate:
 {body}"""
+
+
+# ---- prompt building --------------------------------------------------------
+
+def build_body(cues: list[str], slots: list[float] | None) -> str:
+    """The numbered lines to translate, each with the time it has to be said in.
+
+    Without slots this is the plain numbered list it always was — callers that
+    do not know the timing (the single-cue retry path) still work.
+    """
+    out = []
+    for i, cue in enumerate(cues):
+        slot = None
+        if slots and i < len(slots):
+            slot = slots[i]
+        if slot and slot > 0:
+            out.append(f"{i + 1}. [{slot:.1f}s] {cue}")
+        else:
+            # The last cue of a video has no following cue, so no budget. An
+            # empty "[]" would read as a budget of nothing and invite the model
+            # to translate it to a word.
+            out.append(f"{i + 1}. {cue}")
+    return "\n".join(out)
+
+
+# A duration prefix the model copied out of the prompt instead of dropping it.
+#
+# Left in place it would be spoken: parse_numbered puts everything after the
+# number into the translation, and the narrator reads that aloud. The listener
+# hears "hai phẩy bốn giây" in the middle of the film.
+#
+# Deliberately narrow — a real subtitle may well open with a bracket, so only
+# something shaped exactly like a duration is removed.
+_BUDGET_PREFIX = re.compile(r"^\[\s*\d+(?:[.,]\d+)?\s*s\s*\]\s*", re.I)
+
+
+def strip_budget(line: str) -> str:
+    return _BUDGET_PREFIX.sub("", line, count=1).strip()
 
 
 # ---- answer parsing ---------------------------------------------------------
@@ -57,7 +117,7 @@ def parse_numbered(text: str) -> dict[int, str]:
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
     out: dict[int, str] = {}
     for num, body in re.findall(r"^\s*(\d+)[.)]\s*(.+)$", text, flags=re.M):
-        out[int(num)] = body.strip()
+        out[int(num)] = strip_budget(body)
     return out
 
 
@@ -113,6 +173,7 @@ def omniroute_batch(
     base_url: str = "",
     model: str = "",
     api_key: str = "",
+    slots: list[float] | None = None,
 ) -> list[str] | None:
     """Translate a batch through the LAN router.
 
@@ -126,9 +187,9 @@ def omniroute_batch(
         return None
     ctx = ""
     if context:
-        ctx = "\nNgữ cảnh (các câu ngay trước, KHÔNG dịch):\n" + \
+        ctx = "\nContext (the lines just before these, do NOT translate):\n" + \
               "\n".join(f"- {c}" for c in context) + "\n"
-    body = "\n".join(f"{i + 1}. {c}" for i, c in enumerate(cues))
+    body = build_body(cues, slots)
     payload = {
         "model": model,
         "stream": False,
@@ -189,19 +250,26 @@ async def translate_batch(req: Request):
     if not cues:
         return JSONResponse({"translations": [], "fell_back": False})
     context = body.get("context") or []
+    # How long each line has before the next is due. Optional: a caller that
+    # does not send them gets the plain numbered list and no budget rule.
+    slots = list(body.get("slots") or [])
     base_url, model, api_key = resolve_config(body)
 
     t0 = time.perf_counter()
     fell_back = False
 
-    out = omniroute_batch(cues, context, base_url, model, api_key)
+    out = omniroute_batch(cues, context, base_url, model, api_key, slots)
     if out is None:
         # The batch could not be trusted. Retry one cue at a time, where there
         # is no ordering left to get wrong.
         fell_back = True
         out = []
-        for c in cues:
-            single = omniroute_batch([c], [])
+        for i, c in enumerate(cues):
+            # The budget travels with the line. Retrying without it would answer
+            # a differently-worded question and could hand back a line that no
+            # longer fits, which is exactly what the retry is trying to salvage.
+            one_slot = [slots[i]] if i < len(slots) else None
+            single = omniroute_batch([c], [], base_url, model, api_key, one_slot)
             out.append(single[0] if single else "")
 
     dt = time.perf_counter() - t0

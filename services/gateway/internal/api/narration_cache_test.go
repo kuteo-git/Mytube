@@ -279,3 +279,91 @@ func TestConcurrentWritesToOneFileDoNotFail(t *testing.T) {
 		t.Fatalf("torn write: %q", blob)
 	}
 }
+
+// ---- two-tier cache and clearing it -----------------------------------------
+
+// The natural recording and the stretched copies live under separate keys, so
+// the TTS model runs once per line for the life of the video however many
+// tempos are asked for afterwards. That separation is the whole saving; if a
+// stretched write ever landed on the natural key, every later fitting would
+// start from already-hurried audio and compound the speed-up.
+func TestTTSNaturalAndStretchedAreSeparateEntries(t *testing.T) {
+	root := t.TempDir()
+
+	_ = writeTTSCache(root, "vid1", "hello", naturalSpeed, "V", []byte("natural"))
+	_ = writeTTSCache(root, "vid1", "hello", 1.4, "V", []byte("stretched"))
+
+	nat, ok := readTTSCache(root, "vid1", "hello", naturalSpeed, "V")
+	if !ok || string(nat) != "natural" {
+		t.Fatalf("natural copy clobbered: ok=%v %q", ok, nat)
+	}
+	fast, ok := readTTSCache(root, "vid1", "hello", 1.4, "V")
+	if !ok || string(fast) != "stretched" {
+		t.Fatalf("stretched copy wrong: ok=%v %q", ok, fast)
+	}
+}
+
+// defaultSpeed is 1.1, not 1.0 — so "natural" and "the tempo narration normally
+// runs at" are genuinely different recordings and must not share a key.
+func TestTTSNaturalIsNotTheDefaultSpeedEntry(t *testing.T) {
+	root := t.TempDir()
+	_ = writeTTSCache(root, "vid1", "hello", naturalSpeed, "V", []byte("natural"))
+
+	if _, ok := readTTSCache(root, "vid1", "hello", defaultSpeed, "V"); ok {
+		t.Fatal("the natural copy must not answer a request for defaultSpeed")
+	}
+}
+
+func TestRemoveTTSCacheClearsClipsButKeepsTranslations(t *testing.T) {
+	root := t.TempDir()
+
+	_ = writeTTSCache(root, "vid1", "hello", naturalSpeed, "Ngọc Linh", []byte("wav"))
+	if err := writeNarrationCache(root, "vid1", "qwen",
+		map[string]string{"h1": "xin chào"}); err != nil {
+		t.Fatalf("seed translations: %v", err)
+	}
+
+	if err := removeTTSCache(root, "vid1"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	if _, ok := readTTSCache(root, "vid1", "hello", naturalSpeed, "Ngọc Linh"); ok {
+		t.Fatal("clips must be gone")
+	}
+	// The point of the whole exercise: a new voice reads the same Vietnamese.
+	// Wiping this would re-spend tokens on a translator shared with everything
+	// else on the machine, for a translation that would come back identical.
+	kept, _ := readNarrationCache(root, "vid1", "qwen")
+	if kept["h1"] != "xin chào" {
+		t.Fatalf("translations must survive a voice change, got %q", kept["h1"])
+	}
+}
+
+func TestRemoveTTSCacheLeavesOtherVideosAlone(t *testing.T) {
+	root := t.TempDir()
+	_ = writeTTSCache(root, "vid1", "hello", naturalSpeed, "V", []byte("one"))
+	_ = writeTTSCache(root, "vid2", "hello", naturalSpeed, "V", []byte("two"))
+
+	if err := removeTTSCache(root, "vid1"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, ok := readTTSCache(root, "vid2", "hello", naturalSpeed, "V"); !ok {
+		t.Fatal("a voice change must not empty the rest of the library")
+	}
+}
+
+func TestRemoveTTSCacheOnColdVideoIsNotAnError(t *testing.T) {
+	// Changing voice before anything has been synthesised is ordinary.
+	if err := removeTTSCache(t.TempDir(), "never-narrated"); err != nil {
+		t.Fatalf("want nil for an absent directory, got %v", err)
+	}
+}
+
+func TestRemoveTTSCacheRejectsPathClimbing(t *testing.T) {
+	// The id arrives from the URL path, and this one deletes a directory tree.
+	for _, id := range []string{"", "..", "../../etc", "a/b", `a\b`} {
+		if err := removeTTSCache(t.TempDir(), id); err == nil {
+			t.Fatalf("id %q must be refused", id)
+		}
+	}
+}

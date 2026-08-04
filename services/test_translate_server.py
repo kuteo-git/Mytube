@@ -5,13 +5,16 @@ whether the model's answer may be trusted, which is the part that failed in
 measurement.
 """
 from translate_server import (
+    BATCH_PROMPT,
     OMNIROUTE_API_KEY,
     OMNIROUTE_BASE_URL,
     OMNIROUTE_MODEL,
     aligned_or_none,
+    build_body,
     openai_content,
     parse_numbered,
     resolve_config,
+    strip_budget,
 )
 
 
@@ -129,3 +132,73 @@ def test_batch_request_turns_thinking_off(monkeypatch):
     # Streaming stays off for the same reason it always was: a body of SSE
     # frames is not JSON.
     assert sent["payload"]["stream"] is False
+
+
+# ---- the per-line time budget -----------------------------------------------
+#
+# These lines are read aloud over a video, so each has only until the next
+# subtitle. A translation that runs long is not trimmed, it is sped up — and
+# past about 3x the voice stops being followable, at which point the line is
+# dropped. Handing the model the budget moves that from a playback problem to a
+# wording one.
+
+
+def test_build_body_prefixes_each_line_with_its_budget():
+    body = build_body(["hello", "world"], [2.4, 1.0])
+    assert body == "1. [2.4s] hello\n2. [1.0s] world"
+
+
+def test_build_body_without_slots_is_the_plain_list():
+    # The single-cue retry path knows the text but not always the timing.
+    assert build_body(["hello", "world"], None) == "1. hello\n2. world"
+
+
+def test_build_body_omits_the_budget_when_there_is_none():
+    # The last cue of a video has no following cue, so no slot. An empty "[]"
+    # would read as a budget of nothing and invite a one-word translation.
+    body = build_body(["a", "b", "c"], [2.0, 0, None])
+    assert body == "1. [2.0s] a\n2. b\n3. c"
+
+
+def test_build_body_tolerates_a_short_slot_list():
+    assert build_body(["a", "b"], [2.0]) == "1. [2.0s] a\n2. b"
+
+
+def test_prompt_states_the_budget_rule_and_the_idiom_rule():
+    # Both were asked for explicitly. A prompt that quietly loses one of them
+    # fails in a way no alignment check can see.
+    assert "[2.4s]" in BATCH_PROMPT
+    assert "NEVER drop information" in BATCH_PROMPT
+    assert "idioms" in BATCH_PROMPT.lower()
+
+
+# ---- the budget must never reach the speakers -------------------------------
+
+
+def test_strip_budget_removes_a_copied_prefix():
+    # Left in place, parse_numbered folds it into the translation and the
+    # narrator reads it out: the viewer hears "hai phẩy bốn giây" mid-film.
+    assert strip_budget("[2.4s] xin chào") == "xin chào"
+
+
+def test_strip_budget_tolerates_spacing_and_comma_decimals():
+    for line in ("[2.4s] xin chào", "[ 2.4 s ] xin chào",
+                 "[2,4s] xin chào", "[2S] xin chào", "[10s]  xin chào"):
+        assert strip_budget(line) == "xin chào", line
+
+
+def test_strip_budget_leaves_real_bracketed_content_alone():
+    # Subtitles genuinely open with brackets — speaker labels, sound cues.
+    assert strip_budget("[nhạc nền] xin chào") == "[nhạc nền] xin chào"
+    assert strip_budget("[2.4] xin chào") == "[2.4] xin chào"
+    assert strip_budget("[s] xin chào") == "[s] xin chào"
+
+
+def test_strip_budget_removes_only_the_leading_one():
+    # A duration inside the sentence is content, not a prefix.
+    assert strip_budget("[2.4s] chờ [1.0s] nhé") == "chờ [1.0s] nhé"
+
+
+def test_parse_numbered_strips_the_budget_from_every_line():
+    out = parse_numbered("1. [2.4s] một\n2. [1.0s] hai")
+    assert out == {1: "một", 2: "hai"}

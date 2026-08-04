@@ -37,7 +37,11 @@ import {
   setNarrationGain,
   cancelTranslationPass,
   startTranslationPass,
+  startNarrationPregen,
+  cancelNarrationPregen,
+  restartNarrationPregenForVoice,
   narrationProgress,
+  pregenProgress,
 } from '@/features/watch/application/narration'
 import { formatDuration as formatEta } from '@/features/watch/application/narration-eta'
 import {
@@ -47,6 +51,7 @@ import {
 import { centreCues } from '@/features/watch/application/cue-placement'
 import { levelsFor } from '@/features/watch/application/narration-levels'
 import {
+  deleteNarrationClips,
   deleteNarrationVtt,
   setCachePartition,
 } from '@/features/watch/infrastructure/narration-cache'
@@ -806,9 +811,27 @@ export function Player({
     }
   }, [])
 
+  // A change of voice invalidates every clip already made.
+  //
+  // The voice is part of each clip's key at both tiers, so nothing can be
+  // misread as the new voice — but with a whole video prepared in advance, the
+  // old recordings are a couple of hundred megabytes of a reading nobody will
+  // hear again. So they go, and the sweep starts over.
+  //
+  // The first run is skipped on purpose: mounting the player is not a change of
+  // voice, and clearing here would delete the clips of the video just opened
+  // and re-synthesise the lot.
+  const lastVoiceRef = useRef<string | null>(null)
   useEffect(() => {
     setNarrationVoice(audioPrefs.voice)
-  }, [audioPrefs.voice])
+    const previous = lastVoiceRef.current
+    lastVoiceRef.current = audioPrefs.voice
+    if (previous === null || previous === audioPrefs.voice) return
+    // Fired from the stored preference rather than from the picker, so this is
+    // the settled choice — scrolling a list of voices writes nothing.
+    void deleteNarrationClips(videoId)
+    restartNarrationPregenForVoice()
+  }, [audioPrefs.voice, videoId])
 
   const ducking = narrationSpeaks && narrationAvailable
   const levels = levelsFor({
@@ -838,7 +861,37 @@ export function Player({
   // folded into resetNarration, which also runs on every swap between the two
   // <video> layers — so a pass was cancelled seconds after it began and the
   // status sat on "not started".
-  useEffect(() => () => cancelTranslationPass(), [videoId])
+  //
+  // The pre-generation sweep ends here too, and this is exactly the lifetime it
+  // wants — which is worth spelling out, because the obvious reading is wrong.
+  // The Player is mounted once, above the router (AppShell.tsx), so leaving the
+  // watch page does not tear this down: the video folds into the corner and
+  // keeps playing, and it still needs clips. What does tear it down is the video
+  // changing, or the miniplayer being closed for good, which is what deactivate
+  // does. Closing the tab needs nothing — the requests die with the page.
+  useEffect(
+    () => () => {
+      cancelTranslationPass()
+      cancelNarrationPregen()
+    },
+    [videoId],
+  )
+
+  // Prepare the whole video's narration ahead of playback.
+  //
+  // Gated on reading aloud alone, unlike the translation pass beneath it: a
+  // viewer who merely selected the machine-translated subtitle track wants text,
+  // and synthesising a thousand clips nobody will hear is the expensive half of
+  // narration spent on nothing.
+  //
+  // It waits for the cue list itself rather than being re-run when one arrives,
+  // because the cues are loaded by a different effect on a different schedule
+  // and a dependency on them here would be a second thing to keep in step.
+  useEffect(() => {
+    if (!narrationOn || !narrationAvailable) return
+    const el = front()
+    startNarrationPregen(videoId, el ? el.currentTime : 0)
+  }, [narrationOn, narrationAvailable, videoId, front])
 
   // Fetch and parse the best available VTT: Vietnamese first, then English
   // (which will be translated via NLLB-200).
@@ -1412,9 +1465,17 @@ export function Player({
   // begun is worse than one that has not begun, because the viewer's next move
   // is to press something else.
   const [progress, setProgress] = useState(narrationProgress)
+  // The voice half of the same pipeline. Polled on the same tick and from the
+  // same place, because the two are read together — a viewer looking at this
+  // panel wants to know when they will hear something, and translation finishing
+  // is only half of that answer.
+  const [speechProgress, setSpeechProgress] = useState(pregenProgress)
   useEffect(() => {
     if (!narrationOn && captions !== MACHINE_LANGUAGE) return
-    const id = window.setInterval(() => setProgress(narrationProgress()), 500)
+    const id = window.setInterval(() => {
+      setProgress(narrationProgress())
+      setSpeechProgress(pregenProgress())
+    }, 500)
     return () => window.clearInterval(id)
   }, [narrationOn, captions])
 
@@ -1458,6 +1519,14 @@ export function Player({
       <>
         <li className="my-1 border-t border-line" aria-hidden />
         <NarrationStatus progress={progress} />
+        {/*
+          The second half of the same journey, and only shown to someone who
+          asked to hear it: choosing the translated subtitle track produces no
+          speech, so a synthesis bar there would report on work that is not
+          happening. Translating is what makes lines available to say, so the
+          two read top to bottom in the order they occur.
+        */}
+        {narrationOn && <SpeechStatus progress={speechProgress} />}
       </>
     ) : undefined
 
@@ -2784,6 +2853,89 @@ function SettingsMenu({
  * visible. The realtime engine has nothing to report — it translates a line at
  * the moment it speaks it — so it says so rather than showing an empty bar.
  */
+/**
+ * How far the voice has been prepared.
+ *
+ * The companion to NarrationStatus above, and deliberately its twin rather than
+ * a different-looking thing: they are two stages of one pipeline — lines are
+ * translated, then spoken — and a viewer reads them together to answer one
+ * question, which is when they will actually hear something.
+ *
+ * Worth showing at all because preparation now covers the whole video rather
+ * than the next few seconds. That is minutes of work on a long video, it carries
+ * on while the video is paused, and without a report the only evidence of it is
+ * a fan spinning up.
+ */
+function SpeechStatus({
+  progress: p,
+}: {
+  progress: ReturnType<typeof pregenProgress>
+}) {
+  // Every phase gets its own words, for the reason recorded on the translation
+  // status below: several distinct states behind one hopeful label is how
+  // "stuck on preparing" gets reported. In particular a sweep waiting on the
+  // translator and a sweep waiting out a dead synthesiser look identical from
+  // the outside and want completely different responses from the viewer.
+  const label: Record<typeof p.phase, string> = {
+    // Every label names its subject. The row above reports translation and this
+    // one reports speech, and a bare "Not started" on both left two identical
+    // lines stacked on each other with nothing to say which was which.
+    idle: 'Speech not started',
+    sweeping: 'Preparing speech…',
+    'awaiting-translation': 'Waiting for translation…',
+    'backing-off': 'Speech service unavailable — retrying',
+    done: 'Speech ready',
+  }
+  const bar = p.total > 0 && p.phase !== 'idle'
+  const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
+
+  return (
+    <li className="px-4 py-3" aria-live="polite">
+      <div className="flex items-baseline justify-between gap-2 pb-1 text-xs">
+        <span
+          className={p.phase === 'backing-off' ? 'text-brand' : 'text-text-2'}
+        >
+          {label[p.phase]}
+        </span>
+        {bar && (
+          <span className="tabular-nums text-text-2">
+            {p.done}/{p.total} lines
+          </span>
+        )}
+      </div>
+      {p.etaSeconds !== null && (
+        <div className="pb-1 text-xs text-text-2">
+          {formatEta(p.etaSeconds)} left
+        </div>
+      )}
+      {/*
+        Lines that cannot be said in the time they have, whatever the tempo.
+        Reported rather than hidden: a handful is normal, but a video full of
+        them means the translations are running long, and that is fixed in the
+        prompt rather than anywhere the viewer can reach. Without a count it
+        would show up as narration that skips lines for no visible reason —
+        which is exactly the complaint this whole change set began with.
+      */}
+      {p.tooFast > 0 && (
+        <div className="pb-1 text-xs text-text-2">
+          {p.tooFast} line{p.tooFast === 1 ? '' : 's'} too long to speak in time
+        </div>
+      )}
+      {bar && (
+        <div className="h-1 overflow-hidden rounded-full bg-white/15">
+          <div
+            className={clsx(
+              'h-full rounded-full transition-[width] duration-300 ease-out',
+              p.phase === 'done' ? 'bg-white/50' : 'bg-brand',
+            )}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </li>
+  )
+}
+
 function NarrationStatus({
   progress: p,
 }: {

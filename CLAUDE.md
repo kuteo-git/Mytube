@@ -504,6 +504,67 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
    **A trap that comes with it:** the player holds two `<video>` elements; when switching tiers,
    PiP must be requested on the new element **before** the old one's source is cleared, or the
    PiP window closes mid-switch.
+
+3c. **TTS is prepared ahead of playback, not inside it (2026-08-05).** Clips used to be
+   synthesised in the playback loop three cues ahead, and anything not ready when its cue arrived
+   was dropped at one of three silent `continue` branches. That is what viewers reported as
+   narration cutting out for a stretch and then resuming.
+
+   It fell hardest on exactly the lines that could least afford it. Reading speed is
+   `natural / slot`, and the natural length is an **output of the synthesiser** — so a line that
+   overran its slot needed a second request at a corrected tempo, and because tempo was part of
+   the cache key that second request was always a miss, taken synchronously mid-commit. Long
+   lines were therefore the slowest to arrive and the likeliest to be dropped, while being
+   charged twice for TTS and twice for disk.
+
+   Three changes, and the order of them is the argument:
+   - **`narration-pregen.ts` sweeps the whole video**, ordered from the playhead and wrapping —
+     the same `workOrder()` the translation pass uses. It runs **while the video is paused**;
+     nothing in its dependency type can even express "paused", so a later change cannot quietly
+     make it stop when the picture stops. It **never decodes**: a two-hour video is over a
+     thousand cues, and holding an `AudioBuffer` each would trade gigabytes of memory for a local
+     disk read. The sweep's job is the copy the gateway keeps on disk.
+   - **The gateway computes tempo.** `POST /api/tts` takes `slotSeconds` instead of `speed`;
+     it synthesises once at natural speed, measures the WAV, stretches with the `atempo` it
+     already had, and reports the tempo in `X-TTS-Speed`. The natural copy is cached under its
+     own key, so **the model runs once per line for the life of the video** however the timing
+     around it changes.
+   - **A line needing more than `MAX_SPEED` is refused, not clamped** (HTTP 422). Clamping cost
+     *two* lines to keep one: unintelligible at 3x, and it overran, which pushed the next clip
+     past its own cue. Refusing costs one and leaves the next intact.
+
+   **Failure handling differs from the translation pass on purpose.** That pass gives up for
+   good after three consecutive failures, which is right for it: it leaves a status line and a
+   viewer who can restart it. Narration that gives up just goes quiet — indistinguishable from
+   the fault above. So the sweep stops, waits (15s → 30s → 60s, reset by any success), and
+   **resumes on its own**. It is idempotent — it skips whatever is already cached — so resuming
+   needs no record of where it stopped.
+
+   **Lifetime is the miniplayer's, and the obvious reading is wrong.** `<Player>` is mounted once
+   above the router (`AppShell.tsx`), so leaving the watch page does **not** tear it down: the
+   video folds into the corner and keeps playing, and still needs clips. The cleanup on
+   `[videoId]` already has exactly the right lifetime — video change, or the miniplayer closed
+   for good. Never started from `?prefetch=1`, and only when reading aloud is on: a viewer who
+   merely picked the machine-translated subtitle track wants text, not a thousand clips.
+
+   **Changing voice clears the clips and re-sweeps** (`DELETE /api/videos/{id}/narration-tts`),
+   scoped to the video on screen. The **translation cache is deliberately untouched** —
+   Vietnamese text does not depend on who reads it. Skipped on first render, so opening a video
+   is not mistaken for a change of voice.
+
+   **The translation prompt now carries a per-line time budget** (`1. [2.4s] text`) and is
+   written in English. Shortening the Vietnamese is the only place the speed problem can actually
+   be solved; the ceiling can only choose between a hurried line and a missing one. The prompt
+   also asks for idioms by meaning rather than literally. Two guards: the budget is stated as a
+   budget with "never drop information to fit", and a leading `[2.4s]` is **stripped from the
+   answer** — left in, `parse_numbered` folds it into the translation and the narrator reads
+   "hai phẩy bốn giây" out loud.
+
+   > **Not yet measured.** Unit tests cover all of the above (Go, Python and TypeScript) and
+   > `make check` is clean, but the end-to-end numbers this section usually carries — TTS calls
+   > per video before and after, translate latency per batch, and a read-through confirming
+   > meaning survived the budget — have **not** been taken. The gateway must be rebuilt and
+   > restarted first.
 4. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures
    gracefully and allow a retry.
 5. **YouTube blocks by IP if too many full-metadata fetches are made (THIS HAPPENED 2026-07-29).**

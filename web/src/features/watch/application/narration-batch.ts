@@ -61,6 +61,17 @@ export async function translateBatch(
   cues: string[],
   context: string[],
   signal?: AbortSignal,
+  /**
+   * Seconds each line has before the next one is due, in the same order.
+   *
+   * Sent because the translation is going to be *spoken over a video*, not
+   * read. A line that comes back long is not trimmed at playback, it is sped
+   * up, and past about 3x the voice stops being followable — at which point the
+   * line is dropped altogether. Handing the model the budget turns that from a
+   * playback problem into a wording one, which is the only place it can
+   * actually be solved.
+   */
+  slots?: number[],
 ): Promise<string[]> {
   const blank = cues.map(() => '')
   if (cues.length === 0) return []
@@ -68,7 +79,7 @@ export async function translateBatch(
     const resp = await fetch('/api/translate/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cues, context }),
+      body: JSON.stringify({ cues, context, slots }),
       signal,
     })
     if (!resp.ok) {

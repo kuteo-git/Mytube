@@ -96,6 +96,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)
 	mux.HandleFunc("POST /api/videos/{id}/narration-vtt", g.handlePutNarrationVTT)
 	mux.HandleFunc("DELETE /api/videos/{id}/narration-vtt", g.handleDeleteNarrationVTT)
+	// Clearing the synthesised clips, for when the voice changes. Separate from
+	// the translation cache next to it, which the new voice reads unchanged.
+	mux.HandleFunc("DELETE /api/videos/{id}/narration-tts", g.handleDeleteTTSCache)
 	mux.HandleFunc("POST /api/videos/{id}/download/cancel", g.handleCancelVideoDownload)
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)

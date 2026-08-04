@@ -147,6 +147,51 @@ func writeTTSCache(root, videoID, text string, speed float64, voice string, wav 
 	return writeFileAtomic(path, wav)
 }
 
+// removeTTSCache deletes every synthesised clip for one video.
+//
+// Called when the voice changes. Voice is already part of the clip key, so a
+// new voice never plays as the old one — it simply synthesises alongside it.
+// That was harmless when clips were made a few seconds ahead of the playhead;
+// with a whole video pre-generated it is not, because every voice the household
+// tries leaves another couple of hundred megabytes of a reading nobody will
+// hear again.
+//
+// Scoped to one video on purpose. Clips of an old voice under other videos are
+// dead weight too, but they go when eviction removes those folders, and a
+// routine that deletes across the whole library is a far more dangerous thing
+// to own than the disk it would reclaim.
+//
+// The translation cache in the same folder is left alone: Vietnamese text does
+// not depend on who reads it, and re-translating would spend tokens on a
+// translator shared with everything else on the machine for no change at all.
+func removeTTSCache(root, videoID string) error {
+	dir, err := safeVideoDir(root, videoID)
+	if err != nil {
+		return err
+	}
+	err = os.RemoveAll(filepath.Join(dir, narrationTTSDir))
+	if os.IsNotExist(err) {
+		// Nothing there is the state being asked for.
+		return nil
+	}
+	return err
+}
+
+func (g *Gateway) handleDeleteTTSCache(w http.ResponseWriter, r *http.Request) {
+	if err := removeTTSCache(g.mediaRoot, r.PathValue("id")); err != nil {
+		if errors.Is(err, errBadVideoID) {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		// MEDIA_ROOT can be an unmounted external SSD (CLAUDE.md §8.1).
+		g.logger.Warn("tts cache delete", "error", err)
+		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	g.logger.Info("tts cache cleared", "video", r.PathValue("id"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // narrationCuesFile is the cue list exactly as the browser grouped it.
 //
 // Written for inspection and for anything server-side that needs the same cues

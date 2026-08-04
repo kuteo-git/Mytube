@@ -26,6 +26,7 @@ import {
   retryDelayMs,
   worthRetrying,
 } from './narration-retry'
+import { createPregen } from './narration-pregen'
 import { toVTT } from './narration-vtt-write'
 import { estimateEtaSeconds } from './narration-eta'
 import {
@@ -37,11 +38,8 @@ import {
   whenPartitionReady,
 } from '@/features/watch/infrastructure/narration-cache'
 import {
-  DEFAULT_SPEED,
-  MAX_SPEED,
   shouldPlay,
   slotFor,
-  speedFor,
   startTimeFor,
   scheduleAt,
   tooLateToPlay,
@@ -329,7 +327,12 @@ export function startTranslationPass(videoId: string, fromTime: number) {
 
       // Work outward from the playhead and wrap, so the whole video is covered
       // and the viewer's next line is still first in the queue.
-      const texts = workOrder(allTexts.length, first).map((i) => allTexts[i])
+      const order = workOrder(allTexts.length, first)
+      const texts = order.map((i) => allTexts[i])
+      // Each line's time budget travels with it, in the same order. See
+      // translateBatch: the translation is spoken over a video, so how long a
+      // line has is part of the question being asked.
+      const slots = order.map((i) => slotFor(cues, i))
 
       const countDone = () => allTexts.filter((t) => _tlCache.has(t)).length
       let consecutiveFailures = 0
@@ -346,7 +349,16 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         if (generation !== _passGeneration) return
 
         const slice = texts.slice(start, end)
-        const missing = slice.filter((t) => !_tlCache.has(t))
+        // The budget has to be filtered alongside the text it belongs to, or a
+        // batch with any cached line in it would hand every later line the
+        // wrong number.
+        const missing: string[] = []
+        const missingSlots: number[] = []
+        slice.forEach((t, i) => {
+          if (_tlCache.has(t)) return
+          missing.push(t)
+          missingSlots.push(slots[start + i])
+        })
         if (missing.length === 0) continue
 
         const context = texts.slice(Math.max(0, start - CONTEXT_CUES), start)
@@ -361,7 +373,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
             await new Promise((r) => setTimeout(r, retryDelayMs(attempt)))
             if (generation !== _passGeneration) return
           }
-          out = await translateBatch(missing, context, signal)
+          out = await translateBatch(missing, context, signal, missingSlots)
           if (out.some(Boolean)) break
           if (!worthRetrying({ aborted: signal.aborted, error: lastBatchError() })) break
         }
@@ -436,23 +448,120 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   })()
 }
 
-async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise<AudioBuffer> {
-  // Translate EN → VI when the source subtitle is English.
-  let viText = text
-  if (_sourceLang === 'en') {
-    const cached = _tlCache.get(text)
-    // A cue the pass has not reached yet is skipped, not spoken in English:
-    // reading the source language aloud under a setting that promised
-    // Vietnamese is worse than saying nothing and carrying on.
-    if (!cached) throw new Error('not translated yet')
-    viText = cached
+/**
+ * Thrown for a line that cannot be said in the time it has, even at MAX_SPEED.
+ *
+ * A distinct type because the answer is different: this cue is skipped and the
+ * next one plays as normal, whereas a synthesiser that is down means backing
+ * off and trying the same line again later. Told apart by type rather than by
+ * reading a message, so a reworded error cannot silently turn one into the
+ * other.
+ */
+export class TooFastError extends Error {
+  constructor(readonly neededSpeed: number) {
+    super(`needs ${neededSpeed.toFixed(2)}x, above the maximum`)
+    this.name = 'TooFastError'
   }
+}
+
+/** What the gateway answers with when a line will not fit at any usable tempo. */
+const STATUS_TOO_FAST = 422
+
+/**
+ * Prepare one line, fitted to the time it has.
+ *
+ * `slotSeconds` is sent instead of a tempo, and the reason is that the two
+ * halves of that sum live in different places: the browser knows how much room
+ * a line has (the gap between two subtitle timestamps) while only the
+ * synthesiser knows how long the line takes to say. This used to be settled by
+ * synthesising once, measuring, and asking again at a corrected tempo — and
+ * since tempo is part of the cache key, that second request was always a miss.
+ * The lines that needed hurrying were therefore the slowest to arrive, and were
+ * then dropped for arriving late. One request now, and the server keeps an
+ * unstretched copy so the model runs once per line however the timing changes.
+ */
+/**
+ * The Vietnamese for a cue, or nothing if the translator has not got there.
+ *
+ * A cue the pass has not reached yet is skipped, not spoken in English: reading
+ * the source language aloud under a setting that promised Vietnamese is worse
+ * than saying nothing and carrying on.
+ */
+export function vietnameseFor(text: string): string | undefined {
+  if (_sourceLang !== 'en') return text
+  return _tlCache.get(text)
+}
+
+/**
+ * Ask the gateway for one clip, fitted to its slot. Returns the raw bytes.
+ *
+ * Split out from fetchTTS because the pre-generation sweep wants the work done
+ * and the file on disk, but must NOT decode: a decoded clip is an AudioBuffer,
+ * and a two-hour video runs to well over a thousand of them. Holding those to
+ * save a local disk read would trade gigabytes of memory for milliseconds.
+ */
+async function requestTTS(
+  viText: string,
+  slotSeconds: number,
+  signal?: AbortSignal,
+): Promise<ArrayBuffer> {
+  const resp = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // videoId tells the gateway where to keep the clip. Synthesis is the
+    // expensive half of narration and its bytes never change for the same
+    // words at the same tempo, so it belongs on disk beside the video.
+    body: JSON.stringify({
+      text: viText,
+      voice: _voice,
+      slotSeconds,
+      videoId: _passVideoId,
+    }),
+    signal,
+  })
+  if (resp.status === STATUS_TOO_FAST) {
+    const body = (await resp.json().catch(() => ({}))) as { neededSpeed?: number }
+    throw new TooFastError(body.neededSpeed ?? 0)
+  }
+  if (!resp.ok) throw new Error(`tts ${resp.status}`)
+  return resp.arrayBuffer()
+}
+
+/**
+ * Put one line on disk at the gateway, without decoding it.
+ *
+ * This is what the pre-generation sweep runs. It throws `not translated yet`
+ * for a line the translator has not reached, which the sweep reads as "come
+ * back to this" rather than as a failure.
+ */
+export async function prepareClip(
+  text: string,
+  slotSeconds: number,
+  signal: AbortSignal,
+): Promise<void> {
+  const viText = vietnameseFor(text)
+  if (!viText) throw new Error('not translated yet')
+  await requestTTS(viText, slotSeconds, signal)
+}
+
+async function fetchTTS(
+  ctx: AudioContext,
+  text: string,
+  slotSeconds: number,
+): Promise<AudioBuffer> {
+  const viText = vietnameseFor(text)
+  if (!viText) throw new Error('not translated yet')
 
   // Voice belongs in the key for the same reason it belongs in the server's:
   // without it, changing voice keeps playing whichever one was synthesised
   // first, and this cache would go on doing so even after the disk cache was
   // fixed.
-  const cacheKey = `${viText}@@${speed.toFixed(2)}@@${_voice}`
+  //
+  // The slot is in the key rather than the tempo, because the tempo is no
+  // longer known here — it is what the server works out. Two cues with the same
+  // words and the same room get the same audio, which is the only case where
+  // sharing an entry would be correct anyway.
+  const cacheKey = `${viText}@@${slotSeconds.toFixed(2)}@@${_voice}`
   const c = _cache.get(cacheKey)
   if (c) return c
   const inflight = _active.get(cacheKey)
@@ -461,21 +570,10 @@ async function fetchTTS(ctx: AudioContext, text: string, speed: number): Promise
     await Promise.race(_active.values()).catch(() => {})
   }
   const p = (async () => {
-    const resp = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // videoId tells the gateway where to keep the clip. Synthesis is the
-      // expensive half of narration and its bytes never change for the same
-      // words at the same tempo, so it belongs on disk beside the video.
-      body: JSON.stringify({
-        text: viText,
-        voice: _voice,
-        speed,
-        videoId: _passVideoId,
-      }),
-    })
-    if (!resp.ok) throw new Error(`tts ${resp.status}`)
-    const buf = await ctx.decodeAudioData(await resp.arrayBuffer())
+    // Usually a disk read at the gateway rather than a synthesis, because the
+    // pre-generation sweep has already been here. That is the whole point of
+    // the sweep: by the time playback asks, the expensive half is done.
+    const buf = await ctx.decodeAudioData(await requestTTS(viText, slotSeconds))
     _cache.set(cacheKey, buf)
     return buf
   })()
@@ -669,35 +767,46 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
     _cursor++
 
     // Already spoken past, or already under way — the moment has gone.
-    if (cue.start < video.currentTime) continue
+    if (cue.start < video.currentTime) {
+      reportSkip(index, 'cue already behind the playhead', {
+        cueStart: cue.start,
+        now: video.currentTime,
+      })
+      continue
+    }
 
     // Warm the next few in the background. They land in the cache, so when the
     // cursor reaches them there is nothing left to wait for. Deliberately not
     // awaited: this is the concurrency, and it is safe precisely because it
     // cannot commit anything.
+    //
+    // A safety net rather than the main supply — narration-pregen.ts walks the
+    // whole video ahead of playback, so by the time the cursor arrives these
+    // are almost always cached already. It stays for the case pre-generation
+    // has not covered yet: the first seconds after switching narration on, and
+    // a seek landing somewhere the sweep has not reached.
     for (let k = index + 1; k <= index + LOOKAHEAD_CUES && k < cues.length; k++) {
-      void fetchTTS(ctx, cues[k].text, DEFAULT_SPEED).catch(() => undefined)
+      void fetchTTS(ctx, cues[k].text, slotFor(cues, k)).catch(() => undefined)
     }
-
-    const slot = slotFor(cues, index)
 
     let buffer: AudioBuffer
     try {
-      buffer = await fetchTTS(ctx, cue.text, DEFAULT_SPEED)
-
-      // Two-pass fit. The first pass is already at DEFAULT_SPEED, so the
-      // natural length has to be recovered before working out what would make
-      // it fit; asking for a rate against the sped-up length would under-read
-      // the amount of hurry needed.
-      if (buffer.duration > slot) {
-        const natural = buffer.duration * DEFAULT_SPEED
-        const needed = speedFor(natural, slot)
-        if (needed > DEFAULT_SPEED + 0.02 && needed <= MAX_SPEED) {
-          buffer = await fetchTTS(ctx, cue.text, needed)
-        }
-      }
-    } catch {
-      continue // No narration for this line; the rest carries on.
+      // One request, and the tempo is the server's answer rather than this
+      // loop's guess. The two-pass fit that used to live here — synthesise at
+      // DEFAULT_SPEED, measure, ask again at a corrected tempo — was a
+      // guaranteed cache miss on the second pass, taken synchronously in the
+      // middle of committing. It made long lines the slowest to arrive and so
+      // the likeliest to be dropped for lateness, which is the gap viewers
+      // reported.
+      buffer = await fetchTTS(ctx, cue.text, slotFor(cues, index))
+    } catch (e) {
+      reportSkip(index, 'no clip', e instanceof Error ? e.message : String(e))
+      // Including TooFastError: a line that cannot be said in its slot at a
+      // followable pace is skipped, and the line after it plays on time. The
+      // old behaviour squeezed it to MAX_SPEED and played it anyway, which cost
+      // two lines to keep one — it was gibberish at that tempo, and it overran,
+      // which pushed the next clip past its own cue.
+      continue
     }
 
     if (generation !== _generation || video.paused) return
@@ -707,7 +816,13 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
     // over the line after it and pushes everything behind it further out. This
     // is what makes a fixed head start unnecessary: narration simply begins at
     // the first line the machine was quick enough for.
-    if (!shouldPlay(cue.start, video.currentTime)) continue
+    if (!shouldPlay(cue.start, video.currentTime)) {
+      reportSkip(index, 'clip arrived after its moment', {
+        cueStart: cue.start,
+        now: video.currentTime,
+      })
+      continue
+    }
 
     if (ctx.state === 'suspended') void ctx.resume()
 
@@ -721,7 +836,12 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
     // pushes the one after it, and nothing ever compared the moment a clip
     // actually got against the line it was reading. Dropping one lets the queue
     // catch up — the same trade shouldPlay already makes a few lines above.
-    if (tooLateToPlay(when, due)) continue
+    if (tooLateToPlay(when, due)) {
+      reportSkip(index, 'queued too far behind its cue', {
+        lateBy: (when - due).toFixed(2),
+      })
+      continue
+    }
 
     _scheduledUntil = scheduleBuffer(ctx, buffer, when)
   }
@@ -763,15 +883,91 @@ export function bindNarration(video: HTMLVideoElement): () => void {
     _lastTime = video.currentTime
   }
 
+  /**
+   * A jump also moves the preparation queue, but does not empty it.
+   *
+   * Every cue is wanted eventually — the sweep covers the whole video — so what
+   * a seek changes is the order, not the set. Clips already on disk stay there,
+   * which is what keeps two turns of the scrub bar from costing a video's worth
+   * of synthesis. Only pause and playback position are this listener's other
+   * business; deliberately not attached to `pause`, because preparation carries
+   * on while the picture is stopped.
+   */
+  const onSeek = () => {
+    rewindToPlayhead()
+    seekNarrationPregen(video.currentTime)
+  }
+
   video.addEventListener('pause', rewindToPlayhead)
   video.addEventListener('ended', rewindToPlayhead)
-  video.addEventListener('seeking', rewindToPlayhead)
+  video.addEventListener('seeking', onSeek)
 
   return () => {
     video.removeEventListener('pause', rewindToPlayhead)
     video.removeEventListener('ended', rewindToPlayhead)
-    video.removeEventListener('seeking', rewindToPlayhead)
+    video.removeEventListener('seeking', onSeek)
   }
+}
+
+/**
+ * Diagnostics for the fault where narration goes silent after the downloaded
+ * file replaces the upstream stream, and only comes back when the switch is
+ * turned off and on again.
+ *
+ * Two explanations survive reading the code, and they need different fixes:
+ *
+ *  (a) the AudioContext is suspended and `resume()` is being refused. This fits
+ *      the symptom exactly, because toggling the switch is a user gesture and a
+ *      gesture is what the browser is holding out for. The same shape as the
+ *      bug already recorded above, for a fresh page load.
+ *  (b) the cursor is put somewhere the pump then walks past, so every cue in a
+ *      stretch is skipped without a single request being made.
+ *
+ * The difference is visible in one line of output, and guessing between them
+ * would mean shipping two fixes and learning nothing. Off unless asked for:
+ * `localStorage.setItem('yt-narration-debug', '1')` in the console, reproduce
+ * once, read the log.
+ */
+function narrationDebug(): boolean {
+  try {
+    return window.localStorage.getItem('yt-narration-debug') === '1'
+  } catch {
+    return false
+  }
+}
+
+/** The source the last tick saw, so a swap can be reported as it happens. */
+let _lastSrc = ''
+
+function reportSwap(video: HTMLVideoElement, ctx: AudioContext) {
+  if (!narrationDebug()) return
+  if (video.currentSrc === _lastSrc) return
+  const from = _lastSrc
+  _lastSrc = video.currentSrc
+  if (!from) return
+  console.info('[narration] source swapped', {
+    // (a) — if this is anything but "running", the clock every scheduled time
+    // is measured against has stopped, and nothing placed will ever play.
+    audioContext: ctx.state,
+    // (b) — cursor against the playhead. A cursor far ahead of where the video
+    // is means the cues in between have already been stepped over.
+    cursor: _cursor,
+    cueCount: _cues?.length ?? 0,
+    cueAtPlayhead: _cues ? firstCueAtOrAfter(_cues, video.currentTime) : -1,
+    generation: _generation,
+    currentTime: video.currentTime.toFixed(2),
+    paused: video.paused,
+    scheduledUntil: _scheduledUntil.toFixed(2),
+    activeClips: _activeSources.size,
+    from: from.slice(-60),
+    to: video.currentSrc.slice(-60),
+  })
+}
+
+/** Why a cue produced no sound, when it produced none. */
+function reportSkip(index: number, reason: string, detail?: unknown) {
+  if (!narrationDebug()) return
+  console.info('[narration] cue skipped', { index, reason, detail })
 }
 
 /**
@@ -781,6 +977,7 @@ export function bindNarration(video: HTMLVideoElement): () => void {
 export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   const cues = _cues
   const now = video.currentTime
+  reportSwap(video, ctx)
 
   if (video.paused) {
     stopEverything()
@@ -887,6 +1084,117 @@ export function resetNarration() {
   stopNarrationPlayback()
 }
 
+
+// ---- pre-generation ---------------------------------------------------------
+
+/**
+ * The sweep that prepares a whole video's narration ahead of playback.
+ *
+ * Built here rather than inside narration-pregen.ts so that module stays free
+ * of fetch, of module state, and of this file's caches — which is what makes
+ * its retry, backoff and cancellation rules testable without a browser.
+ */
+const _pregen = createPregen({
+  prepare: prepareClip,
+  isTranslated: (text) => vietnameseFor(text) !== undefined,
+  setTimer: (fn, ms) => window.setTimeout(fn, ms),
+  clearTimer: (h) => window.clearTimeout(h as number),
+  sleep: (ms) => new Promise((r) => window.setTimeout(r, ms)),
+  now: () => Date.now(),
+})
+
+/**
+ * What the sweep is doing, for the status line.
+ *
+ * The estimate is applied here rather than inside the sweep, reusing the
+ * translation pass's arithmetic unchanged — the question is identical, and two
+ * implementations of "how long is left" would drift apart and disagree on the
+ * same panel.
+ *
+ * Quoted only while actually synthesising. Waiting on the translator or sitting
+ * out a backoff are both states where the number would keep counting down
+ * against work that is not happening, which is worse than no number at all.
+ */
+export function pregenProgress(): ReturnType<typeof _pregen.progress> & {
+  etaSeconds: number | null
+} {
+  const p = _pregen.progress()
+  return {
+    ...p,
+    etaSeconds:
+      p.phase === 'sweeping'
+        ? estimateEtaSeconds({
+            done: p.done,
+            total: p.total,
+            baseline: p.baseline,
+            elapsedMs: p.startedAt ? Date.now() - p.startedAt : 0,
+          })
+        : null,
+  }
+}
+
+function pregenLines(cues: CueText[]) {
+  return cues.map((_, i) => ({
+    text: cues[i].text,
+    slotSeconds: slotFor(cues, i),
+  }))
+}
+
+/**
+ * Begin preparing this video's narration, from wherever the viewer is.
+ *
+ * Safe to call repeatedly: a sweep already running for the same video is left
+ * alone rather than restarted.
+ */
+export function startNarrationPregen(videoId: string, atTime: number) {
+  void (async () => {
+    // The cue list is fetched and parsed asynchronously, so at the moment the
+    // player decides to narrate there is usually nothing here yet. Waiting on
+    // the load has no deadline to get wrong — the same reasoning that replaced
+    // the translation pass's ten-second poll.
+    const cues = await whenCuesReady()
+    // A video with no subtitles has nothing to say, and a video the viewer has
+    // already moved on from is not ours to prepare.
+    if (cues.length === 0 || videoId !== _passVideoId) return
+    _pregen.start({
+      videoId,
+      lines: pregenLines(cues),
+      fromIndex: nearestCueIndex(cues, atTime),
+    })
+  })()
+}
+
+/** Move the queue to where the viewer has just jumped to. */
+export function seekNarrationPregen(atTime: number) {
+  const cues = _cues
+  if (!cues || cues.length === 0) return
+  _pregen.seek(nearestCueIndex(cues, atTime))
+}
+
+/**
+ * Stop preparing, for good.
+ *
+ * Belongs to the player being torn down — a new video, or the miniplayer being
+ * closed — and NOT to leaving the watch page, where the miniplayer carries on
+ * talking and still needs clips.
+ */
+export function cancelNarrationPregen() {
+  _pregen.cancel()
+}
+
+/**
+ * Throw away every clip and prepare them again, in the newly chosen voice.
+ *
+ * The in-memory cache is keyed by voice, so nothing here can be reused; and the
+ * copies on disk are cleared by the caller, which owns the request. The
+ * translation cache is deliberately untouched: Vietnamese text does not depend
+ * on who reads it.
+ */
+export function restartNarrationPregenForVoice() {
+  _cache.clear()
+  _active.clear()
+  _pregen.restart()
+}
 
 export function isNarrationActive(): boolean {
   return _cues !== null && _cues.length > 0
