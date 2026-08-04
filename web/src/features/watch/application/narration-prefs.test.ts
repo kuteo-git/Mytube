@@ -4,10 +4,11 @@ import { loadNarrationPrefs, saveNarrationPrefs } from './narration-prefs'
 beforeEach(() => window.localStorage.clear())
 
 describe('loadNarrationPrefs', () => {
-  it('defaults to silent, with translation allowed', () => {
-    // A video with only English subtitles cannot be narrated at all without
-    // translation, so the switch that governs it starts on.
-    expect(loadNarrationPrefs()).toEqual({ speak: false, autoTranslate: true })
+  it('defaults to silent', () => {
+    // Sound out of a page nobody asked to speak is a fright. Translation has no
+    // preference of its own any more: it is asked for by choosing the track or
+    // by switching this on.
+    expect(loadNarrationPrefs()).toEqual({ speak: false })
   })
 
   it('carries across someone who had a voice under the old output setting', () => {
@@ -31,13 +32,17 @@ describe('loadNarrationPrefs', () => {
     expect(loadNarrationPrefs().speak).toBe(false)
   })
 
-  it('remembers translation being switched off', () => {
-    saveNarrationPrefs({ speak: true, autoTranslate: false })
-    expect(loadNarrationPrefs().autoTranslate).toBe(false)
+  it('round-trips what was saved', () => {
+    saveNarrationPrefs({ speak: true })
+    expect(loadNarrationPrefs()).toEqual({ speak: true })
   })
 
-  it('round-trips what was saved', () => {
-    saveNarrationPrefs({ speak: true, autoTranslate: true })
-    expect(loadNarrationPrefs()).toEqual({ speak: true, autoTranslate: true })
+  it('ignores a stored auto-translate choice', () => {
+    // The switch is gone: translation is asked for by choosing the track or by
+    // asking for the narration. A value left behind by an older build must not
+    // come back to life as a preference nothing can see or change.
+    window.localStorage.setItem('yt-narration-auto-translate-v1', '0')
+    saveNarrationPrefs({ speak: true })
+    expect(loadNarrationPrefs()).toEqual({ speak: true })
   })
 })

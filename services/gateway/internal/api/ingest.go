@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -537,6 +538,38 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleRemuxStart asks ingest where a muxed stream opened at `t` will really
+// begin. A seek lands on the nearest keyframe at or before the mark, so the
+// answer is up to a group of pictures earlier than asked — and the player needs
+// it, because that is the zero of the stream it is about to be handed.
+//
+// A small JSON reply rather than a header on the stream itself: the stream goes
+// to a <video> element, and script never sees its response.
+func (g *Gateway) handleRemuxStart(w http.ResponseWriter, r *http.Request) {
+	target := g.ingestBaseURL + "/stream/" + url.PathEscape(r.PathValue("id")) + "/start"
+	if v := r.URL.Query().Get("t"); v != "" {
+		target += "?" + url.Values{"t": {v}}.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	resp, err := g.streamClient.Do(req)
+	if err != nil {
+		g.logger.Warn("remux start proxy", "video", r.PathValue("id"), "error", err)
+		http.Error(w, "cannot resolve stream start", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
 // handleRemuxStream proxies the muxed stream from ingest, which owns yt-dlp and
 // ffmpeg. Streamed straight through rather than buffered: the body is a whole
 // video, and holding it in memory to forward it would be pointless.
@@ -545,7 +578,7 @@ func (g *Gateway) handleRemuxStream(w http.ResponseWriter, r *http.Request) {
 	// height picks the rendition; t is where to start. The second is how the
 	// player seeks in a stream that cannot be seeked: it asks for a new one.
 	forwarded := url.Values{}
-	for _, name := range []string{"height", "t"} {
+	for _, name := range []string{"height", "t", "audioAt"} {
 		if v := r.URL.Query().Get(name); v != "" {
 			forwarded.Set(name, v)
 		}

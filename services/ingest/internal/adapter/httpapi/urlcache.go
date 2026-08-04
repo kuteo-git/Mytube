@@ -77,7 +77,16 @@ func (c *cachedRemuxURLs) ResolveRemuxURLs(
 
 // OpenRemux passes straight through; only resolution is worth caching.
 func (c *cachedRemuxURLs) OpenRemux(
-	ctx context.Context, urls []string, startSeconds float64,
+	ctx context.Context, urls []string, startSeconds, audioStartSeconds float64,
 ) (io.ReadCloser, error) {
-	return c.remux.OpenRemux(ctx, urls, startSeconds)
+	return c.remux.OpenRemux(ctx, urls, startSeconds, audioStartSeconds)
+}
+
+// ProbeKeyframe passes straight through. The player asks /start once and hands
+// the answer back with the stream request, so the same mark is not probed twice
+// and there is nothing here worth remembering.
+func (c *cachedRemuxURLs) ProbeKeyframe(
+	ctx context.Context, videoURL string, at float64,
+) (float64, error) {
+	return c.remux.ProbeKeyframe(ctx, videoURL, at)
 }

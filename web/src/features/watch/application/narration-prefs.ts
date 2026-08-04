@@ -7,19 +7,21 @@
  * by drawing over the picture. Once the translation is a track the browser can
  * render, "show it" is just selecting it in the subtitle list, and what is left
  * for narration to decide is whether to read it aloud.
+ *
+ * There was also an "auto translate" switch, and it is gone (2026-08-04). It
+ * described nothing a viewer decides: a translation is wanted when the track is
+ * selected or when something has to be read aloud, and both of those are said
+ * elsewhere, plainly. Left as a switch it was a third way of asking that only
+ * modified the other two — on by default, so pressing it turned translation
+ * *off*, and pressing it again appeared to do nothing at all.
  */
 
 const SPEAK_KEY = 'yt-narration-speak-v1'
-const AUTO_KEY = 'yt-narration-auto-translate-v1'
 /** Superseded twice. Read once, to carry a viewer's choice across. */
 const OUTPUT_KEY = 'yt-narration-output-v1'
 const LEGACY_ON_KEY = 'yt-narration-on'
 
-export function loadNarrationPrefs(): {
-  speak: boolean
-  /** Whether the background translation pass may run at all. */
-  autoTranslate: boolean
-} {
+export function loadNarrationPrefs(): { speak: boolean } {
   const raw = window.localStorage.getItem(SPEAK_KEY)
   let speak = raw === '1'
   if (raw === null) {
@@ -30,17 +32,9 @@ export function loadNarrationPrefs(): {
       output === 'both' ||
       window.localStorage.getItem(LEGACY_ON_KEY) === '1'
   }
-
-  // Defaults on: a video with only English subtitles cannot be narrated without
-  // it, and someone switching narration on has already said what they want.
-  const autoTranslate = window.localStorage.getItem(AUTO_KEY) !== '0'
-  return { speak, autoTranslate }
+  return { speak }
 }
 
-export function saveNarrationPrefs(p: {
-  speak: boolean
-  autoTranslate: boolean
-}) {
+export function saveNarrationPrefs(p: { speak: boolean }) {
   window.localStorage.setItem(SPEAK_KEY, p.speak ? '1' : '0')
-  window.localStorage.setItem(AUTO_KEY, p.autoTranslate ? '1' : '0')
 }

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
@@ -155,5 +155,62 @@ describe('player continuity', () => {
 
     await waitFor(() => expect(document.querySelector('video')).toBe(before))
     expect(before.isConnected).toBe(true)
+  })
+})
+
+/**
+ * Reloading the page while watching, then leaving it.
+ *
+ * A reload on the watch page is not a fresh start: `last-watched` is written
+ * every fifteen seconds, so the entry describing the video now on screen is
+ * already in storage when the page comes up. The resume offer reads that entry
+ * once, at mount, and waits for the player to be free before putting it in the
+ * corner — and on the watch page it is not free, so it waits.
+ *
+ * The mistake is what "free" meant. It was read as "no player state", and there
+ * is an instant during the walk back to the home page where that is true of a
+ * player which is about to be a miniplayer. So the offer fired into that gap and
+ * put a second window in the corner beside the one already arriving — a corner
+ * with two videos in it, the second only visible once the first was closed.
+ */
+describe('reloading on the watch page and then leaving it', () => {
+  it('leaves one player in the corner, not two', async () => {
+    window.localStorage.setItem(
+      'yt-last-watched',
+      JSON.stringify({ videoId: 'abc', positionSeconds: 30, savedAt: Date.now() }),
+    )
+    try {
+      renderApp()
+      await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+
+      await act(async () => {
+        go('/')
+      })
+      await screen.findByText('home')
+      // Long enough for the resume offer's own fetch to land and its effect to
+      // run: the second window arrived a moment after the first, which is why
+      // this was only ever seen by hand.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 100))
+      })
+
+      expect(screen.getAllByTestId('player-host')).toHaveLength(1)
+
+      // Closing it is an answer, and the answer must hold. The offer had only
+      // ever counted itself as spent when it was the thing that made the
+      // offer — so a player put in the corner by the watch page left it armed,
+      // waiting for exactly the state that closing produces. Press the close
+      // button and the same video came straight back.
+      await act(async () => {
+        fireEvent.click(screen.getByLabelText('Close player'))
+      })
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 100))
+      })
+
+      expect(screen.queryByTestId('player-host')).not.toBeInTheDocument()
+    } finally {
+      window.localStorage.removeItem('yt-last-watched')
+    }
   })
 })

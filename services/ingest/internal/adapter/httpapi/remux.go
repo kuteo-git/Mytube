@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,7 +16,8 @@ import (
 // YouTube's separate video and audio files.
 type Remuxer interface {
 	ResolveRemuxURLs(ctx context.Context, videoURL string, height int32) ([]string, error)
-	OpenRemux(ctx context.Context, urls []string, startSeconds float64) (io.ReadCloser, error)
+	OpenRemux(ctx context.Context, urls []string, startSeconds, audioStartSeconds float64) (io.ReadCloser, error)
+	ProbeKeyframe(ctx context.Context, videoURL string, at float64) (float64, error)
 }
 
 // SourceLookup turns a local video id back into its upstream URL.
@@ -43,6 +45,79 @@ func NewHandler(remux Remuxer, sources SourceLookup, defaultHeight int32, logger
 
 func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /stream/{videoId}", h.handleRemux)
+	mux.HandleFunc("GET /stream/{videoId}/start", h.handleStreamStart)
+}
+
+// handleStreamStart answers "if I ask for the stream at t, where will it really
+// begin?" — the keyframe an input seek lands on, which is up to a group of
+// pictures earlier than asked.
+//
+// It is a separate request because the player needs the number and cannot have
+// it: the stream itself is consumed by a <video> element, and script cannot read
+// the headers of a response it never sees. Asking here and passing the answer
+// back as `audioAt` also means the mux itself does not have to probe, so the
+// 1.29s is paid once rather than twice.
+func (h *Handler) handleStreamStart(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	videoID := r.PathValue("videoId")
+
+	at := queryFloat(r, "t")
+	if at <= 0 {
+		// Opening at the beginning needs no probe: both inputs start at zero and
+		// there is nothing to align.
+		writeJSON(w, streamStartDTO{Start: 0})
+		return
+	}
+
+	sourceURL, err := h.sources.SourceURLFor(ctx, videoID)
+	if err != nil || sourceURL == "" {
+		http.Error(w, "unknown video", http.StatusNotFound)
+		return
+	}
+
+	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, h.defaultHeight)
+	if err != nil || len(urls) == 0 {
+		h.logger.Warn("resolve remux urls for start", "video", videoID, "error", err)
+		http.Error(w, "cannot resolve media", http.StatusBadGateway)
+		return
+	}
+
+	start, err := h.remux.ProbeKeyframe(ctx, urls[0], at)
+	if err != nil {
+		// Not an error the player should act on: without an answer it opens the
+		// stream as before, sound slightly adrift, rather than not at all.
+		h.logger.Warn("probe keyframe", "video", videoID, "at", at, "error", err)
+		writeJSON(w, streamStartDTO{Start: 0})
+		return
+	}
+	writeJSON(w, streamStartDTO{Start: start})
+}
+
+type streamStartDTO struct {
+	// Start is where the stream will really begin, in absolute video seconds.
+	// Zero means unknown, not the beginning of the video.
+	Start float64 `json:"start"`
+}
+
+func writeJSON(w http.ResponseWriter, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+// queryFloat reads a positive number from the query string. Anything
+// unparseable reads as absent: a mangled timestamp should play the video from
+// the start, not fail the request.
+func queryFloat(r *http.Request, name string) float64 {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return 0
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || v <= 0 {
+		return 0
+	}
+	return v
 }
 
 // handleRemux streams a video at full resolution, muxed on the fly.
@@ -73,14 +148,11 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Where to start. Anything unparseable is treated as the beginning: a
-	// mangled timestamp should play the video, not fail the request.
-	var startSeconds float64
-	if raw := r.URL.Query().Get("t"); raw != "" {
-		if v, convErr := strconv.ParseFloat(raw, 64); convErr == nil && v > 0 {
-			startSeconds = v
-		}
-	}
+	startSeconds := queryFloat(r, "t")
+	// Where the audio should start, which is not the same place: see OpenRemux.
+	// The player learns it from /start and passes it here so the probe is not
+	// repeated; a caller that omits it gets one done on its behalf.
+	audioStart := queryFloat(r, "audioAt")
 
 	resolveStart := time.Now()
 	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, height)
@@ -91,7 +163,15 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stream, err := h.remux.OpenRemux(ctx, urls, startSeconds)
+	if startSeconds > 0 && audioStart <= 0 && len(urls) > 1 {
+		if probed, probeErr := h.remux.ProbeKeyframe(ctx, urls[0], startSeconds); probeErr == nil {
+			audioStart = probed
+		} else {
+			h.logger.Warn("probe keyframe", "video", videoID, "at", startSeconds, "error", probeErr)
+		}
+	}
+
+	stream, err := h.remux.OpenRemux(ctx, urls, startSeconds, audioStart)
 	if err != nil {
 		h.logger.Warn("open remux", "video", videoID, "error", err)
 		http.Error(w, "cannot open stream", http.StatusBadGateway)
@@ -105,7 +185,7 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	// than a query, and because "did the player even ask for it?" turned out to
 	// be the question that could not be answered from the outside.
 	h.logger.Info("live mux opened",
-		"video", videoID, "height", height, "from", startSeconds,
+		"video", videoID, "height", height, "from", startSeconds, "audioFrom", audioStart,
 		"resolve", resolveTook.Truncate(time.Millisecond))
 
 	w.Header().Set("Content-Type", "video/mp4")

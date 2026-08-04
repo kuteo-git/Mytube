@@ -68,12 +68,89 @@ fragment — so sound and picture arrive in blocks that do not line up. Cutting 
 second brings fragments down to ~0.77s. After the fix, video and audio share a `start_time`;
 before it they differed by 0.04s.
 
+**That fix only ever covered opening at zero (corrected 2026-08-04).** Opened part way in, sound
+ran **2.008 seconds ahead of picture** — measured on `2el-stE5mGM` at `-ss 600`. The cause is the
+separate seeks themselves, not the muxer: an input seek lands on the nearest keyframe **at or
+before** the mark, so the video began at **597.972** while the audio began at **599.980**. The
+flags above then pulled each track down to zero **independently**, which erases that difference
+rather than preserving it. At offset 0 both inputs genuinely start together, which is why the
+2026-07-29 measurement looked settled.
+
+**No timestamp flag can fix it — measured, do not try again.** `-copyts`, `-start_at_zero`,
+`-avoid_negative_ts disabled` and `-af aresample=async=1` all produce byte-identical framing:
+the **fragmented** muxer rebases every track to its own first packet whatever it is told. The
+same two inputs written to an **ordinary** MP4 keep `start_time` 597.972 / 599.980 correctly —
+that contrast is what identified the muxer rather than the seek as the collapsing step.
+
+**The fix is to seek the two inputs to the same content time.** `ProbeKeyframe` asks
+`ffprobe -read_intervals "T%+#1" -select_streams v:0` where the video will really land —
+**1.29s**, a few hundred kilobytes — and the audio is then given `-ss K` while the video keeps
+`-ss T`. Result: **597.972 / 597.960, a 0.012s gap**. Seeking goes from ~3.0s to ~4.3s, which is
+the price. Probed only when `T > 0`.
+> **Do not send both inputs to `K`.** ffmpeg reads `-ss` as "at or before", so a mark that *is* a
+> keyframe steps back to the previous one — 593.593, a 4.4s gap, worse than the bug.
+
+**The stream therefore begins at `K`, not at `T`**, up to a group of pictures early; ffmpeg
+cannot cut between keyframes without re-encoding, which §4 forbids. The player is told: it asks
+`GET /api/videos/{id}/remux/start?t=` (a separate request, because the stream body goes to a
+`<video>` element and script never sees its headers), uses `K` as the offset so every absolute
+position stays honest, and then moves the element the remaining second or two **inside what has
+already arrived**. The answer is handed back as `audioAt` so the probe is paid for once, not
+twice.
+
 **Seeking in the remux tier means reopening the stream.** fMP4 through a pipe carries no index,
 so the browser cannot seek it; the player sends `?t=<seconds>` and ffmpeg uses `-ss` **before
 `-i`** (an HTTP range seek, not decode-and-discard). Measured: opening from the start takes
 4.4s, seeking to 120s takes **3.0s** — cheaper because the URL is already cached. Fired only on
 **release** of the seek bar; dragging just moves the number. There is a "Seeking…" label,
 because three seconds of a frozen picture looks like being ignored.
+
+**Except that it no longer does, and the way it used to was broken (2026-08-04).** A seek in the
+remux tier showed "Seeking…" and then simply did not arrive. Two ways of asking for the same
+picture had drifted apart: the *upgrade* path hands over when the playhead reaches the mark the
+replacement is parked on, while the *seek* path — whose replacement starts somewhere the playhead
+will never reach — waited instead for `buffered.end(0) >= 0.5`, a condition that on a stream it
+could not satisfy never became true. On Auto the 45s patience timer eventually cancelled it; on a
+**pinned 1080p that timer was skipped entirely**, so the wait had no end at all.
+
+The report contained its own diagnosis: seeking at 360p and *then* switching to 1080p worked
+perfectly, because that goes through the upgrade path. So **a seek now takes that road**: down to
+`instant` (progressive, natively seekable, at the mark within milliseconds), then the ordinary
+climb back to 1080p. Three consequences worth keeping:
+- **The climb after a seek uses a 5s lead, not 20s.** Twenty is for the first climb of a video
+  whose network behaviour has not been seen; by then reopening is measured at ~3s.
+- **A seek gets one climb attempt that is not counted** against `MAX_REMUX_ATTEMPTS`. Failing to
+  reopen at a new mark says nothing about the connection, and counted, two turns of the scrub bar
+  would take 1080p away for the rest of the video. One attempt, not an exemption that lasts — and
+  it re-climbs immediately, since only `remuxFailed` is a dependency of that effect.
+- **The seek bar was `disabled` on the remux tier**, so this path was reachable only by the arrow
+  keys — the broken road was also the invisible one. It is enabled on every tier now.
+
+**Overshooting the mark is caught up, not thrown away (2026-08-04).** The climb opens the mux at
+`position + 20s` and hands over when the playhead reaches it. On a long video preparation takes
+about as long as that lead allows, so the climb kept missing by a second or two — and missing
+meant **abandoning**, because handing over would have wound the viewer back. Visible in the
+ingest log as a mux opened and closed every dozen seconds, each at a slightly later mark:
+`from=1289.2` → closed after 12s → `from=1300.5` → closed after 9s → `from=1324.215`. Three
+misses and auto switched the tier off for the rest of the video, which is why **pinning 1080p by
+hand was the only thing that worked** — pinning ignores that count. The replacement is now wound
+forward to where the viewer actually is, **inside data that has already arrived**, the same move
+a seek makes. It is given up only when nothing has arrived at that point. The **paused** branch
+does it too: it used to hand over without positioning anything, so pausing during a climb wound
+the video back to the stream's keyframe.
+
+**A handover must be bound to the source it is about (2026-08-04).** Three things write the
+pending-tier record — the climb, the probe that refines where a muxed stream begins, and a seek —
+and two of them can be in flight within a second of each other. Whichever wrote last decided what
+the player believed it was watching, regardless of what had been loaded. Measured on a real seek
+to **2059.5s**: the picture was the 360p rendition at 2059.5 while the offset came from the muxed
+stream's keyframe at **2056.8**, so the clock read **4130** — the two added together. Worse, the
+tier was recorded as `remux` while `remux` was exactly what the player was still trying to reach,
+so `targetTier` returned nothing and **it never climbed again** for the rest of the video;
+toggling Auto → 1080p → Auto by hand was the only way out, which is how it was found. The record
+now carries the URL it was made for, and both the handover and the positioning at
+`loadedmetadata` refuse a record that does not match the element's own `src` — the one witness
+that cannot disagree with itself.
 
 **Every position is absolute.** A remux stream considers itself to start at zero wherever it was
 opened, so everything outside the video element works in `offset + currentTime`.
@@ -295,6 +372,19 @@ nonsense, and embeddings beat tag matching by nothing while being impossible to 
     channel's videos. It used to be a bare count, so 3-of-5 and 3-of-200 were treated alike — the
     first is a verdict, the second is three ordinary rejections in a library used for months.
     Subscribed channels remain immune.
+    **Plus a ceiling of `≥8`, whatever the share (2026-08-04).** The share is measured against
+    everything the channel has in the library, which made large channels effectively
+    unsuppressible. Measured: **NoCopyrightSounds, 162 videos, 20 of them turned down** — 12%,
+    against a threshold that wanted **49**. And it was worse than slow: every scan added more of
+    that channel, so the denominator grew and pressing "not interested" again moved the share
+    *down*. The one thing anyone does when a control seems not to work is use it more, and here
+    that made it work less. Subscribing still overrides the ceiling — following a channel is a
+    deliberate statement, and the ceiling must not become a way to lose a channel you asked for.
+    > How 162 of them arrived is its own lesson: `topics.yaml` never named that channel. The
+    > **`Music` topic has `sources: []`**, so when the feed ran low `ExpandLibrary` fell through to
+    > its last layer — searching YouTube for the topic's name — and that channel is what "Music"
+    > returns. A topic with no sources is not a topic with no content; it is a topic filled by a
+    > search box.
   - `penaltyDisliked = 5.0` was **never applied to a dislike** — its only reader was `/2` for an
     already-watched video, and disliked videos `continue` several lines earlier. Renamed
     `penaltyAlreadyWatched = 2.5`; the number is unchanged.
@@ -536,6 +626,40 @@ device*, while this says *what THIS browser is part way through*. Using history 
 something already finished on another machine.
 For the position, the server's number wins; the local one is used only when the tab closed before
 the last report.
+**A player that arrived by any other route counts as the offer having been taken up (2026-08-04).**
+The "already offered" flag recorded only *this hook's own* offer, which was too narrow by exactly
+one case: **reload the watch page** and the entry describing the video on screen is already in
+storage, so the offer sits armed while the *watch page* activates the player. Walk out to Home and
+that player becomes the corner window — and pressing ✕ produces precisely the state the offer is
+waiting for, so the same video came straight back. The close button looked broken, and to anyone
+who pressed it twice it looked like **two players had been stacked in the corner all along**,
+which is how it was reported. The rule is now what it always meant: the offer is for a browser
+that is part way through something and showing nothing, so once anything has been playing there
+is nothing left to offer.
+
+**Choosing the machine-translated track is itself a request to translate (2026-08-04).** The
+translation pass ran only while **read-aloud** was on — it was written to feed the narration —
+while the gateway attaches `*.vi-mt.vtt` as a track only **once a file exists**. So the option
+appeared in the subtitle menu after somebody had narrated the video, and nothing but narrating it
+again could fill it: a control that does nothing unless an unrelated feature is switched on,
+which §5 rules out, and worse than dead because the track looked real and stayed nearly empty.
+Measured on `2el-stE5mGM`: **68 successful translate batches in one session left 4 lines on
+disk**, each short spell of read-aloud being cancelled before it covered much of a 2h14 video.
+Now the pass starts on `narrationOn && autoTranslate` **or** on the track being selected, and the
+menu offers **"VI (auto)" before any file exists** — gated on the same two conditions the pass
+itself checks (English to translate from, no human Vietnamese track), so it never offers work
+that would be refused.
+
+**And the "Auto translate" switch is gone with it.** It described nothing a viewer decides — a
+translation is wanted when the track is selected or when there is something to read aloud, and
+both of those are said elsewhere in words about the thing itself. As a third control it only
+qualified the other two, and being **on by default** it read as broken in both directions:
+pressing it turned translation *off*, and pressing it again appeared to do nothing, because the
+pass still needed read-aloud. What is left in its place is the progress line, shown only while a
+translation is actually being made — a report, not a setting. **"Read aloud" is now "Vietnamese
+narration"**: it reads the Vietnamese translation and nothing else, and switching it on also
+brings that translation into being, which is a great deal to hide behind two words that never
+mention Vietnamese.
 
 **Uniform padding: `px-4` on phones, `px-6` from 700px.** Applied to every page.
 The exception is Home's `ChipBar`, which bleeds to the edge on phones (`-mx-4` plus `px-4`
@@ -613,8 +737,19 @@ next viewing comes from disk — but a copy **nobody is waiting for** is also a 
 nobody is waiting for, and this address has been blocked once for making too many (§8, risk 5).
 Leaving the watch page sends `POST /api/videos/{id}/download/cancel`. Attached in the **effect's
 cleanup**, so it covers both ways of leaving: moving to the next video, and closing the page.
-**A known trade:** `NoPart()` is on, so yt-dlp **cannot resume** — cancelling midway loses
-everything fetched so far, and the next attempt starts from zero.
+**A known trade:** `NoPart()` is on, so cancelling midway loses everything fetched so far and the
+next attempt starts from zero.
+
+**And that was only half true until 2026-08-04 — the other half poisoned videos.** yt-dlp *does*
+try to resume; with no part file it resumes **into the finished name**. A track a cancelled
+attempt had already completed therefore made it ask for a range beginning at the end of the file,
+and YouTube answered **416 Requested range not satisfiable**. The download failed and went on
+failing: every retry found the same file and asked the same impossible question, so **one
+cancelled download broke that video for good** — a state nothing else in this system can reach.
+Measured on `2el-stE5mGM`: a 131MB audio track left complete beside a 3.3GB video track left
+partial, and six consecutive job failures. `NoContinue()` makes the behaviour match the sentence
+above. Keeping the bytes instead would mean dropping `NoPart()` so partial data lives in `.part`
+files — resumable, but also litter the eviction sweep knows nothing about.
 
 **Eviction:** catalog runs a sweep every hour
 (`services/catalog/internal/usecase/evict.go`). Above 20 GiB it deletes the media files of

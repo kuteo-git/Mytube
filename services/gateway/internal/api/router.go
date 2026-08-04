@@ -120,6 +120,7 @@ func (g *Gateway) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/videos/{id}/stream", g.handleStream)
 	mux.HandleFunc("GET /api/videos/{id}/remux", g.handleRemuxStream)
+	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
 
 	// Downloads are never requested directly: they are a side effect of asking
 	// to play something. These endpoints only report on them.

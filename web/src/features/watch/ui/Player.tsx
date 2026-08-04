@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
-import { useStream } from '@/features/catalog/application/queries'
+import { resolveRemuxStart, useStream } from '@/features/catalog/application/queries'
 import { useDownloadProgress } from '@/features/catalog/application/download'
 import type { QualityChoice } from '@/features/watch/application/autoplay'
 import {
@@ -119,6 +119,18 @@ const SWAP_LEAD_SECONDS = 0.6
 const REMUX_PREPARE_LEAD_SECONDS = 20
 
 /**
+ * The same, for the climb back to full resolution after a seek.
+ *
+ * Shorter because by then the unknown is known. Twenty seconds covers the first
+ * climb of a video whose network behaviour has not been seen yet; after a seek
+ * the stream has already been opened at least once and the cost is measured —
+ * about 3 seconds to reopen at a new mark, since the URLs are already resolved.
+ * Five leaves room for that without asking the viewer to watch a third of a
+ * minute of the low rendition every time they move the scrub bar.
+ */
+const REMUX_SEEK_LEAD_SECONDS = 5
+
+/**
  * How long a muxed stream may take to become playable before auto gives up.
  *
  * Past this it is not going to keep up with playback either, and a smooth low
@@ -135,6 +147,17 @@ const REMUX_PATIENCE_MS = 45_000
  * noticeable on music.
  */
 const HANDOVER_OVERSHOOT_TOLERANCE = 1
+
+/**
+ * How much of the replacement must already have arrived beyond the point being
+ * caught up to.
+ *
+ * A handover that lands exactly on the edge of what has been buffered stalls on
+ * its first frame, which looks worse than the low rendition it replaced. A
+ * second is enough to be sure there is something to play on arrival, and the
+ * muxed stream fills far faster than it plays, so waiting for it costs nothing.
+ */
+const HANDOVER_CATCHUP_MARGIN_SECONDS = 1
 
 /**
  * How long the controls stay up after the pointer stops moving.
@@ -203,10 +226,19 @@ interface Tier {
  * at zero. Everything the viewer sees has to add this back, or a video seeked
  * to ten minutes reports itself as just beginning.
  */
-function sourceURL(tier: Tier, offsetSeconds: number): string {
+function sourceURL(tier: Tier, offsetSeconds: number, audioStart = 0): string {
   if (tier.name !== 'remux' || offsetSeconds <= 0) return tier.url
+  const params = new URLSearchParams({ t: offsetSeconds.toFixed(3) })
+  // Where the audio should be seeked to, which is not where the video is.
+  // ffmpeg's input seek lands on the nearest keyframe at or before the mark, so
+  // the video starts earlier than asked while the audio starts almost exactly
+  // on it — and the muxer then pulls both down to zero, turning that difference
+  // into sound running ahead of picture. Measured at 2.008s. Sending the audio
+  // to the video's keyframe is what removes it; see the server's OpenRemux.
+  if (audioStart > 0) params.set('audioAt', audioStart.toFixed(3))
   // Cache-bust so the browser never serves a stale stream when seeking.
-  return `${tier.url}?t=${offsetSeconds.toFixed(3)}&_=${Date.now()}`
+  params.set('_', String(Date.now()))
+  return `${tier.url}?${params.toString()}`
 }
 
 /**
@@ -376,6 +408,10 @@ export function Player({
   // will fail every time, and each attempt costs seconds of a stream nobody
   // watches.
   const [remuxAttempts, setRemuxAttempts] = useState(0)
+  // Bumped to send the climb round again when nothing else would. Only the
+  // attempt a seek is given for free needs it: every other abandonment already
+  // moves remuxAttempts, and it is that movement the effect watches.
+  const [climbAttempt, setClimbAttempt] = useState(0)
   const remuxFailed = remuxAttempts >= MAX_REMUX_ATTEMPTS
   // Which tier the front element is playing, and where in the video that
   // element's zero is. Only the muxed stream has a non-zero offset.
@@ -387,6 +423,10 @@ export function Player({
   // whichever tier was current when it was created.
   const tierRef = useRef<Tier | undefined>(undefined)
   tierRef.current = tier
+  // Same reason: a seek needs to know whether a low rendition exists to detour
+  // through, and the list is rebuilt whenever the stream answer is re-polled.
+  const tiersRef = useRef<Tier[]>(tiers)
+  tiersRef.current = tiers
   // True while a muxed stream is being reopened at a new mark. The picture is
   // still the old one, so this is what tells the viewer the seek was heard.
   const [seeking, setSeeking] = useState(false)
@@ -537,7 +577,33 @@ export function Player({
   const upgradingToRef = useRef<string | undefined>(undefined)
   // The tier the hidden element is preparing, and the offset it was opened at.
   // Applied to the visible state only once the handover actually happens.
-  const pendingTierRef = useRef<{ tier: Tier; offset: number } | undefined>(undefined)
+  //
+  // `startAt` is where the viewer should end up, absolute, when that is not
+  // simply where the stream begins: a muxed stream opened at ten minutes really
+  // begins at the keyframe before it, and a seek through the low rendition has
+  // to place the element itself. Absent means "wherever it opened".
+  //
+  // `url` is what makes the whole record trustworthy. Several things write here
+  // — the climb, the probe that refines where a muxed stream begins, and a seek
+  // — and a claim that has been replaced since the element started loading is
+  // not a claim about that element any more. Applying one anyway is how the
+  // player ended up believing it was on the muxed stream while showing the low
+  // rendition: the offset came from one source and the picture from another, so
+  // every position read as the two added together, and nothing would climb
+  // because the tier it thought it was on was the one it wanted.
+  const pendingTierRef = useRef<
+    { tier: Tier; offset: number; url: string; startAt?: number } | undefined
+  >(undefined)
+  // True while the climb back to full resolution belongs to a seek rather than
+  // to the opening of the video. Two things read it: the lead is shorter, and a
+  // failure does not count against the tier.
+  //
+  // Counting it would be wrong in kind. "Tried once and could not keep up" is a
+  // statement about the connection; reopening at a new mark is not a new claim
+  // about the connection, it is the same stream asked for from elsewhere. Left
+  // shared, two seeks would pin a video to 360p for the rest of its length —
+  // making the scrub bar a way to lose quality permanently.
+  const postSeekRef = useRef(false)
   // Absolute position in the video, offset included. Read by the effect that
   // opens a muxed stream, which needs to know where the viewer is without
   // taking position as a dependency and restarting on every tick.
@@ -774,10 +840,17 @@ export function Player({
   // status sat on "not started".
   useEffect(() => () => cancelTranslationPass(), [videoId])
 
-  // When narration is turned on, fetch and parse the best available VTT:
-  // Vietnamese first, then English (which will be translated via NLLB-200).
+  // Fetch and parse the best available VTT: Vietnamese first, then English
+  // (which will be translated via NLLB-200).
+  //
+  // Asked for by the same two things that ask for a translation, and it has to
+  // be both: these cues *are* what the pass translates, so gating them on
+  // narration alone left the viewer who had only chosen the track waiting on a
+  // list that was never going to be fetched. The pass started, found nothing to
+  // do, and sat on "Not started" — which reads exactly like the switch having
+  // done nothing at all.
   useEffect(() => {
-    if (!narrationOn) return
+    if (!narrationOn && captions !== MACHINE_LANGUAGE) return
     // Nothing has been published yet, so "no Vietnamese" is not an answer, it is
     // the absence of one. Choosing English from an empty list is how the
     // realtime engine started translating a video that had Vietnamese coming.
@@ -790,7 +863,7 @@ export function Player({
       (s) => s.language === 'en' || s.language === 'eng',
     )
     if (enSub) loadViSubtitles(enSub.url, 'en')
-  }, [narrationOn, subtitles])
+  }, [narrationOn, captions, subtitles])
 
   // Tell narration which video it is for, so synthesised clips are filed beside
   // that video. Not folded into the translation pass: the realtime engine has
@@ -799,23 +872,43 @@ export function Player({
     setNarrationVideo(videoId)
   }, [videoId])
 
-  // Switching it off has to end the pass, not merely hide it: work carrying on
-  // out of sight is the thing the switch exists to stop.
+  // Nobody is asking any more: stop the pass rather than let it carry on out of
+  // sight. Translation is wanted while the track is selected or while there is
+  // something to read aloud, and when neither is true it is work with no reader
+  // — paid for in requests to a translator that is shared with everything else.
   useEffect(() => {
-    if (!narrationPrefs.autoTranslate) cancelTranslationPass()
-  }, [narrationPrefs.autoTranslate])
+    if (!narrationOn && captions !== MACHINE_LANGUAGE) cancelTranslationPass()
+  }, [narrationOn, captions])
 
   // Anchor the background translation pass wherever the viewer actually is.
   // Only the batch engine has a pass; NLLB translates as it speaks.
   useEffect(() => {
-    if (!narrationOn || !narrationPrefs.autoTranslate) return
+    // Two things ask for a translation, and either is enough.
+    //
+    // Reading aloud needs one, which is what this was written for. Choosing the
+    // "Tiếng Việt (dịch máy)" track is a request in its own right, and it used
+    // not to be treated as one: the track was offered in the menu and could only
+    // be filled by switching on a different feature entirely, so it appeared to
+    // exist and stayed nearly empty.
+    //
+    // There is no third switch. Both of these say what the viewer wants in
+    // words about the thing itself; a separate "auto translate" only qualified
+    // them, and being on by default it read as broken in both directions.
+    if (!narrationOn && captions !== MACHINE_LANGUAGE) return
     // Same gate as the source-choice effect above, for the same reason and at
     // greater cost: a pass started against an empty caption list spends tokens
     // on a video whose own Vietnamese track is seconds away.
     if (!captionsSettled(subtitles) || hasVi) return
     const el = front()
     startTranslationPass(videoId, el ? el.currentTime : 0)
-  }, [narrationOn, narrationPrefs.autoTranslate, videoId, subtitles, hasVi, front])
+  }, [
+    narrationOn,
+    captions,
+    videoId,
+    subtitles,
+    hasVi,
+    front,
+  ])
 
   // A human Vietnamese track arriving mid-pass ends the pass and takes its
   // output with it.
@@ -891,6 +984,7 @@ export function Player({
     // Without this the guard in the upgrade effect would still be holding a
     // tier from the previous video and block this one's first climb.
     pendingTierRef.current = undefined
+    postSeekRef.current = false
     setTier(undefined)
     setOffsetSeconds(0)
     offsetRef.current = 0
@@ -919,6 +1013,13 @@ export function Player({
       return
     }
 
+    // A seek already has the hidden element, and it is going somewhere this
+    // effect does not know about. Starting a climb on top of it would replace
+    // the replacement and leave the viewer where they were — the seek quietly
+    // losing to the upgrade. The climb happens afterwards, from the new
+    // position, when the tier this settles on re-runs the effect.
+    if (pendingTierRef.current?.startAt !== undefined) return
+
     const wanted = targetTier(tiers, tier?.name, quality, remuxFailed)
     if (!wanted) return
 
@@ -937,15 +1038,41 @@ export function Player({
     // the low rendition however long it is left alone.
     if (pendingTierRef.current?.tier.name === wanted.name) return
 
-    const startAt =
-      wanted.name === 'remux' ? positionRef.current + REMUX_PREPARE_LEAD_SECONDS : 0
-    const url = sourceURL(wanted, startAt)
-    if (upgradingToRef.current === url) return
+    if (wanted.name !== 'remux') {
+      if (upgradingToRef.current === wanted.url) return
+      upgradingToRef.current = wanted.url
+      pendingTierRef.current = { tier: wanted, offset: 0, url: wanted.url }
+      setBackSrc(wanted.url)
+      return
+    }
 
-    upgradingToRef.current = url
-    pendingTierRef.current = { tier: wanted, offset: wanted.name === 'remux' ? startAt : 0 }
-    setBackSrc(url)
-  }, [tiers, tier, quality, remuxFailed, frontSrc, setBackSrc])
+    const lead = postSeekRef.current ? REMUX_SEEK_LEAD_SECONDS : REMUX_PREPARE_LEAD_SECONDS
+    const mark = positionRef.current + lead
+    // Claim the attempt before asking anything, or the poll that re-runs this
+    // effect a moment later would start a second mux for the same climb.
+    const provisional = sourceURL(wanted, mark)
+    upgradingToRef.current = provisional
+    const claim = { tier: wanted, offset: mark, url: provisional }
+    pendingTierRef.current = claim
+
+    void resolveRemuxStart(videoId, mark).then((actualStart) => {
+      // The tier machinery may have moved on while this was in flight — the
+      // viewer seeking again, or the local file landing. Identity rather than a
+      // flag scoped to this run of the effect: the effect re-runs on every poll
+      // of the stream answer and returns early at the guard above, and a flag
+      // cleared on the way out would cancel a climb that is still the current
+      // one. What matters is whether this claim is still the one standing.
+      if (pendingTierRef.current !== claim) return
+      // The stream begins at the keyframe, not at the mark, and everything
+      // outside the element counts from that. Zero means the server could not
+      // say, in which case the mark is still the best guess available.
+      const offset = actualStart > 0 ? actualStart : mark
+      const url = sourceURL(wanted, mark, actualStart)
+      upgradingToRef.current = url
+      pendingTierRef.current = { tier: wanted, offset, url }
+      setBackSrc(url)
+    })
+  }, [tiers, tier, quality, remuxFailed, climbAttempt, frontSrc, setBackSrc, videoId])
 
   // Give up on an upgrade and keep playing what already works. Failing to
   // prepare a better source is not a playback failure — nothing on screen
@@ -955,7 +1082,28 @@ export function Player({
     // connection that failed it will not have changed, and a second attempt is
     // more seconds of stalling to learn the same thing. A viewer who pinned
     // 1080p is not overruled — targetTier ignores this for them.
-    if (pendingTierRef.current?.tier.name === 'remux') setRemuxAttempts((n) => n + 1)
+    //
+    // Except after a seek, which is not evidence about the connection: the same
+    // stream is being asked for from a different mark, and counting it would let
+    // two turns of the scrub bar take 1080p away for the rest of the video.
+    if (pendingTierRef.current?.tier.name === 'remux') {
+      if (postSeekRef.current) {
+        // One free attempt per seek, not an exemption that lasts. The mark is
+        // what was untried, and it has now been tried; leaving this set would
+        // mean a single seek quietly switched the limit off for the rest of the
+        // video, and a connection that cannot carry the mux would be asked
+        // again and again for as long as the viewer stayed.
+        postSeekRef.current = false
+        // And try once more, now. Everything else that abandons a climb bumps
+        // remuxAttempts, and it is that change which sends the effect round
+        // again; without something of its own the free attempt would be the one
+        // that quietly ended the climb, leaving the viewer on 360p until some
+        // unrelated poll happened to wake the effect up.
+        setClimbAttempt((n) => n + 1)
+      } else {
+        setRemuxAttempts((n) => n + 1)
+      }
+    }
     pendingTierRef.current = undefined
     setSeeking(false)
     upgradingToRef.current = undefined
@@ -977,14 +1125,39 @@ export function Player({
     // than the current stream, this is a seek rather than an upgrade. The
     // playhead will never catch the new stream — it starts at a different
     // moment entirely — so commit as soon as there is data to show.
-    const isSeek =
-      pendingTierRef.current !== undefined &&
-      Math.abs(pendingTierRef.current.offset - offsetRef.current) > 1
+    const isSeek = pendingTierRef.current?.startAt !== undefined
     // upgradingToRef may have been cleared before onLoadedMetadata fires,
     // so for seeks we use pendingTierRef as the signal instead.
     if (!upgradingToRef.current && !isSeek) return
 
+    // Refuse to apply a claim that is not about this element.
+    //
+    // Several things write the pending claim, and a seek and a climb can be in
+    // flight within a second of each other. Whichever wrote last decided what
+    // the player believed it was watching — regardless of what had actually
+    // been loaded. Measured on a real seek: the picture was the 360p rendition
+    // sitting at 2059.5s while the offset came from the muxed stream's keyframe
+    // at 2056.8s, so every position read as the sum of the two, and the tier was
+    // recorded as `remux` while `remux` was exactly what the player was still
+    // trying to reach — which is why it then never climbed again.
+    //
+    // The element's own `src` is the only witness that cannot disagree with
+    // itself, so it is what decides.
+    const claimMatches = () => {
+      const pending = pendingTierRef.current
+      if (!pending) return false
+      // Compared against the resolved absolute URL the element reports, which is
+      // what `src` gives back once assigned.
+      return next.src === new URL(pending.url, window.location.href).href
+    }
+
     const commit = () => {
+      // The claim moved on while this element was loading. Hand nothing over:
+      // whatever replaced it is loading into this same element and will arrive
+      // with a handover of its own, and swapping now would put the picture and
+      // the offset permanently out of step.
+      if (!claimMatches()) return
+
       // Carry across everything the viewer set, or the swap would silently undo
       // their volume, their mute and their subtitles.
       next.volume = current.volume
@@ -1027,6 +1200,9 @@ export function Player({
       offsetRef.current = nextOffset
       setOffsetSeconds(nextOffset)
       if (pending) setTier(pending.tier)
+      // The seek is over once full resolution is back: a later failure is about
+      // the connection again, and counts.
+      if (pending?.tier.name === 'remux') postSeekRef.current = false
       pendingTierRef.current = undefined
       setSeeking(false)
 
@@ -1057,8 +1233,42 @@ export function Player({
       swappingRef.current = false
     }
 
-    // Paused: no mark to wait for, so exchange where the viewer is.
+    /**
+     * Winds the replacement to where the viewer actually is.
+     *
+     * A stream opened at a mark believes that mark is its zero, and the mark is
+     * rarely where the viewer has got to: ahead of them while the climb is
+     * being prepared, behind them if it ran late. Moving within data that has
+     * already arrived is allowed even without an index, so the difference is
+     * closed here rather than being suffered by the viewer.
+     *
+     * False means there is nothing arrived at that point to show.
+     */
+    const catchUpToViewer = () => {
+      const within = current.currentTime + offsetRef.current - (pendingTierRef.current?.offset ?? 0)
+      if (within <= 0.05) return true
+      const ranges = next.buffered
+      const filledTo = ranges.length > 0 ? ranges.end(ranges.length - 1) : 0
+      // A margin, so the handover does not land on the very edge of what has
+      // arrived and stall on its first frame.
+      if (filledTo < within + HANDOVER_CATCHUP_MARGIN_SECONDS) return false
+      try {
+        next.currentTime = within
+      } catch {
+        return false
+      }
+      return true
+    }
+
+    // Paused: there is no mark to wait for, because the playhead is not going
+    // to reach one. Exchange where the viewer is — which means putting the
+    // replacement there first, or a stream opened at a keyframe behind them
+    // would quietly wind the video back to it.
     if (current.paused) {
+      if (!catchUpToViewer()) {
+        abandonUpgrade()
+        return
+      }
       commit()
       return
     }
@@ -1073,7 +1283,13 @@ export function Player({
     const waitForMark = () => {
       if (upgradingToRef.current === undefined) return
       if (isSeek) {
-        if (next.buffered.length > 0 && next.buffered.end(0) >= 0.5) {
+        // "Has data at the position it is sitting on" — which is the question,
+        // and the one the old test got wrong. It asked whether half a second
+        // had buffered from the start of the stream, but a seek leaves the
+        // element somewhere that need not be near the start, and the browser
+        // buffers around where it is rather than from zero. On a stream it
+        // could not answer for, the condition simply never became true.
+        if (next.readyState >= 2) {
           commit()
           return
         }
@@ -1083,13 +1299,30 @@ export function Player({
       const backAbsolute = (pendingTierRef.current?.offset ?? 0) + next.currentTime
       const frontAbsolute = current.currentTime + offsetRef.current
       if (frontAbsolute >= backAbsolute - 0.05) {
-        // Overshooting the mark by more than a moment means the replacement
-        // took longer to prepare than it was given, and handing over would
-        // rewind the viewer by the difference. Better to keep what is playing:
-        // a picture that stays low is a disappointment, one that jumps
-        // backwards is a fault.
+        // Overshooting the mark means the replacement took longer to prepare
+        // than it was given. Handing it over as it stands would rewind the
+        // viewer by the difference, and a picture that jumps backwards is a
+        // fault where a picture that stays low is only a disappointment.
+        //
+        // But the replacement can be caught up rather than thrown away. It was
+        // opened before the playhead and has been filling ever since, so the
+        // moment the viewer has reached is already inside it — and a move
+        // within buffered data is one even an unindexed stream allows. This is
+        // the same step a seek makes; it is only asked for a different reason.
+        //
+        // Abandoning was the old answer, and on long videos it was the wrong
+        // one: preparation there takes about as long as the lead allows, so the
+        // climb missed by a second or two, was thrown away, tried again from a
+        // later mark, and missed again — a loop visible in the ingest log as a
+        // mux opened and closed every dozen seconds. Three misses and auto gave
+        // up on the tier for the rest of the video, which is why pinning 1080p
+        // by hand was the only thing that worked.
         if (frontAbsolute > backAbsolute + HANDOVER_OVERSHOOT_TOLERANCE) {
-          abandonUpgrade()
+          if (!catchUpToViewer()) {
+            abandonUpgrade()
+            return
+          }
+          commit()
           return
         }
         commit()
@@ -1108,15 +1341,21 @@ export function Player({
   //
   // Without this the rail waits indefinitely on a connection that cannot
   // sustain the mux, and the viewer sits on the low rendition with no
-  // indication that anything is being attempted or has failed. Only auto gives
-  // up; a viewer who pinned 1080p asked for it.
+  // indication that anything is being attempted or has failed.
+  //
+  // This used to exempt a pinned 1080p, on the grounds that a viewer who asked
+  // for it should keep it. That reasoning left the one branch where waiting was
+  // unbounded — and it is the branch a seek lands in, so the seek that could not
+  // be served waited for ever with "Seeking…" on screen and nothing behind it.
+  // Pinning still means the climb is attempted again; it cannot mean the player
+  // is allowed to stop answering.
   useEffect(() => {
-    if (!backSrc || quality === 'high') return
+    if (!backSrc) return
     const timer = window.setTimeout(() => {
       if (pendingTierRef.current?.tier.name === 'remux') abandonUpgrade()
     }, REMUX_PATIENCE_MS)
     return () => window.clearTimeout(timer)
-  }, [backSrc, quality, abandonUpgrade])
+  }, [backSrc, abandonUpgrade])
 
   // Kept in a ref because the progress reporter runs on a timer, from an effect
   // that must not be torn down and rebuilt every time the duration is refined.
@@ -1162,15 +1401,22 @@ export function Player({
   const coarse = useCoarsePointer()
 
   // Polled in one place so the subtitle option and the line under it cannot
-  // disagree about what the translator is doing. Only while narration is on:
-  // this re-renders the player, and a video nobody is narrating should not pay
-  // for it twice a second.
+  // disagree about what the translator is doing. Only while a translation is
+  // wanted: this re-renders the player, and a video nobody is translating
+  // should not pay for it twice a second.
+  //
+  // "Wanted" had to grow to include the track being selected. The pass ran
+  // perfectly well without narration — but nothing read its progress, so the
+  // state kept the value it was given at mount, and `idle` renders as "Not
+  // started". A translation quietly working while the screen insists it has not
+  // begun is worse than one that has not begun, because the viewer's next move
+  // is to press something else.
   const [progress, setProgress] = useState(narrationProgress)
   useEffect(() => {
-    if (!narrationOn) return
+    if (!narrationOn && captions !== MACHINE_LANGUAGE) return
     const id = window.setInterval(() => setProgress(narrationProgress()), 500)
     return () => window.clearInterval(id)
-  }, [narrationOn])
+  }, [narrationOn, captions])
 
   // Translations are filed under the model that produced them, so the player
   // has to know which model is configured before it reads or writes the cache.
@@ -1183,14 +1429,6 @@ export function Player({
   // and the subtitle list was fetched long before that.
   useTranslatedTrack(videoId, progress.vttVersion, progress.phase === 'done')
 
-
-  const toggleAutoTranslate = useCallback(() => {
-    setNarrationPrefs((p) => {
-      const next = { ...p, autoTranslate: !p.autoTranslate }
-      saveNarrationPrefs(next)
-      return next
-    })
-  }, [])
 
   const toggleSpeak = useCallback(() => {
     // Outside the updater, not inside it: React may run an updater more than
@@ -1210,28 +1448,18 @@ export function Player({
   /**
    * Translation, last and behind a rule.
    *
-   * Its own group because it is the only setting here that describes work being
-   * done rather than a preference: with the switch on there is a pass running,
-   * a count and an estimate; with it off there is nothing to report and nothing
-   * is shown.
+   * A report, not a setting: there is nothing to decide here. A translation is
+   * asked for by choosing the track or by asking for the narration, and this
+   * says how far that has got. It appears only while it is happening, because a
+   * progress line for work nobody started is a status about nothing.
    */
-  const translateGroup = canTranslate ? (
-    <>
-      <li className="my-1 border-t border-line" aria-hidden />
-      <SettingRow
-        label="Auto translate"
-        on={narrationPrefs.autoTranslate}
-        onToggle={toggleAutoTranslate}
-      />
-      {/* Only while there is something to report. With the switch off nothing
-          runs, and with narration off nothing has been asked for yet — a
-          progress line in either case is a status for work that is not
-          happening. */}
-      {narrationPrefs.autoTranslate && narrationOn && (
+  const translateGroup =
+    canTranslate && (narrationOn || captions === MACHINE_LANGUAGE) ? (
+      <>
+        <li className="my-1 border-t border-line" aria-hidden />
         <NarrationStatus progress={progress} />
-      )}
-    </>
-  ) : undefined
+      </>
+    ) : undefined
 
   const autoplayRow = onPlayNext ? (
     <SettingRow
@@ -1264,6 +1492,32 @@ export function Player({
                   : 'VI',
             hint: t.label + (t.generated ? ' (auto-generated)' : ''),
           })),
+        // Offered before it exists, when it is the viewer who can bring it into
+        // existence.
+        //
+        // The track is attached by the gateway only once a file has been
+        // written, so listing what is on disk alone made this unreachable:
+        // choosing it is what starts the translation, and it could not be
+        // chosen until the translation had already happened. The way in was
+        // switching on read-aloud, which is a different feature answering a
+        // different question.
+        //
+        // Only where it can actually be produced: English to translate from,
+        // and no Vietnamese track written by a person — the same two conditions
+        // the pass itself checks, asked here so the menu never offers work that
+        // would be refused.
+        ...(!subtitles.some((t) => t.language === MACHINE_LANGUAGE) && hasEn && !hasVi
+          ? [
+              {
+                value: MACHINE_LANGUAGE,
+                label: 'VI (auto)',
+                // The track's own name is content — it is read by the viewer in
+                // the language it is written in, as the gateway's
+                // machineVTTLabel already is. The sentence after it is UI copy.
+                hint: 'Tiếng Việt (dịch máy) — translated as you watch',
+              },
+            ]
+          : []),
       ]}
     />
   )
@@ -1278,8 +1532,14 @@ export function Player({
    */
   const narrationRows = narrationAvailable ? (
     <>
+      {/* Named for the one thing it does. "Read aloud" said nothing about which
+          language came out, and this reads the Vietnamese translation and
+          nothing else — so a viewer could reasonably have expected it to speak
+          the English they were already watching. Switching it on also brings
+          the translation into being, which is a great deal to hide behind two
+          words that do not mention Vietnamese at all. */}
       <SettingRow
-        label="Read aloud"
+        label="Vietnamese narration"
         on={narrationSpeaks}
         onToggle={toggleSpeak}
       />
@@ -1298,11 +1558,22 @@ export function Player({
   /**
    * Moves to an absolute position, however the current tier allows it.
    *
-   * A seekable tier is a plain assignment. The muxed stream has no index, so
-   * the only way to move within it is to open a new one starting there — the
-   * picture is replaced rather than repositioned, which costs a couple of
-   * seconds and is why this is never called while a scrub handle is being
-   * dragged.
+   * A seekable tier is a plain assignment. The muxed stream has no index, so it
+   * cannot be repositioned — the picture has to be replaced. Which replacement
+   * is the whole of the decision:
+   *
+   * **Through the low rendition, whenever there is one.** It is progressive and
+   * seeks natively, so the viewer is at the new position in milliseconds, and
+   * the climb back to full resolution then runs through the ordinary upgrade
+   * path — the one that demonstrably works.
+   *
+   * Reopening the muxed stream directly is the fallback, and it is the fallback
+   * because it was the bug: preparing a replacement at a wholly different mark
+   * is not an upgrade, so the handover cannot wait for the playhead to catch up
+   * and waits for the new stream to buffer instead. That wait had no end to it
+   * on a pinned 1080p, which is what "Seeking…" and then nothing was. The two
+   * ways of asking for the same picture had drifted apart; a seek now takes the
+   * road that stayed working.
    */
   const seekTo = useCallback(
     (absolute: number) => {
@@ -1322,18 +1593,45 @@ export function Player({
 
       const currentTier = tierRef.current
       if (!currentTier) return
-      // Reopening is a source change, so it goes through the same hidden-element
-      // handover as everything else: the picture only leaves once the
-      // replacement can actually play.
+
+      // The climb that follows belongs to this seek: shorter lead, and its
+      // failure is not held against the tier.
+      postSeekRef.current = true
+
+      const instant = tiersRef.current.find((t) => t.name === 'instant')
+      if (instant) {
+        if (upgradingToRef.current === instant.url) return
+        upgradingToRef.current = instant.url
+        // startAt rather than offset: the low rendition begins at zero like any
+        // ordinary file, and it is the element that has to be moved to the mark.
+        pendingTierRef.current = { tier: instant, offset: 0, url: instant.url, startAt: target }
+        setSeeking(true)
+        if (frontIsARef.current) setSrcB(instant.url)
+        else setSrcA(instant.url)
+        return
+      }
+
+      // No progressive rendition published for this video: there is nothing to
+      // detour through, so the stream is reopened at the mark as before.
       const url = sourceURL(currentTier, target)
       if (upgradingToRef.current === url) return
       upgradingToRef.current = url
-      pendingTierRef.current = { tier: currentTier, offset: target }
+      const claim = { tier: currentTier, offset: target, url, startAt: target }
+      pendingTierRef.current = claim
       setSeeking(true)
       if (frontIsARef.current) setSrcB(url)
       else setSrcA(url)
+
+      // Asked separately, and after the stream has been requested rather than
+      // before it: this path has no faster tier to fall back on, so the picture
+      // must not wait on a second round trip. The answer only refines where the
+      // player believes the stream begins.
+      void resolveRemuxStart(videoId, target).then((actualStart) => {
+        if (actualStart <= 0 || pendingTierRef.current !== claim) return
+        pendingTierRef.current = { tier: currentTier, offset: actualStart, url, startAt: target }
+      })
     },
-    [front],
+    [front, videoId],
   )
 
   const seekBy = useCallback(
@@ -1862,6 +2160,39 @@ export function Player({
                 onLoadedMetadata={(e) => {
                   const element = e.currentTarget
                   if (!isFront) {
+                    // A replacement being prepared for a seek is not parked
+                    // ahead of the playhead — it is going somewhere else
+                    // entirely, and the playhead will never arrive there. It is
+                    // placed at the mark and handed over as soon as it can show
+                    // anything.
+                    // Only the claim that is about *this* source may position
+                    // it. One written for a different one would place the
+                    // element by arithmetic belonging to another stream.
+                    const pending = pendingTierRef.current
+                    const mine =
+                      pending && element.src === new URL(pending.url, window.location.href).href
+                        ? pending
+                        : undefined
+
+                    if (mine?.startAt !== undefined) {
+                      const within = mine.startAt - mine.offset
+                      // A muxed stream reopened at the mark begins at the
+                      // keyframe before it, so there is a second or two to skip
+                      // over — a move inside what has already arrived, which
+                      // even an unindexed stream allows. A browser that refuses
+                      // leaves the viewer those seconds earlier, and the bar
+                      // still says where they truly are.
+                      if (within > 0.05) {
+                        try {
+                          element.currentTime = within
+                        } catch {
+                          // Nothing to do about it, and nothing broken by it.
+                        }
+                      }
+                      handoverToBack()
+                      return
+                    }
+
                     // Park the replacement a moment ahead of the playhead and
                     // wait there. Seeking is what makes the exchange seamless,
                     // so a source that cannot seek hands over immediately.
@@ -1869,7 +2200,7 @@ export function Player({
                     // The mark is absolute; the element being prepared measures
                     // from its own offset, so the two frames have to be lined up
                     // before either can be compared with the other.
-                    const pendingOffset = pendingTierRef.current?.offset ?? 0
+                    const pendingOffset = mine?.offset ?? 0
                     const absoluteNow = current
                       ? current.currentTime + offsetRef.current
                       : positionRef.current
@@ -1882,7 +2213,7 @@ export function Player({
                     // Trying to position it would either do nothing or, with a
                     // mark computed in the wrong frame, hand over immediately
                     // and jump the viewer forward.
-                    if (pendingTierRef.current && !pendingTierRef.current.tier.seekable) {
+                    if (mine && !mine.tier.seekable) {
                       handoverToBack()
                     } else if (mark <= 0) {
                       // Nothing has played yet, so both elements already agree
@@ -2062,11 +2393,14 @@ export function Player({
           position={position}
           duration={duration}
           buffered={buffered}
-          // Seeking works from the first second now: the opening source is a
-          // progressive file the browser can range-request. Only the muxed
-          // stream — the fallback for videos publishing no progressive format
-          // at all — has no index and cannot be seeked.
-          disabled={!playable || !tier?.seekable}
+          // Seeking works on every tier. The muxed stream has no index of its
+          // own, but it is not moved within: the seek goes down to the
+          // progressive rendition, across to the mark, and back up.
+          //
+          // The bar used to be disabled here, which made the seek code beneath
+          // it reachable only by the arrow keys — so the path that was broken
+          // was also the path nobody could see was broken.
+          disabled={!playable}
           // While dragging, only the number moves; the stream is asked for once
           // the handle is released. On a tier that cannot be seeked each of
           // these would otherwise kill an ffmpeg and start another, dozens of
@@ -2475,7 +2809,11 @@ function NarrationStatus({
   const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
 
   return (
-    <li className="px-4 pb-3" aria-live="polite">
+    // The same `px-4 py-3` every other row in this panel uses. It had only
+    // bottom padding, so it sat flush against the divider above it while every
+    // switch beside it stood 12px clear — the panel read as though this line
+    // belonged to the group before it rather than being its own thing.
+    <li className="px-4 py-3" aria-live="polite">
       <div className="flex items-baseline justify-between gap-2 pb-1 text-xs">
         <span className={p.phase === 'no-subtitles' ? 'text-brand' : 'text-text-2'}>
           {label[p.phase]}

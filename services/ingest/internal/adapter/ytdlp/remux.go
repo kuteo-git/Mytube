@@ -69,22 +69,58 @@ func (d *Downloader) ResolveRemuxURLs(ctx context.Context, videoURL string, heig
 	return urls, nil
 }
 
-// OpenRemux starts ffmpeg and returns its output. The caller must Close the
-// stream, which is what kills ffmpeg when a viewer navigates away — without
-// that, every abandoned video would leave a process pulling bytes forever.
-// startSeconds is where the stream should begin. Seeking works by opening a
-// fresh mux from a new offset, because a piped fragmented MP4 carries no index
-// for a player to seek within — see CLAUDE.md §8b. `-ss` before `-i` makes
-// ffmpeg do it as an HTTP range request rather than by decoding and discarding,
-// which is what keeps it about as cheap as opening at zero.
-func (d *Downloader) OpenRemux(ctx context.Context, urls []string, startSeconds float64) (io.ReadCloser, error) {
+// ProbeKeyframe reports the video timestamp an input seek to `at` will really
+// land on: the first packet at or before that mark, which for a video stream is
+// always a keyframe. Zero means the question could not be answered.
+//
+// It exists because the two inputs are seeked separately and do not land in the
+// same place — see OpenRemux. Measured at 1.29s against a resolved YouTube URL,
+// which is why it is asked only when the stream is being opened part way in.
+func (d *Downloader) ProbeKeyframe(ctx context.Context, videoURL string, at float64) (float64, error) {
+	// `%+#1` reads one packet from the interval and stops, so this fetches a few
+	// hundred kilobytes rather than walking the file.
+	interval := strconv.FormatFloat(at, 'f', 3, 64) + "%+#1"
+	cmd := exec.CommandContext(ctx, "ffprobe",
+		"-v", "error",
+		"-read_intervals", interval,
+		"-select_streams", "v:0",
+		"-show_entries", "packet=pts_time",
+		"-of", "csv=p=0",
+		videoURL)
+	cmd.Stdin = nil
+
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("probe keyframe %.3f: %w", at, err)
+	}
+	line := strings.TrimSpace(string(out))
+	line = strings.TrimSuffix(strings.TrimSpace(strings.Split(line, "\n")[0]), ",")
+	pts, err := strconv.ParseFloat(line, 64)
+	if err != nil {
+		return 0, fmt.Errorf("probe keyframe %.3f: unreadable pts %q", at, line)
+	}
+	return pts, nil
+}
+
+// remuxArgs builds the ffmpeg command line. Split out from OpenRemux so the flag
+// order — which is the whole of the correctness here — can be tested without
+// running ffmpeg.
+//
+// startSeconds is where the video should begin and audioStartSeconds where the
+// audio should. They differ on purpose: see OpenRemux.
+func remuxArgs(urls []string, startSeconds, audioStartSeconds float64) []string {
 	args := []string{"-hide_banner", "-loglevel", "error"}
-	for _, u := range urls {
-		if startSeconds > 0 {
+	for i, u := range urls {
+		// The first input is the video, the second (when there is one) the audio.
+		seekTo := startSeconds
+		if i > 0 && audioStartSeconds > 0 {
+			seekTo = audioStartSeconds
+		}
+		if seekTo > 0 {
 			// Per input, and before -i. After -i it becomes an output seek:
 			// ffmpeg would read and throw away everything up to the mark, which
 			// on an hour-long video is minutes of work for a viewer waiting.
-			args = append(args, "-ss", strconv.FormatFloat(startSeconds, 'f', 3, 64))
+			args = append(args, "-ss", strconv.FormatFloat(seekTo, 'f', 3, 64))
 		}
 		// Reconnect flags matter more here than for a file: these are signed
 		// CDN URLs being read for the length of a whole video.
@@ -96,11 +132,11 @@ func (d *Downloader) OpenRemux(ctx context.Context, urls []string, startSeconds 
 	}
 	args = append(args,
 		"-c", "copy",
-		// Timestamps come from two separately seeked inputs, so they are
-		// normalised rather than trusted. make_zero rebases them together, and
-		// zeroing the muxer's own delay and preload removes the offset it would
-		// otherwise insert between the streams — the usual cause of audio
-		// running ahead of picture in a piped MP4.
+		// The fragmented muxer rebases every track to zero by its own first
+		// packet, whatever these say — measured, see OpenRemux. So they cannot
+		// align anything; they only keep the muxer from inserting a delay of its
+		// own between the two streams. Alignment is done by seeking the inputs
+		// to the same content time, above.
 		"-avoid_negative_ts", "make_zero",
 		"-muxdelay", "0",
 		"-muxpreload", "0",
@@ -117,8 +153,40 @@ func (d *Downloader) OpenRemux(ctx context.Context, urls []string, startSeconds 
 		// arriving together instead of in uneven blocks.
 		"-frag_duration", "1000000",
 		"-f", "mp4", "pipe:1")
+	return args
+}
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+// OpenRemux starts ffmpeg and returns its output. The caller must Close the
+// stream, which is what kills ffmpeg when a viewer navigates away — without
+// that, every abandoned video would leave a process pulling bytes forever.
+//
+// startSeconds is where the stream should begin. Seeking works by opening a
+// fresh mux from a new offset, because a piped fragmented MP4 carries no index
+// for a player to seek within — see CLAUDE.md §8b. `-ss` before `-i` makes
+// ffmpeg do it as an HTTP range request rather than by decoding and discarding,
+// which is what keeps it about as cheap as opening at zero.
+//
+// audioStartSeconds is where the *audio* should begin, and it is not the same
+// number. An input seek lands on the nearest keyframe at or before the mark, so
+// asking both inputs for the same second puts the video some way earlier than
+// the audio — measured at 2.008s on a real video seeked to 600s. The muxer then
+// pulls each track down to zero independently, which erases the difference
+// instead of preserving it, and the result is sound running ahead of picture by
+// exactly that gap.
+//
+// No combination of timestamp flags fixes this: -copyts, -start_at_zero,
+// -avoid_negative_ts disabled and aresample=async were all measured and all
+// collapse to the same output, because fragmented MP4 rebases per track. The
+// same inputs written to an ordinary MP4 keep the gap correctly, which is how
+// the muxer was identified as the cause. The only fix is to hand the two inputs
+// the same content time, which is what ProbeKeyframe is for.
+//
+// Passing 0 means "do not know" and falls back to seeking both inputs alike:
+// sound out of step is worse than a video that will not open, but only just.
+func (d *Downloader) OpenRemux(
+	ctx context.Context, urls []string, startSeconds, audioStartSeconds float64,
+) (io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, "ffmpeg", remuxArgs(urls, startSeconds, audioStartSeconds)...)
 	// ffmpeg reads stdin for interactive commands and would consume the
 	// caller's if left attached — the same trap noted in CLAUDE.md §8b.
 	cmd.Stdin = nil

@@ -581,7 +581,7 @@ describe('a bar sized for a thumb', () => {
     // this fixture can show. Reading aloud is a switch again — what is written
     // on the picture is the segmented control beside it.
     expect(
-      screen.getByRole('switch', { name: 'Read aloud' }),
+      screen.getByRole('switch', { name: 'Vietnamese narration' }),
     ).toBeInTheDocument()
   })
 
@@ -617,7 +617,7 @@ describe('a bar sized for a thumb', () => {
       screen.getByRole('radiogroup', { name: 'Subtitles' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('switch', { name: 'Read aloud' }),
+      screen.getByRole('switch', { name: 'Vietnamese narration' }),
     ).toBeInTheDocument()
   })
 
@@ -647,7 +647,7 @@ describe('a bar sized for a thumb', () => {
     expect(screen.queryByText(/Translating|Loading subtitles|Not started/)).toBeNull()
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('switch', { name: 'Read aloud' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Vietnamese narration' }))
     })
     expect(
       screen.getByText(/Translating|Loading subtitles|Not started|Translation failed/),
@@ -669,13 +669,17 @@ describe('a bar sized for a thumb', () => {
     expect(groups).toEqual(['Resolution', 'Subtitles'])
 
     const switches = screen.getAllByRole('switch').map((b) => b.textContent)
-    expect(switches[0]).toContain('Read aloud')
-    expect(switches[switches.length - 1]).toContain('Auto translate')
+    expect(switches[0]).toContain('Vietnamese narration')
+    // And no translation switch at the end of them. Translation is asked for by
+    // choosing the track or by asking for the narration; a third control only
+    // qualified those two, and being on by default it read as broken whichever
+    // way it was pressed.
+    expect(switches.some((s) => s?.includes('Auto translate'))).toBe(false)
   })
 
-  it('hides the translation progress when auto translate is off', async () => {
-    // Off means the pass is not running, so a progress line would be a status
-    // for work that is not happening.
+  it('shows the translation progress only while a translation is wanted', async () => {
+    // The line reports work, so it belongs on screen exactly while there is
+    // work: nothing has been asked for until the narration is.
     vi.stubGlobal(
       'AudioContext',
       class {
@@ -694,23 +698,25 @@ describe('a bar sized for a thumb', () => {
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Settings'))
     })
+    expect(
+      screen.queryByText(/Translating|Loading subtitles|Not started/),
+    ).toBeNull()
+
     await act(async () => {
-      fireEvent.click(screen.getByRole('switch', { name: 'Read aloud' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Vietnamese narration' }))
     })
     expect(
       screen.getByText(/Translating|Loading subtitles|Not started/),
     ).toBeInTheDocument()
 
+    // And it goes again with it, rather than reporting on a pass that has been
+    // cancelled.
     await act(async () => {
-      fireEvent.click(screen.getByRole('switch', { name: 'Auto translate' }))
+      fireEvent.click(screen.getByRole('switch', { name: 'Vietnamese narration' }))
     })
     expect(
       screen.queryByText(/Translating|Loading subtitles|Not started/),
     ).toBeNull()
-    // The switch that turns it back on has to survive turning it off.
-    expect(
-      screen.getByRole('switch', { name: 'Auto translate' }),
-    ).toBeInTheDocument()
   })
 
   it('holds the controls open while the settings are open', async () => {

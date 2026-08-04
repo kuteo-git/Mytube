@@ -37,6 +37,24 @@ export function useResumeLastWatched(isWatch: boolean): boolean {
   // close button worked perfectly and was undone within the same tick.
   const offered = useRef(false)
 
+  // A player that arrived by any other route counts as the offer having been
+  // taken up.
+  //
+  // The flag above only recorded this hook's own offer, and that was too narrow
+  // by exactly one case: reload the watch page and the entry describing the
+  // video on screen is already in storage, so the offer is armed while the watch
+  // page — not this hook — activates the player. Leaving for the home page turns
+  // that player into the corner window, and closing it produces precisely the
+  // state this hook waits for. The video came straight back, so the close button
+  // looked broken, and to a viewer who pressed it twice it looked like there had
+  // been two players stacked in the corner all along.
+  //
+  // What the offer is for is a browser that is in the middle of something and
+  // showing nothing. Once anything has been playing, it is not that.
+  useEffect(() => {
+    if (state) offered.current = true
+  }, [state])
+
   const wanted = entry && !isWatch && !state && !offered.current ? entry.videoId : undefined
   const { data: video } = useVideo(wanted)
 
