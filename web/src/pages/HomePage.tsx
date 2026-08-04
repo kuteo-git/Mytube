@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   useDiscover,
@@ -33,7 +33,20 @@ export function HomePage() {
   // Keeping the scroll position across the change put the viewer somewhere in
   // the middle of a list they had not seen the top of — and, having scrolled
   // down through the previous topic, often past the end of the new one.
+  //
+  // Only on a *change*, which is what the sentence above says and what this
+  // effect did not do: it fired on mount as well, and mounting is exactly what
+  // happens when you come back to Home from another tab. So returning to Home
+  // was thrown to the top a frame after being restored to where you left it,
+  // and the scroll memory looked broken on the one page people scroll most.
+  //
+  // Chips are local state rather than navigation, so useScrollRestoration
+  // cannot see this and the effect has to stay.
+  const lastTopicRef = useRef<string | null>(null)
   useEffect(() => {
+    const previous = lastTopicRef.current
+    lastTopicRef.current = active
+    if (previous === null || previous === active) return
     window.scrollTo({ top: 0 })
   }, [active])
 

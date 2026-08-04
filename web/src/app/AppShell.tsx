@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
 import { TopBar } from '@/features/navigation/ui/TopBar'
@@ -26,6 +27,11 @@ function AppShellInner() {
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const { isMobile, mode, miniReserve, safeBottom } = usePlayer()
+
+  // Forward starts at the top, back returns you where you were — the manners a
+  // phone taught everyone. A single-page router never reloads the document, so
+  // without this the offset just stays where the previous page left it.
+  useScrollRestoration()
 
   // Put back whatever this browser was in the middle of, in the corner, paused.
   const resuming = useResumeLastWatched(isWatch)

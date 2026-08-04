@@ -84,6 +84,9 @@ const video = {
 /** Flipped by the handover test to make the download appear to finish. */
 let localReady = false
 
+/** Chips the home page offers. Empty except where a test needs one to click. */
+let topicList: Array<{ name: string; videoCount: number }> = []
+
 vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
   httpCatalogRepository: {
     getVideo: vi.fn(async () => video),
@@ -103,7 +106,7 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     listUpNext: vi.fn(async () => []),
     listPopular: vi.fn(async () => []),
     listComments: vi.fn(async () => ({ comments: [], nextPageToken: '' })),
-    listTopics: vi.fn(async () => []),
+    listTopics: vi.fn(async () => topicList),
     listSubscriptions: vi.fn(async () => []),
     listJobs: vi.fn(async () => []),
     listFeed: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
@@ -987,25 +990,55 @@ describe('picking up where the tab left off', () => {
 })
 
 describe('changing topic on the home page', () => {
-  it('starts the new grid at its own beginning', async () => {
-    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  async function renderChips() {
+    topicList = [{ name: 'Music', videoCount: 3 }]
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
     render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/topic/Music']}>
+        <MemoryRouter initialEntries={['/']}>
           <Routes>
             <Route element={<AppShell />}>
-              <Route path="/topic/:topicName" element={<HomePage />} />
+              <Route path="/" element={<HomePage />} />
             </Route>
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     )
     await settle()
+  }
+
+  afterEach(() => {
+    topicList = []
+  })
+
+  it('starts the new grid at its own beginning', async () => {
+    // Rewritten: this used to render a topic route and assert that mounting
+    // scrolled to the top, which is not what its name claims and is not what
+    // the feature is for. A chip is local state rather than navigation, so it
+    // has to be pressed for real.
+    await renderChips()
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: 'Music' }))
+    })
 
     // Keeping the position across the change left the viewer partway down a
     // list they had not seen the top of, and often past the end of it.
     expect(scrollTo).toHaveBeenCalledWith({ top: 0 })
+    scrollTo.mockRestore()
+  })
+
+  it('does not reset the scroll merely by being opened', async () => {
+    // The bug this pair exists to separate. Mounting is what happens when you
+    // come back to Home from another tab, and useScrollRestoration has just put
+    // the viewer back where they were — so a scroll-to-top here undoes it a
+    // frame later, and the scroll memory looks broken on the page people scroll
+    // most.
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    await renderChips()
+
+    expect(scrollTo).not.toHaveBeenCalledWith({ top: 0 })
     scrollTo.mockRestore()
   })
 })
