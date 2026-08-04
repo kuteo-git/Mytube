@@ -36,8 +36,11 @@ function slider(name: RegExp): HTMLInputElement {
 }
 
 beforeEach(() => {
-  getFeedMix.mockClear()
-  saveFeedMix.mockClear()
+  // Implementations, not just call counts: a test that makes one of these throw
+  // would otherwise hand the failure to whichever test ran next.
+  getFeedMix.mockReset()
+  getFeedMix.mockImplementation(async () => ({ ...defaults, defaults }))
+  saveFeedMix.mockReset()
   saveFeedMix.mockImplementation(async (mix: unknown) => mix)
 })
 
@@ -115,6 +118,20 @@ describe('FeedMixSettings', () => {
     expect(slider(/Channels you follow/).value).toBe('25')
     expect(slider(/More of what you watch/).value).toBe('60')
     expect(slider(/Something new/).value).toBe('15')
+  })
+
+  it('says the read failed instead of loading for ever', async () => {
+    // What this looked like in the wild: the gateway was up but running a build
+    // from before the endpoint existed, so the request 404'd and the section
+    // sat on "Loading…" with nothing to press.
+    getFeedMix.mockImplementation(async () => {
+      throw new Error('404 page not found')
+    })
+    renderSection()
+
+    await waitFor(() => expect(screen.getByText(/Could not read the current mix/)).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(screen.queryByText('Loading…')).toBeNull()
   })
 
   it('explains the share it does not divide', async () => {

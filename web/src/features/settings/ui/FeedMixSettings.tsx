@@ -27,7 +27,7 @@ import { SliderRow } from '@/features/settings/ui/SliderRow'
  * something to do sixty times on the way to a number.
  */
 export function FeedMixSettings() {
-  const { data: stored } = useFeedMix()
+  const { data: stored, isError, isPending, refetch } = useFeedMix()
   const save = useSaveFeedMix()
   const [mix, setMix] = useState<FeedMix | null>(null)
 
@@ -44,7 +44,31 @@ export function FeedMixSettings() {
     }
   }, [stored, mix])
 
-  if (!stored || !mix) {
+  // A request that failed is not a request still running.
+  //
+  // Both used to render as "Loading…", so a gateway that was up but did not
+  // know this endpoint — an older binary still running, which is exactly what
+  // happened — left the section loading for ever with nothing to press and
+  // nothing to read.
+  if (isError) {
+    return (
+      <SettingsSection
+        icon={<LayoutGrid size={18} />}
+        title="Home feed"
+        description="Could not read the current mix. The gateway may be running an older build that does not have this setting yet."
+      >
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="h-11 w-fit rounded-lg bg-surface-hover px-4 text-sm font-medium transition-opacity duration-150 ease-out hover:opacity-90"
+        >
+          Try again
+        </button>
+      </SettingsSection>
+    )
+  }
+
+  if (isPending || !stored || !mix) {
     return (
       <SettingsSection
         icon={<LayoutGrid size={18} />}
