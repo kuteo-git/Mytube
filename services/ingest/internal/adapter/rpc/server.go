@@ -201,7 +201,8 @@ func (s *Server) GetJob(ctx context.Context, req *connect.Request[ingestv1.GetJo
 }
 
 func (s *Server) ListJobs(ctx context.Context, req *connect.Request[ingestv1.ListJobsRequest]) (*connect.Response[ingestv1.ListJobsResponse], error) {
-	jobs, err := s.ingest.ListJobs(ctx, req.Msg.GetActiveOnly(), req.Msg.GetLimit())
+	jobs, err := s.ingest.ListJobs(ctx, req.Msg.GetActiveOnly(),
+		req.Msg.GetHideDismissed(), req.Msg.GetLimit())
 	if err != nil {
 		return nil, toConnectErr(err)
 	}
@@ -217,6 +218,33 @@ func (s *Server) CancelJob(ctx context.Context, req *connect.Request[ingestv1.Ca
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&ingestv1.CancelJobResponse{}), nil
+}
+
+func (s *Server) DismissJob(ctx context.Context, req *connect.Request[ingestv1.DismissJobRequest]) (*connect.Response[ingestv1.DismissJobResponse], error) {
+	if err := s.ingest.DismissJob(ctx, req.Msg.GetJobId()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.DismissJobResponse{}), nil
+}
+
+func (s *Server) RetryJob(ctx context.Context, req *connect.Request[ingestv1.RetryJobRequest]) (*connect.Response[ingestv1.RetryJobResponse], error) {
+	job, err := s.ingest.RetryJob(ctx, req.Msg.GetJobId(), req.Msg.GetRequestedBy())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.RetryJobResponse{Job: jobToProto(job)}), nil
+}
+
+func (s *Server) ListScans(ctx context.Context, req *connect.Request[ingestv1.ListScansRequest]) (*connect.Response[ingestv1.ListScansResponse], error) {
+	scans, total, err := s.ingest.ListScans(ctx, req.Msg.GetLimit(), req.Msg.GetOffset())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*ingestv1.ScanStatus, 0, len(scans))
+	for _, r := range scans {
+		out = append(out, scanToProto(r))
+	}
+	return connect.NewResponse(&ingestv1.ListScansResponse{Scans: out, Total: total}), nil
 }
 
 func (s *Server) ListChannelUploads(ctx context.Context, req *connect.Request[ingestv1.ListChannelUploadsRequest]) (*connect.Response[ingestv1.ListChannelUploadsResponse], error) {

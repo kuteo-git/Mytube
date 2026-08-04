@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ingest/v1/ingest.proto.
  */
 export const file_ingest_v1_ingest: GenFile = /*@__PURE__*/
-  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEglpbmdlc3QudjEiQAoZTGlzdENoYW5uZWxVcGxvYWRzUmVxdWVzdBIPCgdjaGFubmVsGAEgASgJEhIKCnBhZ2VfdG9rZW4YAiABKAkiKgoKU29ydE9wdGlvbhINCgVsYWJlbBgBIAEoCRINCgV0b2tlbhgCIAEoCSKgAQoaTGlzdENoYW5uZWxVcGxvYWRzUmVzcG9uc2USKAoGdmlkZW9zGAEgAygLMhguaW5nZXN0LnYxLkV4dGVybmFsVmlkZW8SKwoMc29ydF9vcHRpb25zGAIgAygLMhUuaW5nZXN0LnYxLlNvcnRPcHRpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAMgASgJEhIKCmF2YXRhcl91cmwYBCABKAkiPQoURXhwYW5kTGlicmFyeVJlcXVlc3QSDQoFdG9waWMYASABKAkSFgoOc2VlZF92aWRlb19pZHMYAiADKAkiLQoVRXhwYW5kTGlicmFyeVJlc3BvbnNlEhQKDHZpZGVvc19hZGRlZBgBIAEoBSKqAgoNRXh0ZXJuYWxWaWRlbxIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRISCgpjaGFubmVsX2lkGAMgASgJEhQKDGNoYW5uZWxfbmFtZRgEIAEoCRIYChBkdXJhdGlvbl9zZWNvbmRzGAUgASgFEhIKCnZpZXdfY291bnQYBiABKAMSFQoNdGh1bWJuYWlsX3VybBgHIAEoCRISCgpzb3VyY2VfdXJsGAggASgJEjAKDHB1Ymxpc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGVzY3JpcHRpb24YCiABKAkSDgoGdG9waWNzGAsgAygJEhAKCGhhc2h0YWdzGAwgAygJEhIKCmluX2xpYnJhcnkYDSABKAgiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoBSI6Cg5TZWFyY2hSZXNwb25zZRIoCgZ2aWRlb3MYASADKAsyGC5pbmdlc3QudjEuRXh0ZXJuYWxWaWRlbyIhChJFbnN1cmVWaWRlb1JlcXVlc3QSCwoDdXJsGAEgASgJIicKE0Vuc3VyZVZpZGVvUmVzcG9uc2USEAoIdmlkZW9faWQYASABKAkiJgoVQmFja2ZpbGxUb3BpY3NSZXF1ZXN0Eg0KBWxpbWl0GAEgASgFIhoKGEdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdCK1AQoOQmFja2ZpbGxTdGF0dXMSEAoIZXhhbWluZWQYASABKAUSDwoHdXBkYXRlZBgCIAEoBRIOCgZmYWlsZWQYAyABKAUSDwoHcnVubmluZxgEIAEoCBIuCgpzdGFydGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQwoWQmFja2ZpbGxUb3BpY3NSZXNwb25zZRIpCgZzdGF0dXMYASABKAsyGS5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiRgoZR2V0QmFja2ZpbGxTdGF0dXNSZXNwb25zZRIpCgZzdGF0dXMYASABKAsyGS5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiEAoOUmVmcmVzaFJlcXVlc3QiOAoPUmVmcmVzaFJlc3BvbnNlEiUKBnN0YXR1cxgBIAEoCzIVLmluZ2VzdC52MS5TY2FuU3RhdHVzIhYKFEdldFNjYW5TdGF0dXNSZXF1ZXN0Ij4KFUdldFNjYW5TdGF0dXNSZXNwb25zZRIlCgZzdGF0dXMYASABKAsyFS5pbmdlc3QudjEuU2NhblN0YXR1cyK9AQoKU2NhblN0YXR1cxIuCgpzdGFydGVkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9tcxgCIAEoAxIXCg9zb3VyY2VzX3NjYW5uZWQYAyABKAUSFgoOc291cmNlc19mYWlsZWQYBCABKAUSEwoLdmlkZW9zX3NlZW4YBSABKAUSFAoMdmlkZW9zX2FkZGVkGAYgASgFEg4KBmVycm9ycxgHIAMoCSIoChRSZXNvbHZlU3RyZWFtUmVxdWVzdBIQCgh2aWRlb19pZBgBIAEoCSJ3ChVSZXNvbHZlU3RyZWFtUmVzcG9uc2USCwoDdXJsGAEgASgJEg4KBmhlaWdodBgCIAEoBRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgltaW1lX3R5cGUYBCABKAkiTAoNU3VibWl0UmVxdWVzdBILCgN1cmwYASABKAkSFAoMcmVxdWVzdGVkX2J5GAIgASgJEhgKEHByZWZlcnJlZF9oZWlnaHQYAyABKAUiLQoOU3VibWl0UmVzcG9uc2USGwoDam9iGAEgASgLMg4uaW5nZXN0LnYxLkpvYiK1AgoDSm9iEgoKAmlkGAEgASgJEhIKCnNvdXJjZV91cmwYAiABKAkSEAoIdmlkZW9faWQYAyABKAkSDQoFdGl0bGUYBCABKAkSIgoFc3RhdGUYBSABKA4yEy5pbmdlc3QudjEuSm9iU3RhdGUSEAoIcHJvZ3Jlc3MYBiABKAISGAoQZG93bmxvYWRlZF9ieXRlcxgHIAEoAxITCgt0b3RhbF9ieXRlcxgIIAEoAxIVCg1lcnJvcl9tZXNzYWdlGAkgASgJEhAKCGF0dGVtcHRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIfCg1HZXRKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSItCg5HZXRKb2JSZXNwb25zZRIbCgNqb2IYASABKAsyDi5pbmdlc3QudjEuSm9iIjUKD0xpc3RKb2JzUmVxdWVzdBITCgthY3RpdmVfb25seRgBIAEoCBINCgVsaW1pdBgCIAEoBSIwChBMaXN0Sm9ic1Jlc3BvbnNlEhwKBGpvYnMYASADKAsyDi5pbmdlc3QudjEuSm9iIiIKEENhbmNlbEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJIhMKEUNhbmNlbEpvYlJlc3BvbnNlIi4KGkNhbmNlbFZpZGVvRG93bmxvYWRSZXF1ZXN0EhAKCHZpZGVvX2lkGAEgASgJIjAKG0NhbmNlbFZpZGVvRG93bmxvYWRSZXNwb25zZRIRCgljYW5jZWxsZWQYASABKAUqmgEKCEpvYlN0YXRlEhkKFUpPQl9TVEFURV9VTlNQRUNJRklFRBAAEhQKEEpPQl9TVEFURV9RVUVVRUQQARIVChFKT0JfU1RBVEVfUlVOTklORxACEhcKE0pPQl9TVEFURV9TVUNDRUVERUQQAxIUChBKT0JfU1RBVEVfRkFJTEVEEAQSFwoTSk9CX1NUQVRFX0NBTkNFTExFRBAFMuUICg1Jbmdlc3RTZXJ2aWNlEj0KBlNlYXJjaBIYLmluZ2VzdC52MS5TZWFyY2hSZXF1ZXN0GhkuaW5nZXN0LnYxLlNlYXJjaFJlc3BvbnNlEkwKC0Vuc3VyZVZpZGVvEh0uaW5nZXN0LnYxLkVuc3VyZVZpZGVvUmVxdWVzdBoeLmluZ2VzdC52MS5FbnN1cmVWaWRlb1Jlc3BvbnNlEkAKB1JlZnJlc2gSGS5pbmdlc3QudjEuUmVmcmVzaFJlcXVlc3QaGi5pbmdlc3QudjEuUmVmcmVzaFJlc3BvbnNlElUKDkJhY2tmaWxsVG9waWNzEiAuaW5nZXN0LnYxLkJhY2tmaWxsVG9waWNzUmVxdWVzdBohLmluZ2VzdC52MS5CYWNrZmlsbFRvcGljc1Jlc3BvbnNlEl4KEUdldEJhY2tmaWxsU3RhdHVzEiMuaW5nZXN0LnYxLkdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdBokLmluZ2VzdC52MS5HZXRCYWNrZmlsbFN0YXR1c1Jlc3BvbnNlElIKDUdldFNjYW5TdGF0dXMSHy5pbmdlc3QudjEuR2V0U2NhblN0YXR1c1JlcXVlc3QaIC5pbmdlc3QudjEuR2V0U2NhblN0YXR1c1Jlc3BvbnNlElIKDVJlc29sdmVTdHJlYW0SHy5pbmdlc3QudjEuUmVzb2x2ZVN0cmVhbVJlcXVlc3QaIC5pbmdlc3QudjEuUmVzb2x2ZVN0cmVhbVJlc3BvbnNlEj0KBlN1Ym1pdBIYLmluZ2VzdC52MS5TdWJtaXRSZXF1ZXN0GhkuaW5nZXN0LnYxLlN1Ym1pdFJlc3BvbnNlEj0KBkdldEpvYhIYLmluZ2VzdC52MS5HZXRKb2JSZXF1ZXN0GhkuaW5nZXN0LnYxLkdldEpvYlJlc3BvbnNlEkMKCExpc3RKb2JzEhouaW5nZXN0LnYxLkxpc3RKb2JzUmVxdWVzdBobLmluZ2VzdC52MS5MaXN0Sm9ic1Jlc3BvbnNlEkYKCUNhbmNlbEpvYhIbLmluZ2VzdC52MS5DYW5jZWxKb2JSZXF1ZXN0GhwuaW5nZXN0LnYxLkNhbmNlbEpvYlJlc3BvbnNlEmQKE0NhbmNlbFZpZGVvRG93bmxvYWQSJS5pbmdlc3QudjEuQ2FuY2VsVmlkZW9Eb3dubG9hZFJlcXVlc3QaJi5pbmdlc3QudjEuQ2FuY2VsVmlkZW9Eb3dubG9hZFJlc3BvbnNlElIKDUV4cGFuZExpYnJhcnkSHy5pbmdlc3QudjEuRXhwYW5kTGlicmFyeVJlcXVlc3QaIC5pbmdlc3QudjEuRXhwYW5kTGlicmFyeVJlc3BvbnNlEmEKEkxpc3RDaGFubmVsVXBsb2FkcxIkLmluZ2VzdC52MS5MaXN0Q2hhbm5lbFVwbG9hZHNSZXF1ZXN0GiUuaW5nZXN0LnYxLkxpc3RDaGFubmVsVXBsb2Fkc1Jlc3BvbnNlQp8BCg1jb20uaW5nZXN0LnYxQgtJbmdlc3RQcm90b1ABWjxnaXRodWIuY29tL2x1Y25ndXllbi9sb2NhbC15b3V0dWJlL2dlbi9nby9pbmdlc3QvdjE7aW5nZXN0djGiAgNJWFiqAglJbmdlc3QuVjHKAglJbmdlc3RcVjHiAhVJbmdlc3RcVjFcR1BCTWV0YWRhdGHqAgpJbmdlc3Q6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEglpbmdlc3QudjEiQAoZTGlzdENoYW5uZWxVcGxvYWRzUmVxdWVzdBIPCgdjaGFubmVsGAEgASgJEhIKCnBhZ2VfdG9rZW4YAiABKAkiKgoKU29ydE9wdGlvbhINCgVsYWJlbBgBIAEoCRINCgV0b2tlbhgCIAEoCSKgAQoaTGlzdENoYW5uZWxVcGxvYWRzUmVzcG9uc2USKAoGdmlkZW9zGAEgAygLMhguaW5nZXN0LnYxLkV4dGVybmFsVmlkZW8SKwoMc29ydF9vcHRpb25zGAIgAygLMhUuaW5nZXN0LnYxLlNvcnRPcHRpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAMgASgJEhIKCmF2YXRhcl91cmwYBCABKAkiPQoURXhwYW5kTGlicmFyeVJlcXVlc3QSDQoFdG9waWMYASABKAkSFgoOc2VlZF92aWRlb19pZHMYAiADKAkiLQoVRXhwYW5kTGlicmFyeVJlc3BvbnNlEhQKDHZpZGVvc19hZGRlZBgBIAEoBSKqAgoNRXh0ZXJuYWxWaWRlbxIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRISCgpjaGFubmVsX2lkGAMgASgJEhQKDGNoYW5uZWxfbmFtZRgEIAEoCRIYChBkdXJhdGlvbl9zZWNvbmRzGAUgASgFEhIKCnZpZXdfY291bnQYBiABKAMSFQoNdGh1bWJuYWlsX3VybBgHIAEoCRISCgpzb3VyY2VfdXJsGAggASgJEjAKDHB1Ymxpc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGVzY3JpcHRpb24YCiABKAkSDgoGdG9waWNzGAsgAygJEhAKCGhhc2h0YWdzGAwgAygJEhIKCmluX2xpYnJhcnkYDSABKAgiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoBSI6Cg5TZWFyY2hSZXNwb25zZRIoCgZ2aWRlb3MYASADKAsyGC5pbmdlc3QudjEuRXh0ZXJuYWxWaWRlbyIhChJFbnN1cmVWaWRlb1JlcXVlc3QSCwoDdXJsGAEgASgJIicKE0Vuc3VyZVZpZGVvUmVzcG9uc2USEAoIdmlkZW9faWQYASABKAkiJgoVQmFja2ZpbGxUb3BpY3NSZXF1ZXN0Eg0KBWxpbWl0GAEgASgFIhoKGEdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdCK1AQoOQmFja2ZpbGxTdGF0dXMSEAoIZXhhbWluZWQYASABKAUSDwoHdXBkYXRlZBgCIAEoBRIOCgZmYWlsZWQYAyABKAUSDwoHcnVubmluZxgEIAEoCBIuCgpzdGFydGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQwoWQmFja2ZpbGxUb3BpY3NSZXNwb25zZRIpCgZzdGF0dXMYASABKAsyGS5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiRgoZR2V0QmFja2ZpbGxTdGF0dXNSZXNwb25zZRIpCgZzdGF0dXMYASABKAsyGS5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiEAoOUmVmcmVzaFJlcXVlc3QiOAoPUmVmcmVzaFJlc3BvbnNlEiUKBnN0YXR1cxgBIAEoCzIVLmluZ2VzdC52MS5TY2FuU3RhdHVzIhYKFEdldFNjYW5TdGF0dXNSZXF1ZXN0Ij4KFUdldFNjYW5TdGF0dXNSZXNwb25zZRIlCgZzdGF0dXMYASABKAsyFS5pbmdlc3QudjEuU2NhblN0YXR1cyK9AQoKU2NhblN0YXR1cxIuCgpzdGFydGVkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9tcxgCIAEoAxIXCg9zb3VyY2VzX3NjYW5uZWQYAyABKAUSFgoOc291cmNlc19mYWlsZWQYBCABKAUSEwoLdmlkZW9zX3NlZW4YBSABKAUSFAoMdmlkZW9zX2FkZGVkGAYgASgFEg4KBmVycm9ycxgHIAMoCSIoChRSZXNvbHZlU3RyZWFtUmVxdWVzdBIQCgh2aWRlb19pZBgBIAEoCSJ3ChVSZXNvbHZlU3RyZWFtUmVzcG9uc2USCwoDdXJsGAEgASgJEg4KBmhlaWdodBgCIAEoBRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgltaW1lX3R5cGUYBCABKAkiTAoNU3VibWl0UmVxdWVzdBILCgN1cmwYASABKAkSFAoMcmVxdWVzdGVkX2J5GAIgASgJEhgKEHByZWZlcnJlZF9oZWlnaHQYAyABKAUiLQoOU3VibWl0UmVzcG9uc2USGwoDam9iGAEgASgLMg4uaW5nZXN0LnYxLkpvYiK1AgoDSm9iEgoKAmlkGAEgASgJEhIKCnNvdXJjZV91cmwYAiABKAkSEAoIdmlkZW9faWQYAyABKAkSDQoFdGl0bGUYBCABKAkSIgoFc3RhdGUYBSABKA4yEy5pbmdlc3QudjEuSm9iU3RhdGUSEAoIcHJvZ3Jlc3MYBiABKAISGAoQZG93bmxvYWRlZF9ieXRlcxgHIAEoAxITCgt0b3RhbF9ieXRlcxgIIAEoAxIVCg1lcnJvcl9tZXNzYWdlGAkgASgJEhAKCGF0dGVtcHRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIfCg1HZXRKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSItCg5HZXRKb2JSZXNwb25zZRIbCgNqb2IYASABKAsyDi5pbmdlc3QudjEuSm9iIk0KD0xpc3RKb2JzUmVxdWVzdBITCgthY3RpdmVfb25seRgBIAEoCBINCgVsaW1pdBgCIAEoBRIWCg5oaWRlX2Rpc21pc3NlZBgDIAEoCCIwChBMaXN0Sm9ic1Jlc3BvbnNlEhwKBGpvYnMYASADKAsyDi5pbmdlc3QudjEuSm9iIiIKEENhbmNlbEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJIhMKEUNhbmNlbEpvYlJlc3BvbnNlIiMKEURpc21pc3NKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSIUChJEaXNtaXNzSm9iUmVzcG9uc2UiNwoPUmV0cnlKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRIUCgxyZXF1ZXN0ZWRfYnkYAiABKAkiLwoQUmV0cnlKb2JSZXNwb25zZRIbCgNqb2IYASABKAsyDi5pbmdlc3QudjEuSm9iIjEKEExpc3RTY2Fuc1JlcXVlc3QSDQoFbGltaXQYASABKAUSDgoGb2Zmc2V0GAIgASgFIkgKEUxpc3RTY2Fuc1Jlc3BvbnNlEiQKBXNjYW5zGAEgAygLMhUuaW5nZXN0LnYxLlNjYW5TdGF0dXMSDQoFdG90YWwYAiABKAUiLgoaQ2FuY2VsVmlkZW9Eb3dubG9hZFJlcXVlc3QSEAoIdmlkZW9faWQYASABKAkiMAobQ2FuY2VsVmlkZW9Eb3dubG9hZFJlc3BvbnNlEhEKCWNhbmNlbGxlZBgBIAEoBSqaAQoISm9iU3RhdGUSGQoVSk9CX1NUQVRFX1VOU1BFQ0lGSUVEEAASFAoQSk9CX1NUQVRFX1FVRVVFRBABEhUKEUpPQl9TVEFURV9SVU5OSU5HEAISFwoTSk9CX1NUQVRFX1NVQ0NFRURFRBADEhQKEEpPQl9TVEFURV9GQUlMRUQQBBIXChNKT0JfU1RBVEVfQ0FOQ0VMTEVEEAUyvQoKDUluZ2VzdFNlcnZpY2USPQoGU2VhcmNoEhguaW5nZXN0LnYxLlNlYXJjaFJlcXVlc3QaGS5pbmdlc3QudjEuU2VhcmNoUmVzcG9uc2USTAoLRW5zdXJlVmlkZW8SHS5pbmdlc3QudjEuRW5zdXJlVmlkZW9SZXF1ZXN0Gh4uaW5nZXN0LnYxLkVuc3VyZVZpZGVvUmVzcG9uc2USQAoHUmVmcmVzaBIZLmluZ2VzdC52MS5SZWZyZXNoUmVxdWVzdBoaLmluZ2VzdC52MS5SZWZyZXNoUmVzcG9uc2USVQoOQmFja2ZpbGxUb3BpY3MSIC5pbmdlc3QudjEuQmFja2ZpbGxUb3BpY3NSZXF1ZXN0GiEuaW5nZXN0LnYxLkJhY2tmaWxsVG9waWNzUmVzcG9uc2USXgoRR2V0QmFja2ZpbGxTdGF0dXMSIy5pbmdlc3QudjEuR2V0QmFja2ZpbGxTdGF0dXNSZXF1ZXN0GiQuaW5nZXN0LnYxLkdldEJhY2tmaWxsU3RhdHVzUmVzcG9uc2USUgoNR2V0U2NhblN0YXR1cxIfLmluZ2VzdC52MS5HZXRTY2FuU3RhdHVzUmVxdWVzdBogLmluZ2VzdC52MS5HZXRTY2FuU3RhdHVzUmVzcG9uc2USUgoNUmVzb2x2ZVN0cmVhbRIfLmluZ2VzdC52MS5SZXNvbHZlU3RyZWFtUmVxdWVzdBogLmluZ2VzdC52MS5SZXNvbHZlU3RyZWFtUmVzcG9uc2USPQoGU3VibWl0EhguaW5nZXN0LnYxLlN1Ym1pdFJlcXVlc3QaGS5pbmdlc3QudjEuU3VibWl0UmVzcG9uc2USPQoGR2V0Sm9iEhguaW5nZXN0LnYxLkdldEpvYlJlcXVlc3QaGS5pbmdlc3QudjEuR2V0Sm9iUmVzcG9uc2USQwoITGlzdEpvYnMSGi5pbmdlc3QudjEuTGlzdEpvYnNSZXF1ZXN0GhsuaW5nZXN0LnYxLkxpc3RKb2JzUmVzcG9uc2USRgoJQ2FuY2VsSm9iEhsuaW5nZXN0LnYxLkNhbmNlbEpvYlJlcXVlc3QaHC5pbmdlc3QudjEuQ2FuY2VsSm9iUmVzcG9uc2USSQoKRGlzbWlzc0pvYhIcLmluZ2VzdC52MS5EaXNtaXNzSm9iUmVxdWVzdBodLmluZ2VzdC52MS5EaXNtaXNzSm9iUmVzcG9uc2USQwoIUmV0cnlKb2ISGi5pbmdlc3QudjEuUmV0cnlKb2JSZXF1ZXN0GhsuaW5nZXN0LnYxLlJldHJ5Sm9iUmVzcG9uc2USRgoJTGlzdFNjYW5zEhsuaW5nZXN0LnYxLkxpc3RTY2Fuc1JlcXVlc3QaHC5pbmdlc3QudjEuTGlzdFNjYW5zUmVzcG9uc2USZAoTQ2FuY2VsVmlkZW9Eb3dubG9hZBIlLmluZ2VzdC52MS5DYW5jZWxWaWRlb0Rvd25sb2FkUmVxdWVzdBomLmluZ2VzdC52MS5DYW5jZWxWaWRlb0Rvd25sb2FkUmVzcG9uc2USUgoNRXhwYW5kTGlicmFyeRIfLmluZ2VzdC52MS5FeHBhbmRMaWJyYXJ5UmVxdWVzdBogLmluZ2VzdC52MS5FeHBhbmRMaWJyYXJ5UmVzcG9uc2USYQoSTGlzdENoYW5uZWxVcGxvYWRzEiQuaW5nZXN0LnYxLkxpc3RDaGFubmVsVXBsb2Fkc1JlcXVlc3QaJS5pbmdlc3QudjEuTGlzdENoYW5uZWxVcGxvYWRzUmVzcG9uc2VCnwEKDWNvbS5pbmdlc3QudjFCC0luZ2VzdFByb3RvUAFaPGdpdGh1Yi5jb20vbHVjbmd1eWVuL2xvY2FsLXlvdXR1YmUvZ2VuL2dvL2luZ2VzdC92MTtpbmdlc3R2MaICA0lYWKoCCUluZ2VzdC5WMcoCCUluZ2VzdFxWMeICFUluZ2VzdFxWMVxHUEJNZXRhZGF0YeoCCkluZ2VzdDo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message ingest.v1.ListChannelUploadsRequest
@@ -761,6 +761,17 @@ export type ListJobsRequest = Message<"ingest.v1.ListJobsRequest"> & {
    * @generated from field: int32 limit = 2;
    */
   limit: number;
+
+  /**
+   * When true, jobs somebody has cleared off the Activity page are left out.
+   *
+   * Asked for rather than assumed, because two callers read this list for
+   * different reasons: the Activity page is being tidied, while the player is
+   * watching for its own download to land and must see every job there is.
+   *
+   * @generated from field: bool hide_dismissed = 3;
+   */
+  hideDismissed: boolean;
 };
 
 /**
@@ -818,6 +829,123 @@ export const CancelJobResponseSchema: GenMessage<CancelJobResponse> = /*@__PURE_
   messageDesc(file_ingest_v1_ingest, 30);
 
 /**
+ * @generated from message ingest.v1.DismissJobRequest
+ */
+export type DismissJobRequest = Message<"ingest.v1.DismissJobRequest"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+};
+
+/**
+ * Describes the message ingest.v1.DismissJobRequest.
+ * Use `create(DismissJobRequestSchema)` to create a new message.
+ */
+export const DismissJobRequestSchema: GenMessage<DismissJobRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 31);
+
+/**
+ * @generated from message ingest.v1.DismissJobResponse
+ */
+export type DismissJobResponse = Message<"ingest.v1.DismissJobResponse"> & {
+};
+
+/**
+ * Describes the message ingest.v1.DismissJobResponse.
+ * Use `create(DismissJobResponseSchema)` to create a new message.
+ */
+export const DismissJobResponseSchema: GenMessage<DismissJobResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 32);
+
+/**
+ * @generated from message ingest.v1.RetryJobRequest
+ */
+export type RetryJobRequest = Message<"ingest.v1.RetryJobRequest"> & {
+  /**
+   * @generated from field: string job_id = 1;
+   */
+  jobId: string;
+
+  /**
+   * @generated from field: string requested_by = 2;
+   */
+  requestedBy: string;
+};
+
+/**
+ * Describes the message ingest.v1.RetryJobRequest.
+ * Use `create(RetryJobRequestSchema)` to create a new message.
+ */
+export const RetryJobRequestSchema: GenMessage<RetryJobRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 33);
+
+/**
+ * @generated from message ingest.v1.RetryJobResponse
+ */
+export type RetryJobResponse = Message<"ingest.v1.RetryJobResponse"> & {
+  /**
+   * The new job. The old one keeps its record of what went wrong.
+   *
+   * @generated from field: ingest.v1.Job job = 1;
+   */
+  job?: Job;
+};
+
+/**
+ * Describes the message ingest.v1.RetryJobResponse.
+ * Use `create(RetryJobResponseSchema)` to create a new message.
+ */
+export const RetryJobResponseSchema: GenMessage<RetryJobResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 34);
+
+/**
+ * @generated from message ingest.v1.ListScansRequest
+ */
+export type ListScansRequest = Message<"ingest.v1.ListScansRequest"> & {
+  /**
+   * @generated from field: int32 limit = 1;
+   */
+  limit: number;
+
+  /**
+   * @generated from field: int32 offset = 2;
+   */
+  offset: number;
+};
+
+/**
+ * Describes the message ingest.v1.ListScansRequest.
+ * Use `create(ListScansRequestSchema)` to create a new message.
+ */
+export const ListScansRequestSchema: GenMessage<ListScansRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 35);
+
+/**
+ * @generated from message ingest.v1.ListScansResponse
+ */
+export type ListScansResponse = Message<"ingest.v1.ListScansResponse"> & {
+  /**
+   * @generated from field: repeated ingest.v1.ScanStatus scans = 1;
+   */
+  scans: ScanStatus[];
+
+  /**
+   * How many passes are on record, so the page knows whether to offer more.
+   *
+   * @generated from field: int32 total = 2;
+   */
+  total: number;
+};
+
+/**
+ * Describes the message ingest.v1.ListScansResponse.
+ * Use `create(ListScansResponseSchema)` to create a new message.
+ */
+export const ListScansResponseSchema: GenMessage<ListScansResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 36);
+
+/**
  * @generated from message ingest.v1.CancelVideoDownloadRequest
  */
 export type CancelVideoDownloadRequest = Message<"ingest.v1.CancelVideoDownloadRequest"> & {
@@ -832,7 +960,7 @@ export type CancelVideoDownloadRequest = Message<"ingest.v1.CancelVideoDownloadR
  * Use `create(CancelVideoDownloadRequestSchema)` to create a new message.
  */
 export const CancelVideoDownloadRequestSchema: GenMessage<CancelVideoDownloadRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 31);
+  messageDesc(file_ingest_v1_ingest, 37);
 
 /**
  * @generated from message ingest.v1.CancelVideoDownloadResponse
@@ -851,7 +979,7 @@ export type CancelVideoDownloadResponse = Message<"ingest.v1.CancelVideoDownload
  * Use `create(CancelVideoDownloadResponseSchema)` to create a new message.
  */
 export const CancelVideoDownloadResponseSchema: GenMessage<CancelVideoDownloadResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 32);
+  messageDesc(file_ingest_v1_ingest, 38);
 
 /**
  * @generated from enum ingest.v1.JobState
@@ -1015,6 +1143,40 @@ export const IngestService: GenService<{
     methodKind: "unary";
     input: typeof CancelJobRequestSchema;
     output: typeof CancelJobResponseSchema;
+  },
+  /**
+   * Takes a finished job off the Activity page. Terminal states only: a job
+   * still running is cancelled, not hidden.
+   *
+   * @generated from rpc ingest.v1.IngestService.DismissJob
+   */
+  dismissJob: {
+    methodKind: "unary";
+    input: typeof DismissJobRequestSchema;
+    output: typeof DismissJobResponseSchema;
+  },
+  /**
+   * Queues the same URL again. Most failures here are temporary — a rate limit,
+   * a block that has lifted, a network that dropped — so trying again is worth
+   * an action of its own rather than leaving "hide it" as the only one.
+   *
+   * @generated from rpc ingest.v1.IngestService.RetryJob
+   */
+  retryJob: {
+    methodKind: "unary";
+    input: typeof RetryJobRequestSchema;
+    output: typeof RetryJobResponseSchema;
+  },
+  /**
+   * What the scanner has been doing, newest first. Distinct from GetScanStatus,
+   * which reports only the pass that has just run.
+   *
+   * @generated from rpc ingest.v1.IngestService.ListScans
+   */
+  listScans: {
+    methodKind: "unary";
+    input: typeof ListScansRequestSchema;
+    output: typeof ListScansResponseSchema;
   },
   /**
    * Stops whatever transfer is running for a video. Called when a viewer leaves

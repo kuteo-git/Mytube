@@ -18,8 +18,13 @@ import (
 type Ingest struct {
 	downloader    domain.Downloader
 	channels      domain.ChannelSource
-	store         domain.JobStore
-	library       domain.Library
+	store   domain.JobStore
+	library domain.Library
+	// Read-only here: the scanner writes passes, this only lists them for the
+	// Activity page. Optional, and set separately from New, because most of
+	// what this type does has nothing to do with scan history and every test
+	// of that work would otherwise have to say so.
+	scans         domain.ScanStore
 	defaultHeight int32
 	newID         func() string
 	logger        *slog.Logger
@@ -54,6 +59,11 @@ func New(
 		backfill:      &backfillState{},
 		subtitles:     newSubtitleFetches(),
 	}
+}
+
+// SetScanStore attaches the scan history the Activity page reads.
+func (i *Ingest) SetScanStore(scans domain.ScanStore) {
+	i.scans = scans
 }
 
 // Search looks upstream, always — the library is what the topics chose to
@@ -294,8 +304,8 @@ func (i *Ingest) GetJob(ctx context.Context, jobID string) (domain.Job, error) {
 	return i.store.Get(ctx, jobID)
 }
 
-func (i *Ingest) ListJobs(ctx context.Context, activeOnly bool, limit int32) ([]domain.Job, error) {
-	return i.store.List(ctx, activeOnly, limit)
+func (i *Ingest) ListJobs(ctx context.Context, activeOnly, hideDismissed bool, limit int32) ([]domain.Job, error) {
+	return i.store.List(ctx, activeOnly, hideDismissed, limit)
 }
 
 func (i *Ingest) CancelJob(ctx context.Context, jobID string) error {
@@ -303,6 +313,64 @@ func (i *Ingest) CancelJob(ctx context.Context, jobID string) error {
 		return fmt.Errorf("%w: job_id is required", domain.ErrInvalid)
 	}
 	return i.store.Cancel(ctx, jobID)
+}
+
+// DismissJob takes a finished job off the Activity page.
+//
+// The one action a completed or failed job had was being read. Dismissing is
+// what lets somebody clear the ones they have dealt with, so what remains on
+// the page is what still wants attention.
+func (i *Ingest) DismissJob(ctx context.Context, jobID string) error {
+	if jobID == "" {
+		return fmt.Errorf("%w: job_id is required", domain.ErrInvalid)
+	}
+	return i.store.Dismiss(ctx, jobID)
+}
+
+// RetryJob queues the same URL again.
+//
+// Worth having because the usual reason a job here failed is temporary — a 429
+// from the caption endpoint, an IP block that has since lifted, a network that
+// dropped (CLAUDE.md §8, risk 4). Before this, the only way to try again was to
+// find the video and press play, and the only action offered on a failure was
+// to hide it — which would have made hiding the way failures get dealt with.
+//
+// A new job rather than resetting the old row: attempts, timings and the error
+// that was reported are what the page is for, and rewriting them in place would
+// erase the record of the thing being retried.
+func (i *Ingest) RetryJob(ctx context.Context, jobID, requestedBy string) (domain.Job, error) {
+	if jobID == "" {
+		return domain.Job{}, fmt.Errorf("%w: job_id is required", domain.ErrInvalid)
+	}
+	previous, err := i.store.Get(ctx, jobID)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	if previous.State == domain.JobQueued || previous.State == domain.JobRunning {
+		return domain.Job{}, fmt.Errorf("%w: job %s has not finished", domain.ErrInvalid, jobID)
+	}
+	if requestedBy == "" {
+		requestedBy = previous.RequestedBy
+	}
+
+	job, err := i.Submit(ctx, previous.SourceURL, requestedBy, previous.PreferredHeight)
+	if err != nil {
+		return domain.Job{}, err
+	}
+	// The failure has been acted on, so it stops asking to be. Best effort: a
+	// retry that queued is a success even if the old row stays visible.
+	if err := i.store.Dismiss(ctx, jobID); err != nil {
+		i.logger.Warn("dismiss after retry", "job", jobID, "error", err)
+	}
+	return job, nil
+}
+
+// ListScans reports what the scanner has been doing, newest first.
+func (i *Ingest) ListScans(ctx context.Context, limit, offset int32) ([]domain.ScanResult, int32, error) {
+	if i.scans == nil {
+		return nil, 0, nil
+	}
+	return i.scans.ListScans(ctx, limit, offset)
 }
 
 // CancelVideoDownload stops any transfer running for a video.

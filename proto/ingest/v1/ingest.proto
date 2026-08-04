@@ -45,6 +45,16 @@ service IngestService {
   rpc GetJob(GetJobRequest) returns (GetJobResponse);
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+  // Takes a finished job off the Activity page. Terminal states only: a job
+  // still running is cancelled, not hidden.
+  rpc DismissJob(DismissJobRequest) returns (DismissJobResponse);
+  // Queues the same URL again. Most failures here are temporary — a rate limit,
+  // a block that has lifted, a network that dropped — so trying again is worth
+  // an action of its own rather than leaving "hide it" as the only one.
+  rpc RetryJob(RetryJobRequest) returns (RetryJobResponse);
+  // What the scanner has been doing, newest first. Distinct from GetScanStatus,
+  // which reports only the pass that has just run.
+  rpc ListScans(ListScansRequest) returns (ListScansResponse);
   // Stops whatever transfer is running for a video. Called when a viewer leaves
   // the watch page: a copy nobody is waiting for is a request to YouTube nobody
   // is waiting for either, and too many of those get the address blocked.
@@ -255,6 +265,12 @@ message ListJobsRequest {
   // When true, only jobs that are queued or running.
   bool active_only = 1;
   int32 limit = 2;
+  // When true, jobs somebody has cleared off the Activity page are left out.
+  //
+  // Asked for rather than assumed, because two callers read this list for
+  // different reasons: the Activity page is being tidied, while the player is
+  // watching for its own download to land and must see every job there is.
+  bool hide_dismissed = 3;
 }
 
 message ListJobsResponse {
@@ -266,6 +282,33 @@ message CancelJobRequest {
 }
 
 message CancelJobResponse {}
+
+message DismissJobRequest {
+  string job_id = 1;
+}
+
+message DismissJobResponse {}
+
+message RetryJobRequest {
+  string job_id = 1;
+  string requested_by = 2;
+}
+
+message RetryJobResponse {
+  // The new job. The old one keeps its record of what went wrong.
+  Job job = 1;
+}
+
+message ListScansRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListScansResponse {
+  repeated ScanStatus scans = 1;
+  // How many passes are on record, so the page knows whether to offer more.
+  int32 total = 2;
+}
 
 message CancelVideoDownloadRequest {
   string video_id = 1;

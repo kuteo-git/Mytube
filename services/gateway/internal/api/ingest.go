@@ -304,9 +304,15 @@ func (g *Gateway) handleScanStatus(w http.ResponseWriter, r *http.Request) {
 func (g *Gateway) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	activeOnly, _ := strconv.ParseBool(r.URL.Query().Get("activeOnly"))
 
+	// Off unless asked for. The Activity page asks; the player, which reads this
+	// same list to learn its download has landed, must not have jobs hidden from
+	// it by somebody tidying a page (CLAUDE.md §8b).
+	hideDismissed, _ := strconv.ParseBool(r.URL.Query().Get("hideDismissed"))
+
 	resp, err := g.ingest.ListJobs(r.Context(), connect.NewRequest(&ingestv1.ListJobsRequest{
-		ActiveOnly: activeOnly,
-		Limit:      intParam(r, "limit", 50),
+		ActiveOnly:    activeOnly,
+		Limit:         intParam(r, "limit", 50),
+		HideDismissed: hideDismissed,
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
@@ -343,6 +349,47 @@ func (g *Gateway) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleDismissJob(w http.ResponseWriter, r *http.Request) {
+	if _, err := g.ingest.DismissJob(r.Context(), connect.NewRequest(&ingestv1.DismissJobRequest{
+		JobId: r.PathValue("id"),
+	})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleRetryJob(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.ingest.RetryJob(r.Context(), connect.NewRequest(&ingestv1.RetryJobRequest{
+		JobId:       r.PathValue("id"),
+		RequestedBy: g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toJobDTO(resp.Msg.GetJob()))
+}
+
+func (g *Gateway) handleListScans(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.ingest.ListScans(r.Context(), connect.NewRequest(&ingestv1.ListScansRequest{
+		Limit:  intParam(r, "limit", 10),
+		Offset: intParam(r, "offset", 0),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	out := make([]scanStatusDTO, 0, len(resp.Msg.GetScans()))
+	for _, s := range resp.Msg.GetScans() {
+		out = append(out, toScanStatusDTO(s))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"scans": out,
+		"total": resp.Msg.GetTotal(),
+	})
 }
 
 // handleStream lists every way the client could play a video right now.

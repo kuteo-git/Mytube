@@ -445,9 +445,41 @@ Bỏ dấu tiếng Việt hai chiều qua `unaccent`. Mở video từ YouTube �
 **Phân trang:** feed + search dùng `useInfiniteQuery`, tự nạp trước 600px, kèm nút
 "Load more" thật cho bàn phím/remote.
 
-**Activity:** trang `/activity` gộp hàng đợi tải (kèm lỗi yt-dlp nguyên văn) và kết quả
-lần quét gần nhất (kèm nguồn nào hỏng). Có nút "Scan now" thật. Không phải log viewer —
+**Activity:** trang `/activity` gộp hàng đợi tải (kèm lỗi yt-dlp nguyên văn) và **lịch sử
+quét** (kèm nguồn nào hỏng). Có nút "Scan now" thật. Không phải log viewer —
 log 4 service vẫn ra stdout.
+
+**Mở rộng 2026-08-04:**
+- **Lịch sử quét, không phải một lượt.** Trước đây `Scanner.lastScan` là **một biến trong
+  RAM**: chỉ trả lời được "lượt gần nhất thế nào", và restart là mất luôn cả câu đó. Câu
+  người dùng thật sự hỏi trải dài nhiều ngày ("kênh này im mấy hôm rồi, quét có chạy
+  không"). Giờ có bảng `ingest.scans`, ghi sau mỗi lượt, **tự xoá dòng cũ hơn 30 ngày ngay
+  trong lần ghi** — buộc cái làm bảng phình cũng là cái làm nó co, không cần lịch thứ hai.
+  Dọn **theo tuổi chứ không theo số dòng**: 500 dòng là 3 tuần ở nhịp 1 tiếng nhưng 10 ngày
+  ở `SCAN_INTERVAL=30m` — ý nghĩa đổi mà không ai đụng vào. `GET /api/scans?limit=&offset=`,
+  **phân trang thật ở server** vì bảng này tăng 1 dòng/giờ, mãi mãi.
+- **"View more" 10 một lần.** Jobs phân trang **ở client** (`usePagedList`): ba nhóm
+  Failed/In progress/Completed đến từ **cùng một request**, nên phân trang server sẽ thành
+  ba query ba con trỏ cho một trang chẩn đoán. Scans thì ngược lại — phân trang server.
+- **`[X]` trên mọi dòng job, hai nghĩa theo trạng thái**: đang chạy = **huỷ tải**; đã xong
+  hoặc đã lỗi = **ẩn** (`jobs.dismissed_at`, `POST /api/ingest/jobs/{id}/dismiss`). Cùng vị
+  trí cùng icon, phân biệt bằng `aria-label`/tooltip — nút mà đổi chỗ là nút phải đi tìm.
+  Store chỉ cho ẩn **trạng thái kết thúc**: giấu việc đang chạy là thứ duy nhất nút này
+  không được phép làm.
+- **`hideDismissed` là tham số, không phải luật.** Hai bên đọc cùng `GET /api/ingest/jobs`
+  vì hai lý do khác nhau: trang Activity đang dọn dẹp, còn **player đọc để biết bản tải đã
+  về chưa**. Lọc mặc định thì ẩn một job xong có thể để player chờ mãi một bản đã có — đúng
+  hình dạng sự cố "job rớt khỏi danh sách → kẹt 360p" ở trên, từ hướng khác. Cùng lý do,
+  query key của React Query **tách riêng** (`['ingest-jobs','activity',limit]`): chung khoá
+  thì trang Activity nạp 200 sẽ đè cache 50 của player.
+- **Retry trên mỗi dòng Failed** (`POST .../retry`): tạo **job mới** với cùng `sourceUrl` và
+  cùng `preferredHeight`, rồi ẩn dòng cũ. Không reset dòng cũ tại chỗ — `attempts`, thời
+  điểm và thông báo lỗi **chính là** thứ trang này tồn tại để hiện. Từ chối job chưa kết
+  thúc: hai transfer cùng một video là đúng thứ đã làm địa chỉ này bị chặn (§8 rủi ro 5).
+  Có Retry vì **không có đường hoàn tác cho `[X]`** (đã chốt): nếu thứ duy nhất làm được với
+  một lỗi là giấu nó thì giấu sẽ thành cách xử lý lỗi mặc định.
+- **Lịch sử quét không có `[X]`** — nó không đòi hành động nào, và ẩn một dòng tạo ra một lỗ
+  trong thứ vốn để đọc như chuỗi liên tục: "tuần trước có chạy không" sẽ trả lời sai.
 
 **Feed vô tận:** `GetFeedPage` đông cứng thứ tự rank vào một snapshot theo phiên (memory
 recsys, TTL 30 phút) — trang sau đọc từ snapshot đó thay vì rank lại, nên không trùng video.

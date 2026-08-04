@@ -32,6 +32,10 @@ PGPASSWORD=catalog_dev psql -h localhost -U catalog_svc -d localyoutube -f servi
 PGPASSWORD=recsys_dev  psql -h localhost -U recsys_svc  -d localyoutube -f services/recsys/migrations/0001_init.sql
 PGPASSWORD=ingest_dev  psql -h localhost -U ingest_svc  -d localyoutube -f services/ingest/migrations/0001_init.sql
 
+# Then every later migration in each service's migrations/ directory, in order.
+# They are plain files applied by hand; there is no migration runner.
+for f in services/*/migrations/0*.sql; do echo "$f"; done
+
 # Optional: sample library so the UI has something to show
 PGPASSWORD=catalog_dev psql -h localhost -U catalog_svc -d localyoutube -f db/seed_dev.sql
 PGPASSWORD=recsys_dev  psql -h localhost -U recsys_svc  -d localyoutube -f db/seed_dev_recsys.sql

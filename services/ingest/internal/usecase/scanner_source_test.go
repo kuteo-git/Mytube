@@ -45,7 +45,7 @@ func (d *countingDownloader) ListPlaylist(_ context.Context, _ string, _, _ int3
 }
 
 func newTestScanner(fetch domain.Downloader, channels domain.ChannelSource, lib domain.Library) *Scanner {
-	return NewScanner(stubTopics{}, fetch, channels, lib,
+	return NewScanner(stubTopics{}, fetch, channels, lib, nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)), time.Hour)
 }
 

@@ -38,3 +38,20 @@ type ScanResult struct {
 	VideosAdded    int
 	Errors         []string
 }
+
+// ScanStore keeps what each pass did.
+//
+// The scanner used to hold only its most recent result, in a variable, so the
+// page could answer "how did the last pass go" and nothing else — not even
+// that across a restart. The question people actually bring to that page spans
+// days: a channel has stopped producing new videos, and the first thing worth
+// knowing is whether the scan has been running at all.
+type ScanStore interface {
+	// RecordScan saves one pass and drops anything older than the retention
+	// window. Pruning here rather than on a timer keeps the table's growth tied
+	// to the only thing that grows it.
+	RecordScan(ctx context.Context, r ScanResult, retain time.Duration) error
+	// ListScans reads them newest first, and reports the total so the page
+	// knows whether there is more.
+	ListScans(ctx context.Context, limit, offset int32) (scans []ScanResult, total int32, err error)
+}

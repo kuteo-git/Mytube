@@ -60,6 +60,13 @@ const (
 	IngestServiceListJobsProcedure = "/ingest.v1.IngestService/ListJobs"
 	// IngestServiceCancelJobProcedure is the fully-qualified name of the IngestService's CancelJob RPC.
 	IngestServiceCancelJobProcedure = "/ingest.v1.IngestService/CancelJob"
+	// IngestServiceDismissJobProcedure is the fully-qualified name of the IngestService's DismissJob
+	// RPC.
+	IngestServiceDismissJobProcedure = "/ingest.v1.IngestService/DismissJob"
+	// IngestServiceRetryJobProcedure is the fully-qualified name of the IngestService's RetryJob RPC.
+	IngestServiceRetryJobProcedure = "/ingest.v1.IngestService/RetryJob"
+	// IngestServiceListScansProcedure is the fully-qualified name of the IngestService's ListScans RPC.
+	IngestServiceListScansProcedure = "/ingest.v1.IngestService/ListScans"
 	// IngestServiceCancelVideoDownloadProcedure is the fully-qualified name of the IngestService's
 	// CancelVideoDownload RPC.
 	IngestServiceCancelVideoDownloadProcedure = "/ingest.v1.IngestService/CancelVideoDownload"
@@ -101,6 +108,16 @@ type IngestServiceClient interface {
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// Takes a finished job off the Activity page. Terminal states only: a job
+	// still running is cancelled, not hidden.
+	DismissJob(context.Context, *connect.Request[v1.DismissJobRequest]) (*connect.Response[v1.DismissJobResponse], error)
+	// Queues the same URL again. Most failures here are temporary — a rate limit,
+	// a block that has lifted, a network that dropped — so trying again is worth
+	// an action of its own rather than leaving "hide it" as the only one.
+	RetryJob(context.Context, *connect.Request[v1.RetryJobRequest]) (*connect.Response[v1.RetryJobResponse], error)
+	// What the scanner has been doing, newest first. Distinct from GetScanStatus,
+	// which reports only the pass that has just run.
+	ListScans(context.Context, *connect.Request[v1.ListScansRequest]) (*connect.Response[v1.ListScansResponse], error)
 	// Stops whatever transfer is running for a video. Called when a viewer leaves
 	// the watch page: a copy nobody is waiting for is a request to YouTube nobody
 	// is waiting for either, and too many of those get the address blocked.
@@ -191,6 +208,24 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("CancelJob")),
 			connect.WithClientOptions(opts...),
 		),
+		dismissJob: connect.NewClient[v1.DismissJobRequest, v1.DismissJobResponse](
+			httpClient,
+			baseURL+IngestServiceDismissJobProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("DismissJob")),
+			connect.WithClientOptions(opts...),
+		),
+		retryJob: connect.NewClient[v1.RetryJobRequest, v1.RetryJobResponse](
+			httpClient,
+			baseURL+IngestServiceRetryJobProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("RetryJob")),
+			connect.WithClientOptions(opts...),
+		),
+		listScans: connect.NewClient[v1.ListScansRequest, v1.ListScansResponse](
+			httpClient,
+			baseURL+IngestServiceListScansProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ListScans")),
+			connect.WithClientOptions(opts...),
+		),
 		cancelVideoDownload: connect.NewClient[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse](
 			httpClient,
 			baseURL+IngestServiceCancelVideoDownloadProcedure,
@@ -225,6 +260,9 @@ type ingestServiceClient struct {
 	getJob              *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	listJobs            *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	cancelJob           *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	dismissJob          *connect.Client[v1.DismissJobRequest, v1.DismissJobResponse]
+	retryJob            *connect.Client[v1.RetryJobRequest, v1.RetryJobResponse]
+	listScans           *connect.Client[v1.ListScansRequest, v1.ListScansResponse]
 	cancelVideoDownload *connect.Client[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse]
 	expandLibrary       *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
 	listChannelUploads  *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
@@ -285,6 +323,21 @@ func (c *ingestServiceClient) CancelJob(ctx context.Context, req *connect.Reques
 	return c.cancelJob.CallUnary(ctx, req)
 }
 
+// DismissJob calls ingest.v1.IngestService.DismissJob.
+func (c *ingestServiceClient) DismissJob(ctx context.Context, req *connect.Request[v1.DismissJobRequest]) (*connect.Response[v1.DismissJobResponse], error) {
+	return c.dismissJob.CallUnary(ctx, req)
+}
+
+// RetryJob calls ingest.v1.IngestService.RetryJob.
+func (c *ingestServiceClient) RetryJob(ctx context.Context, req *connect.Request[v1.RetryJobRequest]) (*connect.Response[v1.RetryJobResponse], error) {
+	return c.retryJob.CallUnary(ctx, req)
+}
+
+// ListScans calls ingest.v1.IngestService.ListScans.
+func (c *ingestServiceClient) ListScans(ctx context.Context, req *connect.Request[v1.ListScansRequest]) (*connect.Response[v1.ListScansResponse], error) {
+	return c.listScans.CallUnary(ctx, req)
+}
+
 // CancelVideoDownload calls ingest.v1.IngestService.CancelVideoDownload.
 func (c *ingestServiceClient) CancelVideoDownload(ctx context.Context, req *connect.Request[v1.CancelVideoDownloadRequest]) (*connect.Response[v1.CancelVideoDownloadResponse], error) {
 	return c.cancelVideoDownload.CallUnary(ctx, req)
@@ -330,6 +383,16 @@ type IngestServiceHandler interface {
 	GetJob(context.Context, *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error)
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// Takes a finished job off the Activity page. Terminal states only: a job
+	// still running is cancelled, not hidden.
+	DismissJob(context.Context, *connect.Request[v1.DismissJobRequest]) (*connect.Response[v1.DismissJobResponse], error)
+	// Queues the same URL again. Most failures here are temporary — a rate limit,
+	// a block that has lifted, a network that dropped — so trying again is worth
+	// an action of its own rather than leaving "hide it" as the only one.
+	RetryJob(context.Context, *connect.Request[v1.RetryJobRequest]) (*connect.Response[v1.RetryJobResponse], error)
+	// What the scanner has been doing, newest first. Distinct from GetScanStatus,
+	// which reports only the pass that has just run.
+	ListScans(context.Context, *connect.Request[v1.ListScansRequest]) (*connect.Response[v1.ListScansResponse], error)
 	// Stops whatever transfer is running for a video. Called when a viewer leaves
 	// the watch page: a copy nobody is waiting for is a request to YouTube nobody
 	// is waiting for either, and too many of those get the address blocked.
@@ -416,6 +479,24 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("CancelJob")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceDismissJobHandler := connect.NewUnaryHandler(
+		IngestServiceDismissJobProcedure,
+		svc.DismissJob,
+		connect.WithSchema(ingestServiceMethods.ByName("DismissJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceRetryJobHandler := connect.NewUnaryHandler(
+		IngestServiceRetryJobProcedure,
+		svc.RetryJob,
+		connect.WithSchema(ingestServiceMethods.ByName("RetryJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceListScansHandler := connect.NewUnaryHandler(
+		IngestServiceListScansProcedure,
+		svc.ListScans,
+		connect.WithSchema(ingestServiceMethods.ByName("ListScans")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceCancelVideoDownloadHandler := connect.NewUnaryHandler(
 		IngestServiceCancelVideoDownloadProcedure,
 		svc.CancelVideoDownload,
@@ -458,6 +539,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceListJobsHandler.ServeHTTP(w, r)
 		case IngestServiceCancelJobProcedure:
 			ingestServiceCancelJobHandler.ServeHTTP(w, r)
+		case IngestServiceDismissJobProcedure:
+			ingestServiceDismissJobHandler.ServeHTTP(w, r)
+		case IngestServiceRetryJobProcedure:
+			ingestServiceRetryJobHandler.ServeHTTP(w, r)
+		case IngestServiceListScansProcedure:
+			ingestServiceListScansHandler.ServeHTTP(w, r)
 		case IngestServiceCancelVideoDownloadProcedure:
 			ingestServiceCancelVideoDownloadHandler.ServeHTTP(w, r)
 		case IngestServiceExpandLibraryProcedure:
@@ -515,6 +602,18 @@ func (UnimplementedIngestServiceHandler) ListJobs(context.Context, *connect.Requ
 
 func (UnimplementedIngestServiceHandler) CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.CancelJob is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) DismissJob(context.Context, *connect.Request[v1.DismissJobRequest]) (*connect.Response[v1.DismissJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.DismissJob is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) RetryJob(context.Context, *connect.Request[v1.RetryJobRequest]) (*connect.Response[v1.RetryJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.RetryJob is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ListScans(context.Context, *connect.Request[v1.ListScansRequest]) (*connect.Response[v1.ListScansResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ListScans is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) CancelVideoDownload(context.Context, *connect.Request[v1.CancelVideoDownloadRequest]) (*connect.Response[v1.CancelVideoDownloadResponse], error) {

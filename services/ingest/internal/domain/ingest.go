@@ -143,8 +143,20 @@ type Downloader interface {
 type JobStore interface {
 	Enqueue(ctx context.Context, job Job) (Job, error)
 	Get(ctx context.Context, jobID string) (Job, error)
-	List(ctx context.Context, activeOnly bool, limit int32) ([]Job, error)
+	// hideDismissed drops jobs somebody has cleared off the Activity page.
+	//
+	// A parameter rather than a rule, because two callers read this list for
+	// different reasons. The Activity page is being tidied and wants them gone;
+	// the player is watching for its own download to land and must be shown
+	// every job there is. Filtering for both would mean dismissing a completed
+	// job could leave a player waiting for a copy that had already arrived —
+	// the same fault, from a new direction, as a job falling off the end of
+	// this list (CLAUDE.md §8b).
+	List(ctx context.Context, activeOnly, hideDismissed bool, limit int32) ([]Job, error)
 	Cancel(ctx context.Context, jobID string) error
+	// Dismiss hides a finished job. Only terminal states can be dismissed:
+	// hiding something still running would leave work with no way to see it.
+	Dismiss(ctx context.Context, jobID string) error
 	// CancelForVideo stops any queued or running transfer for a video and
 	// reports how many it stopped. Zero is not an error.
 	CancelForVideo(ctx context.Context, videoID string) (int, error)

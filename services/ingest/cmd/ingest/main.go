@@ -114,14 +114,18 @@ func main() {
 	// related-video layer of library expansion.
 	channels := innertube.New(nil)
 
+	jobStore := postgres.New(pool)
 	ingest := usecase.New(
 		downloader,
 		channels,
-		postgres.New(pool),
+		jobStore,
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
 		defaultHeight,
 		logger,
 	)
+	// The same store keeps scan history; the Activity page lists it through the
+	// ingest use cases, while the scanner is what writes it.
+	ingest.SetScanStore(jobStore)
 
 	go usecase.NewWorker(ingest, logger).Run(ctx)
 
@@ -140,12 +144,13 @@ func main() {
 		downloader,
 		channels,
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
+		jobStore,
 		logger,
 		envDuration("SCAN_INTERVAL", time.Hour),
 	)
 	go scanner.Run(ctx)
 
-	store := postgres.New(pool)
+	store := jobStore
 	expander := usecase.NewExpander(
 		downloader,
 		channels,

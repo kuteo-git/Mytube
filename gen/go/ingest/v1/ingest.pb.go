@@ -1649,8 +1649,14 @@ func (x *GetJobResponse) GetJob() *Job {
 type ListJobsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// When true, only jobs that are queued or running.
-	ActiveOnly    bool  `protobuf:"varint,1,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"`
-	Limit         int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	ActiveOnly bool  `protobuf:"varint,1,opt,name=active_only,json=activeOnly,proto3" json:"active_only,omitempty"`
+	Limit      int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// When true, jobs somebody has cleared off the Activity page are left out.
+	//
+	// Asked for rather than assumed, because two callers read this list for
+	// different reasons: the Activity page is being tidied, while the player is
+	// watching for its own download to land and must see every job there is.
+	HideDismissed bool `protobuf:"varint,3,opt,name=hide_dismissed,json=hideDismissed,proto3" json:"hide_dismissed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1697,6 +1703,13 @@ func (x *ListJobsRequest) GetLimit() int32 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ListJobsRequest) GetHideDismissed() bool {
+	if x != nil {
+		return x.HideDismissed
+	}
+	return false
 }
 
 type ListJobsResponse struct {
@@ -1823,6 +1836,288 @@ func (*CancelJobResponse) Descriptor() ([]byte, []int) {
 	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{30}
 }
 
+type DismissJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissJobRequest) Reset() {
+	*x = DismissJobRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissJobRequest) ProtoMessage() {}
+
+func (x *DismissJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissJobRequest.ProtoReflect.Descriptor instead.
+func (*DismissJobRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *DismissJobRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+type DismissJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissJobResponse) Reset() {
+	*x = DismissJobResponse{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissJobResponse) ProtoMessage() {}
+
+func (x *DismissJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissJobResponse.ProtoReflect.Descriptor instead.
+func (*DismissJobResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{32}
+}
+
+type RetryJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	RequestedBy   string                 `protobuf:"bytes,2,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetryJobRequest) Reset() {
+	*x = RetryJobRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetryJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetryJobRequest) ProtoMessage() {}
+
+func (x *RetryJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetryJobRequest.ProtoReflect.Descriptor instead.
+func (*RetryJobRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *RetryJobRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *RetryJobRequest) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+type RetryJobResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The new job. The old one keeps its record of what went wrong.
+	Job           *Job `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RetryJobResponse) Reset() {
+	*x = RetryJobResponse{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RetryJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RetryJobResponse) ProtoMessage() {}
+
+func (x *RetryJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RetryJobResponse.ProtoReflect.Descriptor instead.
+func (*RetryJobResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *RetryJobResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
+
+type ListScansRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListScansRequest) Reset() {
+	*x = ListScansRequest{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListScansRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListScansRequest) ProtoMessage() {}
+
+func (x *ListScansRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListScansRequest.ProtoReflect.Descriptor instead.
+func (*ListScansRequest) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ListScansRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListScansRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type ListScansResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Scans []*ScanStatus          `protobuf:"bytes,1,rep,name=scans,proto3" json:"scans,omitempty"`
+	// How many passes are on record, so the page knows whether to offer more.
+	Total         int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListScansResponse) Reset() {
+	*x = ListScansResponse{}
+	mi := &file_ingest_v1_ingest_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListScansResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListScansResponse) ProtoMessage() {}
+
+func (x *ListScansResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ingest_v1_ingest_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListScansResponse.ProtoReflect.Descriptor instead.
+func (*ListScansResponse) Descriptor() ([]byte, []int) {
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ListScansResponse) GetScans() []*ScanStatus {
+	if x != nil {
+		return x.Scans
+	}
+	return nil
+}
+
+func (x *ListScansResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
 type CancelVideoDownloadRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
@@ -1832,7 +2127,7 @@ type CancelVideoDownloadRequest struct {
 
 func (x *CancelVideoDownloadRequest) Reset() {
 	*x = CancelVideoDownloadRequest{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[31]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1844,7 +2139,7 @@ func (x *CancelVideoDownloadRequest) String() string {
 func (*CancelVideoDownloadRequest) ProtoMessage() {}
 
 func (x *CancelVideoDownloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[31]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1857,7 +2152,7 @@ func (x *CancelVideoDownloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelVideoDownloadRequest.ProtoReflect.Descriptor instead.
 func (*CancelVideoDownloadRequest) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{31}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *CancelVideoDownloadRequest) GetVideoId() string {
@@ -1877,7 +2172,7 @@ type CancelVideoDownloadResponse struct {
 
 func (x *CancelVideoDownloadResponse) Reset() {
 	*x = CancelVideoDownloadResponse{}
-	mi := &file_ingest_v1_ingest_proto_msgTypes[32]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1889,7 +2184,7 @@ func (x *CancelVideoDownloadResponse) String() string {
 func (*CancelVideoDownloadResponse) ProtoMessage() {}
 
 func (x *CancelVideoDownloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ingest_v1_ingest_proto_msgTypes[32]
+	mi := &file_ingest_v1_ingest_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1902,7 +2197,7 @@ func (x *CancelVideoDownloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelVideoDownloadResponse.ProtoReflect.Descriptor instead.
 func (*CancelVideoDownloadResponse) Descriptor() ([]byte, []int) {
-	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{32}
+	return file_ingest_v1_ingest_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CancelVideoDownloadResponse) GetCancelled() int32 {
@@ -2033,16 +2328,31 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\rGetJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"2\n" +
 	"\x0eGetJobResponse\x12 \n" +
-	"\x03job\x18\x01 \x01(\v2\x0e.ingest.v1.JobR\x03job\"H\n" +
+	"\x03job\x18\x01 \x01(\v2\x0e.ingest.v1.JobR\x03job\"o\n" +
 	"\x0fListJobsRequest\x12\x1f\n" +
 	"\vactive_only\x18\x01 \x01(\bR\n" +
 	"activeOnly\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"6\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12%\n" +
+	"\x0ehide_dismissed\x18\x03 \x01(\bR\rhideDismissed\"6\n" +
 	"\x10ListJobsResponse\x12\"\n" +
 	"\x04jobs\x18\x01 \x03(\v2\x0e.ingest.v1.JobR\x04jobs\")\n" +
 	"\x10CancelJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"\x13\n" +
-	"\x11CancelJobResponse\"7\n" +
+	"\x11CancelJobResponse\"*\n" +
+	"\x11DismissJobRequest\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"\x14\n" +
+	"\x12DismissJobResponse\"K\n" +
+	"\x0fRetryJobRequest\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12!\n" +
+	"\frequested_by\x18\x02 \x01(\tR\vrequestedBy\"4\n" +
+	"\x10RetryJobResponse\x12 \n" +
+	"\x03job\x18\x01 \x01(\v2\x0e.ingest.v1.JobR\x03job\"@\n" +
+	"\x10ListScansRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x02 \x01(\x05R\x06offset\"V\n" +
+	"\x11ListScansResponse\x12+\n" +
+	"\x05scans\x18\x01 \x03(\v2\x15.ingest.v1.ScanStatusR\x05scans\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"7\n" +
 	"\x1aCancelVideoDownloadRequest\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\";\n" +
 	"\x1bCancelVideoDownloadResponse\x12\x1c\n" +
@@ -2053,7 +2363,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x11JOB_STATE_RUNNING\x10\x02\x12\x17\n" +
 	"\x13JOB_STATE_SUCCEEDED\x10\x03\x12\x14\n" +
 	"\x10JOB_STATE_FAILED\x10\x04\x12\x17\n" +
-	"\x13JOB_STATE_CANCELLED\x10\x052\xe5\b\n" +
+	"\x13JOB_STATE_CANCELLED\x10\x052\xbd\n" +
+	"\n" +
 	"\rIngestService\x12=\n" +
 	"\x06Search\x12\x18.ingest.v1.SearchRequest\x1a\x19.ingest.v1.SearchResponse\x12L\n" +
 	"\vEnsureVideo\x12\x1d.ingest.v1.EnsureVideoRequest\x1a\x1e.ingest.v1.EnsureVideoResponse\x12@\n" +
@@ -2065,7 +2376,11 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06Submit\x12\x18.ingest.v1.SubmitRequest\x1a\x19.ingest.v1.SubmitResponse\x12=\n" +
 	"\x06GetJob\x12\x18.ingest.v1.GetJobRequest\x1a\x19.ingest.v1.GetJobResponse\x12C\n" +
 	"\bListJobs\x12\x1a.ingest.v1.ListJobsRequest\x1a\x1b.ingest.v1.ListJobsResponse\x12F\n" +
-	"\tCancelJob\x12\x1b.ingest.v1.CancelJobRequest\x1a\x1c.ingest.v1.CancelJobResponse\x12d\n" +
+	"\tCancelJob\x12\x1b.ingest.v1.CancelJobRequest\x1a\x1c.ingest.v1.CancelJobResponse\x12I\n" +
+	"\n" +
+	"DismissJob\x12\x1c.ingest.v1.DismissJobRequest\x1a\x1d.ingest.v1.DismissJobResponse\x12C\n" +
+	"\bRetryJob\x12\x1a.ingest.v1.RetryJobRequest\x1a\x1b.ingest.v1.RetryJobResponse\x12F\n" +
+	"\tListScans\x12\x1b.ingest.v1.ListScansRequest\x1a\x1c.ingest.v1.ListScansResponse\x12d\n" +
 	"\x13CancelVideoDownload\x12%.ingest.v1.CancelVideoDownloadRequest\x1a&.ingest.v1.CancelVideoDownloadResponse\x12R\n" +
 	"\rExpandLibrary\x12\x1f.ingest.v1.ExpandLibraryRequest\x1a .ingest.v1.ExpandLibraryResponse\x12a\n" +
 	"\x12ListChannelUploads\x12$.ingest.v1.ListChannelUploadsRequest\x1a%.ingest.v1.ListChannelUploadsResponseB\x9f\x01\n" +
@@ -2085,7 +2400,7 @@ func file_ingest_v1_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_ingest_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_ingest_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_ingest_v1_ingest_proto_goTypes = []any{
 	(JobState)(0),                       // 0: ingest.v1.JobState
 	(*ListChannelUploadsRequest)(nil),   // 1: ingest.v1.ListChannelUploadsRequest
@@ -2119,62 +2434,76 @@ var file_ingest_v1_ingest_proto_goTypes = []any{
 	(*ListJobsResponse)(nil),            // 29: ingest.v1.ListJobsResponse
 	(*CancelJobRequest)(nil),            // 30: ingest.v1.CancelJobRequest
 	(*CancelJobResponse)(nil),           // 31: ingest.v1.CancelJobResponse
-	(*CancelVideoDownloadRequest)(nil),  // 32: ingest.v1.CancelVideoDownloadRequest
-	(*CancelVideoDownloadResponse)(nil), // 33: ingest.v1.CancelVideoDownloadResponse
-	(*timestamppb.Timestamp)(nil),       // 34: google.protobuf.Timestamp
+	(*DismissJobRequest)(nil),           // 32: ingest.v1.DismissJobRequest
+	(*DismissJobResponse)(nil),          // 33: ingest.v1.DismissJobResponse
+	(*RetryJobRequest)(nil),             // 34: ingest.v1.RetryJobRequest
+	(*RetryJobResponse)(nil),            // 35: ingest.v1.RetryJobResponse
+	(*ListScansRequest)(nil),            // 36: ingest.v1.ListScansRequest
+	(*ListScansResponse)(nil),           // 37: ingest.v1.ListScansResponse
+	(*CancelVideoDownloadRequest)(nil),  // 38: ingest.v1.CancelVideoDownloadRequest
+	(*CancelVideoDownloadResponse)(nil), // 39: ingest.v1.CancelVideoDownloadResponse
+	(*timestamppb.Timestamp)(nil),       // 40: google.protobuf.Timestamp
 }
 var file_ingest_v1_ingest_proto_depIdxs = []int32{
 	6,  // 0: ingest.v1.ListChannelUploadsResponse.videos:type_name -> ingest.v1.ExternalVideo
 	2,  // 1: ingest.v1.ListChannelUploadsResponse.sort_options:type_name -> ingest.v1.SortOption
-	34, // 2: ingest.v1.ExternalVideo.published_at:type_name -> google.protobuf.Timestamp
+	40, // 2: ingest.v1.ExternalVideo.published_at:type_name -> google.protobuf.Timestamp
 	6,  // 3: ingest.v1.SearchResponse.videos:type_name -> ingest.v1.ExternalVideo
-	34, // 4: ingest.v1.BackfillStatus.started_at:type_name -> google.protobuf.Timestamp
-	34, // 5: ingest.v1.BackfillStatus.finished_at:type_name -> google.protobuf.Timestamp
+	40, // 4: ingest.v1.BackfillStatus.started_at:type_name -> google.protobuf.Timestamp
+	40, // 5: ingest.v1.BackfillStatus.finished_at:type_name -> google.protobuf.Timestamp
 	13, // 6: ingest.v1.BackfillTopicsResponse.status:type_name -> ingest.v1.BackfillStatus
 	13, // 7: ingest.v1.GetBackfillStatusResponse.status:type_name -> ingest.v1.BackfillStatus
 	20, // 8: ingest.v1.RefreshResponse.status:type_name -> ingest.v1.ScanStatus
 	20, // 9: ingest.v1.GetScanStatusResponse.status:type_name -> ingest.v1.ScanStatus
-	34, // 10: ingest.v1.ScanStatus.started_at:type_name -> google.protobuf.Timestamp
-	34, // 11: ingest.v1.ResolveStreamResponse.expires_at:type_name -> google.protobuf.Timestamp
+	40, // 10: ingest.v1.ScanStatus.started_at:type_name -> google.protobuf.Timestamp
+	40, // 11: ingest.v1.ResolveStreamResponse.expires_at:type_name -> google.protobuf.Timestamp
 	25, // 12: ingest.v1.SubmitResponse.job:type_name -> ingest.v1.Job
 	0,  // 13: ingest.v1.Job.state:type_name -> ingest.v1.JobState
-	34, // 14: ingest.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	34, // 15: ingest.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	40, // 14: ingest.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	40, // 15: ingest.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
 	25, // 16: ingest.v1.GetJobResponse.job:type_name -> ingest.v1.Job
 	25, // 17: ingest.v1.ListJobsResponse.jobs:type_name -> ingest.v1.Job
-	7,  // 18: ingest.v1.IngestService.Search:input_type -> ingest.v1.SearchRequest
-	9,  // 19: ingest.v1.IngestService.EnsureVideo:input_type -> ingest.v1.EnsureVideoRequest
-	16, // 20: ingest.v1.IngestService.Refresh:input_type -> ingest.v1.RefreshRequest
-	11, // 21: ingest.v1.IngestService.BackfillTopics:input_type -> ingest.v1.BackfillTopicsRequest
-	12, // 22: ingest.v1.IngestService.GetBackfillStatus:input_type -> ingest.v1.GetBackfillStatusRequest
-	18, // 23: ingest.v1.IngestService.GetScanStatus:input_type -> ingest.v1.GetScanStatusRequest
-	21, // 24: ingest.v1.IngestService.ResolveStream:input_type -> ingest.v1.ResolveStreamRequest
-	23, // 25: ingest.v1.IngestService.Submit:input_type -> ingest.v1.SubmitRequest
-	26, // 26: ingest.v1.IngestService.GetJob:input_type -> ingest.v1.GetJobRequest
-	28, // 27: ingest.v1.IngestService.ListJobs:input_type -> ingest.v1.ListJobsRequest
-	30, // 28: ingest.v1.IngestService.CancelJob:input_type -> ingest.v1.CancelJobRequest
-	32, // 29: ingest.v1.IngestService.CancelVideoDownload:input_type -> ingest.v1.CancelVideoDownloadRequest
-	4,  // 30: ingest.v1.IngestService.ExpandLibrary:input_type -> ingest.v1.ExpandLibraryRequest
-	1,  // 31: ingest.v1.IngestService.ListChannelUploads:input_type -> ingest.v1.ListChannelUploadsRequest
-	8,  // 32: ingest.v1.IngestService.Search:output_type -> ingest.v1.SearchResponse
-	10, // 33: ingest.v1.IngestService.EnsureVideo:output_type -> ingest.v1.EnsureVideoResponse
-	17, // 34: ingest.v1.IngestService.Refresh:output_type -> ingest.v1.RefreshResponse
-	14, // 35: ingest.v1.IngestService.BackfillTopics:output_type -> ingest.v1.BackfillTopicsResponse
-	15, // 36: ingest.v1.IngestService.GetBackfillStatus:output_type -> ingest.v1.GetBackfillStatusResponse
-	19, // 37: ingest.v1.IngestService.GetScanStatus:output_type -> ingest.v1.GetScanStatusResponse
-	22, // 38: ingest.v1.IngestService.ResolveStream:output_type -> ingest.v1.ResolveStreamResponse
-	24, // 39: ingest.v1.IngestService.Submit:output_type -> ingest.v1.SubmitResponse
-	27, // 40: ingest.v1.IngestService.GetJob:output_type -> ingest.v1.GetJobResponse
-	29, // 41: ingest.v1.IngestService.ListJobs:output_type -> ingest.v1.ListJobsResponse
-	31, // 42: ingest.v1.IngestService.CancelJob:output_type -> ingest.v1.CancelJobResponse
-	33, // 43: ingest.v1.IngestService.CancelVideoDownload:output_type -> ingest.v1.CancelVideoDownloadResponse
-	5,  // 44: ingest.v1.IngestService.ExpandLibrary:output_type -> ingest.v1.ExpandLibraryResponse
-	3,  // 45: ingest.v1.IngestService.ListChannelUploads:output_type -> ingest.v1.ListChannelUploadsResponse
-	32, // [32:46] is the sub-list for method output_type
-	18, // [18:32] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	25, // 18: ingest.v1.RetryJobResponse.job:type_name -> ingest.v1.Job
+	20, // 19: ingest.v1.ListScansResponse.scans:type_name -> ingest.v1.ScanStatus
+	7,  // 20: ingest.v1.IngestService.Search:input_type -> ingest.v1.SearchRequest
+	9,  // 21: ingest.v1.IngestService.EnsureVideo:input_type -> ingest.v1.EnsureVideoRequest
+	16, // 22: ingest.v1.IngestService.Refresh:input_type -> ingest.v1.RefreshRequest
+	11, // 23: ingest.v1.IngestService.BackfillTopics:input_type -> ingest.v1.BackfillTopicsRequest
+	12, // 24: ingest.v1.IngestService.GetBackfillStatus:input_type -> ingest.v1.GetBackfillStatusRequest
+	18, // 25: ingest.v1.IngestService.GetScanStatus:input_type -> ingest.v1.GetScanStatusRequest
+	21, // 26: ingest.v1.IngestService.ResolveStream:input_type -> ingest.v1.ResolveStreamRequest
+	23, // 27: ingest.v1.IngestService.Submit:input_type -> ingest.v1.SubmitRequest
+	26, // 28: ingest.v1.IngestService.GetJob:input_type -> ingest.v1.GetJobRequest
+	28, // 29: ingest.v1.IngestService.ListJobs:input_type -> ingest.v1.ListJobsRequest
+	30, // 30: ingest.v1.IngestService.CancelJob:input_type -> ingest.v1.CancelJobRequest
+	32, // 31: ingest.v1.IngestService.DismissJob:input_type -> ingest.v1.DismissJobRequest
+	34, // 32: ingest.v1.IngestService.RetryJob:input_type -> ingest.v1.RetryJobRequest
+	36, // 33: ingest.v1.IngestService.ListScans:input_type -> ingest.v1.ListScansRequest
+	38, // 34: ingest.v1.IngestService.CancelVideoDownload:input_type -> ingest.v1.CancelVideoDownloadRequest
+	4,  // 35: ingest.v1.IngestService.ExpandLibrary:input_type -> ingest.v1.ExpandLibraryRequest
+	1,  // 36: ingest.v1.IngestService.ListChannelUploads:input_type -> ingest.v1.ListChannelUploadsRequest
+	8,  // 37: ingest.v1.IngestService.Search:output_type -> ingest.v1.SearchResponse
+	10, // 38: ingest.v1.IngestService.EnsureVideo:output_type -> ingest.v1.EnsureVideoResponse
+	17, // 39: ingest.v1.IngestService.Refresh:output_type -> ingest.v1.RefreshResponse
+	14, // 40: ingest.v1.IngestService.BackfillTopics:output_type -> ingest.v1.BackfillTopicsResponse
+	15, // 41: ingest.v1.IngestService.GetBackfillStatus:output_type -> ingest.v1.GetBackfillStatusResponse
+	19, // 42: ingest.v1.IngestService.GetScanStatus:output_type -> ingest.v1.GetScanStatusResponse
+	22, // 43: ingest.v1.IngestService.ResolveStream:output_type -> ingest.v1.ResolveStreamResponse
+	24, // 44: ingest.v1.IngestService.Submit:output_type -> ingest.v1.SubmitResponse
+	27, // 45: ingest.v1.IngestService.GetJob:output_type -> ingest.v1.GetJobResponse
+	29, // 46: ingest.v1.IngestService.ListJobs:output_type -> ingest.v1.ListJobsResponse
+	31, // 47: ingest.v1.IngestService.CancelJob:output_type -> ingest.v1.CancelJobResponse
+	33, // 48: ingest.v1.IngestService.DismissJob:output_type -> ingest.v1.DismissJobResponse
+	35, // 49: ingest.v1.IngestService.RetryJob:output_type -> ingest.v1.RetryJobResponse
+	37, // 50: ingest.v1.IngestService.ListScans:output_type -> ingest.v1.ListScansResponse
+	39, // 51: ingest.v1.IngestService.CancelVideoDownload:output_type -> ingest.v1.CancelVideoDownloadResponse
+	5,  // 52: ingest.v1.IngestService.ExpandLibrary:output_type -> ingest.v1.ExpandLibraryResponse
+	3,  // 53: ingest.v1.IngestService.ListChannelUploads:output_type -> ingest.v1.ListChannelUploadsResponse
+	37, // [37:54] is the sub-list for method output_type
+	20, // [20:37] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_ingest_v1_ingest_proto_init() }
@@ -2188,7 +2517,7 @@ func file_ingest_v1_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ingest_v1_ingest_proto_rawDesc), len(file_ingest_v1_ingest_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   33,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

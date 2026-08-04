@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -66,14 +67,22 @@ func (s *Store) Get(ctx context.Context, jobID string) (domain.Job, error) {
 	return j, err
 }
 
-func (s *Store) List(ctx context.Context, activeOnly bool, limit int32) ([]domain.Job, error) {
+func (s *Store) List(ctx context.Context, activeOnly, hideDismissed bool, limit int32) ([]domain.Job, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 
-	query := `SELECT ` + jobColumns + ` FROM jobs`
+	var where []string
 	if activeOnly {
-		query += ` WHERE state IN ('QUEUED', 'RUNNING')`
+		where = append(where, `state IN ('QUEUED', 'RUNNING')`)
+	}
+	if hideDismissed {
+		where = append(where, `dismissed_at IS NULL`)
+	}
+
+	query := `SELECT ` + jobColumns + ` FROM jobs`
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	// Unfinished work first, then by recency.
 	//
@@ -112,6 +121,24 @@ func (s *Store) Cancel(ctx context.Context, jobID string) error {
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("job %s is not cancellable: %w", jobID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+// Dismiss hides a finished job from the Activity page.
+//
+// Terminal states only. Hiding a job still queued or running would take work
+// off the one page that reports it while leaving it running underneath, and
+// the button that does that on those rows already has a meaning — it cancels.
+func (s *Store) Dismiss(ctx context.Context, jobID string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE jobs SET dismissed_at = now()
+		WHERE id = $1 AND state NOT IN ('QUEUED', 'RUNNING') AND dismissed_at IS NULL`, jobID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("job %s cannot be dismissed: %w", jobID, domain.ErrNotFound)
 	}
 	return nil
 }

@@ -23,7 +23,11 @@ type Scanner struct {
 	// listing because it is the only source that carries view counts and upload
 	// dates; it is undocumented, so every use falls back to fetch.
 	channels domain.ChannelSource
-	library  domain.Library
+	library domain.Library
+	// Where passes are kept so the Activity page can show more than the last
+	// one. Optional: a scanner without it still scans, and the tests that
+	// exercise scanning do not need a database to do it.
+	scans    domain.ScanStore
 	logger   *slog.Logger
 	interval time.Duration
 
@@ -34,11 +38,19 @@ type Scanner struct {
 	lastScan domain.ScanResult
 }
 
+// How long a pass stays on the Activity page.
+//
+// Thirty days, because the question it answers is asked in days — "this channel
+// has stopped producing new videos, has the scan been running?" — and a month
+// covers every version of that question anybody has brought to this page.
+const scanRetention = 30 * 24 * time.Hour
+
 func NewScanner(
 	topics domain.TopicSource,
 	fetch domain.Downloader,
 	channels domain.ChannelSource,
 	library domain.Library,
+	scans domain.ScanStore,
 	logger *slog.Logger,
 	interval time.Duration,
 ) *Scanner {
@@ -47,6 +59,7 @@ func NewScanner(
 		fetch:    fetch,
 		channels: channels,
 		library:  library,
+		scans:    scans,
 		logger:   logger,
 		interval: interval,
 	}
@@ -158,6 +171,15 @@ func (s *Scanner) ScanNow(ctx context.Context) (domain.ScanResult, error) {
 	s.mu.Lock()
 	s.lastScan = result
 	s.mu.Unlock()
+
+	// Written after the in-memory copy, and a failure here is logged rather
+	// than returned: the scan has already done its work, and losing the record
+	// of a pass is not the same as the pass not happening.
+	if s.scans != nil {
+		if err := s.scans.RecordScan(ctx, result, scanRetention); err != nil {
+			s.logger.Warn("record scan", "error", err)
+		}
+	}
 
 	s.logger.Info("scan complete",
 		"sources", result.SourcesScanned,

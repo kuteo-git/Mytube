@@ -125,6 +125,9 @@ func (g *Gateway) Routes() http.Handler {
 	// to play something. These endpoints only report on them.
 	mux.HandleFunc("GET /api/ingest/jobs", g.handleListJobs)
 	mux.HandleFunc("POST /api/ingest/jobs/{id}/cancel", g.handleCancelJob)
+	mux.HandleFunc("POST /api/ingest/jobs/{id}/dismiss", g.handleDismissJob)
+	mux.HandleFunc("POST /api/ingest/jobs/{id}/retry", g.handleRetryJob)
+	mux.HandleFunc("GET /api/scans", g.handleListScans)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))

@@ -87,8 +87,11 @@ type fakeStore struct{}
 
 func (fakeStore) Enqueue(_ context.Context, j domain.Job) (domain.Job, error) { return j, nil }
 func (fakeStore) Get(context.Context, string) (domain.Job, error)             { return domain.Job{}, nil }
-func (fakeStore) List(context.Context, bool, int32) ([]domain.Job, error)     { return nil, nil }
-func (fakeStore) Cancel(context.Context, string) error                        { return nil }
+func (fakeStore) List(context.Context, bool, bool, int32) ([]domain.Job, error) {
+	return nil, nil
+}
+func (fakeStore) Cancel(context.Context, string) error  { return nil }
+func (fakeStore) Dismiss(context.Context, string) error { return nil }
 func (fakeStore) Claim(context.Context, time.Duration) (domain.Job, error) {
 	return domain.Job{}, domain.ErrNotFound
 }

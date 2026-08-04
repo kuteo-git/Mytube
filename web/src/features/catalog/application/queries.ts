@@ -96,6 +96,8 @@ export function useRefreshTopics() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['topics'] })
       void queryClient.invalidateQueries({ queryKey: ['feed'] })
+      // The pass that just ran is now the newest row in the history.
+      void queryClient.invalidateQueries({ queryKey: ['scans'] })
     },
   })
 }
@@ -234,6 +236,66 @@ export function useCancelJob() {
     mutationFn: (jobId: string) => repo.cancelJob(jobId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ingest-jobs'] })
+    },
+  })
+}
+
+/**
+ * The Activity page's own view of the job list.
+ *
+ * A separate query key, not a flag on useIngestJobs, because the two views are
+ * genuinely different lists: this one hides what has been dismissed and asks
+ * for far more rows, while the player's needs every job and fifty of them.
+ * Sharing a key would let whichever mounted last overwrite the other's cache —
+ * and the losing side would be the player, which uses this list to notice that
+ * a download has finished.
+ */
+export function useActivityJobs(limit = 200) {
+  return useQuery({
+    queryKey: ['ingest-jobs', 'activity', limit],
+    queryFn: () => repo.listJobs(false, { hideDismissed: true, limit }),
+    refetchInterval: (query) => {
+      const jobs = query.state.data ?? []
+      return jobs.some((j) => j.state === 'QUEUED' || j.state === 'RUNNING') ? 2000 : false
+    },
+  })
+}
+
+export function useDismissJob() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (jobId: string) => repo.dismissJob(jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ingest-jobs'] })
+    },
+  })
+}
+
+export function useRetryJob() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (jobId: string) => repo.retryJob(jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ingest-jobs'] })
+    },
+  })
+}
+
+/**
+ * What the scanner has been doing, a page at a time.
+ *
+ * Paged at the server rather than fetched whole: this grows by a row an hour
+ * for as long as the service runs, which is the shape of list that has to be
+ * paged from the first day rather than the day it becomes a problem.
+ */
+export function useScans(limit = 10) {
+  return useInfiniteQuery({
+    queryKey: ['scans', limit],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => repo.listScans(limit, pageParam),
+    getNextPageParam: (last, pages) => {
+      const loaded = pages.reduce((n, page) => n + page.scans.length, 0)
+      return loaded < last.total ? loaded : undefined
     },
   })
 }

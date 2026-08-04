@@ -50,7 +50,7 @@ export interface CatalogRepository {
    * must not fill it.
    */
   getStream(videoId: string, prefetch?: boolean): Promise<StreamSources>
-  listJobs(activeOnly: boolean): Promise<IngestJob[]>
+  listJobs(activeOnly: boolean, options?: JobListOptions): Promise<IngestJob[]>
   /**
    * Stops the transfer for a video, if one is running.
    *
@@ -61,6 +61,11 @@ export interface CatalogRepository {
    */
   cancelDownload(videoId: string): Promise<void>
   cancelJob(jobId: string): Promise<void>
+  /** Hides a finished job. Running ones are cancelled, not hidden. */
+  dismissJob(jobId: string): Promise<void>
+  /** Queues the same URL again and returns the new job. */
+  retryJob(jobId: string): Promise<IngestJob>
+  listScans(limit: number, offset: number): Promise<ScanPage>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
   /** Hides a video from the feed and tells the recommender not to offer it. */
@@ -133,6 +138,24 @@ export interface Suggestion {
   text: string
   kind: 'TITLE' | 'TOPIC' | 'CHANNEL'
   videoCount: number
+}
+
+/**
+ * How the Activity page asks for jobs, and how nobody else does.
+ *
+ * hideDismissed is a request rather than a rule because the player reads this
+ * same list to learn its download has landed. Filtering by default would let
+ * somebody tidying this page hide a completed job from a player still waiting
+ * on it.
+ */
+export interface JobListOptions {
+  hideDismissed?: boolean
+  limit?: number
+}
+
+export interface ScanPage {
+  scans: ScanStatus[]
+  total: number
 }
 
 export interface ScanStatus {
@@ -352,9 +375,27 @@ export const httpCatalogRepository: CatalogRepository = {
     await request<void>(`/ingest/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
   },
 
-  async listJobs(activeOnly) {
+  async dismissJob(jobId: string) {
+    await request<void>(`/ingest/jobs/${encodeURIComponent(jobId)}/dismiss`, { method: 'POST' })
+  },
+
+  async retryJob(jobId: string) {
+    return request<IngestJob>(`/ingest/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: 'POST',
+    })
+  },
+
+  async listScans(limit, offset) {
+    return request<ScanPage>(`/scans${query({ limit: String(limit), offset: String(offset) })}`)
+  },
+
+  async listJobs(activeOnly, options) {
     const { jobs } = await request<{ jobs: IngestJob[] }>(
-      `/ingest/jobs${query({ activeOnly: activeOnly ? 'true' : undefined })}`,
+      `/ingest/jobs${query({
+        activeOnly: activeOnly ? 'true' : undefined,
+        hideDismissed: options?.hideDismissed ? 'true' : undefined,
+        limit: options?.limit ? String(options.limit) : undefined,
+      })}`,
     )
     return jobs
   },
