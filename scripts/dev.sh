@@ -36,6 +36,11 @@ mkdir -p "$MEDIA_ROOT"
 
 pids=()
 cleanup() {
+  # Nothing started yet is the ordinary case for every failure above: the
+  # Postgres check and the port check both exit before anything runs, and
+  # under `set -u` an empty array is an unset variable rather than an empty
+  # one — so without this guard a clean refusal ends in a shell error.
+  [ "${#pids[@]}" -eq 0 ] && return
   echo
   echo "stopping services..."
   for pid in "${pids[@]}"; do
@@ -43,12 +48,40 @@ cleanup() {
   done
   wait 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM
 
 if ! pg_isready -q; then
   echo "postgres is not running: brew services start postgresql@17" >&2
   exit 1
 fi
+
+# Refuse to start on top of a stack that is already running.
+#
+# Without this the failures are silent and misleading, both of which happened:
+# a Go service prints "address already in use" into a log nobody is tailing and
+# this script carries on as though it had started, while Vite quietly moves to
+# the next free port and announces it in a line of startup output nobody reads.
+# The result looks like the application being broken rather than like two
+# copies of it running.
+#
+# Vite is checked here as well as by strictPort, because by the time Vite runs
+# the four services have already started and stopping them again is worse than
+# not starting.
+busy=""
+for port in 8180 8181 8182 8183 5173; do
+  if pid=$(lsof -ti:"$port" 2>/dev/null | head -1); then
+    busy+=$'\n'"  :$port held by pid $pid ($(ps -o comm= -p "$pid" 2>/dev/null | xargs basename 2>/dev/null))"
+  fi
+done
+if [ -n "$busy" ]; then
+  echo "some of the stack is already running:$busy" >&2
+  echo >&2
+  echo "stop it first — scripts/stop.sh — or leave it alone." >&2
+  exit 1
+fi
+
+# Registered only now, once the checks that can refuse have passed. There is
+# nothing to clean up before this line.
+trap cleanup EXIT INT TERM
 
 echo "building services..."
 go build -o "$LOG_DIR/catalog" ./services/catalog/cmd/catalog
@@ -72,8 +105,45 @@ NLLB_VENV="${NLLB_VENV:-/tmp/nllb-venv}"
 if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/translate_server.py ]; then
   echo "starting translation server (port 8005)..."
   "$NLLB_VENV/bin/python" services/translate_server.py >"$LOG_DIR/translate.log" 2>&1 & pids+=($!)
+else
+  echo "no translation server: narration will not translate" >&2
 fi
 
-echo "catalog :8181 | recsys :8182 | ingest :8183 | gateway :8180 | logs in $LOG_DIR"
-echo "starting web..."
+# --- speech, for narration ---
+#
+# Lives in another repository, so this only starts it if that repository is
+# where it is expected to be. Started here anyway because the alternative is
+# what has been happening: the player asks for speech, gets nothing, and the
+# reason is a service somebody forgot to start in a second terminal.
+#
+# Not fatal when absent. Narration is one feature; the library is the app.
+TTS_SERVER="${TTS_SERVER:-$HOME/Documents/git/robot-esp32/services/vieneu_server.py}"
+if lsof -ti:8002 >/dev/null 2>&1; then
+  echo "speech already running on :8002, leaving it alone"
+elif [ -f "$TTS_SERVER" ]; then
+  echo "starting speech server (port 8002)..."
+  python3 "$TTS_SERVER" >"$LOG_DIR/tts.log" 2>&1 & pids+=($!)
+else
+  echo "no speech server at $TTS_SERVER: narration will be silent" >&2
+fi
+
+# What actually came up, asked rather than assumed.
+#
+# Every line above starts something in the background and none of them can fail
+# visibly: a service that exits immediately leaves this script printing a list
+# of ports as though they were all listening.
+sleep 1
+echo
+for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8005:translate" "8002:speech"; do
+  port="${entry%%:*}"
+  name="${entry##*:}"
+  if lsof -ti:"$port" >/dev/null 2>&1; then
+    printf '  %-10s :%s  up\n' "$name" "$port"
+  else
+    printf '  %-10s :%s  DOWN — see %s/%s.log\n' "$name" "$port" "$LOG_DIR" "$name"
+  fi
+done
+echo
+echo "logs in $LOG_DIR"
+echo "starting web on :5173..."
 npm --prefix web run dev

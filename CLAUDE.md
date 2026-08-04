@@ -390,7 +390,25 @@ auto-follow kênh (subscribe thành thật) · UI `/tv` điều khiển D-pad ·
 **Hạ tầng:** 4 service (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + web 5173.
 Đổi khỏi block 808x vì máy này có project khác chiếm cứng 8080 và 8082.
 Postgres 17, mỗi service 1 schema + 1 role riêng. ConnectRPC nội bộ, REST ra ngoài.
-`scripts/dev.sh` chạy cả stack. `make check` = buf lint + tsc + go build.
+`scripts/dev.sh` chạy cả stack — **6 tiến trình**: 4 service Go + sidecar dịch (8005) +
+TTS (8002, nằm ở repo `robot-esp32`, chỉ start nếu tìm thấy và chưa chạy) — rồi mới giao
+terminal cho Vite. `scripts/stop.sh` dừng lại, **làm việc theo cổng** nên dừng được cả
+service khởi động bằng tay sau khi rebuild hoặc chạy trong tmux.
+`make check` = buf lint + tsc + go build.
+
+**dev.sh từ chối chạy khi cổng đang bận (2026-08-04).** Trước đó hai kiểu hỏng im lặng đều
+đã xảy ra thật: service Go in `address already in use` vào log không ai tail rồi script vẫn
+chạy tiếp như chưa có gì, còn Vite thì **lặng lẽ nhảy sang cổng khác** và báo trong một dòng
+khởi động không ai đọc — đến khi cái giữ 5173 chết thì tab trình duyệt thành trang chết
+trong lúc Vite vẫn đang chạy. Cả hai đều trông giống "app hỏng" chứ không giống "đang chạy
+hai bản". Kèm `strictPort: true` ở `vite.config.ts`. Và dev.sh **hỏi lại từng cổng sau khi
+start** rồi in `up`/`DOWN` — mọi dòng start đều là background nên không có cái nào hỏng
+**thấy được**.
+
+**Bẫy đã gặp:** `trap cleanup EXIT` của dev.sh giết **mọi** tiến trình con khi nó thoát —
+kể cả khi nó thoát vì `npm run dev` (tiến trình foreground cuối) bị kill. Kill Vite cũ =
+giết luôn catalog và translate server, và triệu chứng hiện ra ở chỗ khác hẳn ("Could not
+reach the library service", "502 translate"). Đã gặp hai lần trong một buổi.
 
 **Nội dung:** `topics.yaml` là nguồn duy nhất của feed. Scanner quét **mỗi 1 tiếng**
 (đổi từ 12 tiếng ngày 2026-07-29; chỉnh qua `SCAN_INTERVAL`, vd `SCAN_INTERVAL=30m`).

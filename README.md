@@ -46,10 +46,23 @@ cd web && npm install && cd ..
 ## Day to day
 
 ```bash
-scripts/dev.sh     # builds and starts catalog, recsys, ingest, gateway, then Vite
+scripts/dev.sh     # builds and starts the whole stack, then Vite in the foreground
+scripts/stop.sh    # stops it again, however it was started
 make check         # buf lint + tsc + go build
 make proto         # regenerate after editing a .proto
 ```
+
+`dev.sh` starts catalog, recsys, ingest, gateway, the translation sidecar and —
+if it can find it — the speech server from the `robot-esp32` repository, then
+prints which ports actually came up before handing the terminal to Vite.
+
+It refuses to start when any of those ports is already held, rather than
+half-starting on top of a stack that is already running. `stop.sh` is the way
+out of that: it works by port, so it stops services however they were launched
+— as children of `dev.sh`, by hand after a rebuild, or inside tmux.
+
+Speech (`:8002`) belongs to another project. `dev.sh` starts it if it is not
+already running and leaves it alone if it is; `stop.sh` never stops it.
 
 ### Health check
 
