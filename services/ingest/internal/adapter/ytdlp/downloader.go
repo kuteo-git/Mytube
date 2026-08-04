@@ -410,6 +410,27 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		NoPlaylist().
 		NoWarnings().
 		NoPart().
+		// Start each attempt from zero.
+		//
+		// NoPart above writes straight to the final names, and CLAUDE.md §8b
+		// recorded the consequence as "yt-dlp cannot resume, so the next attempt
+		// starts from zero". Only the first half was true: yt-dlp does try to
+		// resume, and with no part file it resumes *into the finished name* — so
+		// a track a cancelled attempt had already completed made it ask for a
+		// range beginning at the end of the file, and YouTube answered
+		// **416 Requested range not satisfiable**. The download then failed, and
+		// went on failing: every retry found the same file and asked the same
+		// impossible question. One cancelled download poisoned that video for
+		// good, which is not a state anything else in this system can get into.
+		//
+		// Measured on `2el-stE5mGM`: a 131MB audio track left complete beside a
+		// 3.3GB video track left partial, and five consecutive job failures.
+		//
+		// The cost is the one already accepted: cancelling loses what was
+		// fetched. Keeping the bytes instead would mean dropping NoPart so that
+		// partial data lives in `.part` files — resumable, but also litter that
+		// nothing in the eviction sweep knows how to collect.
+		NoContinue().
 		Output(target)
 
 	if onProgress != nil {
