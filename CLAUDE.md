@@ -259,7 +259,22 @@ Every element either does something real or is dropped.
 | Explore / chip filter | → driven by **real tags and categories** in the catalog |
 | Your videos, YT Music, YT Kids, footer, Shorts, Live | **DROPPED** |
 | Subscribe | **Real in P1**: adds the channel as a live ingest source, scanned like any other |
-| Share | Copies the LAN link to the clipboard |
+| Share | ~~Copies the LAN link to the clipboard~~ → **the YouTube link**, through the device's share sheet on touch and the clipboard on desktop (2026-08-05) |
+
+**Why Share was reversed (2026-08-05).** The LAN address is a link only to somebody sitting in
+the house and on the same network; sent anywhere else it is a dead string, and sharing is by
+definition aimed outward. The address that means the same thing to everybody is the one this
+library fetched the video from — `video.sourceUrl`, falling back to
+`https://www.youtube.com/watch?v=<id>` when a flat-listed row never recorded one.
+- **Share sheet on touch, clipboard on desktop.** Told apart by `useCoarsePointer()`, the same
+  signal the player uses to tell a tap from a click — not by width: a desktop window narrowed to
+  390px does not acquire a share sheet. The browser having `navigator.share` is checked as well,
+  so a pointer that says "phone" on a browser that has no sheet still copies.
+- **A cancelled sheet does not fall through to the clipboard.** Backing out is an answer;
+  quietly doing the thing that was just declined is worse than doing nothing.
+- **The copy path says "Link copied" on the pill for 2 seconds.** A clipboard write shows nothing
+  by itself, which is a button that looks broken — and on a plain-HTTP LAN address the clipboard
+  API is withheld as an insecure context, so the silent version was sometimes *actually* broken.
 
 ## 6. Recommendation
 

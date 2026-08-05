@@ -1,9 +1,15 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
+import { useCoarsePointer } from '@/shared/lib/pointer'
+import {
+  type ShareOutcome,
+  shareURL,
+  shareVideo,
+} from '@/features/watch/application/share-link'
 import { formatCount, formatSubscribers } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
@@ -22,6 +28,21 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   const setReaction = useSetReaction(video.id)
   const setSubscription = useSetSubscription(video.channel.id)
   const setPinned = useSetPinned()
+
+  // A share sheet where there is one, the clipboard where there is not.
+  //
+  // Asked of the pointer rather than of the screen's width: a share sheet is a
+  // thing a touch device has, and a window narrowed on a desktop does not
+  // acquire one. The same signal the player uses to tell a tap from a click.
+  const coarse = useCoarsePointer()
+  const [shared, setShared] = useState<ShareOutcome | null>(null)
+  useEffect(() => {
+    if (shared !== 'copied') return
+    // Long enough to be read, short enough that the button is a button again
+    // before anybody wants to press it a second time.
+    const timer = window.setTimeout(() => setShared(null), 2000)
+    return () => window.clearTimeout(timer)
+  }, [shared])
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -83,10 +104,18 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           </button>
         </div>
 
+        {/* Says what happened. A copy with nothing to show for it is a button
+            that appears not to work, which is how this one behaved before. */}
         <ActionPill
           icon={<Share2 size={20} />}
-          label="Share"
-          onClick={() => void navigator.clipboard?.writeText(window.location.href)}
+          label={shared === 'copied' ? 'Link copied' : 'Share'}
+          onClick={() => {
+            void shareVideo({
+              url: shareURL(video),
+              title: video.title,
+              canShare: coarse,
+            }).then(setShared)
+          }}
         />
         <ActionPill
           icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
