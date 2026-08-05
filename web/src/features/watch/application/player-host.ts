@@ -126,12 +126,25 @@ export function miniPlacement(input: PlacementInput): HostPlacement {
  * behind the hand moving it, which is the whole difference between dragging an
  * object and asking for one.
  */
-export function draggingPlacement(input: PlacementInput, dy: number): HostPlacement {
+export function draggingPlacement(
+  input: PlacementInput,
+  dy: number,
+  /**
+   * The navigation height where the player will actually land.
+   *
+   * Not `input.navHeight`, which describes the screen being dragged *from* — a
+   * watch screen, which draws no tab bar. Measuring against that aimed the drag
+   * at the very bottom edge, and the bar rose to clear a tab bar the moment the
+   * navigation landed: an overshoot and a spring-back that were one mistake
+   * seen twice.
+   */
+  landingNavHeight = input.navHeight,
+): HostPlacement {
   const from = fullPlacement(input)
-  const to = miniPlacement(input)
+  const to = miniPlacement({ ...input, navHeight: landingNavHeight })
   return {
     position: 'fixed',
-    rect: lerpRect(from.rect, to.rect, dragFraction(input, dy)),
+    rect: lerpRect(from.rect, to.rect, dragFraction(input, dy, landingNavHeight)),
     animate: false,
   }
 }
@@ -143,9 +156,13 @@ export function draggingPlacement(input: PlacementInput, dy: number): HostPlacem
  * edge land at exactly `start + dy`: the picture stays under the finger because
  * the arithmetic puts it there.
  */
-export function dragFraction(input: PlacementInput, dy: number): number {
+export function dragFraction(
+  input: PlacementInput,
+  dy: number,
+  landingNavHeight = input.navHeight,
+): number {
   const from = fullPlacement(input)
-  const to = miniPlacement(input)
+  const to = miniPlacement({ ...input, navHeight: landingNavHeight })
   return travelProgress(dy, to.rect.top - from.rect.top)
 }
 

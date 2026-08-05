@@ -688,6 +688,14 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
      covers that strip itself and the player has nothing to clear; where there is none, the
      player's surface takes the bottom edge and its content is held up by padding on the host —
      the same shape `TopBar` uses for the notch and `BottomNav` for the indicator.
+   - **A drag aims at where the player will land, not at the screen it is leaving.** A watch
+     screen draws no tab bar, so measuring the corner against *it* put the target at the very
+     bottom edge — and the instant the navigation committed, the bar rose to clear a tab bar that
+     had just appeared. The overshoot and the spring back were one mistake seen twice. The
+     landing screen is the remembered background, which is usually a tab and occasionally a
+     channel; **that memory now lives in PlayerProvider** rather than in AppShell, because the
+     shell renders the page underneath and the player aims at its corner, and two memories of one
+     fact is how they came to disagree.
    - **"Is the chrome drawn" is one fact and lives in PlayerProvider.** It was worked out twice —
      once by the shell for its padding, once implicitly by the player, which went on reserving
      `BOTTOM_NAV_HEIGHT` for a navigation that was not there and left the mobile bar floating a

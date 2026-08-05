@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { useEffect, useRef, useState } from 'react'
-import { type Location, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { bareTitle } from '@/features/navigation/application/bare-screens'
@@ -40,30 +40,11 @@ function AppShellInner() {
     scrollerEl,
     dragOffset,
     chromeHidden,
+    background,
+    canGoBack,
   } = usePlayer()
 
 
-  /**
-   * The page the watch screen was opened from, kept alive underneath it.
-   *
-   * Remembered here rather than carried in `location.state`, which is the usual
-   * way to do this: every link to a video would have to pass it, and one that
-   * forgot would open a watch screen with nothing behind it — a bug visible
-   * only mid-gesture, which is the worst kind to have to notice.
-   *
-   * Home stands in when there is nothing to remember: a shared LAN link opens
-   * straight onto a video (CLAUDE.md §5), and a deep link with no history is
-   * exactly what native apps answer by synthesising a stack back to the root.
-   */
-  const backgroundRef = useRef<Location | null>(null)
-  if (!isWatch) backgroundRef.current = location
-  const background =
-    backgroundRef.current ?? ({ ...location, pathname: '/', search: '', hash: '' } as Location)
-
-  // The watch screen is a layer over that page only on a phone. On a desktop it
-  // stays an ordinary page, with the slot and the drawer and the observer that
-  // folds the player into the corner — machinery CLAUDE.md is right to call
-  // delicate, and none of which this needs to disturb.
   const watchIsALayer = isWatch && isMobile
 
   // Whether the bars are drawn at all — read from the provider rather than
@@ -267,7 +248,7 @@ function AppShellInner() {
             within the content and has to travel with it. The miniplayer is
             `fixed`, which is measured from the viewport wherever it sits —
             `overflow` does not trap it, only a transformed ancestor would. */}
-        <PlayerHost canGoBack={backgroundRef.current !== null} />
+        <PlayerHost canGoBack={canGoBack} />
       </main>
 
       {/* The watch screen itself, over the page it was opened from.

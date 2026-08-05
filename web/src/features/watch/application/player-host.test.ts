@@ -3,12 +3,19 @@ import {
   type PlacementInput,
   bridgePlacement,
   deriveMode,
+  draggingPlacement,
+  fullPlacement,
   needsBridge,
   placementFor,
   resolvePin,
   toViewport,
 } from './player-host'
-import { BAR_HEIGHT, BOTTOM_NAV_HEIGHT, miniRectDesktop } from './player-geometry'
+import {
+  BAR_HEIGHT,
+  BOTTOM_NAV_HEIGHT,
+  miniRectDesktop,
+  miniRectMobile,
+} from './player-geometry'
 
 const base: PlacementInput = {
   mode: 'full',
@@ -167,6 +174,46 @@ describe('placementFor', () => {
     expect(p.rect.top + p.rect.height).toBe(844 - BOTTOM_NAV_HEIGHT)
   })
 
+})
+
+describe('a drag towards the corner', () => {
+  const phone = {
+    ...base,
+    mode: 'full' as const,
+    isMobile: true,
+    // The screen being dragged *from* draws no tab bar.
+    navHeight: 0,
+    viewport: { width: 390, height: 844 },
+  }
+
+  it('aims at where the player will land, not at the screen it is leaving', () => {
+    // A watch screen has no tab bar, so measuring against it put the corner at
+    // the very bottom edge — and the bar rose to clear a tab bar the moment the
+    // navigation landed. The overshoot and the spring back were one mistake
+    // seen twice.
+    const landed = miniRectMobile(390, 844, BOTTOM_NAV_HEIGHT, 0)
+    const atTheEnd = draggingPlacement(phone, 10_000, BOTTOM_NAV_HEIGHT)
+
+    expect(atTheEnd.rect.top).toBeCloseTo(landed.top)
+  })
+
+  it('follows the finger the whole way to that corner', () => {
+    // The property the gesture rests on: the top edge lands at start + dy.
+    const from = fullPlacement(phone).rect
+    const dy = 120
+    const moved = draggingPlacement(phone, dy, BOTTOM_NAV_HEIGHT)
+
+    expect(moved.rect.top).toBeCloseTo(from.top + dy)
+  })
+
+  it('aims at the bottom edge when the landing screen has no bar either', () => {
+    // Opening a video from a channel and dragging it back down: the channel
+    // draws its own chrome, so there is no tab bar to clear there either.
+    const landed = miniRectMobile(390, 844, 0, 0)
+    const atTheEnd = draggingPlacement(phone, 10_000, 0)
+
+    expect(atTheEnd.rect.top).toBeCloseTo(landed.top)
+  })
 })
 
 describe('needsBridge', () => {

@@ -10,7 +10,7 @@ import {
 } from 'react'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import { forgetLastWatched } from './last-watched'
-import { useLocation } from 'react-router-dom'
+import { type Location, useLocation } from 'react-router-dom'
 import { isBareScreen } from '@/features/navigation/application/bare-screens'
 import {
   BOTTOM_NAV_HEIGHT,
@@ -80,6 +80,21 @@ export interface PlayerContextValue {
    * player disagree about where the bottom of the screen is.
    */
   chromeHidden: boolean
+  /**
+   * The page the watch screen was opened from, kept alive underneath it.
+   *
+   * Held here rather than in AppShell because two things need it and must not
+   * disagree: the shell renders that page underneath, and the player aims its
+   * drag at the corner *of that page*. Aiming at the current screen instead
+   * sent the bar past where the tab bar would be, and it sprang back up as soon
+   * as the navigation landed.
+   *
+   * Home stands in when there is nothing to remember — a shared link opened
+   * cold, or a reload.
+   */
+  background: Location
+  /** Whether there is an entry to pop, which is the same fact as having one. */
+  canGoBack: boolean
   /** Where and how AppShell should position the player host. Null when hidden. */
   placement: HostPlacement | null
   /**
@@ -170,7 +185,8 @@ export function PlayerProvider({
   children: React.ReactNode
   isWatch: boolean
 }) {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
   const [state, setState] = useState<PlayerState | null>(null)
   const [viewport, setViewport] = useState(readViewport)
   const [safeBottom, setSafeBottom] = useState(() => readSafeInset('--safe-bottom'))
@@ -200,6 +216,25 @@ export function PlayerProvider({
 
   /** What the navigation takes from the bottom edge — nothing where it is not drawn. */
   const navHeight = chromeHidden ? 0 : BOTTOM_NAV_HEIGHT
+
+  const backgroundRef = useRef<Location | null>(null)
+  if (!isWatch) backgroundRef.current = location
+  const background =
+    backgroundRef.current ??
+    ({ ...location, pathname: '/', search: '', hash: '' } as Location)
+
+  /**
+   * The navigation height where a drag will actually put the player down.
+   *
+   * Not the current screen's. A watch screen draws no tab bar, so measuring
+   * against it aimed the drag at the very bottom edge — and the moment the
+   * navigation committed, the bar rose to sit above a tab bar that had just
+   * appeared. The overshoot and the spring back were one mistake seen twice.
+   *
+   * Usually a tab, which draws the bar; a channel is the case that does not.
+   */
+  const landingNavHeight =
+    isMobile && !isBareScreen(background.pathname) ? BOTTOM_NAV_HEIGHT : 0
 
   // A callback ref rather than a plain one, and not for style. A plain ref is
   // assigned during commit, which is after render — so reading it during render
@@ -339,10 +374,20 @@ export function PlayerProvider({
     // watch page, and there is nothing to leave from a player already in the
     // corner.
     if (dragOffset !== null && isMobile && mode === 'full') {
-      return draggingPlacement(input, dragOffset)
+      return draggingPlacement(input, dragOffset, landingNavHeight)
     }
     return placementFor(input)
-  }, [mode, isMobile, slotDocRect, viewport, safeBottom, safeTop, navHeight, dragOffset])
+  }, [
+    mode,
+    isMobile,
+    slotDocRect,
+    viewport,
+    safeBottom,
+    safeTop,
+    navHeight,
+    landingNavHeight,
+    dragOffset,
+  ])
 
   // The same number the rectangle is built from, so the chrome that fades
   // cannot drift out of step with the shape that is moving.
@@ -361,6 +406,7 @@ export function PlayerProvider({
             scrollY: 0,
           },
           dragOffset,
+          landingNavHeight,
         )
 
   // CSS cannot transition across a change of `position`, and the two modes do
@@ -409,6 +455,8 @@ export function PlayerProvider({
       safeBottom,
       isWatch,
       chromeHidden,
+      background,
+      canGoBack: backgroundRef.current !== null,
       placement: rendered,
       miniReserve,
       slotRef,
@@ -431,6 +479,7 @@ export function PlayerProvider({
       safeBottom,
       isWatch,
       chromeHidden,
+      background,
       rendered,
       miniReserve,
       slotRef,
