@@ -54,6 +54,16 @@ func (s *Server) Search(ctx context.Context, req *connect.Request[ingestv1.Searc
 	return connect.NewResponse(&ingestv1.SearchResponse{Videos: out}), nil
 }
 
+// PreviewVideo reads one video upstream and writes nothing. See the proto for
+// why a pasted link is fetched rather than searched for.
+func (s *Server) PreviewVideo(ctx context.Context, req *connect.Request[ingestv1.PreviewVideoRequest]) (*connect.Response[ingestv1.PreviewVideoResponse], error) {
+	video, err := s.ingest.Preview(ctx, req.Msg.GetUrl())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.PreviewVideoResponse{Video: videoToProto(video)}), nil
+}
+
 func (s *Server) EnsureVideo(ctx context.Context, req *connect.Request[ingestv1.EnsureVideoRequest]) (*connect.Response[ingestv1.EnsureVideoResponse], error) {
 	videoID, err := s.ingest.EnsureVideo(ctx, req.Msg.GetUrl())
 	if err != nil {

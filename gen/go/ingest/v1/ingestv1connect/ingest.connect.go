@@ -38,6 +38,9 @@ const (
 	// IngestServiceEnsureVideoProcedure is the fully-qualified name of the IngestService's EnsureVideo
 	// RPC.
 	IngestServiceEnsureVideoProcedure = "/ingest.v1.IngestService/EnsureVideo"
+	// IngestServicePreviewVideoProcedure is the fully-qualified name of the IngestService's
+	// PreviewVideo RPC.
+	IngestServicePreviewVideoProcedure = "/ingest.v1.IngestService/PreviewVideo"
 	// IngestServiceRefreshProcedure is the fully-qualified name of the IngestService's Refresh RPC.
 	IngestServiceRefreshProcedure = "/ingest.v1.IngestService/Refresh"
 	// IngestServiceBackfillTopicsProcedure is the fully-qualified name of the IngestService's
@@ -86,6 +89,17 @@ type IngestServiceClient interface {
 	// Creates the catalog row for a video found by search, so it can be opened
 	// like any other. No media is fetched: pressing play does that.
 	EnsureVideo(context.Context, *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error)
+	// Reads one video's metadata upstream, writing nothing.
+	//
+	// Pasting a link into search points at exactly one video, so searching for
+	// the text of its address is the wrong verb — it spends a counted upstream
+	// request (see the note on Search) hunting for something already located.
+	// This fetches that one video instead.
+	//
+	// It writes nothing on purpose: a pasted link and a search result are the
+	// same act — "I saw this video elsewhere" — and a search result is written
+	// only when it is opened. Two rules for one act is how they come to disagree.
+	PreviewVideo(context.Context, *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Assigns YouTube's own category to videos that have none.
@@ -152,6 +166,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceEnsureVideoProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("EnsureVideo")),
+			connect.WithClientOptions(opts...),
+		),
+		previewVideo: connect.NewClient[v1.PreviewVideoRequest, v1.PreviewVideoResponse](
+			httpClient,
+			baseURL+IngestServicePreviewVideoProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("PreviewVideo")),
 			connect.WithClientOptions(opts...),
 		),
 		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
@@ -251,6 +271,7 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 type ingestServiceClient struct {
 	search              *connect.Client[v1.SearchRequest, v1.SearchResponse]
 	ensureVideo         *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
+	previewVideo        *connect.Client[v1.PreviewVideoRequest, v1.PreviewVideoResponse]
 	refresh             *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	backfillTopics      *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
 	getBackfillStatus   *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
@@ -276,6 +297,11 @@ func (c *ingestServiceClient) Search(ctx context.Context, req *connect.Request[v
 // EnsureVideo calls ingest.v1.IngestService.EnsureVideo.
 func (c *ingestServiceClient) EnsureVideo(ctx context.Context, req *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error) {
 	return c.ensureVideo.CallUnary(ctx, req)
+}
+
+// PreviewVideo calls ingest.v1.IngestService.PreviewVideo.
+func (c *ingestServiceClient) PreviewVideo(ctx context.Context, req *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error) {
+	return c.previewVideo.CallUnary(ctx, req)
 }
 
 // Refresh calls ingest.v1.IngestService.Refresh.
@@ -361,6 +387,17 @@ type IngestServiceHandler interface {
 	// Creates the catalog row for a video found by search, so it can be opened
 	// like any other. No media is fetched: pressing play does that.
 	EnsureVideo(context.Context, *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error)
+	// Reads one video's metadata upstream, writing nothing.
+	//
+	// Pasting a link into search points at exactly one video, so searching for
+	// the text of its address is the wrong verb — it spends a counted upstream
+	// request (see the note on Search) hunting for something already located.
+	// This fetches that one video instead.
+	//
+	// It writes nothing on purpose: a pasted link and a search result are the
+	// same act — "I saw this video elsewhere" — and a search result is written
+	// only when it is opened. Two rules for one act is how they come to disagree.
+	PreviewVideo(context.Context, *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Assigns YouTube's own category to videos that have none.
@@ -423,6 +460,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceEnsureVideoProcedure,
 		svc.EnsureVideo,
 		connect.WithSchema(ingestServiceMethods.ByName("EnsureVideo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServicePreviewVideoHandler := connect.NewUnaryHandler(
+		IngestServicePreviewVideoProcedure,
+		svc.PreviewVideo,
+		connect.WithSchema(ingestServiceMethods.ByName("PreviewVideo")),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceRefreshHandler := connect.NewUnaryHandler(
@@ -521,6 +564,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceSearchHandler.ServeHTTP(w, r)
 		case IngestServiceEnsureVideoProcedure:
 			ingestServiceEnsureVideoHandler.ServeHTTP(w, r)
+		case IngestServicePreviewVideoProcedure:
+			ingestServicePreviewVideoHandler.ServeHTTP(w, r)
 		case IngestServiceRefreshProcedure:
 			ingestServiceRefreshHandler.ServeHTTP(w, r)
 		case IngestServiceBackfillTopicsProcedure:
@@ -566,6 +611,10 @@ func (UnimplementedIngestServiceHandler) Search(context.Context, *connect.Reques
 
 func (UnimplementedIngestServiceHandler) EnsureVideo(context.Context, *connect.Request[v1.EnsureVideoRequest]) (*connect.Response[v1.EnsureVideoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.EnsureVideo is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) PreviewVideo(context.Context, *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.PreviewVideo is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {

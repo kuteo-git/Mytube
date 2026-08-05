@@ -20,6 +20,18 @@ service IngestService {
   // like any other. No media is fetched: pressing play does that.
   rpc EnsureVideo(EnsureVideoRequest) returns (EnsureVideoResponse);
 
+  // Reads one video's metadata upstream, writing nothing.
+  //
+  // Pasting a link into search points at exactly one video, so searching for
+  // the text of its address is the wrong verb — it spends a counted upstream
+  // request (see the note on Search) hunting for something already located.
+  // This fetches that one video instead.
+  //
+  // It writes nothing on purpose: a pasted link and a search result are the
+  // same act — "I saw this video elsewhere" — and a search result is written
+  // only when it is opened. Two rules for one act is how they come to disagree.
+  rpc PreviewVideo(PreviewVideoRequest) returns (PreviewVideoResponse);
+
   // Rescans topics.yaml now instead of waiting for the timer.
   rpc Refresh(RefreshRequest) returns (RefreshResponse);
 
@@ -143,6 +155,14 @@ message SearchRequest {
 
 message SearchResponse {
   repeated ExternalVideo videos = 1;
+}
+
+message PreviewVideoRequest {
+  string url = 1;
+}
+
+message PreviewVideoResponse {
+  ExternalVideo video = 1;
 }
 
 message EnsureVideoRequest {

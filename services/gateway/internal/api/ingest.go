@@ -128,6 +128,13 @@ func (g *Gateway) handleDiscover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A pasted address names one video, so it is fetched rather than searched
+	// for. See youtube_url.go for why searching is the wrong verb here.
+	if id, isAddress := videoIDFromSearch(query); isAddress {
+		g.discoverOne(w, r, id)
+		return
+	}
+
 	resp, err := g.ingest.Search(r.Context(), connect.NewRequest(&ingestv1.SearchRequest{
 		Query: query,
 		Limit: intParam(r, "limit", 20),
@@ -151,6 +158,54 @@ func (g *Gateway) handleDiscover(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
+}
+
+// discoverOne answers the "On YouTube" half of a pasted address.
+//
+// The catalog is asked first, and a hit ends the request without touching
+// YouTube at all: the video is already on the page, under "In your library",
+// which is where something on this disk belongs. That check is the whole reason
+// this lives at the gateway — it is the only place holding both answers.
+func (g *Gateway) discoverOne(w http.ResponseWriter, r *http.Request, videoID string) {
+	empty := map[string]any{"videos": []externalVideoDTO{}}
+
+	// An address to YouTube that names no video — a channel, a playlist, the
+	// front page. Nothing to fetch, and running its text as a search would spend
+	// a counted request on a string nobody typed as a question.
+	if videoID == "" {
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+
+	if _, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{
+		VideoId: videoID,
+		UserId:  g.userID(r),
+	})); err == nil {
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+
+	resp, err := g.ingest.PreviewVideo(r.Context(), connect.NewRequest(&ingestv1.PreviewVideoRequest{
+		Url: "https://www.youtube.com/watch?v=" + videoID,
+	}))
+	if err != nil {
+		// A link to a video that is private, removed, or simply mistyped. The
+		// page already says "Could not reach YouTube" for this, which is the
+		// truthful thing to say: the address was asked about and did not answer.
+		g.writeErr(w, r, err)
+		return
+	}
+
+	v := resp.Msg.GetVideo()
+	writeJSON(w, http.StatusOK, map[string]any{"videos": []externalVideoDTO{{
+		ID:              v.GetId(),
+		Title:           v.GetTitle(),
+		ChannelName:     v.GetChannelName(),
+		DurationSeconds: v.GetDurationSeconds(),
+		ViewCount:       v.GetViewCount(),
+		ThumbnailURL:    v.GetThumbnailUrl(),
+		SourceURL:       v.GetSourceUrl(),
+	}}})
 }
 
 type ensureExternalRequest struct {

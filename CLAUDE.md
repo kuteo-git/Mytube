@@ -930,6 +930,39 @@ subtitles are fetched **before** the media file, so they are usable while the up
 still playing. At the end of a video there is a 5-second countdown before the next one (with an
 Autoplay switch, stopping itself after 3 videos with no interaction).
 
+**A pasted link is fetched, not searched for (2026-08-05).** Search runs
+`ytsearch20:<the string>`, so dropping an address in asked YouTube to go *looking for* text that
+already stated where the video was — one counted upstream request (§8, risk 5) for an uncertain
+answer. And the library half is full-text over titles and channels, which an address never
+matches, so **pasting a link to a video sitting on this disk answered "Nothing here matches"** —
+the one case where the library certainly has the answer.
+
+`videoIDFromSearch` reads the id out of five shapes — `youtube.com/watch?v=`, `youtu.be/`,
+`m.youtube.com`, `vnd.youtube://`, plus `/shorts/`, `/live/`, `/embed/` and `music.` for free —
+and they all reduce to the same eleven characters, matched **exactly** against
+`[A-Za-z0-9_-]{11}` so a path segment that merely sits where an id would sit cannot pass. `t=` is
+parsed but not acted on; `list=` is ignored, because a video reached through a playlist is still
+the one video that was pointed at.
+- **Both halves of the page had to change**, and the second return value is why: an ordinary term
+  and *an address that named no video* are different things. A channel or playlist link is still
+  an address, and running its text as a search is exactly the waste being removed.
+- **The catalog is asked first, by id.** A hit ends the request with **no upstream call at all** —
+  measured at **8ms** for a video already on disk. This is the reason the rule lives at the
+  gateway rather than in the client: it is the only place holding both answers.
+- **Nothing is written.** A pasted link and a search result are the same act — "I saw this video
+  elsewhere" — and a search result is written only when it is opened. Two rules for one act is
+  how they come to disagree. That required a new `PreviewVideo` RPC: ingest had `Preview`
+  internally, but the only thing the gateway could reach was `EnsureVideo`, which writes.
+  Confirmed: previewing `dQw4w9WgXcQ` left `GET /api/videos/dQw4w9WgXcQ` at **404**.
+- **A search signal is not recorded for an address.** It says nothing about taste, and recsys
+  would be learning a URL.
+- **The page shows one section, not two.** The empty half would be a heading with nothing under
+  it, which reads as a section still loading rather than one that was never going to have
+  anything — and the heading stops repeating the address back, which is long, wraps, and tells
+  the person who pasted it nothing.
+- Recorded as a direction, not built: `Preview` returns the channel id, so a pasted link is also
+  a signal about a channel worth offering in the feed. That is a §6 ranking decision.
+
 **Search:** **always** asks YouTube alongside the library. The results page has two blocks (In
 your library / On YouTube). Autocomplete comes from local data (topics → channels → titles).
 Vietnamese diacritics are handled both ways through `unaccent`. Opening a video from YouTube

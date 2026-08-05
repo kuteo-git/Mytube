@@ -384,6 +384,18 @@ func (g *Gateway) handleSearch(w http.ResponseWriter, r *http.Request) {
 	userID := g.userID(r)
 	query := r.URL.Query().Get("q")
 
+	// A pasted address is looked up by id, not matched as text.
+	//
+	// Full-text search runs over titles and channels, which an address never
+	// matches — so pasting a link to a video sitting on this disk answered
+	// "Nothing here matches", the one case where the library certainly has the
+	// answer. It is also not recorded as a search signal: an address says
+	// nothing about taste, and recsys would be learning a URL.
+	if id, isAddress := videoIDFromSearch(query); isAddress {
+		g.searchOne(w, r, id, userID)
+		return
+	}
+
 	resp, err := g.catalog.SearchVideos(r.Context(), connect.NewRequest(&catalogv1.SearchVideosRequest{
 		Query:     query,
 		UserId:    userID,
@@ -408,6 +420,28 @@ func (g *Gateway) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Videos:        out,
 		NextPageToken: resp.Msg.GetNextPageToken(),
 	})
+}
+
+// searchOne answers the "In your library" half of a pasted address: the one
+// video if it is here, and nothing if it is not. Nothing is the ordinary
+// outcome — a link is usually to something the library has never seen — and it
+// is not an error, so the upstream half is left to report on the address.
+func (g *Gateway) searchOne(w http.ResponseWriter, r *http.Request, videoID, userID string) {
+	empty := feedResponse{Videos: []videoDTO{}}
+	if videoID == "" {
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+
+	resp, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{
+		VideoId: videoID,
+		UserId:  userID,
+	}))
+	if err != nil {
+		writeJSON(w, http.StatusOK, empty)
+		return
+	}
+	writeJSON(w, http.StatusOK, feedResponse{Videos: []videoDTO{toVideoDTO(resp.Msg.GetVideo())}})
 }
 
 // handleSuggest backs the search box type-ahead. Suggestions come from the

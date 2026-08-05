@@ -17,6 +17,18 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
  */
 const UPSTREAM_PAGE = 20
 
+/**
+ * Whether the query is an address rather than a question — for the heading only.
+ *
+ * Deliberately cruder than the gateway's parser, and not a second copy of it.
+ * Which video an address names is one rule and lives in one place (§4); this
+ * only asks whether to print the string back at the viewer, and getting that
+ * wrong costs a clumsy heading rather than a wrong result.
+ */
+function looksLikeLink(query: string): boolean {
+  return /^(https?:\/\/|vnd\.youtube|www\.|youtu\.be\/|m\.youtube\.)/i.test(query.trim())
+}
+
 export function SearchResultsPage() {
   const [params] = useSearchParams()
   const query = params.get('q') ?? ''
@@ -42,6 +54,13 @@ export function SearchResultsPage() {
 
   const local = localPages?.pages.flatMap((page) => page.videos) ?? []
 
+  // A pasted address has exactly one right answer, so it shows in exactly one
+  // place: the library if the video is here, YouTube if it is not. The other
+  // section would be a heading with nothing under it, which reads as a section
+  // still loading rather than one that was never going to have anything.
+  const isLink = looksLikeLink(query)
+  const settled = !localPending && !upstreamPending
+
   // Videos already in the library appear in the first section; showing them
   // twice would just be noise.
   const localIds = new Set(local.map((v) => v.id))
@@ -50,10 +69,26 @@ export function SearchResultsPage() {
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
       <h1 className="py-6 text-xl">
-        Results for <span className="font-bold">{query}</span>
+        {looksLikeLink(query) ? (
+          // An address is not worth repeating back: it is long, it wraps, and
+          // it says nothing the person who pasted it does not already know.
+          // What it means is the interesting part.
+          'Video from a link'
+        ) : (
+          <>
+            Results for <span className="font-bold">{query}</span>
+          </>
+        )}
       </h1>
 
-      <section>
+      {isLink && settled && local.length === 0 && remaining.length === 0 && (
+        <p className="text-sm text-text-2">
+          That link does not lead to a video. Channel and playlist links cannot be opened here
+          yet.
+        </p>
+      )}
+
+      <section hidden={isLink && settled && local.length === 0}>
         <h2 className="mb-4 text-base font-medium text-text-2">In your library</h2>
         {localPending ? (
           <Grid>
@@ -79,7 +114,7 @@ export function SearchResultsPage() {
         )}
       </section>
 
-      <section className="mt-12">
+      <section className="mt-12" hidden={isLink && settled && remaining.length === 0}>
         <h2 className="mb-4 flex items-center gap-2 text-base font-medium text-text-2">
           On YouTube
           {upstreamPending && <Loader2 size={16} className="animate-spin" />}
