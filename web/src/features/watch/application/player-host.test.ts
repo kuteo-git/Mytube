@@ -17,6 +17,7 @@ const base: PlacementInput = {
   viewport: { width: 1440, height: 900 },
   safeBottom: 0,
   safeTop: 0,
+  navHeight: BOTTOM_NAV_HEIGHT,
   scrollY: 0,
 }
 
@@ -120,6 +121,21 @@ describe('placementFor', () => {
       safeBottom: inset,
     })!
     expect(p.rect.top + p.rect.height).toBe(844 - BOTTOM_NAV_HEIGHT - inset)
+  })
+
+  it('rests on the bottom edge where there is no navigation', () => {
+    // A channel and the watch layer draw their own chrome, so there is no tab
+    // bar for the player to sit above. A fixed BOTTOM_NAV_HEIGHT left it
+    // floating a tab bar's height over nothing — reported on the Subscriptions
+    // channel screen.
+    const p = placementFor({
+      ...base,
+      mode: 'mini',
+      isMobile: true,
+      navHeight: 0,
+      viewport: { width: 390, height: 844 },
+    })!
+    expect(p.rect.top + p.rect.height).toBe(844)
   })
 
   it('makes the mobile miniplayer a bar above the navigation', () => {

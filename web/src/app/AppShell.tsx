@@ -37,6 +37,7 @@ function AppShellInner() {
     scrollerRef,
     scrollerEl,
     dragOffset,
+    chromeHidden,
   } = usePlayer()
 
 
@@ -63,23 +64,16 @@ function AppShellInner() {
   // delicate, and none of which this needs to disturb.
   const watchIsALayer = isWatch && isMobile
 
-  /**
-   * A channel opened on a phone is a screen of its own too.
-   *
-   * Same treatment as the watch layer's chrome — no search bar, no tab bar —
-   * for the same reason: it has its own subject and its own way back, which
-   * ChannelPage draws itself. Not a *layer*, though: nothing underneath it has
-   * to stay alive, and the scroll position on the way back is already handled
-   * by `/channel/*` not being a tab root, so a drill-in restores by entry.
-   *
-   * Keyed on the route rather than on where the viewer came from. One rule, and
-   * a channel reached from a video's byline behaves the same as one reached
-   * from Subscriptions.
-   */
-  const bareScreen = isMobile && pathname.startsWith('/channel/')
-
-  /** Whether the app's own chrome is drawn at all. */
-  const chromeHidden = watchIsALayer || bareScreen
+  // Whether the bars are drawn at all — read from the provider rather than
+  // worked out again here. The player's own geometry depends on the same fact
+  // (its bar sits above the navigation), and as two calculations they drifted:
+  // the shell dropped the room for a navigation that was not there while the
+  // player went on reserving it, leaving the mobile bar floating a tab bar's
+  // height above the bottom of a channel page.
+  //
+  // A channel is not a *layer* like the watch screen: nothing underneath has to
+  // stay alive, and the scroll position on the way back is already handled by
+  // `/channel/*` not being a tab root, so a drill-in restores by entry.
 
   // Forward starts at the top, back returns you where you were — the manners a
   // phone taught everyone. A single-page router never reloads the document, so

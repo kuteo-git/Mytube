@@ -1,5 +1,4 @@
 import {
-  BOTTOM_NAV_HEIGHT,
   type ViewRect,
   fullRectMobile,
   miniRectDesktop,
@@ -37,6 +36,14 @@ export interface PlacementInput {
   safeBottom: number
   /** The status bar's share of the top edge; zero on anything without a notch. */
   safeTop: number
+  /**
+   * What the navigation takes from the bottom edge.
+   *
+   * Zero on a screen that does not draw it — the watch layer, a channel — where
+   * a fixed `BOTTOM_NAV_HEIGHT` left the mobile bar floating a tab bar's height
+   * above the bottom of the screen, over nothing.
+   */
+  navHeight: number
   scrollY: number
 }
 
@@ -99,11 +106,11 @@ export function fullPlacement(input: PlacementInput): HostPlacement {
 }
 
 export function miniPlacement(input: PlacementInput): HostPlacement {
-  const { isMobile, viewport, safeBottom } = input
+  const { isMobile, viewport, safeBottom, navHeight } = input
   return {
     position: 'fixed',
     rect: isMobile
-      ? miniRectMobile(viewport.width, viewport.height, BOTTOM_NAV_HEIGHT + safeBottom)
+      ? miniRectMobile(viewport.width, viewport.height, navHeight + safeBottom)
       : miniRectDesktop(viewport.width, viewport.height),
     animate: true,
   }

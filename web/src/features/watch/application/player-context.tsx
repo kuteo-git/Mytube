@@ -10,6 +10,7 @@ import {
 } from 'react'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import { forgetLastWatched } from './last-watched'
+import { useLocation } from 'react-router-dom'
 import {
   BOTTOM_NAV_HEIGHT,
   MINI_MARGIN,
@@ -67,6 +68,17 @@ export interface PlayerContextValue {
   safeBottom: number
   /** Whether the viewer is on a watch page. Decides what "close" means. */
   isWatch: boolean
+  /**
+   * Whether the app's own bars are drawn at all.
+   *
+   * False on the phone's drill-in screens — the watch layer and a channel —
+   * which carry their own chrome. Held here rather than in AppShell because the
+   * *player's* geometry depends on it: the bar sits above the navigation, and
+   * on a screen with no navigation it was left floating a tab bar's height off
+   * the bottom of the screen. One fact in one place, or the shell and the
+   * player disagree about where the bottom of the screen is.
+   */
+  chromeHidden: boolean
   /** Where and how AppShell should position the player host. Null when hidden. */
   placement: HostPlacement | null
   /**
@@ -157,6 +169,7 @@ export function PlayerProvider({
   children: React.ReactNode
   isWatch: boolean
 }) {
+  const { pathname } = useLocation()
   const [state, setState] = useState<PlayerState | null>(null)
   const [viewport, setViewport] = useState(readViewport)
   const [safeBottom, setSafeBottom] = useState(() => readSafeInset('--safe-bottom'))
@@ -178,6 +191,14 @@ export function PlayerProvider({
   dismissedRef.current = dismissed
 
   const isMobile = viewport.width < MOBILE_BREAKPOINT
+
+  // A channel gets the same bare treatment as the watch layer: its own back
+  // bar, no search bar, no tab bar. Keyed on the route so a channel reached
+  // from a video's byline behaves like one reached from Subscriptions.
+  const chromeHidden = isMobile && (isWatch || pathname.startsWith('/channel/'))
+
+  /** What the navigation takes from the bottom edge — nothing where it is not drawn. */
+  const navHeight = chromeHidden ? 0 : BOTTOM_NAV_HEIGHT
 
   // A callback ref rather than a plain one, and not for style. A plain ref is
   // assigned during commit, which is after render — so reading it during render
@@ -294,10 +315,10 @@ export function PlayerProvider({
 
   const miniReserve = useMemo(() => {
     const rect = isMobile
-      ? miniRectMobile(viewport.width, viewport.height, BOTTOM_NAV_HEIGHT + safeBottom)
+      ? miniRectMobile(viewport.width, viewport.height, navHeight + safeBottom)
       : miniRectDesktop(viewport.width, viewport.height)
-    return rect.height + MINI_MARGIN * 2 + (isMobile ? BOTTOM_NAV_HEIGHT + safeBottom : 0)
-  }, [isMobile, viewport, safeBottom])
+    return rect.height + MINI_MARGIN * 2 + (isMobile ? navHeight + safeBottom : 0)
+  }, [isMobile, viewport, safeBottom, navHeight])
 
   const mode: PlayerMode = deriveMode(Boolean(state), isWatch, pinnedMini)
 
@@ -309,6 +330,7 @@ export function PlayerProvider({
       viewport,
       safeBottom,
       safeTop,
+      navHeight,
       scrollY: 0,
     }
     // A drag in flight overrides where the player would otherwise be. Only from
@@ -319,7 +341,7 @@ export function PlayerProvider({
       return draggingPlacement(input, dragOffset)
     }
     return placementFor(input)
-  }, [mode, isMobile, slotDocRect, viewport, safeBottom, safeTop, dragOffset])
+  }, [mode, isMobile, slotDocRect, viewport, safeBottom, safeTop, navHeight, dragOffset])
 
   // The same number the rectangle is built from, so the chrome that fades
   // cannot drift out of step with the shape that is moving.
@@ -327,7 +349,16 @@ export function PlayerProvider({
     dragOffset === null || !isMobile || mode !== 'full'
       ? 0
       : dragFraction(
-          { mode, isMobile, slotDocRect, viewport, safeBottom, safeTop, scrollY: 0 },
+          {
+            mode,
+            isMobile,
+            slotDocRect,
+            viewport,
+            safeBottom,
+            safeTop,
+            navHeight,
+            scrollY: 0,
+          },
           dragOffset,
         )
 
@@ -376,6 +407,7 @@ export function PlayerProvider({
       isMobile,
       safeBottom,
       isWatch,
+      chromeHidden,
       placement: rendered,
       miniReserve,
       slotRef,
@@ -397,6 +429,7 @@ export function PlayerProvider({
       isMobile,
       safeBottom,
       isWatch,
+      chromeHidden,
       rendered,
       miniReserve,
       slotRef,

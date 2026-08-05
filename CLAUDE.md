@@ -660,6 +660,11 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
    - **The title in the bar arrives late**, once `ChannelHeader` has scrolled away. The header
      already names the channel in large type; naming it again an inch above would be saying the
      same thing twice.
+   - **"Is the chrome drawn" is one fact and lives in PlayerProvider.** It was worked out twice —
+     once by the shell for its padding, once implicitly by the player, which went on reserving
+     `BOTTOM_NAV_HEIGHT` for a navigation that was not there and left the mobile bar floating a
+     tab bar's height above the bottom of a channel screen. `navHeight` now travels with the rest
+     of the placement input.
 
 4. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures
    gracefully and allow a retry.
