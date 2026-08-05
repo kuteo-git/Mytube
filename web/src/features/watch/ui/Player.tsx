@@ -346,6 +346,39 @@ function targetTier(
  */
 const SYSTEM_PAUSE_MS = 120
 
+/**
+ * How long after leaving full screen iOS may still be letting go.
+ *
+ * A ceiling, not the test. Measured on a real iPhone the stop landed **299ms**
+ * after the exit — past the 250ms this first allowed, which is exactly why a
+ * clock is the wrong thing to decide on. Widening it far enough to be safe
+ * would also start swallowing a viewer's own pause.
+ *
+ * So what decides is whether anybody has touched anything since the exit, and
+ * this only stops the window hanging open for ever if the stop never comes.
+ */
+const SYSTEM_LETGO_CEILING_MS = 1500
+
+/**
+ * Reports what Apple's player actually does on the way out, when asked.
+ *
+ * `sessionStorage.setItem('yt-fs-debug', '1')` and reload. Three device reports
+ * in a row said the video comes back stopped, and all three are equally
+ * consistent with the handler never running at all — so reading the code
+ * settles nothing. This says whether the events arrive, what the element
+ * reports at each, and whether `play()` was allowed: iOS refuses one made
+ * outside a user gesture, and that refusal is currently swallowed.
+ */
+/**
+ * Whether to report what the fullscreen path is doing.
+ *
+ * Turned on by putting `?fsdebug=1` on the address, and remembered from there —
+ * because the device this has to be diagnosed on is a phone, and a phone has no
+ * console to type a `sessionStorage` line into. That was the first attempt, and
+ * it is why the first round of evidence came back empty.
+ *
+ * `?fsdebug=0` turns it off again.
+ */
 export function Player({
   videoId,
   hue,
@@ -2051,6 +2084,29 @@ export function Player({
   // did press stop.
   const resumeAfterFullscreenRef = useRef(false)
   const lastPauseAtRef = useRef(0)
+  /** When full screen was last left. */
+  const leftFullscreenAtRef = useRef(0)
+  /**
+   * When the viewer last touched anything.
+   *
+   * This is what tells the system's stop from the viewer's, and it is a better
+   * question than "how long ago": iOS lets go without anybody doing anything,
+   * while a pause the viewer meant is a pause they reached out and caused. A
+   * clock can only guess at that, and guessed wrong by 49ms.
+   */
+  const lastInteractionAtRef = useRef(0)
+  useEffect(() => {
+    const seen = () => {
+      lastInteractionAtRef.current = performance.now()
+    }
+    // Capture, so it is recorded before any handler can stop the event.
+    document.addEventListener('pointerdown', seen, true)
+    document.addEventListener('keydown', seen, true)
+    return () => {
+      document.removeEventListener('pointerdown', seen, true)
+      document.removeEventListener('keydown', seen, true)
+    }
+  }, [])
   useEffect(() => {
     const elements = [videoARef.current, videoBRef.current].filter(
       (el): el is HTMLVideoElement => el !== null,
@@ -2064,6 +2120,7 @@ export function Player({
     }
 
     const onEnd = (event: Event) => {
+      leftFullscreenAtRef.current = performance.now()
       const stopped = (event.target as HTMLVideoElement).paused
       const systemLetGo =
         stopped && performance.now() - lastPauseAtRef.current < SYSTEM_PAUSE_MS
@@ -2079,12 +2136,13 @@ export function Player({
         if (el?.paused) void el.play().catch(() => undefined)
       }
       resume()
-      // A ceiling on the window, in case the pause never comes and the flag
-      // would otherwise sit armed waiting to swallow a real one.
+
+      // A ceiling, in case the stop never comes and the watch would otherwise
+      // run for ever. Not the discriminator — the stop was measured arriving at
+      // 299ms, and what decides is whether the viewer has touched anything.
       const timer = window.setTimeout(() => {
-        resume()
         resumeAfterFullscreenRef.current = false
-      }, 250)
+      }, SYSTEM_LETGO_CEILING_MS)
       return () => window.clearTimeout(timer)
     }
 
@@ -2315,7 +2373,12 @@ export function Player({
                   // anything else: the system lets go once, so a second pause
                   // this close behind is somebody who really did press stop, and
                   // swallowing that would make the button look broken.
-                  if (resumeAfterFullscreenRef.current) {
+                  // The system letting go, or the viewer stopping the video?
+                  // Nobody touched anything since full screen ended, so this
+                  // was not asked for.
+                  const untouched =
+                    lastInteractionAtRef.current <= leftFullscreenAtRef.current
+                  if (resumeAfterFullscreenRef.current && untouched) {
                     resumeAfterFullscreenRef.current = false
                     const el = front()
                     if (el?.paused) void el.play().catch(() => undefined)

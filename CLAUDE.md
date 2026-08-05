@@ -751,11 +751,24 @@ fix below remembered `!paused` at `webkitbeginfullscreen` and gave up if it was 
 enlarging a *stopped* video, pressing play inside the system player, and swiping back out
 returned a still frame, because the decision had been taken before any of that happened. What the
 viewer leaves it doing is what it should go on doing, in both directions.
-The two pauses are told apart by **when**: iOS lets go in the same breath as the exit, while a
-viewer who stopped it inside the system player did so some moments earlier. A pause within
-`SYSTEM_PAUSE_MS` (120) of the exit is the system's and is disregarded; anything older is a
-decision and is honoured. Exactly **one** late pause is swallowed — the system lets go once, and a
-second that close behind is somebody who really did press stop.
+The two pauses are told apart by **what caused them, not by a clock** — and that distinction was
+bought with four rounds on a real device:
+- A pause arriving **before** the exit is the system's if it is within `SYSTEM_PAUSE_MS` (120),
+  and a decision if it is older.
+- A pause arriving **after** the exit is the system's if **nobody has touched anything since**
+  (`pointerdown`/`keydown`, recorded in capture). Exactly one is swallowed: the system lets go
+  once, and a second that close behind is somebody who really did press stop.
+- **A time window does not work here, measured.** iOS's stop landed at **289ms, 291ms and 299ms**
+  across three runs; the 250ms window this first used missed all of them, and widening it far
+  enough to be safe would start swallowing pauses the viewer meant. `SYSTEM_LETGO_CEILING_MS`
+  (1500) is only a ceiling so the window cannot hang open for ever.
+
+**Two things tried and removed, both measured on the device:** a `requestAnimationFrame` loop to
+catch the stop a frame earlier **never ran once** — iOS freezes rAF while the dismissal animates,
+which is exactly the window it had to cover. A `setInterval` poll replacing it never won either,
+for a simpler reason: **polling cannot beat the event that announces the change it is polling
+for.** The remaining ~50ms between the stop and playback resuming is iOS restarting the decoder,
+and is not reachable from page code.
 Resume the **layer on screen**, not the element that was full screen: a download finishing
 mid-flight swaps them, and playing the hidden one is sound with no picture.
 **Two traps, and the first fix hit both:**

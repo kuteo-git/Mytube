@@ -918,6 +918,29 @@ describe('coming back from Apple’s full-screen player', () => {
     expect(screen.getByLabelText('Play')).toBeInTheDocument()
   })
 
+  it('honours a pause the viewer asked for after coming back', async () => {
+    // What tells the system's stop from the viewer's, and the reason it is not
+    // a stopwatch. Measured on a real iPhone the system's stop landed at 289ms,
+    // 291ms and 299ms across three runs — a 250ms window missed all of them,
+    // and a window wide enough to catch them would start swallowing pauses the
+    // viewer meant. Nobody touching anything is the honest question.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+    await act(async () => {
+      void front.play()
+    })
+
+    await enterFullscreen(front)
+    await leaveFullscreen(front)
+    // A hand arrives, and what follows is a decision rather than the system.
+    await act(async () => {
+      document.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      front.pause()
+    })
+
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+  })
+
   it('leaves it stopped if it was stopped when it went in', async () => {
     Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
     const { front } = await ready()
