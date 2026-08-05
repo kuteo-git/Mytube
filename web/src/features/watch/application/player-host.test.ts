@@ -138,6 +138,24 @@ describe('placementFor', () => {
     expect(p.rect.top + p.rect.height).toBe(844)
   })
 
+  it('grows into the home indicator rather than stopping short of it', () => {
+    // Stopping short left a band of page background between the bar and the
+    // bottom of the screen, exactly the height of the home indicator, on every
+    // screen that draws its own chrome. The surface reaches the edge; the
+    // content stays above it, which the host's padding takes care of.
+    const inset = 34
+    const p = placementFor({
+      ...base,
+      mode: 'mini',
+      isMobile: true,
+      navHeight: 0,
+      safeBottom: inset,
+      viewport: { width: 390, height: 844 },
+    })!
+    expect(p.rect.top + p.rect.height).toBe(844)
+    expect(p.rect.height).toBe(BAR_HEIGHT + inset)
+  })
+
   it('makes the mobile miniplayer a bar above the navigation', () => {
     const p = placementFor({
       ...base,

@@ -71,12 +71,25 @@ export function miniRectMobile(
   viewportWidth: number,
   viewportHeight: number,
   navHeight: number = BOTTOM_NAV_HEIGHT,
+  safeBottom = 0,
 ): ViewRect {
+  // Above the navigation where there is one — it already covers the home
+  // indicator itself, so the bar has nothing more to clear.
+  //
+  // Where there is none, the bar takes the bottom edge and **grows into the
+  // safe area** rather than stopping short of it. Stopping short left a band of
+  // page background between the bar and the bottom of the screen, the height of
+  // the home indicator, on every screen that draws its own chrome. Its content
+  // still sits in the top BAR_HEIGHT; what reaches the edge is the surface
+  // behind it, which is what a phone does with every bar it has.
+  const overNav = navHeight > 0
+  const height = BAR_HEIGHT + (overNav ? 0 : safeBottom)
+  const bottomInset = overNav ? navHeight + safeBottom : 0
   return {
-    top: viewportHeight - navHeight - BAR_HEIGHT,
+    top: viewportHeight - bottomInset - height,
     left: 0,
     width: viewportWidth,
-    height: BAR_HEIGHT,
+    height,
   }
 }
 

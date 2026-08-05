@@ -110,7 +110,7 @@ export function miniPlacement(input: PlacementInput): HostPlacement {
   return {
     position: 'fixed',
     rect: isMobile
-      ? miniRectMobile(viewport.width, viewport.height, navHeight + safeBottom)
+      ? miniRectMobile(viewport.width, viewport.height, navHeight, safeBottom)
       : miniRectDesktop(viewport.width, viewport.height),
     animate: true,
   }

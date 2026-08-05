@@ -316,7 +316,7 @@ export function PlayerProvider({
 
   const miniReserve = useMemo(() => {
     const rect = isMobile
-      ? miniRectMobile(viewport.width, viewport.height, navHeight + safeBottom)
+      ? miniRectMobile(viewport.width, viewport.height, navHeight, safeBottom)
       : miniRectDesktop(viewport.width, viewport.height)
     return rect.height + MINI_MARGIN * 2 + (isMobile ? navHeight + safeBottom : 0)
   }, [isMobile, viewport, safeBottom, navHeight])

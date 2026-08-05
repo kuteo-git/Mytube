@@ -682,6 +682,12 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
      which also put it within reach of pull-to-refresh, so dragging the picture down to put it
      away pulled the page underneath at the same time. `data-player-host` marks it as not part of
      the page's scroll surface, the way `data-player-controls` already marks the chrome.
+   - **Every bar grows into the home indicator; only its content stops short.** The mobile
+     player's bar sat *above* the safe area on screens with no navigation, leaving a band of page
+     background the height of the home indicator underneath it. Where a navigation is drawn it
+     covers that strip itself and the player has nothing to clear; where there is none, the
+     player's surface takes the bottom edge and its content is held up by padding on the host —
+     the same shape `TopBar` uses for the notch and `BottomNav` for the indicator.
    - **"Is the chrome drawn" is one fact and lives in PlayerProvider.** It was worked out twice —
      once by the shell for its padding, once implicitly by the player, which went on reserving
      `BOTTOM_NAV_HEIGHT` for a navigation that was not there and left the mobile bar floating a

@@ -320,6 +320,7 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
     scrollerEl: scroller,
     setDragOffset,
     dragFraction,
+    chromeHidden,
   } = usePlayer()
   const navigate = useNavigate()
 
@@ -397,6 +398,12 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
         // the docked player are edge-to-edge, and everything else matches the
         // 12px the thumbnails and cards around it use.
         borderRadius: isMobile && mode === 'full' ? 0 : 12,
+        // The bar reaches the bottom edge on a screen with no navigation, so
+        // its surface runs under the home indicator the way every other bar in
+        // the app does. Its *content* stays above it: the padding is inside the
+        // host, and the player fills what is left.
+        paddingBottom:
+          variant === 'bar' && chromeHidden ? 'var(--safe-bottom)' : undefined,
         transition: placement.animate
           ? 'top 300ms cubic-bezier(0.4, 0, 0.2, 1), left 300ms cubic-bezier(0.4, 0, 0.2, 1),' +
             ' width 300ms cubic-bezier(0.4, 0, 0.2, 1), height 300ms cubic-bezier(0.4, 0, 0.2, 1)'
