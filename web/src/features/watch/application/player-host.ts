@@ -35,6 +35,8 @@ export interface PlacementInput {
    * so the bar has to know about it too or it lands back on top of the labels.
    */
   safeBottom: number
+  /** The status bar's share of the top edge; zero on anything without a notch. */
+  safeTop: number
   scrollY: number
 }
 
@@ -81,7 +83,11 @@ export function deriveMode(
 export function fullPlacement(input: PlacementInput): HostPlacement {
   const { isMobile, slotDocRect, viewport } = input
   if (isMobile) {
-    return { position: 'fixed', rect: fullRectMobile(viewport.width), animate: true }
+    return {
+      position: 'fixed',
+      rect: fullRectMobile(viewport.width, input.safeTop),
+      animate: true,
+    }
   }
   // Before the slot has been measured there is nowhere to be. Callers treat a
   // null slot as "stay put", which is why this never invents a rectangle.

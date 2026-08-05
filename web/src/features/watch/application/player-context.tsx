@@ -144,9 +144,9 @@ function readViewport() {
  * viewport meta tag loses `viewport-fit=cover`, which is the quiet way this
  * whole allowance stops working.
  */
-function readSafeBottom(): number {
+function readSafeInset(name: '--safe-bottom' | '--safe-top'): number {
   if (typeof getComputedStyle !== 'function') return 0
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name)
   return Number.parseFloat(raw) || 0
 }
 
@@ -159,7 +159,8 @@ export function PlayerProvider({
 }) {
   const [state, setState] = useState<PlayerState | null>(null)
   const [viewport, setViewport] = useState(readViewport)
-  const [safeBottom, setSafeBottom] = useState(readSafeBottom)
+  const [safeBottom, setSafeBottom] = useState(() => readSafeInset('--safe-bottom'))
+  const [safeTop, setSafeTop] = useState(() => readSafeInset('--safe-top'))
   const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null)
   const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null)
   const [slotDocRect, setSlotDocRect] = useState<ViewRect | null>(null)
@@ -192,7 +193,8 @@ export function PlayerProvider({
     // inset is re-read alongside the viewport rather than measured once.
     const onResize = () => {
       setViewport(readViewport())
-      setSafeBottom(readSafeBottom())
+      setSafeBottom(readSafeInset('--safe-bottom'))
+      setSafeTop(readSafeInset('--safe-top'))
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -300,7 +302,15 @@ export function PlayerProvider({
   const mode: PlayerMode = deriveMode(Boolean(state), isWatch, pinnedMini)
 
   const target = useMemo(() => {
-    const input = { mode, isMobile, slotDocRect, viewport, safeBottom, scrollY: 0 }
+    const input = {
+      mode,
+      isMobile,
+      slotDocRect,
+      viewport,
+      safeBottom,
+      safeTop,
+      scrollY: 0,
+    }
     // A drag in flight overrides where the player would otherwise be. Only from
     // full size and only on a phone: the gesture is a request to leave the
     // watch page, and there is nothing to leave from a player already in the
@@ -309,7 +319,7 @@ export function PlayerProvider({
       return draggingPlacement(input, dragOffset)
     }
     return placementFor(input)
-  }, [mode, isMobile, slotDocRect, viewport, safeBottom, dragOffset])
+  }, [mode, isMobile, slotDocRect, viewport, safeBottom, safeTop, dragOffset])
 
   // The same number the rectangle is built from, so the chrome that fades
   // cannot drift out of step with the shape that is moving.
@@ -317,7 +327,7 @@ export function PlayerProvider({
     dragOffset === null || !isMobile || mode !== 'full'
       ? 0
       : dragFraction(
-          { mode, isMobile, slotDocRect, viewport, safeBottom, scrollY: 0 },
+          { mode, isMobile, slotDocRect, viewport, safeBottom, safeTop, scrollY: 0 },
           dragOffset,
         )
 

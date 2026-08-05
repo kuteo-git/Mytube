@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { type Location, Outlet, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
@@ -9,6 +10,7 @@ import { Player } from '@/features/watch/ui/Player'
 import { PlayerProvider, usePlayer } from '@/features/watch/application/player-context'
 import { BOTTOM_NAV_HEIGHT } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
+import { dismissFade, layerOpacity } from '@/features/watch/application/watch-overlay'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -22,17 +24,54 @@ export function AppShell() {
 }
 
 function AppShellInner() {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
   const isWatch = pathname.startsWith('/watch')
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const { isMobile, mode, miniReserve, safeBottom, scrollerRef, scrollerEl } =
-    usePlayer()
+  const {
+    isMobile,
+    mode,
+    miniReserve,
+    safeBottom,
+    scrollerRef,
+    scrollerEl,
+    dragOffset,
+  } = usePlayer()
 
   // Forward starts at the top, back returns you where you were — the manners a
   // phone taught everyone. A single-page router never reloads the document, so
   // without this the offset just stays where the previous page left it.
   useScrollRestoration(scrollerEl)
+
+  /**
+   * The page the watch screen was opened from, kept alive underneath it.
+   *
+   * Remembered here rather than carried in `location.state`, which is the usual
+   * way to do this: every link to a video would have to pass it, and one that
+   * forgot would open a watch screen with nothing behind it — a bug visible
+   * only mid-gesture, which is the worst kind to have to notice.
+   *
+   * Home stands in when there is nothing to remember: a shared LAN link opens
+   * straight onto a video (CLAUDE.md §5), and a deep link with no history is
+   * exactly what native apps answer by synthesising a stack back to the root.
+   */
+  const backgroundRef = useRef<Location | null>(null)
+  if (!isWatch) backgroundRef.current = location
+  const background =
+    backgroundRef.current ?? ({ ...location, pathname: '/', search: '', hash: '' } as Location)
+
+  // The watch screen is a layer over that page only on a phone. On a desktop it
+  // stays an ordinary page, with the slot and the drawer and the observer that
+  // folds the player into the corner — machinery CLAUDE.md is right to call
+  // delicate, and none of which this needs to disturb.
+  const watchIsALayer = isWatch && isMobile
+
+  // How far the drag has cleared the layer away. Everything but the player goes
+  // within DISMISS_FADE_FRACTION of the screen's height; the picture keeps
+  // travelling for the rest of it.
+  const fade =
+    watchIsALayer && dragOffset !== null ? dismissFade(dragOffset, window.innerHeight) : 0
 
   // Put back whatever this browser was in the middle of, in the corner, paused.
   const resuming = useResumeLastWatched(isWatch)
@@ -110,16 +149,21 @@ function AppShellInner() {
     // it needs is `pt-14` on the scroller — the same 56px it used to occupy as
     // a sibling, so nothing else moves.
     <div className="relative h-dvh overflow-hidden bg-bg">
-      <TopBar
-        onToggleSidebar={() => {
-          if (isWatch) {
-            setDrawerOpen((o) => !o)
-            return
-          }
-          setSlideMargin(true)
-          setExpanded((e) => !e)
-        }}
-      />
+      {/* No header on the phone's watch screen. It is a screen of its own
+          rather than a page inside the app's chrome — the way out is the drag,
+          and the browser's own back button behind it. */}
+      {!watchIsALayer && (
+        <TopBar
+          onToggleSidebar={() => {
+            if (isWatch) {
+              setDrawerOpen((o) => !o)
+              return
+            }
+            setSlideMargin(true)
+            setExpanded((e) => !e)
+          }}
+        />
+      )}
 
       {showFullSidebar && <Sidebar mini={false} />}
       {showMiniSidebar && <Sidebar mini />}
@@ -141,6 +185,11 @@ function AppShellInner() {
 
       <main
         ref={scrollerRef}
+        // Which page is being held underneath, when one is. Written out because
+        // it is the one thing about this arrangement that is decided rather
+        // than derived, and a wrong answer here is invisible until somebody
+        // drags the layer away and finds the wrong screen behind it.
+        data-background={watchIsALayer ? background.pathname : undefined}
         className={clsx(
           // `relative` is what makes the host's `absolute` mean "within the
           // scrolled content" — the same thing it used to mean against the
@@ -149,22 +198,55 @@ function AppShellInner() {
           // document, where CLAUDE.md §8b records why: a vertical bounce that
           // chains out is read as a gesture, and the gesture it was read as
           // threw away what you were watching.
-          'relative h-full overflow-y-auto overscroll-y-contain pt-14',
+          'relative h-full overflow-y-auto overscroll-y-contain',
+          // The bar's room, and only where there is a bar.
+          watchIsALayer ? 'pt-0' : 'pt-14',
           slideMargin && 'transition-[margin] duration-200 ease-out',
           showFullSidebar && 'ml-60',
           showMiniSidebar && 'ml-[72px]',
         )}
         style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >
-        <Outlet />
+        {/* Underneath the watch layer: the page you were on, still rendered and
+            still holding its own scroll position. `<Outlet/>` cannot serve —
+            it resolves to the *current* route, which is the watch page — so
+            this drives the same route table from the remembered location. */}
+        {watchIsALayer ? (
+          <Routes location={background}>{pageRoutes}</Routes>
+        ) : (
+          <Outlet />
+        )}
         {/* Inside the scroller, because the full-size player is positioned
             within the content and has to travel with it. The miniplayer is
             `fixed`, which is measured from the viewport wherever it sits —
             `overflow` does not trap it, only a transformed ancestor would. */}
-        <PlayerHost />
+        <PlayerHost canGoBack={backgroundRef.current !== null} />
       </main>
 
-      <BottomNav />
+      {/* The watch screen itself, over the page it was opened from.
+          Below the player host on purpose: the picture belongs to neither
+          layer, and travels across both. */}
+      {watchIsALayer && (
+        <div
+          className="absolute inset-0 z-20 overflow-y-auto overscroll-y-contain bg-bg"
+          style={{
+            opacity: layerOpacity(fade),
+            // Gone from the touch surface as soon as it starts to leave. A
+            // half-faded page is not a page you can press things on, and the
+            // finger is on its way to the tab underneath.
+            pointerEvents: fade > 0 ? 'none' : undefined,
+          }}
+        >
+          <Outlet />
+        </div>
+      )}
+
+      {/* Fades in exactly as the layer above it fades out — one number seen
+          from two sides, so the navigation cannot arrive after the page it
+          belongs to. */}
+      <BottomNav
+        opacity={watchIsALayer ? fade : 1}
+      />
     </div>
   )
 }
@@ -176,7 +258,7 @@ function AppShellInner() {
  * element's position and size change. That is what keeps the `<video>` — its
  * buffer, its position, its playback — intact across every transition.
  */
-function PlayerHost() {
+function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
   const {
     state,
     mode,
@@ -281,7 +363,20 @@ function PlayerHost() {
         onSwipeDown={
           variant === 'full' && isMobile
             ? () => {
-                navigate('/')
+                // Back, not Home. The layer underneath is the page this was
+                // opened from — History if you came from History — and popping
+                // the entry is what puts the layer away while returning that
+                // page to the scroll position it was left at.
+                //
+                // `canGoBack` is the same fact that decides what is drawn
+                // underneath: a page was remembered, so we arrived from it.
+                // Deriving it from anything else — `window.history.state.idx`
+                // was tried — risks the two disagreeing, which would show as a
+                // drag revealing one page and landing on another. Without it,
+                // popping walks out of the app entirely, which is what a shared
+                // LAN link opens onto.
+                if (canGoBack) navigate(-1)
+                else navigate('/', { replace: true })
                 // Released on the next frame, once the navigation has been
                 // committed and the placement is the bar's own. At full
                 // progress the drag rectangle already *is* the corner, so

@@ -16,6 +16,7 @@ const base: PlacementInput = {
   slotDocRect: { top: 500, left: 100, width: 1280, height: 720 },
   viewport: { width: 1440, height: 900 },
   safeBottom: 0,
+  safeTop: 0,
   scrollY: 0,
 }
 
@@ -72,11 +73,24 @@ describe('placementFor', () => {
     expect(p.rect).toEqual(base.slotDocRect)
   })
 
-  it('pins the mobile full player under the top bar', () => {
+  it('pins the mobile full player to the top of the screen', () => {
+    // The phone's watch screen has no header of its own, so there is nothing to
+    // sit beneath but the status bar — and nothing at all on a device without
+    // one.
     const p = placementFor({ ...base, isMobile: true, viewport: { width: 390, height: 844 } })!
     expect(p.position).toBe('fixed')
-    expect(p.rect.top).toBe(56)
+    expect(p.rect.top).toBe(0)
     expect(p.rect.width).toBe(390)
+  })
+
+  it('leaves the notch alone where there is one', () => {
+    const p = placementFor({
+      ...base,
+      isMobile: true,
+      safeTop: 47,
+      viewport: { width: 390, height: 844 },
+    })!
+    expect(p.rect.top).toBe(47)
   })
 
   it('waits in the corner rather than moving to a slot it has not measured', () => {

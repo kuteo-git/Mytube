@@ -74,10 +74,19 @@ describe('miniRectMobile', () => {
 })
 
 describe('fullRectMobile', () => {
-  it('is a 16:9 band pinned under the top bar', () => {
+  it('is a 16:9 band at the very top of the screen', () => {
+    // No longer under a top bar of ours: the watch screen on a phone has no
+    // header, being a screen of its own rather than a page inside the app's
+    // chrome. On a device with no notch this really is the top edge.
     const r = fullRectMobile(390)
-    expect(r.top).toBe(56)
+    expect(r.top).toBe(0)
     expect(r.width).toBe(390)
     expect(r.height).toBe(Math.round((390 * 9) / 16))
+  })
+
+  it('clears the status bar where there is one', () => {
+    // Otherwise the picture sits under the clock: viewport-fit=cover means the
+    // page owns the notch, so it has to allow for it.
+    expect(fullRectMobile(390, 47).top).toBe(47)
   })
 })

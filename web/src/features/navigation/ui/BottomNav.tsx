@@ -28,14 +28,28 @@ const ITEMS: { icon: ComponentType<{ size?: number }>; label: string; to: string
   { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 
-export function BottomNav() {
+/**
+ * @param opacity 1 normally. Below that only while the watch layer is being
+ * dragged away: the bar belongs to the page underneath, so it arrives at the
+ * same rate that page is revealed. Hidden from assistive technology and from
+ * the pointer while it is on its way in, because a control at a third of its
+ * opacity is not yet a control.
+ */
+export function BottomNav({ opacity = 1 }: { opacity?: number }) {
+  const arriving = opacity < 1
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-stretch border-t border-white/10
                  bg-bg min-[700px]:hidden"
       // The bar keeps its own height and grows underneath it, so the labels stay
       // clear of the home indicator instead of sitting under it.
-      style={{ paddingBottom: 'var(--safe-bottom)', height: 'calc(3.5rem + var(--safe-bottom))' }}
+      style={{
+        paddingBottom: 'var(--safe-bottom)',
+        height: 'calc(3.5rem + var(--safe-bottom))',
+        opacity,
+        pointerEvents: arriving ? 'none' : undefined,
+      }}
+      aria-hidden={opacity === 0 ? true : undefined}
       aria-label="Main"
     >
       {ITEMS.map(({ icon: Icon, label, to }) => (

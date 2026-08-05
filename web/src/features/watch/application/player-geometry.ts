@@ -49,9 +49,6 @@ export const BAR_HEIGHT = 72
 export const BAR_THUMB_WIDTH = 128
 /** Height of the mobile bottom navigation the bar has to sit on top of. */
 export const BOTTOM_NAV_HEIGHT = 56
-/** Height of the top bar the mobile full-size player is pinned beneath. */
-export const TOP_BAR_HEIGHT = 56
-
 /** Viewport width below which the app uses its mobile shell. */
 export const MOBILE_BREAKPOINT = 700
 
@@ -83,10 +80,18 @@ export function miniRectMobile(
   }
 }
 
-/** The full-size player on mobile: pinned under the top bar, 16:9, edge to edge. */
-export function fullRectMobile(viewportWidth: number): ViewRect {
+/**
+ * The full-size player on mobile: pinned to the top of the screen, 16:9, edge
+ * to edge.
+ *
+ * Under the *status bar*, not under a top bar of ours — the watch page on a
+ * phone has no header, being a screen of its own rather than a page inside the
+ * app's chrome. `safeTop` is zero on everything without a notch, so on most
+ * screens this really is the top edge.
+ */
+export function fullRectMobile(viewportWidth: number, safeTop = 0): ViewRect {
   return {
-    top: TOP_BAR_HEIGHT,
+    top: safeTop,
     left: 0,
     width: viewportWidth,
     height: Math.round((viewportWidth * 9) / 16),

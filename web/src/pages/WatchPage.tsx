@@ -120,7 +120,7 @@ export function WatchPage() {
     <div
       className="mx-auto flex max-w-[1754px] flex-col gap-6 px-4 py-0 min-[700px]:px-6 min-[700px]:py-6
                  min-[1000px]:flex-row
-                 pt-[56.25vw] min-[700px]:pt-6"
+                 pt-[calc(56.25vw+var(--safe-top))] min-[700px]:pt-6"
     >
       {/* The reserve is the player's height and nothing else.
 
@@ -133,7 +133,12 @@ export function WatchPage() {
 
           56.25vw is 9/16 of the width — the same 16:9 the player host computes
           for itself on a phone. Two expressions of one number, which is a thing
-          to be careful of: changing the shape means changing both. */}
+          to be careful of: changing the shape means changing both.
+
+          `--safe-top` joins it because the picture is pinned below the status
+          bar rather than at the very top: the watch screen on a phone has no
+          header, so the notch is the only thing above the player and the
+          reserve has to account for it or the title hides behind the film. */}
       <div className="min-w-0 max-w-[1280px] flex-1">
         {/* The player's slot. AppShell measures this div and positions the player
             host over it — the player is never a child of this page, which is what

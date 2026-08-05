@@ -565,6 +565,33 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
    > per video before and after, translate latency per batch, and a read-through confirming
    > meaning survived the budget — have **not** been taken. The gateway must be rebuilt and
    > restarted first.
+3d. **On a phone the watch screen is a LAYER over the tab you came from (2026-08-05).** Not a
+   page beside the others: no header, no bottom bar, and the page you opened the video from is
+   still rendered underneath. Pulling the player down does not "go to Home" — it puts the layer
+   away and reveals whatever was there. From History you land on History; from Saved, Saved.
+   - **One route table, in `app/routes.tsx`.** The layer underneath is a second `<Routes>` driven
+     by a remembered location, and two route tables would be two things to keep in step — the one
+     that drifted would show as a screen that mysteriously came up blank behind the player.
+   - **The page is remembered in AppShell, not carried in `location.state`.** The usual modal
+     pattern makes every link pass its own background; one link that forgot would open a watch
+     screen with nothing behind it, a fault visible only mid-gesture.
+   - **`canGoBack` is that same fact**, not `window.history.state.idx` — which was tried, is not
+     a public API, and fails silently. Deriving the two separately risks a drag revealing one
+     page and landing on another. Nothing remembered means a cold open (a shared LAN link, §5, or
+     a reload), and then Home stands in and the drag navigates there.
+   - **Mobile only.** On a desktop the watch page stays an ordinary page, with the slot, the
+     drawer and the observer that folds the player into the corner untouched.
+   - **`DISMISS_FADE_FRACTION = 0.1`** (`watch-overlay.ts`): everything except the player clears
+     within a tenth of the screen's height, so the rest of the drag is a picture travelling
+     across a page that is already there rather than a page slowly dissolving. The bottom bar
+     fades in off the same number — as two numbers the navigation arrives after the page it
+     belongs to. Expect to retune this one by thumb.
+   - **The picture is pinned below the status bar, not at 56px.** `--safe-top` joins the existing
+     `--safe-bottom`; `fullRectMobile` takes it, and WatchPage's reserve became
+     `calc(56.25vw + var(--safe-top))`. `TOP_BAR_HEIGHT` is gone — nothing was left beneath a
+     header that no longer exists there.
+   - **The way out is the drag and the browser's own back button.** No in-page control, which is
+     safe here in a way it would not be in a native app.
 4. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures
    gracefully and allow a retry.
 5. **YouTube blocks by IP if too many full-metadata fetches are made (THIS HAPPENED 2026-07-29).**
