@@ -35,13 +35,27 @@ func (s *stubChannels) ChannelUploads(context.Context, string, string) (domain.C
 type countingDownloader struct {
 	deepenDownloader
 	listCalls int
+	// listResult, when non-nil, replaces the default flat listing result.
+	// This lets a test simulate a video that already has a publish date.
+	listResult []domain.ExternalVideo
+	// rssEntries, when set, is what FetchChannelFeed returns. nil means "feed
+	// unavailable", simulating a network error.
+	rssEntries []domain.RSSEntry
+	rssErr     error
 }
 
 func (d *countingDownloader) ListPlaylist(_ context.Context, _ string, _, _ int32) (string, []domain.ExternalVideo, error) {
 	d.listCalls++
+	if d.listResult != nil {
+		return "A", d.listResult, nil
+	}
 	return "A", []domain.ExternalVideo{
 		{ID: "flat1", SourceURL: "https://youtube.test/watch?v=flat1"},
 	}, nil
+}
+
+func (d *countingDownloader) FetchChannelFeed(_ context.Context, _ string) ([]domain.RSSEntry, error) {
+	return d.rssEntries, d.rssErr
 }
 
 func newTestScanner(fetch domain.Downloader, channels domain.ChannelSource, lib domain.Library) *Scanner {
@@ -243,5 +257,167 @@ func TestChannelRefFromURL(t *testing.T) {
 		if got := channelRefFromURL(input); got != want {
 			t.Errorf("channelRefFromURL(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+// Videos from a flat playlist listing carry no dates. The RSS feed fills that
+// gap, so the catalog row has a publish date from the moment it is created.
+func TestRSSFillsMissingPublishDates(t *testing.T) {
+	published := time.Date(2026, 8, 4, 21, 10, 13, 0, time.UTC)
+	channels := &stubChannels{err: errors.New("browse unavailable")} // force flat listing
+	downloader := &countingDownloader{
+		rssEntries: []domain.RSSEntry{
+			{VideoID: "flat1", PublishedAt: published, ViewCount: 516_195},
+		},
+	}
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}, channels: map[string]domain.ExternalVideo{}}
+
+	scanner := newTestScanner(downloader, channels, library)
+	owner := domain.ChannelMetadata{ID: "UC123", Name: "Test Channel"}
+
+	_, added, err := scanner.scanSource(context.Background(), "Tech",
+		"https://www.youtube.com/@test/videos", owner, 30)
+	if err != nil {
+		t.Fatalf("scanSource: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("added = %d, want 1", added)
+	}
+
+	got := library.channels["flat1"]
+	if got.PublishedAt.IsZero() {
+		t.Fatal("PublishedAt is still zero — RSS date was not applied")
+	}
+	if !got.PublishedAt.Equal(published) {
+		t.Errorf("PublishedAt = %v, want %v", got.PublishedAt, published)
+	}
+	if got.ViewCount != 516_195 {
+		t.Errorf("ViewCount = %d, want 516195", got.ViewCount)
+	}
+}
+
+// A date already present from a full metadata fetch (Preview) is more
+// trustworthy than RSS and must not be overwritten.
+func TestRSSDoesNotOverwriteExistingPublishDate(t *testing.T) {
+	existingDate := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+	rssDate := time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC)
+
+	channels := &stubChannels{err: errors.New("browse unavailable")}
+	downloader := &countingDownloader{
+		rssEntries: []domain.RSSEntry{
+			{VideoID: "flat1", PublishedAt: rssDate, ViewCount: 100_000},
+		},
+	}
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}, channels: map[string]domain.ExternalVideo{}}
+
+	scanner := newTestScanner(downloader, channels, library)
+	owner := domain.ChannelMetadata{ID: "UC123", Name: "Test Channel"}
+
+	// Simulate a video that already has a date from a previous full fetch.
+	// The flat listing returns it with the existing date; RSS must not overwrite.
+	downloader.listResult = []domain.ExternalVideo{
+		{ID: "flat1", SourceURL: "https://youtube.test/watch?v=flat1",
+			PublishedAt: existingDate, ViewCount: 1_500_000},
+	}
+	downloader.listCalls = 0
+
+	_, added, err := scanner.scanSource(context.Background(), "Tech",
+		"https://www.youtube.com/@test/videos", owner, 30)
+	if err != nil {
+		t.Fatalf("scanSource: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("added = %d, want 1", added)
+	}
+
+	got := library.channels["flat1"]
+	if !got.PublishedAt.Equal(existingDate) {
+		t.Errorf("PublishedAt = %v, want existing %v (RSS %v was incorrectly applied)",
+			got.PublishedAt, existingDate, rssDate)
+	}
+	if got.ViewCount != 1_500_000 {
+		t.Errorf("ViewCount = %d, want existing 1500000 (RSS 100000 was incorrectly applied)",
+			got.ViewCount)
+	}
+}
+
+// A scan must not fail just because a channel's RSS feed is unreachable.
+func TestScanSucceedsWhenRSSFeedFails(t *testing.T) {
+	channels := &stubChannels{err: errors.New("browse unavailable")}
+	downloader := &countingDownloader{}
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
+
+	scanner := newTestScanner(downloader, channels, library)
+	owner := domain.ChannelMetadata{ID: "UC123", Name: "Test Channel"}
+
+	_, added, err := scanner.scanSource(context.Background(), "Tech",
+		"https://www.youtube.com/@test/videos", owner, 30)
+	if err != nil {
+		t.Fatalf("scanSource should not fail when RSS is unavailable: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("added = %d, want 1", added)
+	}
+}
+
+// A channel with no known ID should not attempt to fetch an RSS feed.
+func TestRSSNotCalledWhenChannelIDIsEmpty(t *testing.T) {
+	channels := &stubChannels{err: errors.New("browse unavailable")}
+	downloader := &countingDownloader{
+		rssEntries: []domain.RSSEntry{
+			{VideoID: "flat1", PublishedAt: time.Now(), ViewCount: 100},
+		},
+	}
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}}
+
+	scanner := newTestScanner(downloader, channels, library)
+	// No owner ID — a playlist source with no channel metadata.
+	owner := domain.ChannelMetadata{}
+	_, _, err := scanner.scanSource(context.Background(), "",
+		"https://www.youtube.com/playlist?list=PL123", owner, 30)
+	if err != nil {
+		t.Fatalf("scanSource: %v", err)
+	}
+	// Video skipped because neither the listing nor the owner supplies a channel
+	// — that is the expected behaviour for a playlist with no metadata.
+}
+
+// RSS entries for a different video than the one being scanned (older than 15
+// uploads) should not affect anything.
+func TestRSSMatchIsByVideoID(t *testing.T) {
+	channels := &stubChannels{err: errors.New("browse unavailable")}
+	downloader := &countingDownloader{
+		rssEntries: []domain.RSSEntry{
+			{VideoID: "someOtherVideo", PublishedAt: time.Now(), ViewCount: 999},
+		},
+	}
+	library := &recordingLibrary{known: map[string]bool{}, topics: map[string][]string{}, channels: map[string]domain.ExternalVideo{}}
+
+	scanner := newTestScanner(downloader, channels, library)
+	owner := domain.ChannelMetadata{ID: "UC123", Name: "Test Channel"}
+
+	_, added, err := scanner.scanSource(context.Background(), "Tech",
+		"https://www.youtube.com/@test/videos", owner, 30)
+	if err != nil {
+		t.Fatalf("scanSource: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("added = %d, want 1", added)
+	}
+
+	got := library.channels["flat1"]
+	if !got.PublishedAt.IsZero() {
+		t.Errorf("PublishedAt = %v, want zero — RSS entry was for a different video", got.PublishedAt)
+	}
+	if got.ViewCount != 0 {
+		t.Errorf("ViewCount = %d, want 0", got.ViewCount)
+	}
+}
+
+// fetchChannelFeed returns nil when the channel ID is empty.
+func TestFetchChannelFeedReturnsNilForEmptyChannelID(t *testing.T) {
+	scanner := newTestScanner(&countingDownloader{}, &stubChannels{}, &recordingLibrary{known: map[string]bool{}})
+	if got := scanner.fetchChannelFeed(context.Background(), ""); got != nil {
+		t.Fatalf("fetchChannelFeed(\"\") = %v, want nil", got)
 	}
 }

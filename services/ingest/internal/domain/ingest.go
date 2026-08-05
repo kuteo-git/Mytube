@@ -113,6 +113,15 @@ type Progress struct {
 	TotalBytes      int64
 }
 
+// RSSEntry is one video from a channel's RSS feed. It carries just the fields
+// a flat playlist listing cannot supply: exact publish dates and view counts.
+// Only the 15 most recent uploads are present — older videos need Preview.
+type RSSEntry struct {
+	VideoID     string
+	PublishedAt time.Time
+	ViewCount   int64
+}
+
 // Downloader is the port over the external tool. Keeping it an interface is
 // what lets the use cases be exercised without touching the network.
 type Downloader interface {
@@ -137,6 +146,11 @@ type Downloader interface {
 	// SaveThumbnail downloads a video thumbnail into the media root and
 	// returns its relative path, or "" on failure.
 	SaveThumbnail(ctx context.Context, url, videoID string) string
+	// FetchChannelFeed reads a channel's RSS feed and returns up to 15 entries
+	// with exact publish dates and view counts — neither of which a flat
+	// playlist listing carries. An error is a missed opportunity, not a failed
+	// scan: the feed is supplementary.
+	FetchChannelFeed(ctx context.Context, channelID string) ([]RSSEntry, error)
 }
 
 // JobStore is the ingest-owned persistence port.

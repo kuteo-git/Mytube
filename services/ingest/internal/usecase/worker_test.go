@@ -51,6 +51,9 @@ func (f *fakeDownloader) FetchChannelArtwork(context.Context, domain.ChannelMeta
 }
 
 func (f *fakeDownloader) SaveThumbnail(ctx context.Context, url, videoID string) string { return "" }
+func (f *fakeDownloader) FetchChannelFeed(context.Context, string) ([]domain.RSSEntry, error) {
+	return nil, nil
+}
 
 // fakeLibrary records every media-state write so the test can assert that
 // subtitles were published before the media file existed.

@@ -201,11 +201,29 @@ func (s *Scanner) scanSource(
 		return 0, 0, err
 	}
 
+	// RSS feeds give exact publish dates for the 15 most recent uploads, which a
+	// flat playlist listing never carries. This is a supplementary pass: a channel
+	// with no reachable feed still gets scanned, just without the dates the feed
+	// would have provided.
+	rssByID := s.fetchChannelFeed(ctx, owner.ID)
+
 	for _, v := range videos {
 		if v.ID == "" || v.SourceURL == "" {
 			continue
 		}
 		seen++
+
+		// The feed carries exact dates and view counts where the listing does not.
+		// Filling gaps rather than overwriting: a value already present from a
+		// previous full fetch (Preview) is more trustworthy than RSS.
+		if rss, ok := rssByID[v.ID]; ok {
+			if v.PublishedAt.IsZero() && !rss.PublishedAt.IsZero() {
+				v.PublishedAt = rss.PublishedAt
+			}
+			if v.ViewCount == 0 && rss.ViewCount > 0 {
+				v.ViewCount = rss.ViewCount
+			}
+		}
 
 		// The topic comes from the source it was found in. An empty topicName
 		// marks a subscription: its videos join the library unfiled, because
@@ -246,6 +264,28 @@ func (s *Scanner) scanSource(
 	}
 
 	return seen, added, nil
+}
+
+// fetchChannelFeed reads a channel's RSS feed and returns its entries keyed by
+// video id. Returns nil (not an empty map) when the feed is unreachable or the
+// channel id is unknown, so the caller can distinguish "nothing to apply" from
+// "the feed was empty".
+func (s *Scanner) fetchChannelFeed(ctx context.Context, channelID string) map[string]domain.RSSEntry {
+	if channelID == "" {
+		return nil
+	}
+
+	entries, err := s.fetch.FetchChannelFeed(ctx, channelID)
+	if err != nil {
+		s.logger.Debug("rss feed", "channel", channelID, "error", err)
+		return nil
+	}
+
+	out := make(map[string]domain.RSSEntry, len(entries))
+	for _, e := range entries {
+		out[e.VideoID] = e
+	}
+	return out
 }
 
 // applyOwner fills in — and for a channel source, corrects — who a video

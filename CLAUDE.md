@@ -1110,6 +1110,41 @@ The thresholds are set by `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
 #### Bugfix: gateway without MEDIA_ROOT
 - The gateway was running without the `MEDIA_ROOT` env var, defaulting to `./media` instead of `/Volumes/Data2/Youtube` → `/media/...` returned 404. Restarted with `MEDIA_ROOT=/Volumes/Data2/Youtube`.
 
+### Done 2026-08-05 — RSS feed for publish dates (branch `fix/rss-publish-date`)
+
+**Problem:** 791/4427 videos (17.9%) had no `published_at`. Root cause: `--flat-playlist`
+returns neither upload dates nor view counts. The scanner already tries InnerTube first
+(`listViaBrowse`), but videos that fall through to the flat-playlist fallback arrive with
+`published_at = NULL`.
+
+**Solution:** YouTube's RSS feeds (`youtube.com/feeds/videos.xml?channel_id=UC...`) carry
+exact timestamps (RFC3339, to the second), accurate view counts, and the 15 most recent
+uploads per channel. ~0.26s per channel, no API key, no quota, no IP block risk.
+
+**Implementation** (`fix/rss-publish-date`, 2026-08-05):
+
+| File | What |
+|---|---|
+| `services/ingest/internal/domain/ingest.go` | `RSSEntry` struct + `FetchChannelFeed` on `Downloader` interface |
+| `services/ingest/internal/adapter/ytdlp/downloader.go` | XML parsing of the Atom feed, HTTP GET, timestamp and view-count extraction |
+| `services/ingest/internal/usecase/scanner.go` | `scanSource` calls `fetchChannelFeed(owner.ID)` after listing, patches `PublishedAt` and `ViewCount` gaps without overwriting existing values; `fetchChannelFeed` returns nil on error or empty channel ID so a scan never fails because of RSS |
+| `services/ingest/internal/adapter/ytdlp/downloader_test.go` | XML parsing, empty feed, missing fields, timezone parsing, real-channel integration test |
+| `services/ingest/internal/usecase/scanner_source_test.go` | 6 new cases: RSS fills gaps, RSS does not overwrite, scan succeeds when RSS fails, empty channel ID skipped, match by video ID, nil for empty channel |
+| `expand_test.go`, `worker_test.go` | Mock `FetchChannelFeed` on `deepenDownloader` and `fakeDownloader` |
+
+**Key design decisions:**
+- RSS is **supplementary**, not a replacement — the listing still comes from
+  InnerTube → flat-playlist; RSS only patches in the two fields flat-playlist omits.
+- **Gap-filling, not overwriting**: a `PublishedAt` already present from a full
+  `Preview` fetch is more trustworthy and is kept.
+- The existing `COALESCE` in the catalog upsert (`published_at = COALESCE(EXCLUDED.published_at, videos.published_at)`) already prefers new data over NULL — no schema change needed.
+- **No new endpoint**: RSS runs inside every scan, which already fires hourly and on
+  `POST /api/topics/refresh`.
+
+**Verification:** `make check` clean, all Go tests pass. The 791 existing gaps will shrink
+naturally as scans refresh the 15 most recent uploads per channel (~482 resolved in the
+first pass). The remaining ~309 older videos still need backfill or a YouTube Data API key.
+
 ### Decisions reversed along the way
 
 - **"The stream cannot seek" → WRONG, remeasured (2026-07-29)**: an earlier note concluded that

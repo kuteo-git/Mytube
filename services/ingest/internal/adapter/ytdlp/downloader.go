@@ -8,11 +8,13 @@ package ytdlp
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +23,31 @@ import (
 
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
+
+// rssFeed is the Atom feed YouTube publishes per channel. Only the fields the
+// scanner needs are modelled; the rest is ignored.
+type rssFeed struct {
+	XMLName xml.Name  `xml:"feed"`
+	Entries []rssEntry `xml:"entry"`
+}
+
+type rssEntry struct {
+	VideoID   string          `xml:"http://www.youtube.com/xml/schemas/2015 videoId"`
+	Published string          `xml:"published"`
+	Media     rssMediaGroup   `xml:"http://search.yahoo.com/mrss/ group"`
+}
+
+type rssMediaGroup struct {
+	Community rssMediaCommunity `xml:"http://search.yahoo.com/mrss/ community"`
+}
+
+type rssMediaCommunity struct {
+	Statistics rssMediaStatistics `xml:"http://search.yahoo.com/mrss/ statistics"`
+}
+
+type rssMediaStatistics struct {
+	Views string `xml:"views,attr"`
+}
 
 // Upstream URLs are signed and time limited. This is deliberately shorter than
 // the real expiry so a client re-resolves before playback breaks mid-video.
@@ -764,6 +791,60 @@ func (d *Downloader) saveThumbnail(ctx context.Context, url, videoID string) str
 // SaveThumbnail is the domain adapter.
 func (d *Downloader) SaveThumbnail(ctx context.Context, url, videoID string) string {
 	return d.saveThumbnail(ctx, url, videoID)
+}
+
+// FetchChannelFeed reads a channel's public RSS feed.
+//
+// YouTube publishes the 15 most recent uploads per channel — enough to cover
+// every video a scan brings in, because a scan looks at the most recent N and
+// the feed's window contains that. The feed carries exact timestamps and
+// accurate view counts, neither of which a flat playlist listing returns.
+//
+// A failure here is a missed opportunity, not a failed scan: the caller
+// continues with whatever the listing already provided.
+func (d *Downloader) FetchChannelFeed(ctx context.Context, channelID string) ([]domain.RSSEntry, error) {
+	url := "https://www.youtube.com/feeds/videos.xml?channel_id=" + channelID
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("rss fetch %q: %w", channelID, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("rss fetch %q: %w", channelID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("rss fetch %q: HTTP %d", channelID, resp.StatusCode)
+	}
+
+	var feed rssFeed
+	if err := xml.NewDecoder(resp.Body).Decode(&feed); err != nil {
+		return nil, fmt.Errorf("rss parse %q: %w", channelID, err)
+	}
+
+	entries := make([]domain.RSSEntry, 0, len(feed.Entries))
+	for _, e := range feed.Entries {
+		if e.VideoID == "" {
+			continue
+		}
+		entry := domain.RSSEntry{VideoID: e.VideoID}
+
+		if e.Published != "" {
+			if parsed, err := time.Parse(time.RFC3339, e.Published); err == nil {
+				entry.PublishedAt = parsed
+			}
+		}
+		if e.Media.Community.Statistics.Views != "" {
+			if views, err := strconv.ParseInt(e.Media.Community.Statistics.Views, 10, 64); err == nil {
+				entry.ViewCount = views
+			}
+		}
+
+		entries = append(entries, entry)
+	}
+	return entries, nil
 }
 
 // FetchChannelArtwork downloads the avatar and banner and returns their paths
