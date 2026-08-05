@@ -677,6 +677,11 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
      the panels drop their own heading (`headless`) — two headings an inch apart saying the same
      word is the fault the channel page's title fade already exists to avoid. `bareTitle` returns
      null for a channel because that page owns the behaviour.
+   - **The player is inside the scroller, so anything listening there hears it too.** It is
+     rendered inside `<main>` because its `absolute` placement has to travel with the content —
+     which also put it within reach of pull-to-refresh, so dragging the picture down to put it
+     away pulled the page underneath at the same time. `data-player-host` marks it as not part of
+     the page's scroll surface, the way `data-player-controls` already marks the chrome.
    - **"Is the chrome drawn" is one fact and lives in PlayerProvider.** It was worked out twice —
      once by the shell for its padding, once implicitly by the player, which went on reserving
      `BOTTOM_NAV_HEIGHT` for a navigation that was not there and left the mobile bar floating a

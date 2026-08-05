@@ -360,6 +360,12 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
   return (
     <div
       data-testid="player-host"
+      // Marks the player as not part of the page's scroll surface. It lives
+      // inside <main> so its `absolute` placement travels with the content —
+      // which also puts it within reach of anything listening for touches
+      // there, and pull-to-refresh was one: dragging the picture down to put it
+      // away pulled the page underneath at the same time.
+      data-player-host=""
       // Below the navigation chrome, above the page. The miniplayer is content
       // that outstayed its page, not a layer over the app.
       className={clsx(

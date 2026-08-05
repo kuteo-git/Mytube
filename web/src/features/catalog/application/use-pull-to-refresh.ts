@@ -49,6 +49,14 @@ export function usePullToRefresh({
 
     const onStart = (e: TouchEvent) => {
       if (refreshingRef.current || e.touches.length !== 1) return
+      // The player is not part of the page.
+      //
+      // It is rendered inside the scroller so its `absolute` placement travels
+      // with the content, which also puts it within reach of this listener.
+      // Dragging the picture down to put it away is its own gesture, and the
+      // page was answering it too — two answers to one movement, and a page has
+      // no business responding to a drag aimed at something on top of it.
+      if ((e.target as Element | null)?.closest?.('[data-player-host]')) return
       // Recorded only from the top. Deciding later, when the finger has already
       // moved, would mean a scroll that happened to end at the top could turn
       // into a pull halfway through.

@@ -42,11 +42,16 @@ beforeEach(() => {
 })
 
 /** One finger, from a point, down to another, and released. */
-function pull(from: number, to: number) {
+function pull(from: number, to: number, target?: Element) {
   act(() => {
-    scroller.dispatchEvent(touch('touchstart', [from]))
-    scroller.dispatchEvent(touch('touchmove', [to]))
-    scroller.dispatchEvent(touch('touchend', []))
+    for (const e of [
+      touch('touchstart', [from]),
+      touch('touchmove', [to]),
+      touch('touchend', []),
+    ]) {
+      if (target) target.dispatchEvent(e)
+      else scroller.dispatchEvent(e)
+    }
   })
 }
 
@@ -134,6 +139,25 @@ describe('pulling the feed down', () => {
     render(<Harness onRefresh={onRefresh} enabled={false} />)
 
     pull(100, 400)
+
+    expect(onRefresh).not.toHaveBeenCalled()
+  })
+
+  it('leaves a drag aimed at the player alone', () => {
+    // The player is rendered inside the scroller so its `absolute` placement
+    // travels with the content — which also puts it within reach of this
+    // listener. Dragging the picture down to put it away is its own gesture,
+    // and the page was answering it too: two answers to one movement.
+    const onRefresh = vi.fn(async () => {})
+    render(<Harness onRefresh={onRefresh} />)
+
+    const host = document.createElement('div')
+    host.setAttribute('data-player-host', '')
+    scroller.appendChild(host)
+    const picture = document.createElement('video')
+    host.appendChild(picture)
+
+    pull(100, 400, picture)
 
     expect(onRefresh).not.toHaveBeenCalled()
   })
