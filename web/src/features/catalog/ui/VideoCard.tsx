@@ -74,12 +74,26 @@ export function VideoCard({ video }: { video: Video }) {
       </Link>
 
       <div className="flex gap-3">
-        <Avatar
-          hue={hueFromId(video.channel.id)}
-          name={video.channel.name}
-          src={mediaURL(video.channel.avatarPath)}
-          size={36}
-        />
+        {/* The picture goes where the name goes.
+            It is a channel's face sitting next to a link bearing that channel's
+            name, so it reads as the same control — and it was the only half
+            that did nothing. The watch page's byline already links both
+            (VideoActions), which is what made the difference visible: the same
+            avatar was live there and dead here.
+            `shrink-0` because the row is `flex` and a long title would
+            otherwise squeeze the anchor narrower than the picture inside it. */}
+        <Link
+          to={`/channel/${video.channel.id}`}
+          className="shrink-0 self-start rounded-full"
+          aria-label={video.channel.name}
+        >
+          <Avatar
+            hue={hueFromId(video.channel.id)}
+            name={video.channel.name}
+            src={mediaURL(video.channel.avatarPath)}
+            size={36}
+          />
+        </Link>
 
         <div className="min-w-0 flex-1">
           <h3 className="clamp-2 text-sm leading-5 font-medium">
