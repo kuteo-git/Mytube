@@ -3,6 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- iOS does not read SVG here, and with nothing to read it screenshots the
+         page instead — a home-screen icon that is a tiny picture of whatever
+         was on screen when it was added. Opaque and square on purpose: iOS
+         masks the corners itself and puts anything transparent on black. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- viewport-fit=cover is what makes env(safe-area-inset-*) report anything
          other than zero on a notched iPhone. Without it the insets are silently
          0 and every allowance made for them does nothing. -->
@@ -10,7 +15,20 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <title>Library</title>
+    <!-- Named, not described. "Library" was what the app is; this is what it is
+         called, and a tab strip has room for one of the two. -->
+    <title>MyTube</title>
+    <!-- The tab colour on Android, and the surface behind the status bar when
+         the page is added to a home screen. Left out, that band renders white
+         above a page that is entirely dark. -->
+    <meta name="theme-color" content="#0f0f0f" />
+    <!-- Added to a home screen on iOS, this is what the shortcut is called and
+         how it behaves. Without `apple-mobile-web-app-capable` the shortcut
+         opens Safari's chrome, and the safe-area work in §3d is drawn for a
+         window that does not have it. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MyTube" />
   </head>
   <body>
     <div id="root"></div>

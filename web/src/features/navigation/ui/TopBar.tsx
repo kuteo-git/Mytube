@@ -96,7 +96,7 @@ export function TopBar({
           {/* The wordmark is the cheapest thing to cut when the row is short:
               the mark alone still says where home is. */}
           <span className="hidden text-xl font-medium tracking-tight min-[700px]:inline">
-            Library
+            MyTube
           </span>
         </Link>
       </div>
