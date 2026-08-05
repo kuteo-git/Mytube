@@ -642,6 +642,25 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
    `touchmove` must be **non-passive**: calling off the browser's own elastic bounce needs
    `preventDefault`, and React attaches its listeners passively.
 
+3f. **Subscriptions is a phone tab, and a channel is a screen of its own (2026-08-05).** A phone
+   has no sidebar, so the only route to a channel was to find one of its videos and tap through —
+   a poor way to answer "what has this channel posted", which is the question following a channel
+   is for. `/subscriptions` lists the channels; tapping one opens `/channel/:id`.
+   - **The bar is five entries and that is a ceiling**, so every addition is a removal. Storage
+     went when Settings arrived, Activity when Subscriptions did. Both moved to the **top** of
+     Settings — they are pages you go to on purpose when something is wrong, not settings, and
+     neither has another way in on a phone: Storage's banner shows only above 75% full, and
+     Activity's bell lives on the desktop header.
+   - **A channel drops the search bar and the tab bar** and draws `BackBar` instead — same
+     treatment as the watch layer's chrome, keyed on the route so a channel reached from a
+     video's byline behaves like one reached from Subscriptions.
+   - **It is not a layer.** Nothing underneath has to stay alive, and the scroll position on the
+     way back is already handled by `/channel/*` not being a tab root: a drill-in restores by
+     history entry.
+   - **The title in the bar arrives late**, once `ChannelHeader` has scrolled away. The header
+     already names the channel in large type; naming it again an inch above would be saying the
+     same thing twice.
+
 4. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures
    gracefully and allow a retry.
 5. **YouTube blocks by IP if too many full-metadata fetches are made (THIS HAPPENED 2026-07-29).**

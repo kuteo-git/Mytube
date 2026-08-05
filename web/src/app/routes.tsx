@@ -6,6 +6,7 @@ import { HomePage } from '@/pages/HomePage'
 import { SavedPage } from '@/pages/SavedPage'
 import { SearchResultsPage } from '@/pages/SearchResultsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { SubscriptionsPage } from '@/pages/SubscriptionsPage'
 import { StoragePage } from '@/pages/StoragePage'
 import { WatchPage } from '@/pages/WatchPage'
 
@@ -31,6 +32,7 @@ export const pageRoutes = (
     <Route path="/activity" element={<ActivityPage />} />
     <Route path="/history" element={<HistoryPage />} />
     <Route path="/saved" element={<SavedPage />} />
+    <Route path="/subscriptions" element={<SubscriptionsPage />} />
     <Route path="/storage" element={<StoragePage />} />
     <Route path="/settings" element={<SettingsPage />} />
     <Route path="/channel/:channelId" element={<ChannelPage />} />

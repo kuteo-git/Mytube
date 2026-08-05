@@ -63,6 +63,24 @@ function AppShellInner() {
   // delicate, and none of which this needs to disturb.
   const watchIsALayer = isWatch && isMobile
 
+  /**
+   * A channel opened on a phone is a screen of its own too.
+   *
+   * Same treatment as the watch layer's chrome — no search bar, no tab bar —
+   * for the same reason: it has its own subject and its own way back, which
+   * ChannelPage draws itself. Not a *layer*, though: nothing underneath it has
+   * to stay alive, and the scroll position on the way back is already handled
+   * by `/channel/*` not being a tab root, so a drill-in restores by entry.
+   *
+   * Keyed on the route rather than on where the viewer came from. One rule, and
+   * a channel reached from a video's byline behaves the same as one reached
+   * from Subscriptions.
+   */
+  const bareScreen = isMobile && pathname.startsWith('/channel/')
+
+  /** Whether the app's own chrome is drawn at all. */
+  const chromeHidden = watchIsALayer || bareScreen
+
   // Forward starts at the top, back returns you where you were — the manners a
   // phone taught everyone. A single-page router never reloads the document, so
   // without this the offset just stays where the previous page left it.
@@ -107,7 +125,9 @@ function AppShellInner() {
   // The navigation's real height, which is more than the bar itself on a phone
   // with a home indicator. Reserving only the nominal 3.5rem left the last row
   // of every grid tucked under the labels.
-  const navReserve = isMobile ? BOTTOM_NAV_HEIGHT + safeBottom : 0
+  // No bar, no room for one. A screen that draws its own chrome — the watch
+  // layer, a channel — would otherwise end in a band of nothing.
+  const navReserve = isMobile && !chromeHidden ? BOTTOM_NAV_HEIGHT + safeBottom : 0
   const reservedBottom = mode === 'mini' || resuming ? miniReserve : navReserve || undefined
 
   // youtube.com hides the rail on the watch page to give the player room, and
@@ -169,7 +189,7 @@ function AppShellInner() {
           Rendered rather than omitted, at the opacity the drag has reached, so
           it arrives with the page it belongs to instead of after it. */}
       <TopBar
-        opacity={watchIsALayer ? fade : 1}
+        opacity={chromeHidden ? fade : 1}
         onToggleSidebar={() => {
           if (isWatch) {
             setDrawerOpen((o) => !o)
@@ -268,9 +288,7 @@ function AppShellInner() {
       {/* Fades in exactly as the layer above it fades out — one number seen
           from two sides, so the navigation cannot arrive after the page it
           belongs to. */}
-      <BottomNav
-        opacity={watchIsALayer ? fade : 1}
-      />
+      <BottomNav opacity={chromeHidden ? fade : 1} />
     </div>
   )
 }

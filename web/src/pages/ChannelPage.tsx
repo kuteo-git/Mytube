@@ -5,6 +5,8 @@ import { ChannelHeader } from '@/features/catalog/ui/ChannelHeader'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { channelQueueSearch } from '@/features/watch/application/queue'
+import { BackBar } from '@/features/catalog/ui/BackBar'
+import { usePlayer } from '@/features/watch/application/player-context'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { Pill } from '@/shared/ui/primitives'
 
@@ -16,7 +18,32 @@ import { Pill } from '@/shared/ui/primitives'
  */
 export function ChannelPage() {
   const { channelId } = useParams()
+  const { isMobile } = usePlayer()
   const [sortToken, setSortToken] = useState<string | undefined>(undefined)
+
+  /**
+   * Whether the channel's own header has scrolled out of sight.
+   *
+   * Drives the title in the back bar, which is empty until then — the header
+   * names the channel in large type, and a bar naming it as well would say the
+   * same thing twice an inch apart.
+   *
+   * An IntersectionObserver rather than a scroll handler, for the reason
+   * already recorded for the miniplayer: the browser works the crossing out
+   * itself, off the main thread, so there is no per-frame work in the scroll
+   * path to jitter.
+   */
+  const [headerGone, setHeaderGone] = useState(false)
+  const [headerEl, setHeaderEl] = useState<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!headerEl || !isMobile) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setHeaderGone(!entry.isIntersecting),
+      { threshold: 0 },
+    )
+    observer.observe(headerEl)
+    return () => observer.disconnect()
+  }, [headerEl, isMobile])
 
   // A token belongs to one channel. Carrying it across a navigation would ask
   // YouTube to continue a listing for a channel nobody is looking at.
@@ -43,11 +70,25 @@ export function ChannelPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 min-[700px]:px-6">
-      {channelPending || !channelPage ? (
-        <div className="mt-4 aspect-[6/1] w-full animate-pulse rounded-xl bg-surface" />
-      ) : (
-        <ChannelHeader channel={channelPage.channel} videoCount={channelPage.videoCount} />
+      {/* On a phone this screen carries its own chrome: AppShell drops the
+          search bar and the tab bar for `/channel`, and this is what replaces
+          them. On a desktop the sidebar and the header are still there and a
+          second way back would be clutter. */}
+      {isMobile && (
+        <BackBar
+          title={channelPage?.channel.name ?? ''}
+          showTitle={headerGone && Boolean(channelPage)}
+          fallback="/subscriptions"
+        />
       )}
+
+      <div ref={setHeaderEl}>
+        {channelPending || !channelPage ? (
+          <div className="mt-4 aspect-[6/1] w-full animate-pulse rounded-xl bg-surface" />
+        ) : (
+          <ChannelHeader channel={channelPage.channel} videoCount={channelPage.videoCount} />
+        )}
+      </div>
 
       {/* Orderings come from YouTube, so this row is empty rather than wrong
           when a channel offers none — and never renders a control that would

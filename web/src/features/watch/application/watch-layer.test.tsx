@@ -82,7 +82,7 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     discover: vi.fn(async () => []),
     search: vi.fn(async () => ({ library: [], youtube: [] })),
     getChannel: vi.fn(async () => null),
-    listChannelVideos: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listChannelVideos: vi.fn(async () => ({ videos: [], nextPageToken: '', sortOptions: [] })),
   },
 }))
 
@@ -342,6 +342,31 @@ describe('the watch screen as a layer', () => {
     await settle()
 
     expect(path()).toBe('/history')
+  })
+
+  it('drops the same two bars on a channel, without making it a layer', async () => {
+    // A channel opened on a phone is a screen of its own too — its own subject,
+    // its own way back, which ChannelPage draws. But nothing underneath has to
+    // stay alive, so it is an ordinary page: `data-background` stays absent.
+    phone(['/subscriptions'])
+    await settle()
+    act(() => go('/channel/c1'))
+    await settle()
+
+    expect(document.querySelector('main')?.getAttribute('data-background')).toBeNull()
+    expect(document.querySelector('header')?.style.opacity).toBe('0')
+    expect(
+      (document.querySelector('nav[aria-label="Main"]') as HTMLElement | null)?.style.opacity,
+    ).toBe('0')
+  })
+
+  it('keeps the app\'s chrome on a channel opened on a desktop', async () => {
+    desktop(['/subscriptions'])
+    await settle()
+    act(() => go('/channel/c1'))
+    await settle()
+
+    expect(screen.getByLabelText('Toggle sidebar')).toBeInTheDocument()
   })
 
   it('is not a layer on a desktop, where the watch page is an ordinary page', async () => {

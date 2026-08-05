@@ -35,6 +35,7 @@ export function isTabRoot(pathname: string): boolean {
 
 const TAB_ROOTS = new Set([
   '/',
+  '/subscriptions',
   '/saved',
   '/history',
   '/storage',

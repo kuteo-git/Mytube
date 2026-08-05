@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Activity, Bookmark, Clock, Home, Settings } from 'lucide-react'
+import { Bookmark, Clock, Home, Settings, Users } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 
@@ -12,19 +12,21 @@ import { NavLink } from 'react-router-dom'
  * rather than that one.
  *
  * Five is also the ceiling rather than a coincidence: past that the targets fall
- * below the 44px a finger needs. So the sidebar's six entries have to lose one
- * here, and **Storage is the one that goes**. It is a page you visit when the
- * disk is filling up — occasionally, deliberately, and it announces itself
- * through the storage banner when it matters. Settings is the opposite: the
- * narration voice, its levels and the feed mix all live there, and on a phone it
- * had no way in at all. Storage is still reachable on a phone through that
- * banner's "Manage storage" link, so nothing is stranded.
+ * below the 44px a finger needs — so every addition here is a removal as well.
+ * Storage went first, then Activity, and both moved to the top of Settings
+ * rather than being stranded: they are pages you go to deliberately when
+ * something is wrong, not places you browse.
+ *
+ * Subscriptions earns its place because a phone has no sidebar, and without it
+ * the only route to a channel was to find one of its videos and tap through —
+ * a poor way to answer "what has this channel posted", which is the question
+ * following a channel is for.
  */
 const ITEMS: { icon: ComponentType<{ size?: number }>; label: string; to: string }[] = [
   { icon: Home, label: 'Home', to: '/' },
+  { icon: Users, label: 'Subscriptions', to: '/subscriptions' },
   { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: Clock, label: 'History', to: '/history' },
-  { icon: Activity, label: 'Activity', to: '/activity' },
   { icon: Settings, label: 'Settings', to: '/settings' },
 ]
 

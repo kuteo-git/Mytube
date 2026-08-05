@@ -2,7 +2,22 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { BottomNav } from './BottomNav'
-import { SIDEBAR_ROUTES } from './Sidebar'
+import { Children, isValidElement } from 'react'
+import { pageRoutes } from '@/app/routes'
+
+/**
+ * Every path the router actually serves.
+ *
+ * Read out of the route table rather than out of the sidebar, which was the
+ * first version and was the wrong list: the two carry different subsets on
+ * purpose — five fit across a phone, six down a rail, and Subscriptions is a
+ * phone entry with no place on the rail. What a link has to be checked against
+ * is what the router knows.
+ */
+const ROUTED = Children.toArray(pageRoutes.props.children)
+  .filter(isValidElement)
+  .map((route) => (route.props as { path?: string }).path)
+  .filter((path): path is string => Boolean(path))
 
 function renderNav() {
   return render(
@@ -29,15 +44,24 @@ describe('the mobile bottom bar', () => {
     )
   })
 
-  it('every entry goes somewhere the sidebar also knows about', () => {
+  it('every entry goes somewhere the router actually serves', () => {
     // The charter's rule against dead buttons, checked rather than trusted: a
-    // typo in a path renders a link that quietly leads to the not-found page.
+    // typo in a path renders a link that quietly leads to the not-found page,
+    // and nothing about rendering it would say so.
     renderNav()
     const hrefs = screen
       .getAllByRole('link')
       .map((a) => a.getAttribute('href'))
     for (const href of hrefs) {
-      expect(SIDEBAR_ROUTES).toContain(href)
+      expect(ROUTED).toContain(href)
     }
+  })
+
+  it('offers Subscriptions, which a phone has no sidebar to list', () => {
+    renderNav()
+    expect(screen.getByRole('link', { name: /subscriptions/i })).toHaveAttribute(
+      'href',
+      '/subscriptions',
+    )
   })
 })

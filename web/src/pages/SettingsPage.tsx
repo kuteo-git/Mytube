@@ -1,4 +1,5 @@
 import {
+  Activity,
   ChevronRight,
   Eye,
   EyeOff,
@@ -36,39 +37,54 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">Settings</h1>
+      {/* First, above everything a viewer might be adjusting. These two are not
+          settings — they are the pages you go to when something is wrong, and
+          burying them under three panels of sliders is the opposite of what
+          somebody looking for them is doing. */}
+      <PhoneOnlyPages />
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
-      <StorageLink />
     </div>
   )
 }
 
 /**
- * The way to Storage on a phone.
+ * The pages a phone has no other way to reach.
  *
  * The bottom bar holds five entries — past that the targets fall under the 44px
- * a finger needs — so Storage gave up its place to Settings, which had no way in
- * on mobile at all. That left /storage with no entry point: the storage banner
- * on Home is the only other one, and it appears only above 75% full and can be
- * dismissed, so on a healthy disk the page was simply unreachable.
+ * a finger needs — so every addition there is a removal. Storage gave up its
+ * place to Settings, and Activity gave up its place to Subscriptions. Neither
+ * can simply be dropped: Storage's only other entry point is the banner on
+ * Home, which appears above 75% full and can be dismissed, so on a healthy disk
+ * it would be unreachable; Activity's bell lives on the desktop header, which a
+ * phone does not draw.
  *
- * Hidden on desktop, where the sidebar still lists it and a second route to the
+ * Both are pages you go to on purpose because something is wrong, which is why
+ * a list of links serves them and a place in the bar does not.
+ *
+ * Hidden on desktop, where the sidebar lists both and a second route to the
  * same page would just be clutter.
  */
-function StorageLink() {
+function PhoneOnlyPages() {
   return (
-    <div className="mt-8 border-t border-line pt-6 min-[700px]:hidden">
-      <Link
-        to="/storage"
-        className="flex items-center gap-3 rounded-xl px-1 py-3 text-sm
-                   transition-colors hover:bg-surface-hover"
-      >
-        <HardDrive size={18} className="shrink-0 text-text-2" />
-        <span className="flex-1">Storage</span>
-        <ChevronRight size={18} className="shrink-0 text-text-2" />
-      </Link>
-    </div>
+    <nav className="mt-6 mb-2 min-[700px]:hidden" aria-label="More">
+      {[
+        { to: '/storage', icon: HardDrive, label: 'Storage' },
+        { to: '/activity', icon: Activity, label: 'Activity' },
+      ].map(({ to, icon: Icon, label }) => (
+        <Link
+          key={to}
+          to={to}
+          className="flex items-center gap-3 rounded-xl px-1 py-3 text-sm
+                     transition-colors hover:bg-surface-hover"
+        >
+          <Icon size={18} className="shrink-0 text-text-2" />
+          <span className="flex-1">{label}</span>
+          <ChevronRight size={18} className="shrink-0 text-text-2" />
+        </Link>
+      ))}
+    </nav>
   )
 }
 

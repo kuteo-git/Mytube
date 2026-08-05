@@ -115,7 +115,15 @@ describe('which paths behave like tabs', () => {
   it('counts every navigation destination', () => {
     // The five in the bottom bar and the six in the sidebar. A path missing
     // here loses its position on every tab switch, silently.
-    for (const p of ['/', '/saved', '/history', '/activity', '/settings', '/storage']) {
+    for (const p of [
+      '/',
+      '/subscriptions',
+      '/saved',
+      '/history',
+      '/activity',
+      '/settings',
+      '/storage',
+    ]) {
       expect(isTabRoot(p)).toBe(true)
     }
   })
@@ -129,6 +137,10 @@ describe('which paths behave like tabs', () => {
 
   it('does not count the pages you drill into', () => {
     expect(isTabRoot('/watch/abc123')).toBe(false)
+    // A channel is opened *from* Subscriptions, so going back to the list has
+    // to return to where it was scrolled — which is the POP branch, keyed on
+    // the entry. Counting it as a tab would send the channel itself back to
+    // wherever a different channel had been left.
     expect(isTabRoot('/channel/UC123')).toBe(false)
     // Search is a question you ask afresh; returning to old results partway
     // down would be answering a different one.

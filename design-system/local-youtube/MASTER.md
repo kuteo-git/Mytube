@@ -156,6 +156,21 @@ Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
 
 ---
 
+**Bottom bar (mobile) — 2026-08-05:** `Home · Subscriptions · Saved · History · Settings`.
+**Đúng 5, và đó là trần**: quá 5 thì mỗi target tụt dưới 44px. Nên **mỗi lần thêm là một lần
+bớt** — Storage nhường chỗ cho Settings, rồi Activity nhường chỗ cho Subscriptions. Cả hai dời
+lên **đầu trang Settings**, không phải cuối: chúng không phải tuỳ chọn mà là trang người ta tìm
+tới khi có chuyện, chôn dưới ba khối slider là ngược với việc đang làm.
+
+**Màn drill-in trên mobile (`/channel/*`, và màn watch):** bỏ cả search header lẫn bottom bar,
+thay bằng **`BackBar`** — nút back cùng `.chrome-blur`, cùng `--top-bar`. **Tiêu đề hiện dần**:
+lúc đầu chỉ có mũi tên, cuộn qua khỏi `ChannelHeader` thì tên kênh mới mờ vào. Vì header đã nêu
+tên bằng chữ lớn rồi; thanh nêu lại là nói cùng một điều hai lần cách nhau một inch. Dùng
+IntersectionObserver, không dùng scroll handler — cùng lý do với miniplayer.
+Trang kênh **không phải lớp phủ** như màn watch: không có gì bên dưới cần sống tiếp, và vị trí
+cuộn lúc back đã có sẵn cơ chế lo (POP → khôi phục theo entry, vì `/channel/*` không nằm trong
+`TAB_ROOTS`).
+
 **Pull to refresh (Home, mobile only — 2026-08-05):** kéo xuống từ **đỉnh trang** để nạp lại feed.
 Ngưỡng **72px quãng đường trang** (≈120px quãng đường ngón tay, đúng tầm app native), trần 110px.
 Đường cong: **1:1 lúc đầu rồi nặng dần** — bám sát ngay để biết là đã nhận cử chỉ, rồi nặng lên để
