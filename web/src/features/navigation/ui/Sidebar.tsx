@@ -72,7 +72,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
     return (
       <nav
         aria-label="Main"
-        className="fixed top-14 bottom-0 left-0 z-20 w-[72px] overflow-y-auto bg-bg py-1 no-scrollbar"
+        className="fixed top-[var(--top-bar)] bottom-0 left-0 z-20 w-[72px] overflow-y-auto bg-bg py-1 no-scrollbar"
       >
         {PRIMARY.map((item) => (
           <Row key={item.to} item={item} mini />
@@ -84,7 +84,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
   return (
     <nav
       aria-label="Main"
-      className="fixed top-14 bottom-0 left-0 z-20 w-60 overflow-y-auto bg-bg px-3 py-3 no-scrollbar"
+      className="fixed top-[var(--top-bar)] bottom-0 left-0 z-20 w-60 overflow-y-auto bg-bg px-3 py-3 no-scrollbar"
     >
       <section className="flex flex-col gap-0.5">
         {PRIMARY.map((item) => (

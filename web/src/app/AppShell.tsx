@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
-import { type Location, Outlet, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { type Location, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
@@ -39,10 +39,6 @@ function AppShellInner() {
     dragOffset,
   } = usePlayer()
 
-  // Forward starts at the top, back returns you where you were — the manners a
-  // phone taught everyone. A single-page router never reloads the document, so
-  // without this the offset just stays where the previous page left it.
-  useScrollRestoration(scrollerEl)
 
   /**
    * The page the watch screen was opened from, kept alive underneath it.
@@ -66,6 +62,22 @@ function AppShellInner() {
   // folds the player into the corner — machinery CLAUDE.md is right to call
   // delicate, and none of which this needs to disturb.
   const watchIsALayer = isWatch && isMobile
+
+  // Forward starts at the top, back returns you where you were — the manners a
+  // phone taught everyone. A single-page router never reloads the document, so
+  // without this the offset just stays where the previous page left it.
+  //
+  // Withheld while the watch layer is up, and that is not a detail. `<main>`
+  // then holds the page *underneath*, while the location says `/watch` — so the
+  // hook read "a new screen, start at the top" and scrolled somebody else's
+  // page to zero. The drag then revealed a History that had been quietly
+  // rewound, and the `navigate(-1)` at the end put the real position back,
+  // which showed as the page jumping the instant the player reached the corner.
+  // One cause, two complaints.
+  //
+  // Nothing needs saving in the meantime either: the layer above has its own
+  // scroller, and the one underneath is not being touched.
+  useScrollRestoration(watchIsALayer ? null : scrollerEl)
 
   // How far the drag has cleared the layer away. Everything but the player goes
   // within DISMISS_FADE_FRACTION of the screen's height; the picture keeps
@@ -146,24 +158,27 @@ function AppShellInner() {
     //
     // The bar overlays the scrolling region rather than sitting above it, which
     // is what gives it something to blur: content passes *behind* it. The room
-    // it needs is `pt-14` on the scroller — the same 56px it used to occupy as
-    // a sibling, so nothing else moves.
+    // it needs is `--top-bar` on the scroller — its own height plus the status
+    // bar it bleeds up under, added in one place rather than in each of the
+    // half-dozen things that begin beneath it.
     <div className="relative h-dvh overflow-hidden bg-bg">
-      {/* No header on the phone's watch screen. It is a screen of its own
-          rather than a page inside the app's chrome — the way out is the drag,
-          and the browser's own back button behind it. */}
-      {!watchIsALayer && (
-        <TopBar
-          onToggleSidebar={() => {
-            if (isWatch) {
-              setDrawerOpen((o) => !o)
-              return
-            }
-            setSlideMargin(true)
-            setExpanded((e) => !e)
-          }}
-        />
-      )}
+      {/* No header on the phone's watch screen — it is a screen of its own
+          rather than a page inside the app's chrome, and the way out is the
+          drag with the browser's own back button behind it.
+          
+          Rendered rather than omitted, at the opacity the drag has reached, so
+          it arrives with the page it belongs to instead of after it. */}
+      <TopBar
+        opacity={watchIsALayer ? fade : 1}
+        onToggleSidebar={() => {
+          if (isWatch) {
+            setDrawerOpen((o) => !o)
+            return
+          }
+          setSlideMargin(true)
+          setExpanded((e) => !e)
+        }}
+      />
 
       {showFullSidebar && <Sidebar mini={false} />}
       {showMiniSidebar && <Sidebar mini />}
@@ -173,11 +188,11 @@ function AppShellInner() {
           {/* Above the player, scrim included. Navigation that opens *behind*
               the thing it is meant to navigate away from is not navigation. */}
           <div
-            className="fixed inset-0 top-14 z-40 bg-black/50"
+            className="fixed inset-0 top-[var(--top-bar)] z-40 bg-black/50"
             onClick={() => setDrawerOpen(false)}
             aria-hidden
           />
-          <div className="fixed top-14 bottom-0 left-0 z-50">
+          <div className="fixed top-[var(--top-bar)] bottom-0 left-0 z-50">
             <Sidebar mini={false} />
           </div>
         </>
@@ -198,24 +213,30 @@ function AppShellInner() {
           // document, where CLAUDE.md §8b records why: a vertical bounce that
           // chains out is read as a gesture, and the gesture it was read as
           // threw away what you were watching.
-          'relative h-full overflow-y-auto overscroll-y-contain',
-          // The bar's room, and only where there is a bar.
-          watchIsALayer ? 'pt-0' : 'pt-14',
+          // The bar's room, reserved unconditionally.
+          //
+          // Not withheld while the watch layer is up: the page underneath is an
+          // ordinary tab and expects the gap, and taking it away meant the
+          // content sat 56px too high for the whole drag and then jumped down
+          // the instant the navigation committed.
+          'relative h-full overflow-y-auto overscroll-y-contain pt-[var(--top-bar)]',
           slideMargin && 'transition-[margin] duration-200 ease-out',
           showFullSidebar && 'ml-60',
           showMiniSidebar && 'ml-[72px]',
         )}
         style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >
-        {/* Underneath the watch layer: the page you were on, still rendered and
-            still holding its own scroll position. `<Outlet/>` cannot serve —
-            it resolves to the *current* route, which is the watch page — so
-            this drives the same route table from the remembered location. */}
-        {watchIsALayer ? (
-          <Routes location={background}>{pageRoutes}</Routes>
-        ) : (
-          <Outlet />
-        )}
+        {/* The page underneath, and — when there is no layer over it — simply
+            the page.
+
+            Always a `<Routes>`, never an `<Outlet/>`, and that is the whole
+            reason this reads oddly. React reconciles by element type at each
+            position, so swapping one for the other when the watch screen opens
+            tears the page down and builds a new one: same pixels, no state.
+            Everything scrolled, typed, expanded or loaded on the tab was lost
+            the moment a video was opened, which rather defeats keeping it.
+            Same type in the same place, and only the location changes. */}
+        <Routes location={watchIsALayer ? background : location}>{pageRoutes}</Routes>
         {/* Inside the scroller, because the full-size player is positioned
             within the content and has to travel with it. The miniplayer is
             `fixed`, which is measured from the viewport wherever it sits —
@@ -237,7 +258,10 @@ function AppShellInner() {
             pointerEvents: fade > 0 ? 'none' : undefined,
           }}
         >
-          <Outlet />
+          {/* The watch screen itself. Its own `<Routes>` for the same reason as
+              above, rather than an Outlet that would resolve to the same thing
+              by a different mechanism. */}
+          <Routes location={location}>{pageRoutes}</Routes>
         </div>
       )}
 
@@ -291,12 +315,20 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
   const onExpand = () => {
     if (!isWatch) navigate(`/watch/${state.videoId}`)
     restore()
-    // Not smooth, on purpose. The bridging frame reads the scroller's offset to
-    // convert between fixed and absolute, and a smooth scroll would have it
-    // read a number still in motion — the player would jump, then animate.
-    // Scrolling synchronously means the offset is already 0 by the time that
-    // runs, leaving a single movement: the corner to the frame.
-    scroller?.scrollTo({ top: 0 })
+    // Desktop only, and that qualifier is the whole of it.
+    //
+    // There the full-size player lives in a slot on the watch page, so the page
+    // has to be at the top for the slot to be on screen — and not smoothly,
+    // because the bridging frame reads the scroller's offset to convert between
+    // fixed and absolute, and a scroll still in motion would have it read a
+    // number about to be wrong.
+    //
+    // On a phone there is no slot: the player is `fixed`, and the watch screen
+    // is a layer over the tab rather than a page inside it. Scrolling here does
+    // nothing for the player and throws away the position of the tab
+    // underneath — which the next drag is about to reveal, at the top, having
+    // apparently forgotten where it was.
+    if (!isMobile) scroller?.scrollTo({ top: 0 })
   }
 
   const onClose = () => (isWatch ? dismiss() : deactivate())
@@ -319,9 +351,7 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
         // Not applied to the desktop miniplayer: there the video fills the
         // frame, so a blurred backdrop would be covered by it entirely and
         // would only cost a compositing layer.
-        variant === 'bar'
-          ? 'bg-bg/70 backdrop-blur-xl backdrop-saturate-150'
-          : 'bg-black',
+        variant === 'bar' ? 'chrome-blur' : 'bg-black',
         // A corner-resident player is a floating object and should read as one.
         // shadow-2xl alone did not: over a dark page a black shadow is nearly
         // invisible, so the ring is what actually draws the edge.

@@ -73,6 +73,23 @@ function disabled(): boolean {
  * and moves everything pinned to the top edge, which is what a restored
  * position looked like: the top bar flickering on every tab switch.
  */
+/**
+ * Says what the scroller was doing at each navigation, when asked.
+ *
+ * `sessionStorage.setItem('yt-scroll-debug', '1')` and reload. It reports the
+ * offset on arrival and what this hook decided to do about it, which is the one
+ * question reading the code cannot settle: whether a lost position was moved by
+ * this hook, by something else, or was never there to begin with.
+ */
+function report(what: string, detail: Record<string, unknown>) {
+  try {
+    if (window.sessionStorage.getItem('yt-scroll-debug') !== '1') return
+  } catch {
+    return
+  }
+  console.info(`[scroll] ${what}`, detail)
+}
+
 export function useScrollRestoration(scroller: HTMLElement | null) {
   const { key, pathname } = useLocation()
   const navigationType = useNavigationType() as NavKind
@@ -80,6 +97,20 @@ export function useScrollRestoration(scroller: HTMLElement | null) {
   const previousPathRef = useRef<string | null>(null)
   /** What the layout effect decided, for the after-paint check below. */
   const targetRef = useRef<number | null>(null)
+  /**
+   * Whether the last run had no scroller to work on.
+   *
+   * That is what a layer over the page looks like from here: the phone's watch
+   * screen is drawn above `<main>` while `<main>` goes on holding the page
+   * underneath, so this hook is handed nothing and the page is left alone.
+   *
+   * Coming back out of one must leave it alone too. The scroller never moved —
+   * it was never the thing that changed — so there is nothing to restore, and
+   * restoring anyway can only make it worse: a POP with no recorded position
+   * resolves to zero, which threw the page to the top precisely when it had
+   * been sitting in the right place the whole time.
+   */
+  const wasSuspendedRef = useRef(false)
 
   // Take the browser's own restoration out of the argument.
   //
@@ -137,7 +168,22 @@ export function useScrollRestoration(scroller: HTMLElement | null) {
   // The retry loop below still paints early when the content genuinely is not
   // there yet; nothing can scroll to an offset a page does not have.
   useLayoutEffect(() => {
-    if (disabled() || !scroller) return
+    if (disabled()) return
+    if (!scroller) {
+      wasSuspendedRef.current = true
+      report('suspended — a layer is over the page', { pathname })
+      return
+    }
+    if (wasSuspendedRef.current) {
+      wasSuspendedRef.current = false
+      previousPathRef.current = pathname
+      targetRef.current = null
+      report('resumed, leaving the offset alone', {
+        pathname,
+        at: scroller.scrollTop,
+      })
+      return
+    }
     const samePath = previousPathRef.current === pathname
     previousPathRef.current = pathname
 
@@ -149,6 +195,14 @@ export function useScrollRestoration(scroller: HTMLElement | null) {
       savedForPath: read(PATH_PREFIX, pathname),
     })
     targetRef.current = target
+    report('deciding', {
+      pathname,
+      kind: navigationType,
+      at: scroller.scrollTop,
+      target,
+      savedForEntry: read(ENTRY_PREFIX, key),
+      savedForPath: read(PATH_PREFIX, pathname),
+    })
     if (target === null) return
 
     // Already there. Worth checking rather than scrolling anyway: on a phone

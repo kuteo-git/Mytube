@@ -1,9 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
+import { pageRoutes } from '@/app/routes'
 import { describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
-import { WatchPage } from '@/pages/WatchPage'
 
 /**
  * The one thing about the miniplayer a machine can check here, and the thing
@@ -86,6 +92,10 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     recordProgress: vi.fn(async () => {}),
     cancelDownload: vi.fn(async () => {}),
     getStorage: vi.fn(async () => ({ usedBytes: 0, budgetBytes: 1 })),
+    listHistory: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listPinned: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listTopPlayed: vi.fn(async () => []),
+    discover: vi.fn(async () => []),
   },
 }))
 
@@ -104,16 +114,26 @@ function renderApp() {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/watch/abc']}>
         <Navigator />
+        <Probe />
         <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<div>home</div>} />
-            <Route path="/watch/:videoId" element={<WatchPage />} />
-          </Route>
+          <Route element={<AppShell />}>{pageRoutes}</Route>
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )
 }
+
+/**
+ * Says where the router is.
+ *
+ * The shell renders the app's own route table now — one table, so the page held
+ * underneath the watch layer cannot drift from the page a link goes to — which
+ * means a stand-in page can no longer stand in for the real one.
+ */
+function Probe() {
+  return <span data-testid="path">{useLocation().pathname}</span>
+}
+const atHome = () => screen.findByText('/', { selector: '[data-testid="path"]' })
 
 describe('player continuity', () => {
   it('keeps the very same <video> node when leaving the watch page', async () => {
@@ -129,7 +149,7 @@ describe('player continuity', () => {
       go('/')
     })
 
-    await screen.findByText('home')
+    await atHome()
 
     expect(document.querySelector('video')).toBe(before)
     expect(before.isConnected).toBe(true)
@@ -147,7 +167,7 @@ describe('player continuity', () => {
     await act(async () => {
       go('/')
     })
-    await screen.findByText('home')
+    await atHome()
 
     await act(async () => {
       go('/watch/abc')
@@ -186,7 +206,7 @@ describe('reloading on the watch page and then leaving it', () => {
       await act(async () => {
         go('/')
       })
-      await screen.findByText('home')
+      await atHome()
       // Long enough for the resume offer's own fetch to land and its effect to
       // run: the second window arrived a moment after the first, which is why
       // this was only ever seen by hand.

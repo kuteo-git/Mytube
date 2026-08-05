@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { pageRoutes } from '@/app/routes'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
-import { WatchPage } from '@/pages/WatchPage'
 import { MOBILE_BREAKPOINT } from './player-geometry'
 
 // Copied from player-expand.test.tsx rather than trimmed: the page reads more
@@ -68,6 +68,10 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     recordProgress: vi.fn(async () => {}),
     cancelDownload: vi.fn(async () => {}),
     getStorage: vi.fn(async () => ({ usedBytes: 0, budgetBytes: 1 })),
+    listHistory: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listPinned: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listTopPlayed: vi.fn(async () => []),
+    discover: vi.fn(async () => []),
   },
 }))
 
@@ -75,6 +79,13 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
 const surface = () => screen.getByTestId('player-host').querySelector('.group\\/player')!
 
 const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 20))))
+
+/** Says where the router is. The shell renders the app's own route table now,
+ *  so a stand-in page cannot stand in for anything. */
+function Probe() {
+  return <span data-testid="path">{useLocation().pathname}</span>
+}
+const path = () => screen.getByTestId('path').textContent
 
 async function renderOnAPhone() {
   Object.defineProperty(window, 'innerWidth', {
@@ -87,11 +98,9 @@ async function renderOnAPhone() {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/watch/abc']}>
+        <Probe />
         <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<h1>home</h1>} />
-            <Route path="/watch/:videoId" element={<WatchPage />} />
-          </Route>
+          <Route element={<AppShell />}>{pageRoutes}</Route>
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -160,7 +169,7 @@ describe('dragging the player down on a phone', () => {
     drag(el, { from: [200, 100], to: [200, 260] })
     await settle()
 
-    expect(screen.getByRole('heading', { name: 'home' })).toBeInTheDocument()
+    expect(path()).toBe('/')
   })
 
   it('leaves the player alive rather than closing it', async () => {
@@ -182,7 +191,7 @@ describe('dragging the player down on a phone', () => {
     await settle()
 
     // Still on the watch page, and nothing left half-way to the corner.
-    expect(screen.queryByRole('heading', { name: 'home' })).not.toBeInTheDocument()
+    expect(path()).toBe('/watch/abc')
   })
 
   it('answers a flick that never travelled far', async () => {
@@ -193,7 +202,7 @@ describe('dragging the player down on a phone', () => {
     drag(el, { from: [200, 100], to: [200, 145], ms: 40 })
     await settle()
 
-    expect(screen.getByRole('heading', { name: 'home' })).toBeInTheDocument()
+    expect(path()).toBe('/')
   })
 
   it('ignores a tap, which belongs to the controls', async () => {
@@ -204,7 +213,7 @@ describe('dragging the player down on a phone', () => {
     drag(el, { from: [200, 100], to: [202, 104] })
     await settle()
 
-    expect(screen.queryByRole('heading', { name: 'home' })).not.toBeInTheDocument()
+    expect(path()).toBe('/watch/abc')
   })
 
   it('ignores a sideways swipe', async () => {
@@ -215,7 +224,7 @@ describe('dragging the player down on a phone', () => {
     drag(el, { from: [200, 100], to: [40, 190] })
     await settle()
 
-    expect(screen.queryByRole('heading', { name: 'home' })).not.toBeInTheDocument()
+    expect(path()).toBe('/watch/abc')
   })
 
   it('ignores an upward drag', async () => {
@@ -224,7 +233,7 @@ describe('dragging the player down on a phone', () => {
     drag(el, { from: [200, 300], to: [200, 60] })
     await settle()
 
-    expect(screen.queryByRole('heading', { name: 'home' })).not.toBeInTheDocument()
+    expect(path()).toBe('/watch/abc')
   })
 
   it('ignores a mouse, which has a back button', async () => {
@@ -239,6 +248,6 @@ describe('dragging the player down on a phone', () => {
     })
     await settle()
 
-    expect(screen.queryByRole('heading', { name: 'home' })).not.toBeInTheDocument()
+    expect(path()).toBe('/watch/abc')
   })
 })

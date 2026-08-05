@@ -45,6 +45,7 @@ beforeEach(() => {
     scrollY = typeof a === 'number' ? (b ?? 0) : (a.top ?? 0)
   }) as HTMLElement['scrollTo']
   document.body.appendChild(scroller)
+  scrollerForHook = scroller
 
   // The hook restores across animation frames while it waits for the content to
   // be tall enough. Running them immediately keeps the tests synchronous.
@@ -75,8 +76,11 @@ function Page({ name }: { name: string }) {
   )
 }
 
+/** Null while a layer is over the page, as the shell does. */
+let scrollerForHook: HTMLElement | null = null
+
 function App() {
-  useScrollRestoration(scroller)
+  useScrollRestoration(scrollerForHook)
   return (
     <Routes>
       <Route path="/" element={<Page name="home" />} />
@@ -223,7 +227,7 @@ describe('scrolling across a navigation', () => {
       )
     }
     function SelfishApp() {
-      useScrollRestoration(scroller)
+      useScrollRestoration(scrollerForHook)
       return (
         <Routes>
           <Route path="/" element={<Selfish />} />
@@ -239,6 +243,40 @@ describe('scrolling across a navigation', () => {
     scrollTo(900)
     click('to settings')
     click('to home')
+
+    expect(scrollY).toBe(900)
+  })
+
+  it('leaves the page alone on the way back out of a layer', () => {
+    // A layer over the page — the phone's watch screen — hands this hook no
+    // scroller, because `<main>` goes on holding the page underneath and must
+    // not be touched. Coming back out, there is still nothing to restore: the
+    // scroller never moved. Restoring anyway resolved a POP with no recorded
+    // position to zero and threw the page to the top, which is exactly the
+    // position it had been holding correctly all along.
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+    scrollTo(900)
+
+    // The layer opens: no scroller to work on.
+    scrollerForHook = null
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+    expect(scrollY).toBe(900)
+
+    // And closes again.
+    scrollerForHook = scroller
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
 
     expect(scrollY).toBe(900)
   })

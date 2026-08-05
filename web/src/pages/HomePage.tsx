@@ -1,5 +1,6 @@
 import clsx from 'clsx'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import {
   useDiscover,
@@ -18,6 +19,8 @@ import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
 import { VideoRail } from '@/features/catalog/ui/VideoRail'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { usePlayer } from '@/features/watch/application/player-context'
+import { PullIndicator } from '@/features/catalog/ui/PullIndicator'
+import { usePullToRefresh } from '@/features/catalog/application/use-pull-to-refresh'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
 /**
@@ -43,7 +46,41 @@ export function HomePage() {
   //
   // Chips are local state rather than navigation, so useScrollRestoration
   // cannot see this and the effect has to stay.
-  const { scrollerEl } = usePlayer()
+  const { scrollerEl, isMobile } = usePlayer()
+
+  /**
+   * Pull the feed down to fetch it again. A phone has no refresh button and
+   * should not grow one — the gesture is the control everywhere else.
+   *
+   * It answers a real question here rather than being a flourish: the scanner
+   * runs hourly and the ranking is frozen into a thirty-minute snapshot
+   * (CLAUDE.md §8b), so "is there anything new" is something the page will
+   * otherwise not go and ask.
+   *
+   * Everything the page is made of, not just the grid. Refreshing the feed and
+   * leaving Continue watching and Popular with you as they were would be a page
+   * that is half new — and the half that did not move is the half the viewer
+   * would notice.
+   */
+  const queryClient = useQueryClient()
+  const refresh = useCallback(
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feed'] }),
+        queryClient.invalidateQueries({ queryKey: ['history'] }),
+        queryClient.invalidateQueries({ queryKey: ['top-played'] }),
+        queryClient.invalidateQueries({ queryKey: ['storage'] }),
+      ]),
+    [queryClient],
+  )
+  const pull = usePullToRefresh({
+    scroller: scrollerEl,
+    // Touch only, and Home only. On a desktop the page has a keyboard and a
+    // reload button; a drag there would be a second way to do something that
+    // already has two.
+    enabled: isMobile,
+    onRefresh: refresh,
+  })
   const lastTopicRef = useRef<string | null>(null)
   useEffect(() => {
     const previous = lastTopicRef.current
@@ -98,7 +135,23 @@ export function HomePage() {
   const chips = ['All', ...(topics ?? []).map((t) => t.name)]
 
   return (
-    <div className="px-4 pb-16 min-[700px]:px-6">
+    // `relative` so the indicator has something to be positioned against, and
+    // the pull moves the content rather than the scroller: the scroller is
+    // shared with every other page, and translating it would leave whatever
+    // came next displaced.
+    <div
+      className="relative px-4 pb-16 min-[700px]:px-6"
+      style={{
+        transform: pull.offset > 0 ? `translateY(${pull.offset}px)` : undefined,
+        // Follows the finger with no transition, springs back with one. A
+        // transition during the drag puts the page a frame behind the hand.
+        // Follows the finger with no transition, and animates on the way back —
+        // both when a short pull is abandoned and when the refresh finishes and
+        // the page closes over the spinner.
+        transition: pull.pulling ? undefined : 'transform 200ms ease-out',
+      }}
+    >
+      <PullIndicator distance={pull.distance} refreshing={pull.refreshing} />
       {storage && (
         <StorageBanner usedBytes={storage.usedBytes} budgetBytes={storage.budgetBytes} />
       )}

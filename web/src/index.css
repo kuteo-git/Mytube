@@ -62,6 +62,17 @@
        phone dropped its header: the picture is pinned to the top of the screen
        now, and without this it would sit under the clock. */
     --safe-top: env(safe-area-inset-top, 0px);
+
+    /* What the top bar actually occupies: its own 56px plus whatever the status
+       bar has taken above it.
+
+       The bar's *background* covers both — it bleeds up under the clock, the
+       way a native title bar does, so the blurred surface reaches the top edge
+       of the screen instead of leaving a flat band above itself. Its *content*
+       sits in the 56px below. Everything that has to begin beneath the bar
+       measures from this, so the two numbers are added in one place rather than
+       in each of them. */
+    --top-bar: calc(3.5rem + var(--safe-top));
   }
 
   html {
@@ -156,6 +167,36 @@
     color: #fff;
     background-color: rgb(0 0 0 / 0.7);
     text-shadow: none;
+  }
+}
+
+@layer components {
+  /* Translucent chrome over moving content: the top bar, the chip row beneath
+     it, and the player's own bar on a phone.
+
+     One class rather than the same declarations written out per surface. The
+     alpha is the number that gets judged by eye and retuned, and as several
+     literals the surfaces drift apart — one bar ends up darker than another and
+     nobody can say which was intended.
+
+     The alpha is the *dark* layer's share, which is worth stating because it
+     reads backwards: raising it makes the surface darker. It started at 70%,
+     where a page of bright thumbnails scrolling underneath lit the whole bar up
+     and pushed the text forward.
+
+     At 95% the seam between two of these stacked — the bar and the chip row —
+     stops mattering. Two `backdrop-filter` layers can never line up exactly,
+     because each blurs its own backdrop and clips to its own bounds; but a
+     twentieth of what is behind comes through at all, so there is a twentieth
+     as much mismatch to see. The objection was real at 70% and is not here.
+
+     Nearly opaque, and the blur is nearly a hint — which is the point. What is
+     wanted is a suggestion that something is moving behind the chrome, not a
+     window onto it. */
+  .chrome-blur {
+    background-color: color-mix(in srgb, var(--color-bg) 95%, transparent);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
   }
 }
 

@@ -31,7 +31,7 @@ export function ChipBar({
     // `top-0`, and it is the top bar's height that must NOT appear here.
     //
     // The sticky threshold is measured from the scroller's content edge, and
-    // the scroller already carries `pt-14` to clear the bar — so zero here
+    // the scroller already carries `--top-bar` to clear the bar — so zero here
     // already means "just below the bar". Writing the bar's height as well made
     // the threshold 112px, and sticky does not only hold an element up, it
     // pushes one down to reach its threshold: the row sat a whole header lower
@@ -43,18 +43,21 @@ export function ChipBar({
     // overlay. The number belongs in exactly one place, and that place is the
     // scroller.
     //
-    // Opaque, and deliberately not blurred like the bar above it.
+    // The same translucent surface as the bar above it, from the same class.
     //
-    // Two adjacent `backdrop-filter` layers can never line up: each blurs its
-    // own backdrop and then clips to its own bounds, so along the shared edge
-    // the two are inventing pixels from different neighbourhoods. The seam is
-    // in the technique, not in the parameters — matching the radius and the
-    // tint does not remove it. One opaque surface next to one blurred one at
-    // least reads as a decision.
+    // Opaque at first, because two adjacent `backdrop-filter` layers can never
+    // line up: each blurs its own backdrop and clips to its own bounds, so
+    // along the shared edge the two invent pixels from different
+    // neighbourhoods. That objection was made at 70%, and at 95% it is worth
+    // very little — a twentieth of what is behind comes through, so there is a
+    // twentieth as much mismatch to notice.
+    //
+    // The chips themselves stay opaque pills, so their text never sits on
+    // anything but `--surface`. Only the strip behind them is see-through.
     //
     // No horizontal padding here: it belongs to the scrolling row, below.
     <div
-      className="sticky top-0 z-10 -mx-4 flex items-center gap-2 bg-bg py-3
+      className="chrome-blur sticky top-0 z-10 -mx-4 flex items-center gap-2 py-3
                  min-[700px]:mx-0"
     >
       <button

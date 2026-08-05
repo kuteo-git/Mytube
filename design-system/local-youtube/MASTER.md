@@ -73,7 +73,7 @@ Body base 14px — thấp hơn khuyến nghị 16px chung, **nhưng đây là ch
 
 | Đại lượng | Giá trị |
 |---|---|
-| Topbar height | **56px**, `position: sticky`, nền `--bg` |
+| Topbar height | **`--top-bar` = 56px + `--safe-top`**, `absolute` đè lên vùng cuộn, nền `.chrome-blur` |
 | Sidebar mở | **240px** · Sidebar thu gọn | **72px** (icon + label nhỏ) |
 | Grid gap | **16px** ngang · **40px** dọc |
 | Thumbnail | ratio **16:9**, `border-radius: 12px` |
@@ -95,19 +95,45 @@ Hover card: **không transform, không shadow, không scale** — YouTube không
 
 **Sidebar item:** height 40px, radius 10px, padding trái 12px, icon 24px cách label 24px. Hover `--surface-hover`. Active: nền `--surface-hover` + label weight 500.
 
-**Top bar (sửa 2026-08-05 — lệch có chủ đích khỏi ảnh tham chiếu):** nền `--bg` ở **70%** phủ
-`backdrop-blur-xl` + `backdrop-saturate-150`, **không** đục như `Example/home.png`. Lý do: trang
-cuộn bên trong `<main>` chứ không cuộn cửa sổ (xem `CLAUDE.md`), và thanh bar **đè lên** vùng
-cuộn — nội dung đi *phía sau* nó. Đục thì phần đè đó vô nghĩa.
-Blur là thứ giữ cho chữ đọc được: 70% trên thumbnail đang trôi, chữ đặt trên tấm trong suốt
-phẳng sẽ bơi. Kiểm `--text #F1F1F1` vẫn đạt tương phản trên nền tối nhất lẫn sáng nhất mà
-thumbnail có thể đưa ra.
-**ChipBar thì ĐỤC** (`--bg`) — thử blur rồi bỏ. **Hai lớp `backdrop-filter` cạnh nhau không bao
-giờ khớp**: mỗi lớp làm mờ backdrop *của riêng nó* rồi cắt theo biên của chính nó, nên dọc mép
-giáp ranh hai bên bịa pixel từ hai vùng khác nhau. Đường nối nằm ở **kỹ thuật**, không phải ở
-tham số — chỉnh cùng bán kính, cùng độ trong vẫn lộ. Một mặt đục cạnh một mặt blur ít ra còn đọc
-như một quyết định. Muốn liền mạch thì phải **một lớp blur duy nhất** phủ cả hai, và cái giá là
-trang phải khai báo chiều cao phần mở rộng cho AppShell.
+**Chrome trong suốt (sửa 2026-08-05 — lệch có chủ đích khỏi ảnh tham chiếu):** nền `--bg` ở
+**95%** phủ blur 24px + saturate 150%, **không** đục như `Example/home.png`. Viết một lần thành
+class **`.chrome-blur`** trong `index.css`, dùng cho **cả ba** mặt: top bar, ChipBar, và thanh
+player trên mobile. Alpha là con số phải chỉnh bằng mắt; để thành nhiều literal thì các mặt sẽ
+lệch nhau và không ai nói được cái nào mới đúng ý.
+
+Lý do lệch khỏi ảnh gốc: trang cuộn bên trong `<main>` chứ không cuộn cửa sổ (xem `CLAUDE.md`),
+và bar **đè lên** vùng cuộn — nội dung đi *phía sau* nó. Đục thì phần đè đó vô nghĩa.
+
+**Nền bar tràn lên phủ vùng an toàn trên cùng**, nội dung nằm trong 56px bên dưới — đúng kiểu
+`BottomNav` đã làm với `--safe-bottom`. Không làm vậy thì trên máy có tai thỏ logo và ô search
+nằm dưới đồng hồ, và mặt blur dừng sớm để lại một dải phẳng phía trên nó.
+Chiều cao tổng viết một lần thành **`--top-bar`** (`index.css`), vì có tới sáu thứ phải bắt đầu
+bên dưới bar — scroller, sidebar mini, sidebar đầy, drawer, scrim, ChipBar — và mỗi chỗ tự cộng
+lấy là mỗi chỗ có thể cộng sai. Đây đã là **lần thứ tư** trong dự án cùng một lỗi: đếm chiều cao
+TopBar hai lần.
+
+> **Alpha ở đây là phần của lớp TỐI, nên đọc ngược: tăng alpha = tối đi.** Bắt đầu ở 70% và bị báo
+> là quá sáng — một trang đầy thumbnail sáng cuộn phía sau làm cả bar bừng lên và đẩy chữ ra
+> trước. Qua 85%, qua 90%, chốt **95%** — gần như đục, và blur gần như chỉ còn một gợi ý. Đó mới
+> là thứ cần: dấu hiệu rằng có gì đó đang chuyển động phía sau, không phải một ô cửa nhìn vào nó.
+
+**Đường nối giữa hai lớp blur chồng nhau: có thật, nhưng ở 95% thì không đáng.** Hai
+`backdrop-filter` cạnh nhau không bao giờ khớp — mỗi lớp làm mờ backdrop *của riêng nó* rồi cắt
+theo biên của chính nó, nên dọc mép giáp ranh hai bên bịa pixel từ hai vùng khác nhau. Đó là hạn
+chế của **kỹ thuật**, không phải tham số. Nhưng ở 95% chỉ còn một phần hai mươi nội dung lọt qua,
+nên cũng chỉ còn chừng ấy biên độ lệch để mà thấy. Phản đối này đúng ở 70% và không còn đúng ở
+đây; ChipBar từng để đục vì lý do đó, giờ dùng chung `.chrome-blur`.
+Chip vẫn là **pill đục** (`--surface` / `--invert-bg`), nên chữ không bao giờ nằm trên gì khác
+ngoài nền đục — chỉ dải phía sau chúng là trong.
+
+**ChipBar dính ở `top-0`, KHÔNG phải `top-14`.** Ngưỡng sticky đo từ mép content của vùng cuộn, mà
+vùng cuộn đã mang sẵn `pt-14`. Ghi thêm chiều cao bar là đếm hai lần → ngưỡng 112px, và sticky
+**đẩy phần tử xuống** cho tới ngưỡng, nên hàng chip tụt đúng một header ngay cả khi chưa cuộn.
+Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
+
+**Miniplayer:** blur **chỉ ở biến thể `bar` trên mobile**, nơi video chỉ rộng 128px nên tiêu đề và
+nút nằm trên nền của chính host. Miniplayer desktop thì video phủ kín khung: blur ở đó bị che hoàn
+toàn, chỉ tốn thêm một lớp compositing.
 
 **Padding ngang của ChipBar nằm trên VÙNG CUỘN, không nằm trên wrapper.** Đặt ở wrapper thì nó
 rút ngắn chính vùng cuộn, chip biến mất trước mép màn hình 16px và hàng đọc như bị cắt cụt thay
@@ -127,6 +153,18 @@ Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
 **Chip:** mặc định nền `--surface` text `--text`; active nền `--invert-bg` text `--invert-text`. Thanh chip scroll ngang, có nút mũi tên 2 đầu, **ẩn scrollbar**.
 
 **Button (Like/Share/Save):** pill, nền `--surface`, height 36px, hover `--surface-hover`. Like/Dislike là **segmented** dính nhau, ngăn bằng divider 1px.
+
+---
+
+**Pull to refresh (Home, mobile only — 2026-08-05):** kéo xuống từ **đỉnh trang** để nạp lại feed.
+Ngưỡng **72px quãng đường trang** (≈120px quãng đường ngón tay, đúng tầm app native), trần 110px.
+Đường cong: **1:1 lúc đầu rồi nặng dần** — bám sát ngay để biết là đã nhận cử chỉ, rồi nặng lên để
+tay biết đã tới giới hạn.
+Chỉ báo **nói trước khi thả**: mũi tên xoay 180° khi đủ ngưỡng. Đó là khác biệt giữa một cử chỉ có
+thể bỏ giữa chừng và một cử chỉ chỉ có thể hối tiếc.
+Làm mới **toàn bộ trang** (feed + history + top-played + storage), không chỉ lưới — làm mới nửa
+trang thì nửa không đổi lại chính là nửa người ta để ý.
+**Desktop không có**: đã có bàn phím và nút reload, thêm cử chỉ là cách thứ ba cho cùng một việc.
 
 ---
 

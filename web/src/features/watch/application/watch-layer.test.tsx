@@ -1,9 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
+import { pageRoutes } from '@/app/routes'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
-import { WatchPage } from '@/pages/WatchPage'
 import { MOBILE_BREAKPOINT } from './player-geometry'
 
 const channel = {
@@ -66,25 +72,42 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     recordProgress: vi.fn(async () => {}),
     cancelDownload: vi.fn(async () => {}),
     getStorage: vi.fn(async () => ({ usedBytes: 0, budgetBytes: 1 })),
+    // The real pages render underneath now, so whatever they ask for has to
+    // answer. Empty is the honest answer for all of it.
+    listHistory: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listPinned: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
+    listTopPlayed: vi.fn(async () => []),
+    listScans: vi.fn(async () => ({ scans: [], total: 0 })),
+    getScanStatus: vi.fn(async () => ({ running: false, sources: [] })),
+    discover: vi.fn(async () => []),
+    search: vi.fn(async () => ({ library: [], youtube: [] })),
+    getChannel: vi.fn(async () => null),
+    listChannelVideos: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
   },
 }))
 
 const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 20))))
 
-/** A stand-in tab with a way to open a video from it. */
-function Tab({ name }: { name: string }) {
-  return (
-    <div>
-      <h1>{name}</h1>
-      <Link to="/watch/abc">open video</Link>
-    </div>
-  )
+/**
+ * Reads the router, and drives it.
+ *
+ * The shell renders the app's own route table now — one table, so that the page
+ * held underneath the watch layer cannot drift from the page a link goes to —
+ * which means a test cannot swap in stand-in pages. It says where it is and
+ * moves itself instead.
+ */
+let go: (to: string) => void = () => {}
+function Probe() {
+  const location = useLocation()
+  go = useNavigate()
+  return <span data-testid="path">{location.pathname}</span>
 }
+const path = () => screen.getByTestId('path').textContent
 
 /**
- * The shell with stand-in tabs.
+ * The shell, mounted the way main.tsx mounts it.
  *
- * The tabs have to be *arrived at* rather than listed as history: the shell
+ * Tabs have to be *arrived at* rather than listed as history: the shell
  * remembers the page it was showing, so an entry it never rendered is an entry
  * it cannot have seen. That is not a limitation of the test — it is exactly
  * what a reload on a watch URL looks like, and why Home stands in for it.
@@ -96,13 +119,9 @@ function renderShell(width: number, entries: string[]) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={entries}>
+        <Probe />
         <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<Tab name="home" />} />
-            <Route path="/history" element={<Tab name="history" />} />
-            <Route path="/saved" element={<Tab name="saved" />} />
-            <Route path="/watch/:videoId" element={<WatchPage />} />
-          </Route>
+          <Route element={<AppShell />}>{pageRoutes}</Route>
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -116,9 +135,7 @@ const desktop = (entries: string[]) => renderShell(1440, entries)
 async function openVideoFrom(tab: string) {
   phone([tab])
   await settle()
-  act(() => {
-    fireEvent.click(screen.getByRole('link', { name: 'open video' }))
-  })
+  act(() => go('/watch/abc'))
   await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
   await settle()
 }
@@ -156,6 +173,104 @@ describe('the watch screen as a layer', () => {
     expect(underneath()).toBe('/history')
   })
 
+  it('holds on to the very same page, not a rebuilt copy of it', async () => {
+    // The fault this was reported for. Swapping `<Outlet/>` for `<Routes>` when
+    // the layer opens looks like keeping the page, and is not: React reconciles
+    // by element type at each position, so the two are a teardown and a fresh
+    // build. Same pixels, no state — everything scrolled, expanded or loaded on
+    // the tab was lost the moment a video was opened, which rather defeats
+    // keeping it there.
+    //
+    // Node identity is the strongest form of the check available here: a
+    // rebuilt tree cannot hand back the node it replaced.
+    phone(['/history'])
+    await settle()
+    const before = document.querySelector('main')?.firstElementChild
+    expect(before).toBeTruthy()
+
+    act(() => go('/watch/abc'))
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    await settle()
+
+    expect(document.querySelector('main')?.firstElementChild).toBe(before)
+    expect(document.contains(before!)).toBe(true)
+  })
+
+  it('leaves the page underneath at the offset it was scrolled to', async () => {
+    // Reported three times. jsdom computes no layout, so scrollTop is backed by
+    // a plain number here — which is all anything in this path reads or writes.
+    phone(['/history'])
+    await settle()
+
+    const main = document.querySelector('main')!
+    let top = 0
+    Object.defineProperty(main, 'scrollTop', {
+      get: () => top,
+      set: (v: number) => {
+        top = v
+      },
+      configurable: true,
+    })
+    Object.defineProperty(main, 'scrollHeight', { value: 5000, configurable: true })
+    Object.defineProperty(main, 'clientHeight', { value: 800, configurable: true })
+
+    act(() => {
+      top = 900
+      main.dispatchEvent(new Event('scroll'))
+    })
+
+    act(() => go('/watch/abc'))
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    await settle()
+
+    // Opening the video must not move the page it was opened from: it is still
+    // there, and the drag is about to reveal it.
+    expect(main.scrollTop).toBe(900)
+
+    act(() => go(-1 as unknown as string))
+    await settle()
+
+    // And coming back must not move it either. Nothing scrolled in between.
+    expect(main.scrollTop).toBe(900)
+  })
+
+  it('does not rewind the tab when the bar is expanded back to the video', async () => {
+    // Found by reading rather than by reasoning, after the offset went on being
+    // lost with the obvious paths ruled out. Expanding scrolls the page to the
+    // top so the desktop player's slot is on screen — but on a phone there is
+    // no slot, the player is `fixed`, and the only thing that scroll reaches is
+    // the tab underneath. Tab, bar, expand, drag: the tab came back at the top.
+    phone(['/history'])
+    await settle()
+
+    const main = document.querySelector('main')!
+    let top = 0
+    Object.defineProperty(main, 'scrollTop', {
+      get: () => top,
+      set: (v: number) => {
+        top = v
+      },
+      configurable: true,
+    })
+    main.scrollTo = ((o: ScrollToOptions) => {
+      top = o.top ?? 0
+    }) as HTMLElement['scrollTo']
+
+    act(() => go('/watch/abc'))
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    await settle()
+    act(() => go(-1 as unknown as string))
+    await settle()
+
+    top = 900
+    act(() => {
+      fireEvent.click(screen.getAllByLabelText('Expand player')[0])
+    })
+    await settle()
+
+    expect(main.scrollTop).toBe(900)
+  })
+
   it('shows the tab you actually came from, not always Home', async () => {
     await openVideoFrom('/saved')
 
@@ -172,15 +287,32 @@ describe('the watch screen as a layer', () => {
     expect(underneath()).toBe('/')
   })
 
-  it('drops the header and the bottom bar', async () => {
-    // A screen of its own rather than a page inside the app's chrome.
+  it('hides the header and the bottom bar, without removing them', async () => {
+    // A screen of its own rather than a page inside the app's chrome — but both
+    // bars stay in the tree at zero opacity, because they belong to the page
+    // underneath and have to arrive *with* it. Omitted, they appeared only once
+    // the navigation committed: the bar arrived after its page, and the
+    // scroller's top padding came with it, so the content jumped 56px at the
+    // very end of the drag.
     await openVideoFrom('/history')
 
-    expect(screen.queryByLabelText('Toggle sidebar')).not.toBeInTheDocument()
-    const nav = screen.queryByRole('navigation', { name: 'Main' })
-    // Rendered but invisible: it belongs to the page underneath and arrives
-    // with it as the layer is dragged away.
-    expect(nav === null || nav.style.opacity === '0').toBe(true)
+    // Queried through the DOM, not by role: `aria-hidden` is doing its job, so
+    // neither bar is in the accessibility tree to be found by one. That is the
+    // point — a bar on its way in should not be announced as available.
+    const header = document.querySelector('header')!
+    const nav = document.querySelector('nav[aria-label="Main"]') as HTMLElement
+    expect(header.style.opacity).toBe('0')
+    expect(nav.style.opacity).toBe('0')
+    expect(header.getAttribute('aria-hidden')).toBe('true')
+    expect(nav.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('reserves the header\'s room throughout, so nothing jumps at the end', async () => {
+    // `--top-bar` rather than a literal: the bar's own height plus the status
+    // bar it bleeds up under, added in one place so the half-dozen things that
+    // begin beneath it cannot disagree about where that is.
+    await openVideoFrom('/history')
+    expect(document.querySelector('main')?.className).toContain('pt-[var(--top-bar)]')
   })
 
   it('returns to the tab it came from when dragged away', async () => {
@@ -209,8 +341,7 @@ describe('the watch screen as a layer', () => {
     })
     await settle()
 
-    expect(screen.getByRole('heading', { name: 'history' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'home' })).not.toBeInTheDocument()
+    expect(path()).toBe('/history')
   })
 
   it('is not a layer on a desktop, where the watch page is an ordinary page', async () => {

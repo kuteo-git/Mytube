@@ -10,7 +10,23 @@ import { Avatar, IconButton } from '@/shared/ui/primitives'
  * topics.yaml rather than from anything a user types here. The bell reports
  * real download activity.
  */
-export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
+/**
+ * @param opacity 1 normally. Below that only while the phone's watch layer is
+ * being dragged away: the bar belongs to the page underneath, so it arrives at
+ * the same rate that page is revealed — off the same number as the bottom bar.
+ *
+ * It used to be omitted entirely on that screen and re-appear when the
+ * navigation committed, which was two faults in one frame: the bar arrived
+ * after the page it belongs to, and the scroller's top padding came with it, so
+ * the content underneath jumped 56px at the moment the drag finished.
+ */
+export function TopBar({
+  onToggleSidebar,
+  opacity = 1,
+}: {
+  onToggleSidebar: () => void
+  opacity?: number
+}) {
 
   // The badge reports real ingest activity rather than imaginary social
   // notifications: downloads in flight, and failures that need attention.
@@ -30,15 +46,33 @@ export function TopBar({ onToggleSidebar }: { onToggleSidebar: () => void }) {
     //
     // Translucent over a blur, so what is behind reads as depth rather than as
     // a seam. A deliberate step away from the reference screenshots, where the
-    // bar is opaque — design-system MASTER.md should be updated rather than
-    // quietly contradicted. The blur is what keeps it legible: at 70% over
-    // moving thumbnails, text on a flat translucent panel would swim.
+    // bar is opaque — design-system MASTER.md records it rather than being
+    // quietly contradicted.
+    //
+    // `chrome-blur` carries the alpha and the blur, shared with the chip row
+    // beneath and the player's bar on a phone — see index.css. One class
+    // because the alpha is the figure that gets judged by eye, and as three
+    // literals the surfaces drift apart.
     //
     // `absolute` with a z-index keeps the stacking context the search
     // suggestions depend on, which `sticky` used to provide.
     <header
-      className="absolute inset-x-0 top-0 z-40 flex h-14 items-center gap-2 px-4
-                 bg-bg/70 backdrop-blur-xl backdrop-saturate-150"
+      style={{
+        // The background reaches the top edge of the screen; the content stays
+        // in the 56px below the status bar. Without this the logo and the
+        // search field sat under the clock on a notched phone — and the blurred
+        // surface stopped short, leaving a flat band above itself.
+        //
+        // The same shape BottomNav already uses for the home indicator.
+        height: 'var(--top-bar)',
+        paddingTop: 'var(--safe-top)',
+        opacity,
+        // A bar at a third of its opacity is not yet a bar.
+        pointerEvents: opacity < 1 ? 'none' : undefined,
+      }}
+      aria-hidden={opacity === 0 ? true : undefined}
+      className="chrome-blur absolute inset-x-0 top-0 z-40 flex items-center
+                 gap-2 px-4"
     >
       <div className="flex shrink-0 items-center gap-1">
         {/* Desktop only. There it does two jobs — collapsing the rail, and on the

@@ -592,6 +592,56 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
      header that no longer exists there.
    - **The way out is the drag and the browser's own back button.** No in-page control, which is
      safe here in a way it would not be in a native app.
+3e. **The window does not scroll; `<main>` does (2026-08-05).** Restoring a scroll position made
+   the top bar flicker on every tab switch, and two attempts at fixing the *timing* of the scroll
+   made it worse. The cause was the scroll itself: on a phone, scrolling the window slides the
+   browser's own address bar in and out, which resizes the viewport and repositions everything
+   pinned to the top edge. An element scrolling inside a frame that fills the screen is what a
+   native app does, and the browser chrome then has no reason to move.
+   Everything that read `window.scrollY` reads the scroller's offset instead — the arithmetic is
+   the same shape; only what "the document" means moved inward by one element. `html, body, #root`
+   are pinned at `height:100%; overflow:hidden` so there is no outer scroller left to bounce.
+
+   **Scroll memory is three rules, not one**, because a tab bar and a navigation stack remember
+   differently:
+   - **switching tabs** returns each tab to where you left it, keyed by **path**;
+   - **going back** returns to the exact history entry, keyed by that **entry** — two visits to
+     one feed are two positions;
+   - **drilling in** to a video or a channel starts at the top.
+
+   Two of those are forward navigation, which is why the *destination* is classified rather than
+   the direction alone. And the branch order is load-bearing: **React Router turns a link to the
+   location you are already on into a REPLACE, not a PUSH** (measured), so tapping the tab you are
+   standing on looks exactly like a query string being edited. The same-path check has to come
+   first, or the one gesture every phone answers with "back to the top" answers with nothing.
+
+   **Four things reset a scroll position that should not have.** All were found by report, in this
+   order, and each hid the next:
+   - `HomePage` reset on **mount**, not only on a topic change — and mounting is what happens when
+     you come back to Home. Its own comment said "a different topic is a different grid", so
+     firing on mount was wrong in its own terms.
+   - The restore ran in an ordinary effect, i.e. **after paint**, giving one frame at the old
+     offset. Moving it to a layout effect fixed the flicker and **inverted the ordering** it had
+     relied on — a parent's layout effect runs before a child's ordinary effect — so a second pass
+     after paint re-asserts the position if anything moved it. Normally a no-op.
+   - With the watch layer up, `<main>` holds the page *underneath* while the location says
+     `/watch`, so the hook read "a new screen, start at the top" and scrolled somebody else's page
+     to zero. It is handed **null** there, and coming back out it restores **nothing** — the
+     scroller never moved, and a POP with no recorded position resolves to zero.
+   - `onExpand` scrolls the page to the top so the desktop player's slot is on screen. On a phone
+     there is no slot; the only thing that scroll reached was the tab underneath.
+
+   **Horizontal rows remember separately** (`useRememberedScrollX`, `sessionStorage`): the topic
+   chips are their own scroller with their own position, and switching tabs returned them to the
+   beginning — losing exactly the chip you had scrolled across to find.
+
+   **Pull to refresh on Home, phones only.** The scanner runs hourly and the ranking is frozen
+   into a thirty-minute snapshot, so "is there anything new" is a question the page will otherwise
+   not go and ask. It refreshes **everything the page is made of** — feed, history, top-played,
+   storage — because a page that is half new is a page whose unchanged half is what gets noticed.
+   `touchmove` must be **non-passive**: calling off the browser's own elastic bounce needs
+   `preventDefault`, and React attaches its listeners passively.
+
 4. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures
    gracefully and allow a retry.
 5. **YouTube blocks by IP if too many full-metadata fetches are made (THIS HAPPENED 2026-07-29).**
@@ -1060,6 +1110,23 @@ The thresholds are set by `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   `if` somebody has to remember.
 - **`ffmpeg` eats stdin** inside a bash loop → always pass `-nostdin`.
 - **pgx encodes a nil slice as NULL** → violating an array column's NOT NULL constraint.
+- **The top bar's height has now been counted twice four separate times.** WatchPage's reserve
+  did it; the chip row did it while the bar was `sticky`; the chip row did it again when the bar
+  became an overlay (sticky thresholds are measured from the scroller's *content* edge, which
+  already carries the bar's padding — and sticky does not only hold an element up, it pushes one
+  down to reach its threshold, so the row sat a whole header low before any scrolling); and the
+  safe-area inset made it a fourth. The number now lives in exactly one place, `--top-bar`
+  (`3.5rem + --safe-top`), read by the six things that begin beneath the bar.
+- **Swapping `<Outlet/>` for `<Routes>` at the same position tears the page down.** React
+  reconciles by element type, so the two are a teardown and a fresh build — same pixels, no
+  state. Keeping the page underneath the watch layer alive meant using `<Routes>` in *both*
+  cases and changing only the location. The cost: AppShell owns the route table, so tests can no
+  longer swap in stand-in pages.
+- **Two adjacent `backdrop-filter` layers can never line up.** Each blurs its own backdrop and
+  clips to its own bounds, so along the shared edge the two invent pixels from different
+  neighbourhoods. The seam is in the technique, not the parameters. It stops mattering at a high
+  enough alpha — at 95% only a twentieth of what is behind comes through — which is why the chip
+  row can share the bar's surface now and could not at 70%.
 
 ## 9. Open questions
 - What make is the TV at home? (it affects how certificates have to be handled)
