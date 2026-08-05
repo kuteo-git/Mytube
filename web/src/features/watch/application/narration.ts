@@ -37,6 +37,7 @@ import {
   saveNarrationVtt,
   whenPartitionReady,
 } from '@/features/watch/infrastructure/narration-cache'
+import { hasStalled } from './narration-watchdog'
 import {
   shouldPlay,
   slotFor,
@@ -609,6 +610,9 @@ let _lastTime = 0
 /** Bumped whenever the timeline is abandoned, so in-flight work knows to stop. */
 let _generation = 0
 
+/** Playback position when a clip was last placed, for the watchdog below. */
+let _lastSpokeAt = 0
+
 // ---- audio sink -------------------------------------------------------------
 
 /**
@@ -764,6 +768,24 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
     // Too far ahead to be worth preparing yet.
     if (cue.start - video.currentTime > PREFETCH_SEC) return
 
+    // Nothing to say for it yet.
+    //
+    // The cursor stays where it is, and the next tick — a tenth of a second —
+    // tries again. It used to move on, and moving on is permanent: the cursor
+    // only ever goes forwards, so a line the translator had not reached was
+    // lost for the rest of the video. On a video already on disk the
+    // translations are cached and there is nothing to wait for, which is why
+    // this only ever showed itself on a *new* one, and why seeking appeared to
+    // "wake narration up" — a seek is the one thing that puts the cursor back.
+    //
+    // Waiting cannot become stuck, because the check below gives the cue up
+    // once the playhead has gone past it. Translation runs two to four times
+    // ahead of speech, so in practice the wait is a tick or two.
+    if (!vietnameseFor(cue.text) && cue.start >= video.currentTime) {
+      reportSkip(index, 'waiting for the translation')
+      return
+    }
+
     _cursor++
 
     // Already spoken past, or already under way — the moment has gone.
@@ -844,6 +866,7 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
     }
 
     _scheduledUntil = scheduleBuffer(ctx, buffer, when)
+    _lastSpokeAt = video.currentTime
   }
 }
 
@@ -881,6 +904,7 @@ export function bindNarration(video: HTMLVideoElement): () => void {
     _pumping = false
     _cursor = _cues ? firstCueAtOrAfter(_cues, video.currentTime) : 0
     _lastTime = video.currentTime
+    _lastSpokeAt = video.currentTime
   }
 
   /**
@@ -1020,10 +1044,42 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     stopEverything()
     _pumping = false
     _cursor = cues ? firstCueAtOrAfter(cues, now) : 0
+    // Rebased with the cursor. Without this a jump forwards looks to the
+    // watchdog like minutes of silence and a jump backwards makes the figure
+    // negative — neither is a stall, both are a seek.
+    _lastSpokeAt = now
   }
   _lastTime = now
 
   if (!cues || cues.length === 0 || _pumping) return
+
+  // The net underneath the three faults this was written after.
+  //
+  // Each of them ended the same way: something decided not to speak and nothing
+  // revisited the decision, so the viewer's own remedy was to seek — the one
+  // thing that puts the cursor back. All three are fixed at their own root;
+  // this is here so a fourth of the same shape costs a few silent seconds
+  // rather than the rest of the video.
+  //
+  // Narrow on purpose. It asks one question about one thing, rather than
+  // re-asserting everything every second — see narration-watchdog.ts, and
+  // CLAUDE.md §4 on why a general sweep is worse than the faults it hides.
+  const atPlayhead = firstCueAtOrAfter(cues, now)
+  if (
+    hasStalled({
+      wanted: true,
+      playing: !video.paused,
+      scheduled: _activeSources.size,
+      cursor: _cursor,
+      cursorAtPlayhead: atPlayhead,
+      silentFor: now - _lastSpokeAt,
+    })
+  ) {
+    _generation++
+    stopEverything()
+    _cursor = atPlayhead
+    _lastSpokeAt = now
+  }
 
   _pumping = true
   void pump(video, ctx).finally(() => {
@@ -1070,6 +1126,7 @@ export function stopNarrationPlayback() {
   _generation++
   _cursor = 0
   _pumping = false
+  _lastSpokeAt = 0
   // Zeroed so the next tick reads as a jump and re-derives the cursor from
   // wherever the video has got to in the meantime.
   _lastTime = 0

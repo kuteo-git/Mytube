@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 /**
@@ -21,12 +21,14 @@ export function useTranslatedTrack(
   videoId: string,
   vttVersion: number,
   complete: boolean,
-): void {
+): number {
   const client = useQueryClient()
   const announced = useRef({ first: false, complete: false })
+  const [revision, setRevision] = useState(0)
 
   useEffect(() => {
     announced.current = { first: false, complete: false }
+    setRevision(0)
   }, [videoId])
 
   useEffect(() => {
@@ -38,5 +40,34 @@ export function useTranslatedTrack(
     if (first) seen.first = true
     if (last) seen.complete = true
     void client.invalidateQueries({ queryKey: ['video', videoId] })
+    // The list coming back is not enough on its own.
+    //
+    // The file keeps the same name while it is rewritten after every batch, and
+    // a browser will not fetch a `<track>` address it already has — so the copy
+    // on screen stayed the handful of lines that existed when it was first
+    // asked for. Watching a translation finish and then finding the subtitles
+    // stop part way through was that, and reloading the page "fixed" it because
+    // a reload is the one thing that fetches the file again.
+    //
+    // This number goes on the address, which is what makes it a different one.
+    setRevision((n) => n + 1)
   }, [client, videoId, vttVersion, complete])
+
+  return revision
+}
+
+/**
+ * The address to give a `<track>`, with the revision on it where one is needed.
+ *
+ * Only the generated Vietnamese track is rewritten in place; every other
+ * subtitle is written once when the video is downloaded and never changes, so
+ * putting a version on those would only defeat the browser's cache for nothing.
+ */
+export function trackURL(
+  url: string,
+  generated: boolean,
+  revision: number,
+): string {
+  if (!generated || revision === 0) return url
+  return `${url}${url.includes('?') ? '&' : '?'}v=${revision}`
 }

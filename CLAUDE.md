@@ -1136,6 +1136,32 @@ The thresholds are set by `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
   `if` somebody has to remember.
 - **`ffmpeg` eats stdin** inside a bash loop → always pass `-nostdin`.
 - **pgx encodes a nil slice as NULL** → violating an array column's NOT NULL constraint.
+- **Three faults reported together on 2026-08-05, all of them only on a video that had just been
+  added — and all three for different reasons.** "Only on a new video" is not one cause; it is
+  what a video whose tiers are still climbing, whose translations are not cached, and whose
+  subtitle file is still being written all have in common.
+  - **Subtitles stayed on after being switched off.** The preference was applied to the front
+    `<video>` only, so the other layer kept whatever it was last told — and the next tier climb
+    brought it back with subtitles on. Applied to **both** layers now, which also means the
+    incoming layer is already right at a swap rather than briefly wrong.
+  - **Narration was silent until the viewer seeked.** `pump` advanced its cursor *before* asking
+    for the audio, and the cursor only goes forwards — so a cue the translator had not reached
+    was lost for the rest of the video. On a video already on disk the translations are cached
+    and there is nothing to wait for, which is why it looked new-video-only, and why seeking
+    "woke it up": a seek is the one thing that puts the cursor back. It now **waits** for the
+    cue, and gives up only once the playhead has gone past it.
+  - **The translated track stopped showing part way through.** `useTranslatedTrack` refetched the
+    subtitle *list*, but the track's **address never changed** — and a browser will not fetch an
+    address it already has, so the copy on screen stayed the handful of lines that existed when
+    it was first asked for. The generated track now carries a revision in its URL, bumped twice:
+    when the file first exists, and when the translation is complete. Refreshing the page
+    "fixed" it because a reload is the one thing that fetches the file again.
+- **`narration-watchdog.ts` is a net, not a sweep.** All three above are fixed at their own root;
+  the watchdog restarts narration only when it is wanted, playing, has nothing queued, has no cue
+  still ahead of the playhead, and has said nothing for `STALL_SECONDS`. Deliberately narrow —
+  §4's argument against periodic reconciliation holds, and a watchdog that fires during ordinary
+  operation is worse than none. Its clock is rebased wherever the timeline is abandoned, or a
+  seek forwards looks like minutes of silence.
 - **The top bar's height has now been counted twice four separate times.** WatchPage's reserve
   did it; the chip row did it while the bar was `sticky`; the chip row did it again when the bar
   became an overlay (sticky thresholds are measured from the scroller's *content* edge, which

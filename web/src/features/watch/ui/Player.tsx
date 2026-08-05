@@ -59,7 +59,10 @@ import {
 } from '@/features/watch/infrastructure/narration-cache'
 import { useTranslateConfig } from '@/features/settings/application/queries'
 import { loadNarrationAudioPrefs } from '@/features/settings/application/settings-prefs'
-import { useTranslatedTrack } from '@/features/watch/application/use-translated-track'
+import {
+  trackURL,
+  useTranslatedTrack,
+} from '@/features/watch/application/use-translated-track'
 import {
   MACHINE_LANGUAGE,
   captionsSettled,
@@ -731,58 +734,11 @@ export function Player({
   // and no Vietnamese track to prefer over it. Decides whether the translation
   // group appears — never whether it runs, which is the switch's job.
   const canTranslate = hasEn && !hasVi
+  // Every track's address, so an effect can depend on the list actually
+  // changing rather than on its length.
+  const subtitleKey = subtitles.map((t) => t.url).join('|')
 
-  // <track> elements are created synchronously by React, but the browser
-  // initialises the backing TextTrack objects asynchronously (microtask).
-  // useLayoutEffect runs before that — textTracks.length is 0 on first fire.
-  // Poll with rAF until the tracks are ready, then apply the stored preference.
-  useLayoutEffect(() => {
-    const element = front()
-    if (!element) return
-    let frame = 0
-    const apply = () => {
-      if (element.textTracks.length === 0) {
-        frame = requestAnimationFrame(apply)
-        return
-      }
-      for (let i = 0; i < element.textTracks.length; i++) {
-        const track = element.textTracks[i]
-        // Off entirely in the bar. Subtitles are drawn by the browser at a size
-        // proportional to the video, and across a 128px thumbnail that is a
-        // couple of illegible pixels sitting over the only part of the picture
-        // there is. The preference is untouched, so they come back the moment
-        // the player is a picture again.
-        track.mode =
-          !bar && track.language === captionsRef.current ? 'showing' : 'disabled'
-        // A cue's own align/position beats any stylesheet, and YouTube's
-        // auto-captions carry them on every line. The gateway strips them when
-        // it serves a subtitle, but in the LAN deployment Caddy takes that route
-        // over and would serve the file as it sits on disk — so the browser
-        // fixes them too, and the two subtitle sources agree either way.
-        centreCues(track.cues)
-      }
-    }
-    frame = requestAnimationFrame(apply)
 
-    // Cues arrive after the track itself does, and a track only parses them
-    // once its mode leaves 'disabled' — so the pass above sees an empty list
-    // the first time and this is what catches the real one.
-    const onCues = (e: Event) => {
-      const track = (e.target as TextTrack | null) ?? null
-      if (track) centreCues(track.cues)
-    }
-    const tracks = element.textTracks
-    for (let i = 0; i < tracks.length; i++) {
-      tracks[i].addEventListener('cuechange', onCues)
-    }
-
-    return () => {
-      cancelAnimationFrame(frame)
-      for (let i = 0; i < tracks.length; i++) {
-        tracks[i].removeEventListener('cuechange', onCues)
-      }
-    }
-  }, [captions, frontSrc, frontIsA, front, subtitles.length, bar])
 
   // Create AudioContext when narration activates.  Must happen here — not just
   // in onClick — because narrationOn can be restored from localStorage on page
@@ -1574,7 +1530,85 @@ export function Player({
 
   // The translated track only exists once the file behind it has been written,
   // and the subtitle list was fetched long before that.
-  useTranslatedTrack(videoId, progress.vttVersion, progress.phase === 'done')
+  const trackRevision = useTranslatedTrack(
+    videoId,
+    progress.vttVersion,
+    progress.phase === 'done',
+  )
+
+  // <track> elements are created synchronously by React, but the browser
+  // initialises the backing TextTrack objects asynchronously (microtask).
+  // useLayoutEffect runs before that — textTracks.length is 0 on first fire.
+  // Poll with rAF until the tracks are ready, then apply the stored preference.
+  //
+  // **Both layers, not just the one on screen.** The player keeps two `<video>`
+  // elements and swaps which is in front; applying the preference to the front
+  // one alone left the other holding whatever it was last told. Turn subtitles
+  // off while B is in front and A keeps its track `showing` — then the next
+  // tier climb brings A back and the subtitles return, switched off. Only a
+  // video that is still downloading swaps layers, which is why it looked like a
+  // fault of new videos.
+  //
+  // Setting both also means the incoming layer is already right at the moment
+  // of a swap, so there is no frame where the subtitles are missing.
+  useLayoutEffect(() => {
+    const elements = [videoARef.current, videoBRef.current].filter(
+      (el): el is HTMLVideoElement => el !== null,
+    )
+    if (elements.length === 0) return
+    let frame = 0
+    const apply = () => {
+      if (elements.every((el) => el.textTracks.length === 0)) {
+        frame = requestAnimationFrame(apply)
+        return
+      }
+      for (const element of elements) {
+        for (let i = 0; i < element.textTracks.length; i++) {
+          const track = element.textTracks[i]
+          // Off entirely in the bar. Subtitles are drawn by the browser at a
+          // size proportional to the video, and across a 128px thumbnail that
+          // is a couple of illegible pixels sitting over the only part of the
+          // picture there is. The preference is untouched, so they come back
+          // the moment the player is a picture again.
+          track.mode =
+            !bar && track.language === captionsRef.current ? 'showing' : 'disabled'
+          // A cue's own align/position beats any stylesheet, and YouTube's
+          // auto-captions carry them on every line. The gateway strips them when
+          // it serves a subtitle, but in the LAN deployment Caddy takes that route
+          // over and would serve the file as it sits on disk — so the browser
+          // fixes them too, and the two subtitle sources agree either way.
+          centreCues(track.cues)
+        }
+      }
+    }
+    frame = requestAnimationFrame(apply)
+
+    // Cues arrive after the track itself does, and a track only parses them
+    // once its mode leaves 'disabled' — so the pass above sees an empty list
+    // the first time and this is what catches the real one.
+    const onCues = (e: Event) => {
+      const track = (e.target as TextTrack | null) ?? null
+      if (track) centreCues(track.cues)
+    }
+    const lists = elements.map((el) => el.textTracks)
+    for (const tracks of lists) {
+      for (let i = 0; i < tracks.length; i++) {
+        tracks[i].addEventListener('cuechange', onCues)
+      }
+    }
+
+    return () => {
+      cancelAnimationFrame(frame)
+      for (const tracks of lists) {
+        for (let i = 0; i < tracks.length; i++) {
+          tracks[i].removeEventListener('cuechange', onCues)
+        }
+      }
+    }
+    // Keyed on the tracks' addresses rather than on how many there are: the
+    // translated track keeps its place in the list while its URL changes, so a
+    // count would not notice it being replaced.
+  }, [captions, frontSrc, frontIsA, subtitleKey, trackRevision, bar])
 
 
   const toggleSpeak = useCallback(() => {
@@ -2589,7 +2623,10 @@ export function Player({
                     <track
                       key={track.language}
                       kind="subtitles"
-                      src={track.url}
+                      // The generated track carries a revision, because the file
+                      // behind it is rewritten in place and a browser will not
+                      // fetch an address it already has.
+                      src={trackURL(track.url, track.generated, trackRevision)}
                       srcLang={track.language}
                       label={track.generated ? `${track.label} (auto)` : track.label}
                     />

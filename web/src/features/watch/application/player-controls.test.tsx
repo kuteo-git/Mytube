@@ -786,6 +786,46 @@ describe('closing the corner player from the watch page', () => {
   })
 })
 
+describe('the subtitle preference and the two layers', () => {
+  /**
+   * jsdom builds no TextTrack objects for `<track>` children, so the modes the
+   * effect writes have nowhere to land. They are given somewhere: what is being
+   * checked is which elements get written to, not what a browser does with it.
+   */
+  function trackable(video: HTMLVideoElement, languages: string[]) {
+    const tracks = languages.map((language) => ({ language, mode: 'showing', cues: null }))
+    Object.defineProperty(video, 'textTracks', {
+      configurable: true,
+      value: Object.assign(tracks, {
+        length: tracks.length,
+        addEventListener() {},
+        removeEventListener() {},
+      }),
+    })
+    return tracks
+  }
+
+  it('reaches the layer that is not on screen', async () => {
+    // The reported fault. Applying it to the front element alone left the other
+    // holding whatever it was last told — so turning subtitles off while B was
+    // in front left A still `showing`, and the next tier climb brought A back
+    // with the subtitles switched off and visible. Only a video still
+    // downloading swaps layers, which is why it looked like a fault of new
+    // videos.
+    await ready()
+    const [a, b] = Array.from(document.querySelectorAll('video'))
+    const back = trackable(b, ['en'])
+    trackable(a, ['en'])
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60))
+    })
+
+    // Captions default to off, and both layers have to say so.
+    expect(back[0].mode).toBe('disabled')
+  })
+})
+
 describe('coming back from Apple’s full-screen player', () => {
   const enterFullscreen = (video: HTMLVideoElement) =>
     act(() => {
