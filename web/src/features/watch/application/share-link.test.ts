@@ -79,14 +79,27 @@ describe('what pressing Share does', () => {
       clipboard: { writeText },
     })
 
-    expect(await shareVideo({ url: 'u', canShare: true })).toBe('failed')
+    expect(await shareVideo({ url: 'u', canShare: true })).toBe('cancelled')
     expect(writeText).not.toHaveBeenCalled()
   })
 
-  it('says so when the clipboard is refused', async () => {
-    // Plain HTTP on a LAN address is not a secure context, and the clipboard is
-    // one of the APIs that withholds itself there — see CLAUDE.md §2. Reporting
-    // it beats a button that silently does nothing.
+  it('falls back to the old clipboard when the modern one is absent', async () => {
+    // This is the ordinary case on a phone, not an exotic one: the app is served
+    // over plain HTTP on a LAN address, which is not a secure context, so
+    // `navigator.clipboard` does not exist at all. Only localhost is exempt —
+    // which is why the button worked on the dev machine and did nothing on a
+    // phone. See CLAUDE.md §8, risk 3.
+    vi.stubGlobal('navigator', {})
+    const exec = vi.fn(() => true)
+    document.execCommand = exec
+
+    expect(await shareVideo({ url: 'u', canShare: true })).toBe('copied')
+    expect(exec).toHaveBeenCalledWith('copy')
+    expect(document.querySelector('textarea')).toBeNull() // tidied up after
+  })
+
+  it('falls through to the old clipboard when the modern one refuses', async () => {
+    // Present but rejecting — a permission, or a document that is not focused.
     vi.stubGlobal('navigator', {
       clipboard: {
         writeText: vi.fn(async () => {
@@ -94,6 +107,16 @@ describe('what pressing Share does', () => {
         }),
       },
     })
+    document.execCommand = vi.fn(() => true)
+
+    expect(await shareVideo({ url: 'u', canShare: false })).toBe('copied')
+  })
+
+  it('says so when there is no clipboard at all', async () => {
+    // A button that does nothing and reports nothing is indistinguishable from
+    // a broken one, which is exactly how this was reported.
+    vi.stubGlobal('navigator', {})
+    document.execCommand = vi.fn(() => false)
 
     expect(await shareVideo({ url: 'u', canShare: false })).toBe('failed')
   })

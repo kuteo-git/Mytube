@@ -37,7 +37,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   const coarse = useCoarsePointer()
   const [shared, setShared] = useState<ShareOutcome | null>(null)
   useEffect(() => {
-    if (shared !== 'copied') return
+    if (shared === null || shared === 'shared') return
     // Long enough to be read, short enough that the button is a button again
     // before anybody wants to press it a second time.
     const timer = window.setTimeout(() => setShared(null), 2000)
@@ -108,7 +108,13 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             that appears not to work, which is how this one behaved before. */}
         <ActionPill
           icon={<Share2 size={20} />}
-          label={shared === 'copied' ? 'Link copied' : 'Share'}
+          label={
+            shared === 'copied'
+              ? 'Link copied'
+              : shared === 'failed'
+                ? "Couldn't copy"
+                : 'Share'
+          }
           onClick={() => {
             void shareVideo({
               url: shareURL(video),

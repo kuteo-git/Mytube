@@ -273,8 +273,17 @@ library fetched the video from — `video.sourceUrl`, falling back to
 - **A cancelled sheet does not fall through to the clipboard.** Backing out is an answer;
   quietly doing the thing that was just declined is worse than doing nothing.
 - **The copy path says "Link copied" on the pill for 2 seconds.** A clipboard write shows nothing
-  by itself, which is a button that looks broken — and on a plain-HTTP LAN address the clipboard
-  API is withheld as an insecure context, so the silent version was sometimes *actually* broken.
+  by itself, which is a button that looks broken.
+- **And on a phone it *was* broken, immediately (2026-08-05).** A plain-HTTP LAN address is **not
+  a secure context**, and browsers withhold both `navigator.share` and `navigator.clipboard`
+  there — the properties are **absent**, not permission-gated. `localhost` is the one exemption,
+  which is exactly why the button worked on the machine it was written on and did nothing on a
+  phone. So `document.execCommand('copy')` is not a fallback for an exotic browser: until §8's
+  HTTPS risk is settled it is **the** clipboard every device on this network has. **The share
+  sheet is unreachable for the same reason** — that half needs HTTPS, not code.
+- **A failure says "Couldn't copy"; a cancelled sheet says nothing.** They are two outcomes, not
+  one: a button that fails silently is indistinguishable from a broken one, which is precisely
+  how this was reported — while reporting a viewer's own decision back to them is noise.
 
 ## 6. Recommendation
 

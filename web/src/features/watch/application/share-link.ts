@@ -19,7 +19,12 @@ export function shareURL(video: { id: string; sourceUrl?: string }): string {
   return `https://www.youtube.com/watch?v=${video.id}`
 }
 
-export type ShareOutcome = 'shared' | 'copied' | 'failed'
+/**
+ * `cancelled` and `failed` are separate because they are said differently: one
+ * is the viewer's own answer and deserves no report at all, the other is the
+ * button not working and must never be silent.
+ */
+export type ShareOutcome = 'shared' | 'copied' | 'cancelled' | 'failed'
 
 /**
  * Hand the link to the device, or to the clipboard.
@@ -47,20 +52,58 @@ export async function shareVideo({
       await navigator.share({ url, title })
       return 'shared'
     } catch {
-      // Cancelling the sheet rejects, and cancelling is not a failure — but it
-      // is not a reason to put something on the clipboard either. Either way
-      // there is nothing to report, so nothing is said.
-      return 'failed'
+      // Cancelling the sheet rejects, and cancelling is not a failure — nor is
+      // it a reason to put something on the clipboard, which would be doing the
+      // thing that was just declined. Nothing happens and nothing is said.
+      return 'cancelled'
     }
   }
 
+  return (await copyText(url)) ? 'copied' : 'failed'
+}
+
+/**
+ * Put text on the clipboard, including where the modern API is withheld.
+ *
+ * This app is served over plain HTTP on a LAN address (CLAUDE.md §8, risk 3:
+ * HTTPS is still unproven), and **a plain-HTTP origin is not a secure context**,
+ * so browsers withhold `navigator.clipboard` entirely — the property is not
+ * merely permission-gated, it is absent. Only `localhost` is exempt, which is
+ * exactly why this worked on the development machine and did nothing on a phone.
+ *
+ * `document.execCommand('copy')` is deprecated and carries none of that gating.
+ * It is the only clipboard a page on this network has, so it is not a fallback
+ * for an exotic browser — on every device but the one running the dev server it
+ * is *the* path.
+ */
+async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Present but refused — permission, or a document that is not focused.
+      // Fall through: the old road may still be open.
+    }
+  }
+
+  const field = document.createElement('textarea')
+  field.value = text
+  // Off-screen rather than hidden: the selection has to be real, and neither
+  // `display:none` nor `hidden` can be selected. `readOnly` keeps the keyboard
+  // down on a phone in the moment the field holds focus.
+  field.setAttribute('readonly', '')
+  field.style.position = 'fixed'
+  field.style.top = '-1000px'
+  field.style.opacity = '0'
+  document.body.appendChild(field)
   try {
-    await navigator.clipboard.writeText(url)
-    return 'copied'
+    field.select()
+    field.setSelectionRange(0, text.length) // iOS ignores select() alone.
+    return document.execCommand('copy')
   } catch {
-    // No clipboard permission, or an insecure context — which this app is, on a
-    // plain-HTTP LAN address, in every browser but Chrome's localhost
-    // exemption. Worth reporting rather than pretending: see CLAUDE.md §2.
-    return 'failed'
+    return false
+  } finally {
+    field.remove()
   }
 }
