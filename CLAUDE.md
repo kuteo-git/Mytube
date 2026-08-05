@@ -745,7 +745,20 @@ on the first render). But "does THIS video qualify" can only be answered by the 
 `webkitSupportsPresentationMode`, asked in an effect once the element exists.
 **Leaving fullscreen on iOS returns the video paused** even when it was playing on the way in.
 Listen for `webkitbeginfullscreen`/`webkitendfullscreen` to remember and restore it — otherwise
-you leave a video and come back to a still frame. **Two traps, and the first fix hit both:**
+you leave a video and come back to a still frame.
+**Corrected 2026-08-05: the state that matters is the one on the way OUT, not the way in.** The
+fix below remembered `!paused` at `webkitbeginfullscreen` and gave up if it was false — so
+enlarging a *stopped* video, pressing play inside the system player, and swiping back out
+returned a still frame, because the decision had been taken before any of that happened. What the
+viewer leaves it doing is what it should go on doing, in both directions.
+The two pauses are told apart by **when**: iOS lets go in the same breath as the exit, while a
+viewer who stopped it inside the system player did so some moments earlier. A pause within
+`SYSTEM_PAUSE_MS` (120) of the exit is the system's and is disregarded; anything older is a
+decision and is honoured. Exactly **one** late pause is swallowed — the system lets go once, and a
+second that close behind is somebody who really did press stop.
+Resume the **layer on screen**, not the element that was full screen: a download finishing
+mid-flight swaps them, and playing the hidden one is sound with no picture.
+**Two traps, and the first fix hit both:**
 (a) the memory of "it was playing on the way in" **must not** live in the effect's closure — the
 source can change mid-flight (the local file finishing) and re-run the effect, taking the memory
 with it; it has to be a ref.

@@ -852,6 +852,72 @@ describe('coming back from Apple’s full-screen player', () => {
     expect(screen.getByLabelText('Pause')).toBeInTheDocument()
   }, 20000)
 
+  it('keeps playing when it was started inside the system player', async () => {
+    // The reported fault. The first version decided on the way *in*: enlarging
+    // a stopped video armed nothing, so pressing play inside the system player
+    // and swiping back out returned a still frame — the decision had been taken
+    // before any of it happened. What the viewer leaves it doing is what it
+    // should go on doing.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+
+    await enterFullscreen(front)
+    await act(async () => {
+      void front.play()
+    })
+    await leaveFullscreen(front)
+    await act(async () => {
+      front.pause()
+    })
+
+    expect(screen.getByLabelText('Pause')).toBeInTheDocument()
+  })
+
+  it('stays stopped when the viewer stopped it inside the system player', async () => {
+    // The other half of the same rule, and what stops "keep playing" from
+    // becoming "always play". Told apart from the system letting go by when it
+    // happened: the system stops the video in the same breath as the exit, a
+    // viewer some moments earlier.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+    await act(async () => {
+      void front.play()
+    })
+
+    await enterFullscreen(front)
+    await act(async () => {
+      front.pause()
+    })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200))
+    })
+    await leaveFullscreen(front)
+
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+  })
+
+  it('honours a second pause right after the exit', async () => {
+    // Exactly one pause is swallowed. The system lets go once; a second this
+    // close behind is somebody who really did press stop, and swallowing that
+    // would make the button look broken.
+    Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
+    const { front } = await ready()
+    await act(async () => {
+      void front.play()
+    })
+
+    await enterFullscreen(front)
+    await leaveFullscreen(front)
+    await act(async () => {
+      front.pause()
+    })
+    await act(async () => {
+      front.pause()
+    })
+
+    expect(screen.getByLabelText('Play')).toBeInTheDocument()
+  })
+
   it('leaves it stopped if it was stopped when it went in', async () => {
     Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: true })
     const { front } = await ready()

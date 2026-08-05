@@ -335,6 +335,17 @@ function targetTier(
   return wanted
 }
 
+/**
+ * How close to the exit a pause has to be to be the system's rather than the
+ * viewer's.
+ *
+ * iOS lets go of the video in the same breath as leaving full screen; a viewer
+ * who stopped it inside the system player did so some moments earlier. There is
+ * nothing else to tell the two apart — both are an ordinary `pause` on the same
+ * element.
+ */
+const SYSTEM_PAUSE_MS = 120
+
 export function Player({
   videoId,
   hue,
@@ -2013,38 +2024,63 @@ export function Player({
   // Coming back from Apple's full-screen player.
   //
   // iOS hands the video to the system while it is full screen and hands it back
-  // stopped, even when it was running on the way in. Leaving a video and
-  // returning to a still frame reads as the player having given up.
+  // stopped. Leaving a video and returning to a still frame reads as the player
+  // having given up.
   //
-  // Two things make this harder than it sounds, and the first attempt fell to
-  // both. The memory of "it was playing" cannot live in the effect's closure:
-  // the source can change while the viewer is in full screen — the downloaded
-  // file becoming ready is the obvious way — and the effect re-running takes
-  // that memory with it. And the pause does not reliably arrive before the
-  // announcement that full screen ended, so checking at that moment can find a
-  // video that has not stopped yet and will a moment later.
+  // **The state that matters is the one on the way OUT, not the way in.** The
+  // first version remembered `!paused` at `webkitbeginfullscreen` and gave up
+  // if it was false — so enlarging a stopped video, pressing play inside the
+  // system player, and swiping back out returned a still frame, because the
+  // decision had been taken before any of that happened. What the viewer left
+  // it doing is what it should go on doing, in both directions.
   //
-  // So the memory is a ref, and the window stays open long enough to catch a
-  // pause that arrives after the event rather than before it.
+  // Which the element itself reports at `webkitendfullscreen` — except that the
+  // system's own pause arrives on **either** side of that announcement, and
+  // CLAUDE.md §8b records both orderings. Arriving first, it makes a video the
+  // viewer left running look stopped.
+  //
+  // So the two pauses are told apart by *when*, which is the only thing that
+  // distinguishes them: the system lets go in the same breath as the exit,
+  // while a viewer who stopped the video inside the system player did it some
+  // moments earlier. A pause within SYSTEM_PAUSE_MS of the exit is the system's
+  // and is disregarded; anything older is a decision and is honoured.
+  //
+  // A pause arriving *after* is the same event on the other side, so exactly
+  // one is swallowed — see the `onPause` handler. One, because the system only
+  // lets go once, and a second pause that close behind is somebody who really
+  // did press stop.
   const resumeAfterFullscreenRef = useRef(false)
+  const lastPauseAtRef = useRef(0)
   useEffect(() => {
     const elements = [videoARef.current, videoBRef.current].filter(
       (el): el is HTMLVideoElement => el !== null,
     )
     if (elements.length === 0) return
 
-    const onBegin = (event: Event) => {
-      resumeAfterFullscreenRef.current = !(event.target as HTMLVideoElement).paused
+    // Cleared on the way in so a pause from just before the video was enlarged
+    // cannot be mistaken for the system letting go on the way out.
+    const onBegin = () => {
+      lastPauseAtRef.current = 0
     }
+
     const onEnd = (event: Event) => {
-      if (!resumeAfterFullscreenRef.current) return
-      const element = event.target as HTMLVideoElement
+      const stopped = (event.target as HTMLVideoElement).paused
+      const systemLetGo =
+        stopped && performance.now() - lastPauseAtRef.current < SYSTEM_PAUSE_MS
+      // Stopped, and stopped a while ago: the viewer meant it.
+      if (stopped && !systemLetGo) return
+      resumeAfterFullscreenRef.current = true
+
+      // The layer on screen, not necessarily the one that was full screen: a
+      // download finishing mid-flight swaps them, and playing the hidden one is
+      // sound with no picture.
       const resume = () => {
-        if (element.paused) void element.play().catch(() => undefined)
+        const el = front()
+        if (el?.paused) void el.play().catch(() => undefined)
       }
       resume()
-      // And once more after the event queue has drained, for the ordering where
-      // iOS stops it on the way out rather than on the way.
+      // A ceiling on the window, in case the pause never comes and the flag
+      // would otherwise sit armed waiting to swallow a real one.
       const timer = window.setTimeout(() => {
         resume()
         resumeAfterFullscreenRef.current = false
@@ -2062,7 +2098,7 @@ export function Player({
         element.removeEventListener('webkitendfullscreen', onEnd)
       }
     }
-  }, [playable])
+  }, [playable, front])
 
   const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
@@ -2270,12 +2306,19 @@ export function Player({
                 onPlay={() => {
                   if (isA === frontIsARef.current) setPlaying(true)
                 }}
-                onPause={(e) => {
+                onPause={() => {
+                  lastPauseAtRef.current = performance.now()
                   // A pause arriving in the moments after full screen ended is
                   // the system letting go, not the viewer stopping the video.
+                  //
+                  // Exactly one is swallowed, and the flag is cleared before
+                  // anything else: the system lets go once, so a second pause
+                  // this close behind is somebody who really did press stop, and
+                  // swallowing that would make the button look broken.
                   if (resumeAfterFullscreenRef.current) {
                     resumeAfterFullscreenRef.current = false
-                    void e.currentTarget.play().catch(() => undefined)
+                    const el = front()
+                    if (el?.paused) void el.play().catch(() => undefined)
                     return
                   }
                   if (isA === frontIsARef.current) setPlaying(false)
