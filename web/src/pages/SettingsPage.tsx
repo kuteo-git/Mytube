@@ -1,11 +1,13 @@
 import {
   Activity,
+  Bookmark,
   ChevronRight,
   Eye,
   EyeOff,
   HardDrive,
   Headphones,
   Languages,
+  LayoutGrid,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -24,6 +26,7 @@ import {
   type NarrationAudioPrefs,
 } from '@/features/settings/application/settings-prefs'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
+import { usePlayer } from '@/features/watch/application/player-context'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
 import {
   SettingRow,
@@ -34,14 +37,27 @@ import { SliderRow } from '@/features/settings/ui/SliderRow'
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
 export function SettingsPage() {
+  const { isMobile } = usePlayer()
+
+  // A phone gets a list of rows, each opening a screen of its own; a desktop
+  // gets the panels themselves, laid out down the page.
+  //
+  // Not a preference. Three panels of sliders on a 390px column is a page you
+  // scroll through looking for the one control you came for, and the thing you
+  // came for is never the one on top. A row you tap is the shape a phone uses
+  // for exactly this, and it means each screen is only about one thing.
+  if (isMobile) {
+    return (
+      <div className="px-4 py-6">
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <PhoneMenu />
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">Settings</h1>
-      {/* First, above everything a viewer might be adjusting. These two are not
-          settings — they are the pages you go to when something is wrong, and
-          burying them under three panels of sliders is the opposite of what
-          somebody looking for them is doing. */}
-      <PhoneOnlyPages />
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
@@ -50,33 +66,38 @@ export function SettingsPage() {
 }
 
 /**
- * The pages a phone has no other way to reach.
+ * Everything Settings leads to on a phone, as one list.
  *
- * The bottom bar holds five entries — past that the targets fall under the 44px
- * a finger needs — so every addition there is a removal. Storage gave up its
- * place to Settings, and Activity gave up its place to Subscriptions. Neither
- * can simply be dropped: Storage's only other entry point is the banner on
- * Home, which appears above 75% full and can be dismissed, so on a healthy disk
- * it would be unreachable; Activity's bell lives on the desktop header, which a
- * phone does not draw.
+ * The first three are pages with nowhere else to be reached from: the bottom
+ * bar holds at most five entries and what earns a place there is what you move
+ * *between* while browsing, so Saved, Storage and Activity land here. None has
+ * another way in — Storage's banner appears only above 75% full and can be
+ * dismissed, Activity's bell lives on the desktop header, and Saved has nothing
+ * else at all.
  *
- * Both are pages you go to on purpose because something is wrong, which is why
- * a list of links serves them and a place in the bar does not.
- *
- * Hidden on desktop, where the sidebar lists both and a second route to the
- * same page would just be clutter.
+ * The last three are the settings themselves, each on its own screen rather
+ * than stacked down this one. Saved leads because it is the only entry here
+ * that is content; the rest are read when you have decided to change or check
+ * something.
  */
-function PhoneOnlyPages() {
+const PHONE_MENU = [
+  { to: '/saved', icon: Bookmark, label: 'Saved' },
+  { to: '/storage', icon: HardDrive, label: 'Storage' },
+  { to: '/activity', icon: Activity, label: 'Activity' },
+  { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
+  { to: '/settings/narration', icon: Headphones, label: 'Narration' },
+  { to: '/settings/translation', icon: Languages, label: 'Translation' },
+]
+
+function PhoneMenu() {
   return (
-    <nav className="mt-6 mb-2 min-[700px]:hidden" aria-label="More">
-      {[
-        { to: '/storage', icon: HardDrive, label: 'Storage' },
-        { to: '/activity', icon: Activity, label: 'Activity' },
-      ].map(({ to, icon: Icon, label }) => (
+    <nav className="mt-4" aria-label="Settings">
+      {PHONE_MENU.map(({ to, icon: Icon, label }) => (
         <Link
           key={to}
           to={to}
-          className="flex items-center gap-3 rounded-xl px-1 py-3 text-sm
+          // 44px of height, which the padding and the text clear between them.
+          className="flex items-center gap-3 rounded-xl px-1 py-3.5 text-sm
                      transition-colors hover:bg-surface-hover"
         >
           <Icon size={18} className="shrink-0 text-text-2" />
@@ -88,7 +109,7 @@ function PhoneOnlyPages() {
   )
 }
 
-function NarrationSettings() {
+export function NarrationSettings({ headless = false }: { headless?: boolean } = {}) {
   const { data: voices } = useVoices()
   const [prefs, setPrefs] = useState(loadNarrationAudioPrefs)
 
@@ -108,6 +129,7 @@ function NarrationSettings() {
 
   return (
     <SettingsSection
+      headless={headless}
       icon={<Headphones size={18} />}
       title="Narration"
       description="Open a video and come back here to hear these against it — the player keeps going in the corner."
@@ -152,7 +174,7 @@ function NarrationSettings() {
   )
 }
 
-function TranslationSettings() {
+export function TranslationSettings({ headless = false }: { headless?: boolean } = {}) {
   const { data: config } = useTranslateConfig()
   const save = useSaveTranslateConfig()
   const models = useTranslateModels()
@@ -177,6 +199,7 @@ function TranslationSettings() {
 
   return (
     <SettingsSection
+      headless={headless}
       icon={<Languages size={18} />}
       title="Translation"
       description="Where subtitles are translated. Changing the model translates fresh — earlier translations are kept, so switching back costs nothing."

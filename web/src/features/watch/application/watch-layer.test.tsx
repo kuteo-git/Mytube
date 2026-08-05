@@ -360,6 +360,34 @@ describe('the watch screen as a layer', () => {
     ).toBe('0')
   })
 
+  it('gives every screen you arrive at a back bar and a title', async () => {
+    // Storage, Activity, Saved and each Settings panel are all somewhere you go
+    // on purpose, so each is a screen of its own rather than a page inside the
+    // app's chrome — the same treatment as a channel.
+    phone(['/settings'])
+    await settle()
+    act(() => go('/settings/narration'))
+    await settle()
+
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Narration' })).toBeInTheDocument()
+    expect(
+      (document.querySelector('nav[aria-label="Main"]') as HTMLElement | null)?.style.opacity,
+    ).toBe('0')
+  })
+
+  it('leaves Settings itself as a tab, bars and all', async () => {
+    // A prefix match on `/settings` would have taken the tab bar away from the
+    // tab that leads to all of them.
+    phone(['/settings'])
+    await settle()
+
+    expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+    expect(
+      (document.querySelector('nav[aria-label="Main"]') as HTMLElement | null)?.style.opacity,
+    ).toBe('1')
+  })
+
   it('keeps the app\'s chrome on a channel opened on a desktop', async () => {
     desktop(['/subscriptions'])
     await settle()

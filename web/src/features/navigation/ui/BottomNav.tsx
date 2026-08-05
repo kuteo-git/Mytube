@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Bookmark, Clock, Home, Settings, Users } from 'lucide-react'
+import { Clock, Home, Settings, Users } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 
@@ -11,11 +11,16 @@ import { NavLink } from 'react-router-dom'
  * exactly the dead button the charter forbids, so the bar reflects this app
  * rather than that one.
  *
- * Five is also the ceiling rather than a coincidence: past that the targets fall
- * below the 44px a finger needs — so every addition here is a removal as well.
- * Storage went first, then Activity, and both moved to the top of Settings
- * rather than being stranded: they are pages you go to deliberately when
- * something is wrong, not places you browse.
+ * Five is the ceiling rather than a coincidence: past that the targets fall
+ * below the 44px a finger needs. What is here is what the bar is *for* — the
+ * places you move between while browsing — and everything else was moved to the
+ * top of Settings rather than being stranded: Storage, Activity, and now Saved.
+ *
+ * Saved is the one worth justifying, since it is content rather than a
+ * diagnostic. It is a list you go to when you have decided to watch something
+ * you kept, which is a deliberate act like opening Settings — not a place you
+ * pass through on the way to somewhere else, the way Home and Subscriptions
+ * and History are.
  *
  * Subscriptions earns its place because a phone has no sidebar, and without it
  * the only route to a channel was to find one of its videos and tap through —
@@ -25,7 +30,6 @@ import { NavLink } from 'react-router-dom'
 const ITEMS: { icon: ComponentType<{ size?: number }>; label: string; to: string }[] = [
   { icon: Home, label: 'Home', to: '/' },
   { icon: Users, label: 'Subscriptions', to: '/subscriptions' },
-  { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: Clock, label: 'History', to: '/history' },
   { icon: Settings, label: 'Settings', to: '/settings' },
 ]

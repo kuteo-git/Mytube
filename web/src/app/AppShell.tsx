@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react'
 import { type Location, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
+import { bareTitle } from '@/features/navigation/application/bare-screens'
+import { BackBar } from '@/features/catalog/ui/BackBar'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
 import { TopBar } from '@/features/navigation/ui/TopBar'
@@ -182,6 +184,16 @@ function AppShellInner() {
           
           Rendered rather than omitted, at the opacity the drag has reached, so
           it arrives with the page it belongs to instead of after it. */}
+      {/* A screen you arrived at rather than passed through gets a back bar in
+          place of the app's own. Drawn here so every such screen gets one
+          without having to remember, except a channel: `bareTitle` returns null
+          for it because ChannelHeader already names it in large type, and the
+          bar there fades its own copy in only once that has scrolled away —
+          behaviour the page owns. */}
+      {chromeHidden && !isWatch && bareTitle(pathname) !== null && (
+        <BackBar title={bareTitle(pathname) ?? ''} showTitle fallback="/" />
+      )}
+
       <TopBar
         opacity={chromeHidden ? fade : 1}
         onToggleSidebar={() => {

@@ -660,6 +660,23 @@ Auto-follow channels (subscribe becoming real) · a `/tv` UI driven by a D-pad �
    - **The title in the bar arrives late**, once `ChannelHeader` has scrolled away. The header
      already names the channel in large type; naming it again an inch above would be saying the
      same thing twice.
+   - **The bar carries what you move *between*; everything else is a screen you arrive at.**
+     Home · Subscriptions · History · Settings, four of a possible five. Saved, Storage and
+     Activity moved to the top of Settings, and Settings on a phone became a **list of rows**
+     rather than three panels stacked down one column — on 390px that is a page you scroll
+     through hunting for the one control you came for, and it is never the one on top. Each
+     panel now has a screen of its own (`/settings/feed`, `/settings/narration`,
+     `/settings/translation`); the desktop page still shows all three together, and there is one
+     implementation of each control with only the arrangement differing.
+   - **`bare-screens.ts` is the single list of those screens**, read by three things that must
+     not disagree: the shell decides which bars to draw, the player decides where its own bar
+     rests, and the back bar decides what to call the screen. `/settings` is a tab and
+     `/settings/feed` is a screen, so the test is exact rather than a prefix — a prefix match
+     would have taken the tab bar away from the tab that leads to all of them.
+   - **A screen names itself once.** The shell draws the back bar with the title for these, and
+     the panels drop their own heading (`headless`) — two headings an inch apart saying the same
+     word is the fault the channel page's title fade already exists to avoid. `bareTitle` returns
+     null for a channel because that page owns the behaviour.
    - **"Is the chrome drawn" is one fact and lives in PlayerProvider.** It was worked out twice —
      once by the shell for its padding, once implicitly by the player, which went on reserving
      `BOTTOM_NAV_HEIGHT` for a navigation that was not there and left the mobile bar floating a

@@ -6,6 +6,11 @@ import { HomePage } from '@/pages/HomePage'
 import { SavedPage } from '@/pages/SavedPage'
 import { SearchResultsPage } from '@/pages/SearchResultsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import {
+  FeedSettingsPage,
+  NarrationSettingsPage,
+  TranslationSettingsPage,
+} from '@/pages/SettingsSectionPage'
 import { SubscriptionsPage } from '@/pages/SubscriptionsPage'
 import { StoragePage } from '@/pages/StoragePage'
 import { WatchPage } from '@/pages/WatchPage'
@@ -35,6 +40,11 @@ export const pageRoutes = (
     <Route path="/subscriptions" element={<SubscriptionsPage />} />
     <Route path="/storage" element={<StoragePage />} />
     <Route path="/settings" element={<SettingsPage />} />
+    {/* One panel each, for the phone's Settings menu. The desktop page still
+        shows all three together; only the arrangement differs. */}
+    <Route path="/settings/feed" element={<FeedSettingsPage />} />
+    <Route path="/settings/narration" element={<NarrationSettingsPage />} />
+    <Route path="/settings/translation" element={<TranslationSettingsPage />} />
     <Route path="/channel/:channelId" element={<ChannelPage />} />
     <Route path="/watch/:videoId" element={<WatchPage />} />
     <Route path="*" element={<Navigate to="/" replace />} />

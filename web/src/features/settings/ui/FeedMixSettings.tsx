@@ -26,7 +26,7 @@ import { SliderRow } from '@/features/settings/ui/SliderRow'
  * bought by re-ranking the feed and losing your scroll position, which is not
  * something to do sixty times on the way to a number.
  */
-export function FeedMixSettings() {
+export function FeedMixSettings({ headless = false }: { headless?: boolean } = {}) {
   const { data: stored, isError, isPending, refetch } = useFeedMix()
   const save = useSaveFeedMix()
   const [mix, setMix] = useState<FeedMix | null>(null)
@@ -53,6 +53,7 @@ export function FeedMixSettings() {
   if (isError) {
     return (
       <SettingsSection
+        headless={headless}
         icon={<LayoutGrid size={18} />}
         title="Home feed"
         description="Could not read the current mix. The gateway may be running an older build that does not have this setting yet."

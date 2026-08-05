@@ -11,6 +11,7 @@ import {
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import { forgetLastWatched } from './last-watched'
 import { useLocation } from 'react-router-dom'
+import { isBareScreen } from '@/features/navigation/application/bare-screens'
 import {
   BOTTOM_NAV_HEIGHT,
   MINI_MARGIN,
@@ -192,10 +193,10 @@ export function PlayerProvider({
 
   const isMobile = viewport.width < MOBILE_BREAKPOINT
 
-  // A channel gets the same bare treatment as the watch layer: its own back
-  // bar, no search bar, no tab bar. Keyed on the route so a channel reached
-  // from a video's byline behaves like one reached from Subscriptions.
-  const chromeHidden = isMobile && (isWatch || pathname.startsWith('/channel/'))
+  // The watch layer, and every screen a phone treats as somewhere you arrive
+  // rather than pass through — see bare-screens.ts, which is the one list all
+  // of this reads.
+  const chromeHidden = isMobile && (isWatch || isBareScreen(pathname))
 
   /** What the navigation takes from the bottom edge — nothing where it is not drawn. */
   const navHeight = chromeHidden ? 0 : BOTTOM_NAV_HEIGHT

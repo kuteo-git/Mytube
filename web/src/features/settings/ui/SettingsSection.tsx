@@ -1,25 +1,40 @@
+import clsx from 'clsx'
 import type { ReactNode } from 'react'
 
 /** A card with a heading, matching the stat cards on the Storage page. */
+/**
+ * @param headless drops the icon and the heading, for a screen that is only
+ * about this one section — the phone's Settings opens each on its own, and the
+ * back bar already carries the name. Two headings an inch apart saying the same
+ * word is the same fault the channel page's title fade exists to avoid.
+ * The description stays: it says what the controls are for, which the title
+ * does not.
+ */
 export function SettingsSection({
   icon,
   title,
   description,
+  headless = false,
   children,
 }: {
   icon: ReactNode
   title: string
   description?: string
+  headless?: boolean
   children: ReactNode
 }) {
   return (
     <section className="mt-6 rounded-xl bg-surface p-4 min-[700px]:p-5">
-      <div className="flex items-center gap-2">
-        <span className="text-text-2">{icon}</span>
-        <h2 className="text-base font-medium">{title}</h2>
-      </div>
+      {!headless && (
+        <div className="flex items-center gap-2">
+          <span className="text-text-2">{icon}</span>
+          <h2 className="text-base font-medium">{title}</h2>
+        </div>
+      )}
       {description && (
-        <p className="mt-1 text-sm leading-relaxed text-text-2">{description}</p>
+        <p className={clsx('text-sm leading-relaxed text-text-2', !headless && 'mt-1')}>
+          {description}
+        </p>
       )}
       <div className="mt-4 flex flex-col gap-4">{children}</div>
     </section>

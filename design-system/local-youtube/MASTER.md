@@ -156,7 +156,13 @@ Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
 
 ---
 
-**Bottom bar (mobile) — 2026-08-05:** `Home · Subscriptions · Saved · History · Settings`.
+**Bottom bar (mobile) — 2026-08-05:** `Home · Subscriptions · History · Settings`.
+Chỉ chứa **nơi bạn đi qua lại** khi đang duyệt. Mọi thứ khác là **màn bạn tới có chủ đích**, và
+màn như vậy thì có `BackBar` riêng, không search header, không tab bar: Saved, Storage, Activity,
+trang kênh, và từng mục Settings (`/settings/feed`, `/settings/narration`, `/settings/translation`).
+Settings trên mobile là **danh sách hàng**, không phải ba khối slider xếp dọc — trên 390px thì đó
+là trang phải cuộn tìm đúng một control mình cần, mà nó không bao giờ nằm trên cùng.
+Panel trên màn riêng **bỏ tiêu đề của nó** (`headless`), vì `BackBar` đã nêu tên rồi.
 **Đúng 5, và đó là trần**: quá 5 thì mỗi target tụt dưới 44px. Nên **mỗi lần thêm là một lần
 bớt** — Storage nhường chỗ cho Settings, rồi Activity nhường chỗ cho Subscriptions. Cả hai dời
 lên **đầu trang Settings**, không phải cuối: chúng không phải tuỳ chọn mà là trang người ta tìm
