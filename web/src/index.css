@@ -101,6 +101,10 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  #root {
+    background-color: var(--color-bg);
+  }
+
   /* Focus ring must always be visible: Phase 3 navigates with a TV remote D-pad. */
   :focus-visible {
     outline: 2px solid var(--color-ring);
