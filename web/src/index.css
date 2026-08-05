@@ -232,3 +232,16 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* The toast arrives from below, the direction it sits in. Short enough to be
+   felt rather than watched; the reduced-motion rule above flattens it. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

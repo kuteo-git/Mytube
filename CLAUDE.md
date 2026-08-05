@@ -272,8 +272,15 @@ library fetched the video from — `video.sourceUrl`, falling back to
   so a pointer that says "phone" on a browser that has no sheet still copies.
 - **A cancelled sheet does not fall through to the clipboard.** Backing out is an answer;
   quietly doing the thing that was just declined is worse than doing nothing.
-- **The copy path says "Link copied" on the pill for 2 seconds.** A clipboard write shows nothing
-  by itself, which is a button that looks broken.
+- **What happened is said in a toast** (`shared/ui/toast.tsx`) — "Shared", "YouTube link copied",
+  "Couldn't copy the link". A clipboard write shows nothing by itself, which is a button that
+  looks broken. It is said *beside* the action rather than on the pill: a label that changes under
+  the pointer is read only by somebody already staring at that one control, and at that moment the
+  eye is on the thing being shared.
+  The toast is deliberately **not** a notification system — no dismissal, no action, no stack, one
+  message at a time. Anything worth acting on or reading at leisure belongs on a page, and
+  `/activity` is already that page. It **portals to `document.body`**, for the reason the touch ⚙
+  panel does: the scroller and the player both clip their contents.
 - **And on a phone it *was* broken, immediately (2026-08-05).** A plain-HTTP LAN address is **not
   a secure context**, and browsers withhold both `navigator.share` and `navigator.clipboard`
   there — the properties are **absent**, not permission-gated. `localhost` is the one exemption,

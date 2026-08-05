@@ -13,6 +13,7 @@ import { PlayerProvider, usePlayer } from '@/features/watch/application/player-c
 import { BOTTOM_NAV_HEIGHT } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 import { dismissFade, layerOpacity } from '@/features/watch/application/watch-overlay'
+import { ToastProvider } from '@/shared/ui/toast'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -20,7 +21,9 @@ export function AppShell() {
 
   return (
     <PlayerProvider isWatch={isWatch}>
-      <AppShellInner />
+      <ToastProvider>
+        <AppShellInner />
+      </ToastProvider>
     </PlayerProvider>
   )
 }

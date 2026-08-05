@@ -1,10 +1,11 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { useCoarsePointer } from '@/shared/lib/pointer'
+import { useToast } from '@/shared/ui/toast'
 import {
   type ShareOutcome,
   shareURL,
@@ -35,14 +36,19 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   // thing a touch device has, and a window narrowed on a desktop does not
   // acquire one. The same signal the player uses to tell a tap from a click.
   const coarse = useCoarsePointer()
-  const [shared, setShared] = useState<ShareOutcome | null>(null)
-  useEffect(() => {
-    if (shared === null || shared === 'shared') return
-    // Long enough to be read, short enough that the button is a button again
-    // before anybody wants to press it a second time.
-    const timer = window.setTimeout(() => setShared(null), 2000)
-    return () => window.clearTimeout(timer)
-  }, [shared])
+  const toast = useToast()
+
+  // What happened is said in a toast rather than on the button. Copying a link
+  // changes nothing on screen, and a label that changes under the pointer is
+  // read by whoever is already looking at that one control — while the eye at
+  // that moment is on the thing being shared.
+  const announce = (outcome: ShareOutcome) => {
+    if (outcome === 'shared') toast('Shared')
+    else if (outcome === 'copied') toast('YouTube link copied')
+    else if (outcome === 'failed') toast("Couldn't copy the link")
+    // A cancelled share sheet is the viewer's own answer, and reporting a
+    // decision back to the person who made it is noise.
+  }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -104,23 +110,18 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           </button>
         </div>
 
-        {/* Says what happened. A copy with nothing to show for it is a button
-            that appears not to work, which is how this one behaved before. */}
+        {/* Says what happened, in a toast. A copy with nothing to show for it
+            is a button that appears not to work, which is how this one was
+            reported twice. */}
         <ActionPill
           icon={<Share2 size={20} />}
-          label={
-            shared === 'copied'
-              ? 'Link copied'
-              : shared === 'failed'
-                ? "Couldn't copy"
-                : 'Share'
-          }
+          label="Share"
           onClick={() => {
             void shareVideo({
               url: shareURL(video),
               title: video.title,
               canShare: coarse,
-            }).then(setShared)
+            }).then(announce)
           }}
         />
         <ActionPill
