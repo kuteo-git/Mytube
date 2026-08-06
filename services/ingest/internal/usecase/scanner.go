@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
@@ -254,6 +255,14 @@ func (s *Scanner) scanSource(
 			v.ThumbnailURL = local
 		}
 
+		// Detect language from the title's script. Latin-script titles
+		// (English, Vietnamese, etc.) are marked "en" so the language
+		// filter accepts them. Non-Latin (Arabic, Thai, CJK) stay empty,
+		// which hides them when a filter is active.
+		if v.Language == "" && v.Title != "" && isLatinTitle(v.Title) {
+			v.Language = "en"
+		}
+
 		// QUEUED means "known, not on disk". The feed can rank it; pressing
 		// play is what turns it into a download.
 		if err := s.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
@@ -456,4 +465,16 @@ func channelVideosURL(c domain.SubscribedChannel) string {
 		return "https://www.youtube.com/" + handle + "/videos"
 	}
 	return "https://www.youtube.com/channel/" + c.ID + "/videos"
+}
+
+
+// isLatinTitle reports whether every letter in the title belongs to the Latin
+// script. Titles mixing Latin with other scripts are treated as non-Latin.
+func isLatinTitle(title string) bool {
+	for _, r := range title {
+		if unicode.IsLetter(r) && !unicode.Is(unicode.Latin, r) {
+			return false
+		}
+	}
+	return true
 }

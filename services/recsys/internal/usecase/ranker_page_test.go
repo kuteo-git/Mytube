@@ -61,7 +61,7 @@ func TestPagingNeverRepeatsAVideo(t *testing.T) {
 	ranker.snapshots = NewSnapshotStore(time.Minute)
 
 	ctx := context.Background()
-	first, err := ranker.GetFeedPage(ctx, "user1", "", "", 20, 0, DefaultFeedMix)
+	first, err := ranker.GetFeedPage(ctx, "user1", "", "", 20, 0, DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("page 1: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestPagingNeverRepeatsAVideo(t *testing.T) {
 	}
 	ranker.store = stubStore{profile: profile}
 
-	second, err := ranker.GetFeedPage(ctx, "user1", "", first.SnapshotID, 20, 20, DefaultFeedMix)
+	second, err := ranker.GetFeedPage(ctx, "user1", "", first.SnapshotID, 20, 20, DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestRemainingReportsHowMuchFeedIsLeft(t *testing.T) {
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features(50)})
 	ranker.snapshots = NewSnapshotStore(time.Minute)
 
-	page, err := ranker.GetFeedPage(context.Background(), "user1", "", "", 20, 0, DefaultFeedMix)
+	page, err := ranker.GetFeedPage(context.Background(), "user1", "", "", 20, 0, DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("page: %v", err)
 	}

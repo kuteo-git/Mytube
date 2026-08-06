@@ -49,7 +49,7 @@ func TestBouncedVideoScoresBelowOneNeverOpened(t *testing.T) {
 	store := stubStore{profile: profileWith(map[string]float32{"bounced": 0.01})}
 	ranker := NewRanker(store, stubFeatures{features: twoVideos(now)})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestUnopenedVideoIsNotTreatedAsBounced(t *testing.T) {
 		stubFeatures{features: twoVideos(now)},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestRetentionLiftsVideosThatHoldAnAudience(t *testing.T) {
 	}
 	ranker := NewRanker(store, stubFeatures{features: features})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestWatchingBuildsTopicAffinityWithoutAnyLikes(t *testing.T) {
 	})}
 	ranker := NewRanker(store, stubFeatures{features: features})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestRetentionFailureDoesNotEmptyTheFeed(t *testing.T) {
 		stubFeatures{features: twoVideos(now)},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestDislikingMostOfAChannelSuppressesIt(t *testing.T) {
 	profile.Disliked["a3"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -373,7 +373,7 @@ func TestThreeDislikesInALargeChannelAreJustThreeDislikes(t *testing.T) {
 	profile.Disliked["b2"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -401,7 +401,7 @@ func TestRejectingATopicPushesTheRestOfItDown(t *testing.T) {
 	profile.Disliked["rejected"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestEnoughRejectionsSuppressALargeChannelWhateverTheShare(t *testing.T) {
 	}
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -471,11 +471,150 @@ func TestSubscribingStillOverridesEnoughRejections(t *testing.T) {
 	}
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
 	if !present(ranked, "d100") {
 		t.Fatal("a followed channel must survive its own rejections")
+	}
+}
+
+func TestFreshnessBoostMultiplier(t *testing.T) {
+	now := time.Now()
+	highViews := int64(50000)
+	bonus := freshnessBoost(now.Add(-1*time.Hour), highViews, now)
+	none := freshnessBoost(now.Add(-49*time.Hour), highViews, now)
+	if bonus <= 1.0 {
+		t.Fatalf("fresh video with %d views got %.2f, want > 1.0", highViews, bonus)
+	}
+	if none != 1.0 {
+		t.Fatalf("video outside the window got %.2f, want 1.0", none)
+	}
+}
+
+func TestFreshnessBoostNoViewsStillGivesFloorBoost(t *testing.T) {
+	now := time.Now()
+	score := freshnessBoost(now.Add(-30*time.Minute), 0, now)
+	if score <= 1.0 {
+		t.Fatalf("fresh video with no views got %.2f, want > 1.0 (floor boost)", score)
+	}
+}
+
+func TestFreshnessBoostNoPublishedDateGivesNoBonus(t *testing.T) {
+	now := time.Now()
+	score := freshnessBoost(time.Time{}, 100000, now)
+	if score != 1.0 {
+		t.Fatalf("video with no published date got %.2f, want 1.0", score)
+	}
+}
+
+func TestFreshnessBoostMoreViewsOutranksFewerViews(t *testing.T) {
+	now := time.Now()
+	publishedAt := now.Add(-2 * time.Hour)
+	popular := freshnessBoost(publishedAt, 500000, now)
+	unknown := freshnessBoost(publishedAt, 100, now)
+	if popular <= unknown {
+		t.Fatalf("500k views scored %.2f against 100 views at %.2f",
+			popular, unknown)
+	}
+}
+
+func TestLanguageFilterHidesUnwantedLanguage(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "en_video", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "en"},
+		{VideoID: "ar_video", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, Language: "ar"},
+		{VideoID: "vi_video", ChannelID: "ch_c", Topics: []string{"News"}, AddedAt: now, Language: "vi"},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en", "vi"})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if !present(ranked, "en_video") {
+		t.Fatal("English video was filtered despite being allowed")
+	}
+	if !present(ranked, "vi_video") {
+		t.Fatal("Vietnamese video was filtered despite being allowed")
+	}
+	if present(ranked, "ar_video") {
+		t.Fatal("Arabic video appeared despite not being allowed")
+	}
+}
+
+func TestLanguageFilterHidesUnknownLanguage(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "known", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "en"},
+		{VideoID: "unknown", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, Language: ""},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en", "vi"})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if !present(ranked, "known") {
+		t.Fatal("known-language video was filtered")
+	}
+	if present(ranked, "unknown") {
+		t.Fatal("video with no language appeared despite a filter being set")
+	}
+}
+
+func TestNoLanguageFilterShowsEverything(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "en_video", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "en"},
+		{VideoID: "ar_video", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, Language: "ar"},
+		{VideoID: "no_lang", ChannelID: "ch_c", Topics: []string{"News"}, AddedAt: now, Language: ""},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if len(ranked) != 3 {
+		t.Fatalf("no language filter should show all 3 videos, got %d", len(ranked))
+	}
+}
+
+func TestFreshVideoWithHighViewsOutranksOlderVideo(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{
+			VideoID: "breaking_news", ChannelID: "ch_news", Topics: []string{"News"},
+			AddedAt: now, PublishedAt: now.Add(-1 * time.Hour), ViewCount: 150000,
+		},
+		{
+			VideoID: "old_video", ChannelID: "ch_other", Topics: []string{"News"},
+			AddedAt: now, PublishedAt: now.Add(-48 * time.Hour), ViewCount: 0,
+		},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	fresh := scoreOf(t, ranked, "breaking_news")
+	old := scoreOf(t, ranked, "old_video")
+	if fresh.Score <= old.Score {
+		t.Fatalf("breaking news scored %.2f, not above the old video at %.2f",
+			fresh.Score, old.Score)
+	}
+}
+
+func TestLanguageFilterCaseInsensitive(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "caps", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "EN"},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en"})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if !present(ranked, "caps") {
+		t.Fatal("EN (uppercase) did not match en (lowercase) filter")
 	}
 }

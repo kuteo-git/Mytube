@@ -85,6 +85,9 @@ message GetFeedRequest {
   int32 client_hour = 5;
   // Optional. Absent means the built-in mix.
   FeedMix mix = 6;
+  // Language codes the viewer wants to see, e.g. ["en", "vi"].
+  // Empty means no filter — show all languages.
+  repeated string languages = 7;
 }
 
 message GetFeedResponse {

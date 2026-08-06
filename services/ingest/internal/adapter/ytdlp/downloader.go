@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/lrstanley/go-ytdlp"
-
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
@@ -177,6 +176,16 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 	// PublishedAt is deliberately left zero when unknown. Flat listings omit
 	// upload dates, and defaulting to now would render as "1 minute ago" on
 	// every card — a plausible-looking lie is worse than a blank.
+
+	// Language comes from yt-dlp, and only on full metadata fetches
+	// (Preview). Flat playlist listings and the browse API carry none,
+	// so a video arrives with no language until someone opens it.
+	if info.ExtractedFormat != nil {
+		if lang := deref(info.Language); lang != "" {
+			v.Language = lang
+		}
+	}
+
 	return v
 }
 

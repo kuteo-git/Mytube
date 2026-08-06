@@ -80,6 +80,7 @@ func (l *Library) UpsertVideo(ctx context.Context, v domain.ExternalVideo, state
 			Topics:        v.Topics,
 			MediaState:    mediaStates[state],
 			SourceUrl:     v.SourceURL,
+			Language:      v.Language,
 		},
 	}))
 	return err

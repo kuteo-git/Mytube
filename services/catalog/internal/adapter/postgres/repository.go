@@ -393,8 +393,8 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		INSERT INTO videos (id, title, channel_id, duration_seconds, view_count,
 		                    published_at, added_at, thumbnail_path, description,
 		                    hashtags, topics, media_state, media_path,
-		                    size_bytes, source_url)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14)
+		                    size_bytes, source_url, language)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (id) DO UPDATE
 		SET title = EXCLUDED.title,
 		    channel_id = EXCLUDED.channel_id,
@@ -409,11 +409,12 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		    -- Topics accumulate: a video discovered under a second topic keeps
 		    -- the first one instead of being reassigned.
 		    topics = ARRAY(SELECT DISTINCT unnest(videos.topics || EXCLUDED.topics)),
-		    source_url = EXCLUDED.source_url`,
+		    source_url = EXCLUDED.source_url,
+		    language = COALESCE(NULLIF(EXCLUDED.language, ''), videos.language)`,
 		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, nullableCount(v.ViewCount),
 		nullableTime(v.PublishedAt),
 		v.ThumbnailPath, v.Description, v.Hashtags, v.Topics,
-		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL)
+		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL, v.Language)
 	if err != nil {
 		return domain.Video{}, err
 	}
@@ -523,7 +524,7 @@ func (r *Repository) FindBySourceURL(ctx context.Context, sourceURL, userID stri
 func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([]domain.VideoFeatures, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, channel_id, topics, hashtags, published_at, added_at,
-		       duration_seconds, media_state
+		       duration_seconds, media_state, language, view_count
 		FROM videos
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, page.Size, page.Offset)
@@ -539,12 +540,16 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 			state       string
 			publishedAt *time.Time
 		)
+		var viewCountFeature *int64
 		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Topics, &f.Hashtags,
-			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state); err != nil {
+			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state, &f.Language, &viewCountFeature); err != nil {
 			return nil, err
 		}
 		if publishedAt != nil {
 			f.PublishedAt = *publishedAt
+		}
+		if viewCountFeature != nil {
+			f.ViewCount = *viewCountFeature
 		}
 		f.MediaState = domain.MediaState(state)
 		out = append(out, f)

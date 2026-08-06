@@ -66,7 +66,7 @@ func (s *Server) GetFeed(ctx context.Context, req *connect.Request[recsysv1.GetF
 	}
 
 	page, err := s.ranker.GetFeedPage(ctx, req.Msg.GetUserId(), req.Msg.GetCategory(),
-		snapshotID, req.Msg.GetPageSize(), offset, mix)
+		snapshotID, req.Msg.GetPageSize(), offset, mix, req.Msg.GetLanguages())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

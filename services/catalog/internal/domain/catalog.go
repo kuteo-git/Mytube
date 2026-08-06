@@ -62,6 +62,7 @@ type Video struct {
 	LikeCount       int64
 	Subtitles       []SubtitleTrack
 	UserState       *VideoUserState
+	Language        string
 }
 
 // SubtitleTrack is a caption file on disk, fetched with the media.
@@ -134,6 +135,8 @@ type VideoFeatures struct {
 	AddedAt         time.Time
 	DurationSeconds int32
 	MediaState      MediaState
+	Language        string
+	ViewCount       int64
 }
 
 type StorageUsage struct {

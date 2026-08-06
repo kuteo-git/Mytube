@@ -68,6 +68,10 @@ type ExternalVideo struct {
 	// video. Only present when the caller did a full metadata fetch (Preview);
 	// a flat playlist listing never carries it.
 	Category string
+	// Language is the video's primary language, as reported by yt-dlp on a full
+	// metadata fetch or detected from the title when yt-dlp did not carry one.
+	// Empty when neither source could determine it.
+	Language string
 }
 
 // ChannelMetadata is everything a channel page needs that a flat video listing

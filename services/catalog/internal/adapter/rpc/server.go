@@ -116,6 +116,7 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		Pinned:          v.Pinned,
 		SourceUrl:       v.SourceURL,
 		LikeCount:       v.LikeCount,
+		Language:        v.Language,
 	}
 
 	for _, t := range v.Subtitles {
@@ -284,6 +285,8 @@ func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[cat
 			AddedAt:         timestamppb.New(f.AddedAt),
 			DurationSeconds: f.DurationSeconds,
 			MediaState:      mediaStates[f.MediaState],
+			Language:        f.Language,
+			ViewCount:       f.ViewCount,
 		})
 		if !f.PublishedAt.IsZero() {
 			out[len(out)-1].PublishedAt = timestamppb.New(f.PublishedAt)
@@ -341,6 +344,7 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 		MediaPath:       in.GetMediaPath(),
 		SizeBytes:       in.GetSizeBytes(),
 		SourceURL:       in.GetSourceUrl(),
+		Language:        in.GetLanguage(),
 	}
 	if ts := in.GetPublishedAt(); ts != nil {
 		v.PublishedAt = ts.AsTime()

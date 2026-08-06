@@ -25,7 +25,7 @@ const (
 	// partially-watched videos dominate every bucket they fell into.
 	weightContinueWatching = 1.5
 	weightNeverWatched     = 1.5
-	weightSubscribed       = 1.2
+	weightSubscribed       = 2.5
 	weightRecentlyAdded    = 1.0
 	// Raised from 1.0 because affinity is now multiplicative: these weights set
 	// how fast the multiplier climbs as a viewer watches a channel or topic.
@@ -122,6 +122,16 @@ const (
 	// which a video from an unsubscribed channel is classified as discovery.
 	// 0.15 means "essentially no meaningful connection to anything watched."
 	discoveryAffinityThreshold = 0.15
+	// Videos published within this window get a freshness boost proportional to
+	// their view count, so breaking news surfaces immediately without needing
+	// anyone in the household to have watched it first.
+	freshnessWindow = 48 * time.Hour
+	// How strongly freshness pushes a video up. Multiplied by recency decay
+	// (linear from 1.0 to 0 over the window) and the view-count factor.
+	weightFreshness = 3.0
+	// View-count cap for the freshness log factor, so one viral video does not
+	// dominate the entire first page.
+	maxFreshnessViewCount = 1_000_000
 )
 
 type Ranker struct {
@@ -222,12 +232,13 @@ func (r *Ranker) GetFeedPage(
 	userID, topic, snapshotID string,
 	pageSize, offset int32,
 	mix FeedMix,
+	languages []string,
 ) (FeedPage, error) {
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 24
 	}
 
-	fresh, err := r.rankAll(ctx, userID, topic, mix)
+	fresh, err := r.rankAll(ctx, userID, topic, mix, languages)
 	if err != nil {
 		return FeedPage{}, err
 	}
@@ -257,10 +268,38 @@ func (r *Ranker) GetFeedPage(
 	}, nil
 }
 
+// freshnessBoost returns a multiplier for videos published within the freshness
+// window, scaled by view count. A video published an hour ago with high views
+// gets the strongest boost; one published 23h ago with no views gets none.
+// Videos outside the window or with no published date are unchanged (1.0).
+func freshnessBoost(publishedAt time.Time, viewCount int64, now time.Time) float64 {
+	if publishedAt.IsZero() {
+		return 1.0
+	}
+	age := now.Sub(publishedAt)
+	if age >= freshnessWindow {
+		return 1.0
+	}
+	// Linear decay from 1.0 (now) to 0.0 (at the freshness boundary).
+	recency := 1.0 - age.Seconds()/freshnessWindow.Seconds()
+	// Log-scale view count, capped so one viral video doesn't dominate.
+	// Zero views still gets a floor so breaking news with no known count
+	// still surfaces — it just earns less than a proven video would.
+	viewFactor := math.Log1p(float64(viewCount)) / math.Log1p(maxFreshnessViewCount)
+	if viewFactor < 0.2 {
+		viewFactor = 0.2
+	}
+	if viewFactor > 1.0 {
+		viewFactor = 1.0
+	}
+	return 1.0 + weightFreshness*recency*viewFactor
+}
+
 func (r *Ranker) rankAll(
 	ctx context.Context,
 	userID, topic string,
 	mix FeedMix,
+	languages []string,
 ) ([]domain.RankedVideo, error) {
 	features, err := r.features.ListVideoFeatures(ctx)
 	if err != nil {
@@ -351,6 +390,23 @@ func (r *Ranker) rankAll(
 		if opened && fraction >= watchedEnoughThreshold {
 			continue
 		}
+			// When a language filter is set, skip videos whose language is
+			// unknown or does not match one of the allowed codes.
+			if len(languages) > 0 {
+				if f.Language == "" {
+					continue
+				}
+				allowed := false
+				for _, lang := range languages {
+					if strings.EqualFold(f.Language, lang) {
+						allowed = true
+						break
+					}
+				}
+				if !allowed {
+					continue
+				}
+			}
 		hasPub := !f.PublishedAt.IsZero() && f.PublishedAt.Unix() > 0
 		if hasPub && now.Sub(f.PublishedAt).Hours()/24 > maxPublishedAgeDays {
 			continue
@@ -371,10 +427,8 @@ func (r *Ranker) rankAll(
 			reason = domain.ReasonContinueWatching
 			slot = slotContinueWatching
 		case isWatched(fraction):
-			// Rewatching is allowed but must not crowd out fresh material.
-			score += weightRewatch
-			reason = domain.ReasonRewatch
-			slot = slotRewatch
+			// Already finished — don't suggest again.
+			continue
 		case opened:
 			// Opened and left almost immediately.
 			score -= penaltyBounced
@@ -446,8 +500,13 @@ func (r *Ranker) rankAll(
 		}
 
 		score *= publishedAgePenalty(f.PublishedAt, f.AddedAt, now)
-		if !f.PublishedAt.IsZero() && now.Sub(f.PublishedAt) > 365*24*time.Hour {
-			score -= 4.0
+		// Fresh videos get a boost; subscribed channels get more.
+		// Freshness alone surfaces breaking news; the subscription
+		// multiplier ensures followed channels are never missed.
+		score *= freshnessBoost(f.PublishedAt, f.ViewCount, now)
+		if profile.Subscribed[f.ChannelID] && !f.PublishedAt.IsZero() &&
+			now.Sub(f.PublishedAt) < freshnessWindow {
+			score *= 3.0
 		}
 
 		slots[f.VideoID] = slot

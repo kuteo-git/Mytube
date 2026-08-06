@@ -368,7 +368,10 @@ type Video struct {
 	// Aggregate across all local users, shown next to the like button.
 	LikeCount int64 `protobuf:"varint,18,opt,name=like_count,json=likeCount,proto3" json:"like_count,omitempty"`
 	// Subtitle tracks on disk. Empty until the media file has been downloaded.
-	Subtitles     []*SubtitleTrack `protobuf:"bytes,19,rep,name=subtitles,proto3" json:"subtitles,omitempty"`
+	Subtitles []*SubtitleTrack `protobuf:"bytes,19,rep,name=subtitles,proto3" json:"subtitles,omitempty"`
+	// Primary language of the video, e.g. "en", "vi". From yt-dlp on full fetch,
+	// or detected from the title on flat listings. Empty when unknown.
+	Language      string `protobuf:"bytes,20,opt,name=language,proto3" json:"language,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -534,6 +537,13 @@ func (x *Video) GetSubtitles() []*SubtitleTrack {
 		return x.Subtitles
 	}
 	return nil
+}
+
+func (x *Video) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
 }
 
 type SubtitleTrack struct {
@@ -1809,6 +1819,8 @@ type VideoFeatures struct {
 	AddedAt         *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=added_at,json=addedAt,proto3" json:"added_at,omitempty"`
 	DurationSeconds int32                  `protobuf:"varint,7,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
 	MediaState      MediaState             `protobuf:"varint,8,opt,name=media_state,json=mediaState,proto3,enum=catalog.v1.MediaState" json:"media_state,omitempty"`
+	Language        string                 `protobuf:"bytes,9,opt,name=language,proto3" json:"language,omitempty"`
+	ViewCount       int64                  `protobuf:"varint,10,opt,name=view_count,json=viewCount,proto3" json:"view_count,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1897,6 +1909,20 @@ func (x *VideoFeatures) GetMediaState() MediaState {
 		return x.MediaState
 	}
 	return MediaState_MEDIA_STATE_UNSPECIFIED
+}
+
+func (x *VideoFeatures) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *VideoFeatures) GetViewCount() int64 {
+	if x != nil {
+		return x.ViewCount
+	}
+	return 0
 }
 
 type UpsertChannelRequest struct {
@@ -3378,7 +3404,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"subscribed\x18\a \x01(\bR\n" +
 	"subscribed\x12\x1f\n" +
 	"\vbanner_path\x18\b \x01(\tR\n" +
-	"bannerPath\"\xee\x05\n" +
+	"bannerPath\"\x8a\x06\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12-\n" +
@@ -3406,7 +3432,8 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"user_state\x18\x11 \x01(\v2\x1a.catalog.v1.VideoUserStateH\x00R\tuserState\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"like_count\x18\x12 \x01(\x03R\tlikeCount\x127\n" +
-	"\tsubtitles\x18\x13 \x03(\v2\x19.catalog.v1.SubtitleTrackR\tsubtitlesB\r\n" +
+	"\tsubtitles\x18\x13 \x03(\v2\x19.catalog.v1.SubtitleTrackR\tsubtitles\x12\x1a\n" +
+	"\blanguage\x18\x14 \x01(\tR\blanguageB\r\n" +
 	"\v_user_state\"s\n" +
 	"\rSubtitleTrack\x12\x1a\n" +
 	"\blanguage\x18\x01 \x01(\tR\blanguage\x12\x14\n" +
@@ -3500,7 +3527,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"v\n" +
 	"\x19ListVideoFeaturesResponse\x121\n" +
 	"\x06videos\x18\x01 \x03(\v2\x19.catalog.v1.VideoFeaturesR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd7\x02\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x92\x03\n" +
 	"\rVideoFeatures\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x1d\n" +
 	"\n" +
@@ -3511,7 +3538,11 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\badded_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\aaddedAt\x12)\n" +
 	"\x10duration_seconds\x18\a \x01(\x05R\x0fdurationSeconds\x127\n" +
 	"\vmedia_state\x18\b \x01(\x0e2\x16.catalog.v1.MediaStateR\n" +
-	"mediaState\"E\n" +
+	"mediaState\x12\x1a\n" +
+	"\blanguage\x18\t \x01(\tR\blanguage\x12\x1d\n" +
+	"\n" +
+	"view_count\x18\n" +
+	" \x01(\x03R\tviewCount\"E\n" +
 	"\x14UpsertChannelRequest\x12-\n" +
 	"\achannel\x18\x01 \x01(\v2\x13.catalog.v1.ChannelR\achannel\"F\n" +
 	"\x15UpsertChannelResponse\x12-\n" +

@@ -213,6 +213,11 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 	// instead of the next restart.
 	mix := loadFeedMix(g.feedMixPath())
 
+	// Language preferences, per call rather than stored on the server.
+	// ?lang=en&lang=vi means "show only English and Vietnamese videos".
+	// Omitted entirely means "show everything".
+	languages := r.URL.Query()["lang"]
+
 	// 1. Ranking, from the service that owns ranking.
 	ranked, err := g.recsys.GetFeed(ctx, connect.NewRequest(&recsysv1.GetFeedRequest{
 		UserId:     userID,
@@ -225,6 +230,7 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 			AffinityPercent:   int32(mix.Affinity),
 			DiscoveryPercent:  int32(mix.Discovery),
 		},
+			Languages: languages,
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
@@ -755,7 +761,7 @@ func (g *Gateway) handleSetSubscription(w http.ResponseWriter, r *http.Request) 
 	if !body.Subscribed {
 		signalType = recsysv1.SignalType_SIGNAL_TYPE_UNSUBSCRIBE
 	}
-	go g.recordSignal(userID, signalType, "", "", 0)
+	go g.recordSignal(userID, signalType, channelID, "", 0)
 
 	w.WriteHeader(http.StatusNoContent)
 }

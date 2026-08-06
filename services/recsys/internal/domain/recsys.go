@@ -58,6 +58,8 @@ type VideoFeatures struct {
 	AddedAt         time.Time
 	DurationSeconds int32
 	MediaState      string
+	Language        string
+	ViewCount       int64
 }
 
 // UserProfile is derived from signals, never stored. Recomputing it per request

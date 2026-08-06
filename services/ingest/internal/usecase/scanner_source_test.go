@@ -421,3 +421,30 @@ func TestFetchChannelFeedReturnsNilForEmptyChannelID(t *testing.T) {
 		t.Fatalf("fetchChannelFeed(\"\") = %v, want nil", got)
 	}
 }
+
+func TestIsLatinTitle(t *testing.T) {
+	tests := []struct {
+		title string
+		want  bool
+	}{
+		{"Hello world this is news", true},
+		{"Xin chào Việt Nam tin tức", true},
+		{"BBC News", true},
+		{"مرحبا بالعالم", false},
+		{"สวัสดีชาวโลก", false},
+		{"你好世界", false},
+		{"Привет мир", false},
+		{"Mix of English and 中文", false},
+		{"", true},
+		{"12345 !@#$%", true},
+		{"Café naïve", true},
+	}
+	for _, tc := range tests {
+		got := isLatinTitle(tc.title)
+		if got != tc.want {
+			t.Errorf("isLatinTitle(%q) = %v, want %v", tc.title, got, tc.want)
+		}
+	}
+}
+
+

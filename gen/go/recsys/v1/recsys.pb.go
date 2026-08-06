@@ -307,7 +307,10 @@ type GetFeedRequest struct {
 	// behaviour signals the brief called for.
 	ClientHour int32 `protobuf:"varint,5,opt,name=client_hour,json=clientHour,proto3" json:"client_hour,omitempty"`
 	// Optional. Absent means the built-in mix.
-	Mix           *FeedMix `protobuf:"bytes,6,opt,name=mix,proto3" json:"mix,omitempty"`
+	Mix *FeedMix `protobuf:"bytes,6,opt,name=mix,proto3" json:"mix,omitempty"`
+	// Language codes the viewer wants to see, e.g. ["en", "vi"].
+	// Empty means no filter — show all languages.
+	Languages     []string `protobuf:"bytes,7,rep,name=languages,proto3" json:"languages,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -380,6 +383,13 @@ func (x *GetFeedRequest) GetClientHour() int32 {
 func (x *GetFeedRequest) GetMix() *FeedMix {
 	if x != nil {
 		return x.Mix
+	}
+	return nil
+}
+
+func (x *GetFeedRequest) GetLanguages() []string {
+	if x != nil {
+		return x.Languages
 	}
 	return nil
 }
@@ -878,7 +888,7 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\aFeedMix\x12-\n" +
 	"\x12subscribed_percent\x18\x01 \x01(\x05R\x11subscribedPercent\x12)\n" +
 	"\x10affinity_percent\x18\x02 \x01(\x05R\x0faffinityPercent\x12+\n" +
-	"\x11discovery_percent\x18\x03 \x01(\x05R\x10discoveryPercent\"\xc8\x01\n" +
+	"\x11discovery_percent\x18\x03 \x01(\x05R\x10discoveryPercent\"\xe6\x01\n" +
 	"\x0eGetFeedRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x1b\n" +
@@ -887,7 +897,8 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1f\n" +
 	"\vclient_hour\x18\x05 \x01(\x05R\n" +
 	"clientHour\x12$\n" +
-	"\x03mix\x18\x06 \x01(\v2\x12.recsys.v1.FeedMixR\x03mix\"\x92\x01\n" +
+	"\x03mix\x18\x06 \x01(\v2\x12.recsys.v1.FeedMixR\x03mix\x12\x1c\n" +
+	"\tlanguages\x18\a \x03(\tR\tlanguages\"\x92\x01\n" +
 	"\x0fGetFeedResponse\x12.\n" +
 	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12'\n" +

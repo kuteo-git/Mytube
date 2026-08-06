@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	goytdlp "github.com/lrstanley/go-ytdlp"
 )
 
 // TestFetchChannelFeedParsing verifies the XML parsing of a real RSS feed
@@ -199,5 +201,48 @@ func TestFetchChannelFeedTimeParsing(t *testing.T) {
 		if !parsed.Equal(tc.want) {
 			t.Errorf("Parse(%q) = %v, want %v", tc.raw, parsed, tc.want)
 		}
+	}
+}
+
+
+func sptr(s string) *string { return &s }
+
+func TestToExternalExtractsLanguageFromYtdlp(t *testing.T) {
+	lang := "vi"
+	info := &goytdlp.ExtractedInfo{
+		ExtractedFormat: &goytdlp.ExtractedFormat{
+			Language: &lang,
+		},
+		ID:    "test123",
+		Title: sptr("Xin chao Viet Nam"),
+	}
+	v := toExternal(info)
+	if v.Language != "vi" {
+		t.Fatalf("Language = %q, want %q", v.Language, "vi")
+	}
+}
+
+func TestToExternalLeavesLanguageEmptyWhenNotPresent(t *testing.T) {
+	info := &goytdlp.ExtractedInfo{
+		ID:    "test456",
+		Title: sptr("BBC News"),
+	}
+	v := toExternal(info)
+	if v.Language != "" {
+		t.Fatalf("Language = %q, want empty when yt-dlp returns none", v.Language)
+	}
+}
+
+func TestToExternalLanguageIsEmptyWhenNull(t *testing.T) {
+	info := &goytdlp.ExtractedInfo{
+		ID:    "test789",
+		Title: sptr("Some Video"),
+		ExtractedFormat: &goytdlp.ExtractedFormat{
+			Language: sptr(""),
+		},
+	}
+	v := toExternal(info)
+	if v.Language != "" {
+		t.Fatalf("Language = %q, want empty when yt-dlp returns empty string", v.Language)
 	}
 }
