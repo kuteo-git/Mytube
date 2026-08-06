@@ -101,13 +101,23 @@ func (g *Gateway) handleReaction(w http.ResponseWriter, r *http.Request) {
 		VideoId:  videoID,
 		Reaction: reaction,
 	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-
+	// Send the signal to recsys regardless of whether the video exists in the
+	// catalog. A viewer saying "not interested" on a suggested video must still
+	// hide it from the feed — the signal is what the ranker reads, and it does
+	// not need the video to be in the library.
 	if signalType != recsysv1.SignalType_SIGNAL_TYPE_UNSPECIFIED {
 		go g.recordSignal(userID, signalType, videoID, "", 0)
+	}
+
+	if err != nil {
+		// A reaction on a video not yet in the library is not a client error.
+		// The signal above was already sent; acknowledge success.
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			writeJSON(w, http.StatusOK, map[string]int64{"likeCount": 0})
+			return
+		}
+		g.writeErr(w, r, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int64{"likeCount": resp.Msg.GetLikeCount()})
 }
