@@ -54,7 +54,16 @@ export function VideoCard({ video }: { video: Video }) {
               Downloading…
             </span>
           )}
-          {/* Streaming tag removed — unhelpful noise on the card */}
+          {video.reason === 'DISCOVERY' && (
+            <span className="absolute top-2 left-2 rounded bg-emerald-600/85 px-1.5 py-0.5 text-xs text-white">
+              Suggested
+            </span>
+          )}
+          {video.reason === 'SUBSCRIBED_CHANNEL' && (
+            <span className="absolute top-2 left-2 rounded bg-blue-600/85 px-1.5 py-0.5 text-xs text-white">
+              Subscribed
+            </span>
+          )}
           <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">
             {formatDuration(video.durationSeconds)}
           </span>
