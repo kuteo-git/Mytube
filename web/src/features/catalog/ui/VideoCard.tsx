@@ -49,19 +49,9 @@ export function VideoCard({ video }: { video: Video }) {
     >
       <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
         <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title}>
-          {video.mediaState === 'DOWNLOADING' && (
-            <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
-              Downloading…
-            </span>
-          )}
           {video.reason === 'DISCOVERY' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
               Suggested
-            </span>
-          )}
-          {video.reason === 'SUBSCRIBED_CHANNEL' && (
-            <span className="absolute top-2 left-2 rounded bg-blue-600/85 px-1.5 py-0.5 text-xs text-white">
-              Subscribed
             </span>
           )}
           <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">
