@@ -101,7 +101,7 @@ for _ in $(seq 1 20); do
 done
 
 # --- translation server (EN → VI), NLLB and Qwen ---
-NLLB_VENV="${NLLB_VENV:-/tmp/nllb-venv}"
+NLLB_VENV="${NLLB_VENV:-$(pwd)/.venv-nllb}"
 if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/translate_server.py ]; then
   echo "starting translation server (port 8005)..."
   "$NLLB_VENV/bin/python" services/translate_server.py >"$LOG_DIR/translate.log" 2>&1 & pids+=($!)
