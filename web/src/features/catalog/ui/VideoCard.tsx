@@ -55,7 +55,7 @@ export function VideoCard({ video }: { video: Video }) {
             </span>
           )}
           {video.reason === 'DISCOVERY' && (
-            <span className="absolute top-2 left-2 rounded bg-emerald-600/85 px-1.5 py-0.5 text-xs text-white">
+            <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
               Suggested
             </span>
           )}
