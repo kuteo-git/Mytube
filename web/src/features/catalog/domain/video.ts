@@ -37,6 +37,8 @@ export type RecommendationReason =
   | 'NEVER_WATCHED'
   | 'SUBSCRIBED_CHANNEL'
   | 'REWATCH'
+  | 'BOUNCED'
+  | 'DISCOVERY'
   | 'SAME_CHANNEL'
   | 'SHARED_TAGS'
   | ''
