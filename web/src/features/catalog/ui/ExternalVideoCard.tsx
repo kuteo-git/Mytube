@@ -48,11 +48,6 @@ export function ExternalVideoCard({
               {formatDuration(video.durationSeconds)}
             </span>
           )}
-          {video.inLibrary && (
-            <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
-              In library
-            </span>
-          )}
           {open.isPending && (
             <span className="absolute inset-0 grid place-items-center bg-black/55">
               <Loader2 size={20} className="animate-spin" />
