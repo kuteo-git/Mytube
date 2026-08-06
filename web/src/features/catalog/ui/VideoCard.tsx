@@ -54,11 +54,7 @@ export function VideoCard({ video }: { video: Video }) {
               Downloading…
             </span>
           )}
-          {video.mediaState === 'QUEUED' && (
-            <span className="absolute top-2 left-2 rounded bg-surface/85 px-1.5 py-0.5 text-xs text-text-2">
-              Streaming
-            </span>
-          )}
+          {/* Streaming tag removed — unhelpful noise on the card */}
           <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">
             {formatDuration(video.durationSeconds)}
           </span>

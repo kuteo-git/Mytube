@@ -713,9 +713,17 @@ func buildWatchAffinity(
 		if !ok {
 			continue
 		}
-		affinity.Channels[feature.ChannelID] += float64(fraction)
+		// Partial views count less: skimming a channel builds far less
+		// affinity than watching it to the end. Below half watched the
+		// contribution is halved again — a hundred ten-second skims
+		// should not outrank a few videos actually finished.
+		weight := float64(fraction)
+		if fraction < 0.5 {
+			weight *= 0.25
+		}
+		affinity.Channels[feature.ChannelID] += weight
 		for _, topic := range feature.Topics {
-			affinity.Topics[strings.ToLower(topic)] += float64(fraction)
+			affinity.Topics[strings.ToLower(topic)] += weight
 		}
 	}
 
