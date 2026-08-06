@@ -17,6 +17,7 @@ export default defineConfig({
     // Vite is demonstrably running. That looked exactly like the app being
     // broken, twice, before anybody thought to check the port.
     strictPort: true,
+		allowedHosts: ['mytube.local', '10.25.113.151', '10.25.113.117'],
     // Proxy to the gateway so the browser sees a single origin in development,
     // exactly as it will in the LAN deployment behind Caddy.
     proxy: {
