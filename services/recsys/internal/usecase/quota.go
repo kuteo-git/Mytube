@@ -142,7 +142,7 @@ func applyDiscoveryQuota(
 	// Shuffle each bucket so the feed looks different on each refresh.
 	// Seeded by the minute so it changes often enough to feel dynamic without
 	// flipping every request.
-	rng := rand.New(rand.NewSource(time.Now().Truncate(time.Minute).UnixNano()))
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for _, bucket := range buckets {
 		shuffleSlice(bySlot[bucket.slot], rng)
 	}
