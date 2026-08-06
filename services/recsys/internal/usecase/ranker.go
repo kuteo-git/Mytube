@@ -407,11 +407,13 @@ func (r *Ranker) rankAll(
 					continue
 				}
 			}
-		hasPub := !f.PublishedAt.IsZero() && f.PublishedAt.Unix() > 0
-		if hasPub && now.Sub(f.PublishedAt).Hours()/24 > maxPublishedAgeDays {
+		// Videos without a publish date are skipped — the feed only ranks
+		// content whose age is known. AddedAt is a fallback for the age
+		// penalty on the ranking side, not for surfacing in the feed.
+		if f.PublishedAt.IsZero() || f.PublishedAt.Unix() <= 0 {
 			continue
 		}
-		if !hasPub && !f.AddedAt.IsZero() && now.Sub(f.AddedAt).Hours()/24 > maxPublishedAgeDays {
+		if now.Sub(f.PublishedAt).Hours()/24 > maxPublishedAgeDays {
 			continue
 		}
 		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now)
