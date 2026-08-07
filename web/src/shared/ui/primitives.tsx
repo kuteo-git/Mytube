@@ -113,7 +113,7 @@ export function ThumbnailSurface({
   hue,
   src,
   alt,
-  rounded = 'rounded-xl',
+  rounded = 'rounded-3xl',
   children,
 }: {
   hue: number
