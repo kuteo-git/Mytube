@@ -950,13 +950,16 @@ export function Player({
     // the absence of one. Choosing English from an empty list is how the
     // realtime engine started translating a video that had Vietnamese coming.
     if (!captionsSettled(subtitles)) return
+    // Use the same regex as hasHumanVietnamese / hasEn so variants
+    // yt-dlp produces (“en-orig”, “vi-orig”) are not missed. Missing
+    // one left loadViSubtitles uncalled while startTranslationPass
+    // waited forever in whenCuesReady — the progress line read
+    // “Loading…” against subtitles already on screen.
     const viSub = subtitles.find(
-      (s) => s.language === 'vi' || s.language === 'vie',
+      (s) => /^vi/.test(s.language) && s.language !== MACHINE_LANGUAGE,
     )
     if (viSub) { loadViSubtitles(viSub.url, 'vi'); return }
-    const enSub = subtitles.find(
-      (s) => s.language === 'en' || s.language === 'eng',
-    )
+    const enSub = subtitles.find((s) => /^en/.test(s.language))
     if (enSub) loadViSubtitles(enSub.url, 'en')
   }, [narrationOn, captions, subtitles])
 
