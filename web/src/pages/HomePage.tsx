@@ -190,7 +190,7 @@ export function HomePage() {
           {railShown && (
             <section className="pt-3">
               <h2 className="mb-3 text-lg font-medium">Continue watching</h2>
-              <VideoRail videos={continueWatching} />
+              <VideoRail videos={continueWatching} variant="continueWatching" />
               {/* Space below the rule belongs to the grid that follows, so it
                   is set there — matched to this margin. */}
               <hr className="mt-8 border-0 border-t border-line" />

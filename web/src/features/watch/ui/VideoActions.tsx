@@ -126,7 +126,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
         />
         <ActionPill
           icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
-          label={video.pinned ? 'Kept' : 'Keep'}
+          label={video.pinned ? 'Saved' : 'Save'}
           onClick={() => setPinned.mutate({ videoId: video.id, pinned: !video.pinned })}
         />
 

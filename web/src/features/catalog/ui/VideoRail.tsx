@@ -1,5 +1,5 @@
 import type { Video } from '@/features/catalog/domain/video'
-import { VideoCard } from '@/features/catalog/ui/VideoCard'
+import { VideoCard, type VideoCardVariant } from '@/features/catalog/ui/VideoCard'
 
 /**
  * A row of videos that scrolls sideways instead of pushing the page down.
@@ -9,7 +9,7 @@ import { VideoCard } from '@/features/catalog/ui/VideoCard'
  * offered arrived instead of the feed rather than before it. A rail costs one
  * row however many it holds.
  */
-export function VideoRail({ videos }: { videos: Video[] }) {
+export function VideoRail({ videos, variant }: { videos: Video[]; variant?: VideoCardVariant }) {
   if (videos.length === 0) return null
 
   return (
@@ -53,7 +53,7 @@ export function VideoRail({ videos }: { videos: Video[] }) {
           // exactly at the edge looks like the end of the list.
           className="w-[70%] shrink-0 snap-start min-[560px]:w-[45%] min-[1000px]:w-[30%] min-[1400px]:w-[23%]"
         >
-          <VideoCard video={video} />
+          <VideoCard video={video} variant={variant} />
         </div>
       ))}
     </div>

@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
-import {CheckCircle, EyeOff, MoreVertical} from 'lucide-react'
+import {Bookmark, BookmarkMinus, CheckCircle, EyeOff, MoreVertical} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
@@ -8,6 +8,7 @@ import { watchProgress } from '../domain/video'
 import {
   useMarkWatched,
   useNotInterested,
+  useSetPinned,
   useStreamPrefetch,
 } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
@@ -15,9 +16,12 @@ import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
+import { useToast } from '@/shared/ui/toast'
+
+export type VideoCardVariant = 'continueWatching' | 'feed' | 'saved' | 'history' | 'storage'
 
 /** Card. Hover comes from videoItemHover, shared with every other item. */
-export function VideoCard({ video }: { video: Video }) {
+export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?: VideoCardVariant }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -132,7 +136,7 @@ export function VideoCard({ video }: { video: Video }) {
           >
             <MoreVertical size={20} />
           </button>
-          {menuOpen && <CardMenu video={video} close={() => setMenuOpen(false)} />}
+          {menuOpen && <CardMenu video={video} variant={variant} close={() => setMenuOpen(false)} />}
         </div>
       </div>
     </article>
@@ -174,43 +178,114 @@ export function VideoCardSkeleton() {
  * it. Offered from a grid of two dozen it is a decision nobody came to make,
  * sitting above the two that are actually about tidying the grid.
  */
-function CardMenu({ video, close }: { video: Video; close: () => void }) {
+function CardMenu({
+  video,
+  variant,
+  close,
+}: {
+  video: Video
+  variant: VideoCardVariant
+  close: () => void
+}) {
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
+  const setPinned = useSetPinned()
+  const toast = useToast()
+
+  const items: React.ReactNode[] = []
+
+  const watchedItem = (
+    <li key="watched">
+      <button
+        type="button"
+        onClick={() => {
+          markWatched.mutate({
+            videoId: video.id,
+            durationSeconds: video.durationSeconds,
+          })
+          toast('Marked as watched')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <CheckCircle size={16} />
+        Watched
+      </button>
+    </li>
+  )
+
+  const notInterestedItem = (
+    <li key="not-interested">
+      <button
+        type="button"
+        onClick={() => {
+          notInterested.mutate(video.id)
+          toast('Not interested')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <EyeOff size={16} />
+        Not interested
+      </button>
+    </li>
+  )
+
+  const saveItem = (
+    <li key="save">
+      <button
+        type="button"
+        onClick={() => {
+          setPinned.mutate({ videoId: video.id, pinned: true })
+          toast('Saved')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <Bookmark size={16} />
+        Save
+      </button>
+    </li>
+  )
+
+  const unsaveItem = (
+    <li key="unsave">
+      <button
+        type="button"
+        onClick={() => {
+          setPinned.mutate({ videoId: video.id, pinned: false })
+          toast('Unsaved')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <BookmarkMinus size={16} />
+        Unsave
+      </button>
+    </li>
+  )
+
+  switch (variant) {
+    case 'continueWatching':
+      items.push(watchedItem, notInterestedItem)
+      break
+    case 'feed':
+      items.push(watchedItem, saveItem, notInterestedItem)
+      break
+    case 'saved':
+      items.push(unsaveItem)
+      break
+    case 'history':
+      items.push(saveItem)
+      break
+    case 'storage':
+      items.push(saveItem)
+      break
+  }
 
   return (
-    // Above the player host: this menu opens in the bottom-right of the grid,
-    // which is exactly where the miniplayer parks.
     <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
-      <li>
-        <button
-          type="button"
-          onClick={() => {
-            markWatched.mutate({
-              videoId: video.id,
-              durationSeconds: video.durationSeconds,
-            })
-            close()
-          }}
-          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-        >
-          <CheckCircle size={16} />
-          Watched
-        </button>
-      </li>
-      <li>
-        <button
-          type="button"
-          onClick={() => {
-            notInterested.mutate(video.id)
-            close()
-          }}
-          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-        >
-          <EyeOff size={16} />
-          Not interested
-        </button>
-      </li>
+      {items}
     </ul>
   )
 }

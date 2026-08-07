@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import type { Video } from '../domain/video'
-import { VideoCard } from './VideoCard'
+import { VideoCard, type VideoCardVariant } from './VideoCard'
 
 const video: Video = {
   id: 'vid1',
@@ -36,12 +36,12 @@ const video: Video = {
   subtitles: [],
 }
 
-function renderCard() {
+function renderCard(variant?: VideoCardVariant) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <VideoCard video={video} />
+        <VideoCard video={video} variant={variant} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -75,5 +75,52 @@ describe('a video card', () => {
       .filter((a) => a.getAttribute('href') === '/watch/vid1')
 
     expect(toWatch.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('card menu by variant', () => {
+  const openMenu = () => {
+    fireEvent.click(screen.getByLabelText('More options'))
+  }
+
+  it('continueWatching shows Watched and Not interested', () => {
+    renderCard('continueWatching')
+    openMenu()
+    expect(screen.getByText('Watched')).toBeInTheDocument()
+    expect(screen.getByText('Not interested')).toBeInTheDocument()
+    expect(screen.queryByText('Save')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unsave')).not.toBeInTheDocument()
+  })
+
+  it('feed shows Watched, Save, and Not interested', () => {
+    renderCard('feed')
+    openMenu()
+    expect(screen.getByText('Watched')).toBeInTheDocument()
+    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.getByText('Not interested')).toBeInTheDocument()
+  })
+
+  it('saved shows Unsave', () => {
+    renderCard('saved')
+    openMenu()
+    expect(screen.getByText('Unsave')).toBeInTheDocument()
+    expect(screen.queryByText('Save')).not.toBeInTheDocument()
+    expect(screen.queryByText('Watched')).not.toBeInTheDocument()
+  })
+
+  it('history shows Save', () => {
+    renderCard('history')
+    openMenu()
+    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.queryByText('Watched')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not interested')).not.toBeInTheDocument()
+  })
+
+  it('storage shows Save', () => {
+    renderCard('storage')
+    openMenu()
+    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.queryByText('Watched')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not interested')).not.toBeInTheDocument()
   })
 })

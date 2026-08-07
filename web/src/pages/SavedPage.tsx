@@ -21,7 +21,7 @@ export function SavedPage() {
           <div className="grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
-              : videos.map((video) => <VideoCard key={video.id} video={video} />)}
+              : videos.map((video) => <VideoCard key={video.id} video={video} variant="saved" />)}
           </div>
 
           <InfiniteList

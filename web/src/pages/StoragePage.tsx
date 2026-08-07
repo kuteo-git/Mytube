@@ -1,11 +1,10 @@
-import { HardDrive, Pin } from 'lucide-react'
-import { useStorage, useSetPinned } from '@/features/catalog/application/queries'
+import { HardDrive } from 'lucide-react'
+import { useStorage } from '@/features/catalog/application/queries'
 import { VideoCard } from '@/features/catalog/ui/VideoCard'
 import { formatBytes } from '@/shared/lib/format'
 
 export function StoragePage() {
   const { data, isPending, isError } = useStorage()
-  const setPinned = useSetPinned()
 
   if (isPending) {
     return (
@@ -64,22 +63,7 @@ export function StoragePage() {
           </p>
           <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3">
             {data.evictionCandidates.map((video) => (
-              <div key={video.id} className="relative">
-                <VideoCard video={video} />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPinned.mutate({ videoId: video.id, pinned: !video.pinned })
-                  }
-                  className="absolute top-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-black/70 text-white hover:bg-black/90"
-                  aria-label={video.pinned ? 'Unpin' : 'Keep'}
-                >
-                  <Pin
-                    size={16}
-                    className={video.pinned ? 'fill-current' : undefined}
-                  />
-                </button>
-              </div>
+              <VideoCard key={video.id} video={video} variant="storage" />
             ))}
           </div>
         </section>
