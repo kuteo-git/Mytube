@@ -313,9 +313,19 @@ export function PlayerProvider({
     return () => observer.disconnect()
   }, [slotEl, isMobile, isWatch])
 
+  const activeVideoRef = useRef<string | null>(null)
+
   const activate = useCallback((next: PlayerState) => {
-    setPinnedMini(false)
-    setDismissed(false)
+    // Only reset the miniplayer when activating a *different* video. Metadata
+    // updates for the same video (nextVideoTitle, onPlayNext) must not yank the
+    // player out of the corner — doing so removes the paddingBottom reservation,
+    // which can cause the browser to lose the scroller's position and jump to the
+    // top of the page.
+    if (activeVideoRef.current !== next.videoId) {
+      activeVideoRef.current = next.videoId
+      setPinnedMini(false)
+      setDismissed(false)
+    }
     setState(next)
   }, [])
 

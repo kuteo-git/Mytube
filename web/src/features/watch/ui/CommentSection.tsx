@@ -1,5 +1,5 @@
 import { ChevronDown, ListFilter, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Comment } from '@/features/catalog/domain/video'
 import { useAddComment, useComments, useFetchComments } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
@@ -13,6 +13,10 @@ export function CommentSection({ videoId }: { videoId: string }) {
   const fetchComments = useFetchComments(videoId)
   const [draft, setDraft] = useState('')
   const [autoFetched, setAutoFetched] = useState(false)
+
+  const handleLoadMore = useCallback(() => {
+    void fetchNextPage()
+  }, [fetchNextPage])
 
   // Auto-fetch YouTube comments when a video has none.
   useEffect(() => {
@@ -99,7 +103,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
       <InfiniteList
         hasMore={Boolean(hasNextPage)}
         isLoading={isFetchingNextPage}
-        onLoadMore={() => void fetchNextPage()}
+        onLoadMore={handleLoadMore}
       />
     </section>
   )

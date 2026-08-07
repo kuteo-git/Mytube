@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useUpNext } from '@/features/catalog/application/queries'
@@ -24,6 +24,9 @@ export function UpNextRail({
   const [channelFilter, setChannelFilter] = useState<string | undefined>(undefined)
   const [collapsed, setCollapsed] = useState(false)
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useUpNext(current.id, channelFilter)
+  const handleLoadMore = useCallback(() => {
+    void fetchNextPage()
+  }, [fetchNextPage])
   const unseen = data?.filter((video) => !exclude.has(video.id))
   // Once everything on offer has been played this sitting, showing the list
   // again beats showing nothing: an empty rail reads as a broken page, and
@@ -92,7 +95,7 @@ export function UpNextRail({
           <InfiniteList
             hasMore={Boolean(hasNextPage)}
             isLoading={isFetchingNextPage}
-            onLoadMore={() => void fetchNextPage()}
+            onLoadMore={handleLoadMore}
           />
         </>
       )}
