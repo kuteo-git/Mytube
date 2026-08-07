@@ -74,7 +74,7 @@ export function TopBar({
       className="chrome-blur absolute inset-x-0 top-0 z-40 flex items-center
                  gap-2 px-4"
     >
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1 min-[700px]:min-w-[156px]">
         {/* Desktop only. There it does two jobs — collapsing the rail, and on the
             watch page opening the drawer, which is the only way off that page
             besides the logo because the rail is hidden there. Below the
@@ -103,7 +103,7 @@ export function TopBar({
 
       <SearchBox />
 
-      <div className="flex min-w-0 shrink items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2 justify-end min-[700px]:min-w-[156px]">
         {/* The badge counts ingest events, and the Activity page is where those
             events are listed — so the bell goes there. It had the count but no
             destination, which made it the one control on this bar that reported
