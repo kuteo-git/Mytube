@@ -335,6 +335,7 @@ func (g *Gateway) handleUpNext(w http.ResponseWriter, r *http.Request) {
 		CurrentVideoId: r.PathValue("id"),
 		ChannelFilter:  r.URL.Query().Get("channel"),
 		PageSize:       intParam(r, "pageSize", 20),
+		PageToken:      intParam(r, "pageToken", 0),
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
@@ -368,9 +369,12 @@ func (g *Gateway) handleUpNext(w http.ResponseWriter, r *http.Request) {
 		dto.Reason = reasonByID[v.GetId()]
 		out = append(out, dto)
 	}
-	writeJSON(w, http.StatusOK, feedResponse{Videos: out})
+	var nextPageToken string
+	if ranked.Msg.GetNextPageToken() > 0 {
+		nextPageToken = strconv.FormatInt(int64(ranked.Msg.GetNextPageToken()), 10)
+	}
+	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: nextPageToken})
 }
-
 // ---------------------------------------------------------------------------
 // Straight pass-throughs
 // ---------------------------------------------------------------------------

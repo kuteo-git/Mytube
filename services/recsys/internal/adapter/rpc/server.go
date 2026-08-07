@@ -83,12 +83,15 @@ func (s *Server) GetFeed(ctx context.Context, req *connect.Request[recsysv1.GetF
 }
 
 func (s *Server) GetUpNext(ctx context.Context, req *connect.Request[recsysv1.GetUpNextRequest]) (*connect.Response[recsysv1.GetUpNextResponse], error) {
-	ranked, err := s.ranker.GetUpNext(ctx, req.Msg.GetUserId(), req.Msg.GetCurrentVideoId(),
-		req.Msg.GetChannelFilter(), req.Msg.GetPageSize())
+	ranked, nextToken, err := s.ranker.GetUpNext(ctx, req.Msg.GetUserId(), req.Msg.GetCurrentVideoId(),
+		req.Msg.GetChannelFilter(), req.Msg.GetPageSize(), req.Msg.GetPageToken())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&recsysv1.GetUpNextResponse{Videos: toProto(ranked)}), nil
+	return connect.NewResponse(&recsysv1.GetUpNextResponse{
+		Videos:        toProto(ranked),
+		NextPageToken: nextToken,
+	}), nil
 }
 
 func (s *Server) GetMostWatched(ctx context.Context, req *connect.Request[recsysv1.GetMostWatchedRequest]) (*connect.Response[recsysv1.GetMostWatchedResponse], error) {

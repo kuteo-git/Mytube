@@ -180,7 +180,7 @@ func TestUpNextDrawsOnSeveralChannelsWithinTheSubject(t *testing.T) {
 		stubStore{profile: emptyProfile()},
 		stubFeatures{features: features},
 	)
-	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20)
+	ranked, _, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20, 0)
 	if err != nil {
 		t.Fatalf("GetUpNext: %v", err)
 	}

@@ -113,10 +113,14 @@ message GetUpNextRequest {
   // Empty means no filter; otherwise restrict to this channel.
   string channel_filter = 3;
   int32 page_size = 4;
+  // Offset into the ranked list. 0 for the first page.
+  int32 page_token = 5;
 }
 
 message GetUpNextResponse {
   repeated RankedVideo videos = 1;
+  // Set when more pages exist; pass as page_token in the next request.
+  int32 next_page_token = 2;
 }
 
 enum SignalType {

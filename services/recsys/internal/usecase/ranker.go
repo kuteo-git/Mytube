@@ -282,7 +282,7 @@ func freshnessBoost(publishedAt time.Time, viewCount int64, now time.Time) float
 	}
 	// Linear decay from 1.0 (now) to 0.0 (at the freshness boundary).
 	recency := 1.0 - age.Seconds()/freshnessWindow.Seconds()
-	// Log-scale view count, capped so one viral video doesn't dominate.
+	// Log-scale view count, paginated so one viral video doesn't dominate.
 	// Zero views still gets a floor so breaking news with no known count
 	// still surfaces — it just earns less than a proven video would.
 	viewFactor := math.Log1p(float64(viewCount)) / math.Log1p(maxFreshnessViewCount)
@@ -539,14 +539,14 @@ func (r *Ranker) MostWatched(ctx context.Context, userID string, limit int32) ([
 	return r.store.MostWatched(ctx, userID, limit)
 }
 
-func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelFilter string, pageSize int32) ([]domain.RankedVideo, error) {
+func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelFilter string, pageSize, pageToken int32) ([]domain.RankedVideo, int32, error) {
 	features, err := r.features.ListVideoFeatures(ctx)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	profile, err := r.store.BuildProfile(ctx, userID, impressionWindow)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	watchAffinity := buildWatchAffinity(features, profile.WatchedFraction)
@@ -665,9 +665,28 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 24
 	}
-	// Applied after the sort and in place of sortAndPage, which re-sorts by
-	// score and would put the current channel straight back on top.
-	return capPerChannel(ranked, channelOf, maxPerChannelUpNext, int(pageSize)), nil
+	// Channel diversity only matters when showing all channels. When the
+	// viewer explicitly picked "From {Channel}", there is only one channel
+	// to show — capping it to 3 would hide the rest of its videos.
+	paginated := ranked
+	if channelFilter == "" {
+		paginated = capPerChannel(ranked, channelOf, maxPerChannelUpNext, len(ranked))
+	}
+
+	// Paginate within the (possibly paginated) list.
+	start := int(pageToken)
+	if start >= len(paginated) {
+		return nil, 0, nil
+	}
+	end := start + int(pageSize)
+	if end > len(paginated) {
+		end = len(paginated)
+	}
+	var nextToken int32
+	if end < len(paginated) {
+		nextToken = int32(end)
+	}
+	return paginated[start:end], nextToken, nil
 }
 
 // WatchAffinity is what a viewing history says about someone's taste, without

@@ -23,7 +23,7 @@ export interface CatalogRepository {
    * URL does not — and those must not land on "Video not found".
    */
   getVideoEnsuring(id: string): Promise<Video>
-  listUpNext(currentVideoId: string, channelFilter?: string): Promise<Video[]>
+  listUpNext(currentVideoId: string, channelFilter?: string, pageToken?: string, pageSize?: number): Promise<Feed>
   listComments(videoId: string, pageToken?: string, pageSize?: number): Promise<CommentPage>
   listTopics(): Promise<Topic[]>
   refreshTopics(): Promise<ScanStatus>
@@ -324,11 +324,10 @@ export const httpCatalogRepository: CatalogRepository = {
     }
   },
 
-  async listUpNext(currentVideoId, channelFilter) {
-    const feed = await request<Feed>(
-      `/videos/${encodeURIComponent(currentVideoId)}/up-next${query({ channel: channelFilter })}`,
+  async listUpNext(currentVideoId, channelFilter, pageToken, pageSize) {
+    return request<Feed>(
+      `/videos/${encodeURIComponent(currentVideoId)}/up-next${query({ channel: channelFilter, pageToken, pageSize: pageSize?.toString() })}`,
     )
-    return feed.videos
   },
 
   listComments(videoId, pageToken, pageSize) {

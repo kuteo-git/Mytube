@@ -229,7 +229,7 @@ func TestUpNextDoesNotOfferBackSomethingJustWatched(t *testing.T) {
 	profile.RecentlyWatched["b"] = true
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "b", "", 20)
+	ranked, _, err := ranker.GetUpNext(context.Background(), "viewer", "b", "", 20, 0)
 	if err != nil {
 		t.Fatalf("GetUpNext: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestUpNextStillOffersSomethingWatchedLongAgo(t *testing.T) {
 	profile.WatchedFraction["old_favourite"] = 0.99
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20)
+	ranked, _, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20, 0)
 	if err != nil {
 		t.Fatalf("GetUpNext: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestUpNextPrefersRelatednessOverGeneralTaste(t *testing.T) {
 	profile := profileWith(map[string]float32{"history_1": 1.0, "history_2": 1.0})
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20)
+	ranked, _, err := ranker.GetUpNext(context.Background(), "viewer", "current", "", 20, 0)
 	if err != nil {
 		t.Fatalf("GetUpNext: %v", err)
 	}

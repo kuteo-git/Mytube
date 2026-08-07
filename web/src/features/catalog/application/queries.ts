@@ -120,11 +120,17 @@ export function useVideo(id: string | undefined) {
   })
 }
 
+const UP_NEXT_PAGE_SIZE = 20
+
 export function useUpNext(videoId: string | undefined, channelFilter?: string) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['up-next', videoId, channelFilter ?? ''],
-    queryFn: () => repo.listUpNext(videoId!, channelFilter),
+    queryFn: ({ pageParam }) =>
+      repo.listUpNext(videoId!, channelFilter, pageParam, UP_NEXT_PAGE_SIZE),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
     enabled: Boolean(videoId),
+    select: (data) => data.pages.flatMap((p) => p.videos),
   })
 }
 

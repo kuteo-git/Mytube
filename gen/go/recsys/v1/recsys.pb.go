@@ -559,6 +559,8 @@ type GetUpNextRequest struct {
 	// Empty means no filter; otherwise restrict to this channel.
 	ChannelFilter string `protobuf:"bytes,3,opt,name=channel_filter,json=channelFilter,proto3" json:"channel_filter,omitempty"`
 	PageSize      int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Offset into the ranked list. 0 for the first page.
+	PageToken     int32 `protobuf:"varint,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -621,9 +623,18 @@ func (x *GetUpNextRequest) GetPageSize() int32 {
 	return 0
 }
 
+func (x *GetUpNextRequest) GetPageToken() int32 {
+	if x != nil {
+		return x.PageToken
+	}
+	return 0
+}
+
 type GetUpNextResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Videos        []*RankedVideo         `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Videos []*RankedVideo         `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
+	// Set when more pages exist; pass as page_token in the next request.
+	NextPageToken int32 `protobuf:"varint,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -663,6 +674,13 @@ func (x *GetUpNextResponse) GetVideos() []*RankedVideo {
 		return x.Videos
 	}
 	return nil
+}
+
+func (x *GetUpNextResponse) GetNextPageToken() int32 {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return 0
 }
 
 type RecordSignalRequest struct {
@@ -907,14 +925,17 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\"H\n" +
 	"\x16GetMostWatchedResponse\x12.\n" +
-	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\"\x99\x01\n" +
+	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\"\xb8\x01\n" +
 	"\x10GetUpNextRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12(\n" +
 	"\x10current_video_id\x18\x02 \x01(\tR\x0ecurrentVideoId\x12%\n" +
 	"\x0echannel_filter\x18\x03 \x01(\tR\rchannelFilter\x12\x1b\n" +
-	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\"C\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x05 \x01(\x05R\tpageToken\"k\n" +
 	"\x11GetUpNextResponse\x12.\n" +
-	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\"\xf2\x01\n" +
+	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\x05R\rnextPageToken\"\xf2\x01\n" +
 	"\x13RecordSignalRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12)\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x15.recsys.v1.SignalTypeR\x04type\x12\x19\n" +
