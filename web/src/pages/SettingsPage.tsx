@@ -162,7 +162,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
         <div className="flex flex-col gap-4">
           <SettingRow label="Voice">
             <select
-              className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
               value={prefs.voice}
               aria-label="Voice"
               onChange={(e) => update({ voice: e.target.value })}
