@@ -105,6 +105,17 @@
     background-color: var(--color-bg);
   }
 
+  /* On a touch screen, selecting text is almost always a slip of the finger
+     rather than something the viewer meant to do. Desktop keeps selection —
+     copying a title, a channel name, a duration — because on a mouse and
+     keyboard it is deliberate. */
+  @media (pointer: coarse) {
+    html {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+  }
+
   /* Focus ring must always be visible: Phase 3 navigates with a TV remote D-pad. */
   :focus-visible {
     outline: 2px solid var(--color-ring);
