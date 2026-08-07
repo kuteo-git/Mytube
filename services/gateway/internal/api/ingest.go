@@ -241,6 +241,7 @@ type scanStatusDTO struct {
 	VideosSeen     int32    `json:"videosSeen"`
 	VideosAdded    int32    `json:"videosAdded"`
 	Errors         []string `json:"errors"`
+	Running        bool     `json:"running"`
 }
 
 func toScanStatusDTO(s *ingestv1.ScanStatus) scanStatusDTO {
@@ -256,6 +257,7 @@ func toScanStatusDTO(s *ingestv1.ScanStatus) scanStatusDTO {
 		VideosSeen:     s.GetVideosSeen(),
 		VideosAdded:    s.GetVideosAdded(),
 		Errors:         errs,
+		Running:        s.GetRunning(),
 	}
 }
 

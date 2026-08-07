@@ -97,7 +97,9 @@ func (s *Scanner) Run(ctx context.Context) {
 func (s *Scanner) LastScan() domain.ScanResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.lastScan
+	result := s.lastScan
+	result.Running = s.running
+	return result
 }
 
 // ScanNow backs both the timer and the manual Refresh button.

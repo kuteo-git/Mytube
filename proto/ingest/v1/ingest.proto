@@ -233,6 +233,7 @@ message ScanStatus {
   int32 videos_seen = 5;
   int32 videos_added = 6;
   repeated string errors = 7;
+  bool running = 8;
 }
 
 message ResolveStreamRequest {

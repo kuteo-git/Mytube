@@ -1208,6 +1208,7 @@ type ScanStatus struct {
 	VideosSeen     int32                  `protobuf:"varint,5,opt,name=videos_seen,json=videosSeen,proto3" json:"videos_seen,omitempty"`
 	VideosAdded    int32                  `protobuf:"varint,6,opt,name=videos_added,json=videosAdded,proto3" json:"videos_added,omitempty"`
 	Errors         []string               `protobuf:"bytes,7,rep,name=errors,proto3" json:"errors,omitempty"`
+	Running        bool                   `protobuf:"varint,8,opt,name=running,proto3" json:"running,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1289,6 +1290,13 @@ func (x *ScanStatus) GetErrors() []string {
 		return x.Errors
 	}
 	return nil
+}
+
+func (x *ScanStatus) GetRunning() bool {
+	if x != nil {
+		return x.Running
+	}
+	return false
 }
 
 type ResolveStreamRequest struct {
@@ -2533,7 +2541,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06status\x18\x01 \x01(\v2\x15.ingest.v1.ScanStatusR\x06status\"\x16\n" +
 	"\x14GetScanStatusRequest\"F\n" +
 	"\x15GetScanStatusResponse\x12-\n" +
-	"\x06status\x18\x01 \x01(\v2\x15.ingest.v1.ScanStatusR\x06status\"\x94\x02\n" +
+	"\x06status\x18\x01 \x01(\v2\x15.ingest.v1.ScanStatusR\x06status\"\xae\x02\n" +
 	"\n" +
 	"ScanStatus\x129\n" +
 	"\n" +
@@ -2545,7 +2553,8 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\vvideos_seen\x18\x05 \x01(\x05R\n" +
 	"videosSeen\x12!\n" +
 	"\fvideos_added\x18\x06 \x01(\x05R\vvideosAdded\x12\x16\n" +
-	"\x06errors\x18\a \x03(\tR\x06errors\"1\n" +
+	"\x06errors\x18\a \x03(\tR\x06errors\x12\x18\n" +
+	"\arunning\x18\b \x01(\bR\arunning\"1\n" +
 	"\x14ResolveStreamRequest\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\"\x99\x01\n" +
 	"\x15ResolveStreamResponse\x12\x10\n" +

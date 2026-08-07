@@ -8,6 +8,7 @@ import {
   useDismissJobs,
   useRefreshTopics,
   useRetryJob,
+  useScanStatus,
   useScans,
 } from '@/features/catalog/application/queries'
 import { usePagedList } from '@/features/catalog/application/paged-list'
@@ -39,6 +40,8 @@ export function ActivityPage() {
   const clearScans = useClearScans()
   const dismissJobs = useDismissJobs()
   const toast = useToast()
+  const { data: scanStatus } = useScanStatus()
+  const scanning = scanStatus?.running ?? false
 
   const failed = (jobs ?? []).filter((j) => j.state === 'FAILED')
   const active = (jobs ?? []).filter((j) => j.state === 'RUNNING' || j.state === 'QUEUED')
@@ -67,7 +70,7 @@ export function ActivityPage() {
       <h1 className="text-2xl font-medium">Activity</h1>
 
       <ScanHistory
-        refreshing={refresh.isPending}
+        refreshing={scanning || refresh.isPending}
         onRefresh={() => refresh.mutate()}
         onClearAll={handleClearScans}
       />

@@ -183,6 +183,8 @@ export interface ScanStatus {
   videosSeen: number
   videosAdded: number
   errors: string[]
+  /** True while a scan is in progress, across page refreshes and devices. */
+  running: boolean
 }
 
 /** One way of playing a video. */

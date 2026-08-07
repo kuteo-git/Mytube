@@ -37,6 +37,7 @@ type ScanResult struct {
 	VideosSeen     int
 	VideosAdded    int
 	Errors         []string
+	Running        bool // true while a scan is in progress
 }
 
 // ScanStore keeps what each pass did.

@@ -339,14 +339,15 @@ export function useScans(limit = 10) {
 }
 
 /**
- * Result of the most recent topic scan. Scans are manual or twelve-hourly, so
- * this does not poll; the Activity page refetches it when the user asks.
+ * Result of the most recent topic scan. Polls every 2s while a scan is running
+ * so the Activity page stays accurate across refreshes and devices.
  */
 export function useScanStatus() {
   return useQuery({
     queryKey: ['scan-status'],
     queryFn: () => repo.getScanStatus(),
-    staleTime: 30_000,
+    refetchInterval: (query) => (query.state.data?.running ? 2000 : false),
+    staleTime: 5_000,
   })
 }
 

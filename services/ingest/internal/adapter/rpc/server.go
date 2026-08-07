@@ -81,6 +81,7 @@ func scanToProto(r domain.ScanResult) *ingestv1.ScanStatus {
 		VideosSeen:     int32(r.VideosSeen),
 		VideosAdded:    int32(r.VideosAdded),
 		Errors:         r.Errors,
+		Running:        r.Running,
 	}
 }
 
