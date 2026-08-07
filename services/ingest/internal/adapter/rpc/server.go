@@ -237,6 +237,14 @@ func (s *Server) DismissJob(ctx context.Context, req *connect.Request[ingestv1.D
 	return connect.NewResponse(&ingestv1.DismissJobResponse{}), nil
 }
 
+func (s *Server) DismissJobs(ctx context.Context, req *connect.Request[ingestv1.DismissJobsRequest]) (*connect.Response[ingestv1.DismissJobsResponse], error) {
+	count, err := s.ingest.DismissJobs(ctx, req.Msg.GetState())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.DismissJobsResponse{Dismissed: count}), nil
+}
+
 func (s *Server) RetryJob(ctx context.Context, req *connect.Request[ingestv1.RetryJobRequest]) (*connect.Response[ingestv1.RetryJobResponse], error) {
 	job, err := s.ingest.RetryJob(ctx, req.Msg.GetJobId(), req.Msg.GetRequestedBy())
 	if err != nil {
@@ -255,6 +263,13 @@ func (s *Server) ListScans(ctx context.Context, req *connect.Request[ingestv1.Li
 		out = append(out, scanToProto(r))
 	}
 	return connect.NewResponse(&ingestv1.ListScansResponse{Scans: out, Total: total}), nil
+}
+
+func (s *Server) ClearScans(ctx context.Context, req *connect.Request[ingestv1.ClearScansRequest]) (*connect.Response[ingestv1.ClearScansResponse], error) {
+	if err := s.ingest.ClearScans(ctx); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.ClearScansResponse{}), nil
 }
 
 func (s *Server) ListChannelUploads(ctx context.Context, req *connect.Request[ingestv1.ListChannelUploadsRequest]) (*connect.Response[ingestv1.ListChannelUploadsResponse], error) {

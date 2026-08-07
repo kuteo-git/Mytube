@@ -81,3 +81,8 @@ func (s *Store) ListScans(ctx context.Context, limit, offset int32) ([]domain.Sc
 	}
 	return out, total, rows.Err()
 }
+
+func (s *Store) ClearScans(ctx context.Context) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM scans`)
+	return err
+}

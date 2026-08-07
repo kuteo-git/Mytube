@@ -327,6 +327,15 @@ func (i *Ingest) DismissJob(ctx context.Context, jobID string) error {
 	return i.store.Dismiss(ctx, jobID)
 }
 
+// DismissJobs hides every job with a given state, so the Activity page can
+// be cleared in one action rather than one row at a time.
+func (i *Ingest) DismissJobs(ctx context.Context, state string) (int64, error) {
+	if state == "" {
+		return 0, fmt.Errorf("%w: state is required", domain.ErrInvalid)
+	}
+	return i.store.DismissByState(ctx, state)
+}
+
 // RetryJob queues the same URL again.
 //
 // Worth having because the usual reason a job here failed is temporary — a 429
@@ -371,6 +380,14 @@ func (i *Ingest) ListScans(ctx context.Context, limit, offset int32) ([]domain.S
 		return nil, 0, nil
 	}
 	return i.scans.ListScans(ctx, limit, offset)
+}
+
+// ClearScans deletes every scan row.
+func (i *Ingest) ClearScans(ctx context.Context) error {
+	if i.scans == nil {
+		return nil
+	}
+	return i.scans.ClearScans(ctx)
 }
 
 // CancelVideoDownload stops any transfer running for a video.

@@ -131,7 +131,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/ingest/jobs/{id}/cancel", g.handleCancelJob)
 	mux.HandleFunc("POST /api/ingest/jobs/{id}/dismiss", g.handleDismissJob)
 	mux.HandleFunc("POST /api/ingest/jobs/{id}/retry", g.handleRetryJob)
+	mux.HandleFunc("POST /api/scans/clear", g.handleClearScans)
 	mux.HandleFunc("GET /api/scans", g.handleListScans)
+	mux.HandleFunc("POST /api/ingest/dismiss-jobs", g.handleDismissJobs)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("ok"))

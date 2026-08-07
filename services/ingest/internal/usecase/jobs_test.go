@@ -33,6 +33,8 @@ func (s *recordingStore) Dismiss(_ context.Context, jobID string) error {
 	return s.dismissEr
 }
 
+func (s *recordingStore) DismissByState(_ context.Context, state string) (int64, error) { return 0, nil }
+
 func failedJob() domain.Job {
 	return domain.Job{
 		ID:              "job1",
@@ -157,6 +159,8 @@ func (s *scanRecorder) RecordScan(_ context.Context, r domain.ScanResult, retain
 func (s *scanRecorder) ListScans(context.Context, int32, int32) ([]domain.ScanResult, int32, error) {
 	return s.list, s.total, nil
 }
+
+func (s *scanRecorder) ClearScans(context.Context) error { return nil }
 
 func TestListScansIsEmptyRatherThanBrokenWithoutAStore(t *testing.T) {
 	// The Activity page asks for these unconditionally; a deployment without

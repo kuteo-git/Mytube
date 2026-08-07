@@ -60,6 +60,9 @@ service IngestService {
   // Takes a finished job off the Activity page. Terminal states only: a job
   // still running is cancelled, not hidden.
   rpc DismissJob(DismissJobRequest) returns (DismissJobResponse);
+  // Dismisses every job with a given state, so the Activity page can be emptied
+  // in one action rather than one row at a time.
+  rpc DismissJobs(DismissJobsRequest) returns (DismissJobsResponse);
   // Queues the same URL again. Most failures here are temporary — a rate limit,
   // a block that has lifted, a network that dropped — so trying again is worth
   // an action of its own rather than leaving "hide it" as the only one.
@@ -67,6 +70,8 @@ service IngestService {
   // What the scanner has been doing, newest first. Distinct from GetScanStatus,
   // which reports only the pass that has just run.
   rpc ListScans(ListScansRequest) returns (ListScansResponse);
+  // Deletes every scan row, so the Scand page clears in one action.
+  rpc ClearScans(ClearScansRequest) returns (ClearScansResponse);
   // Stops whatever transfer is running for a video. Called when a viewer leaves
   // the watch page: a copy nobody is waiting for is a request to YouTube nobody
   // is waiting for either, and too many of those get the address blocked.
@@ -309,6 +314,15 @@ message DismissJobRequest {
 
 message DismissJobResponse {}
 
+message DismissJobsRequest {
+  // Job state to dismiss: "FAILED" or "SUCCEEDED".
+  string state = 1;
+}
+
+message DismissJobsResponse {
+  int64 dismissed = 1;
+}
+
 message RetryJobRequest {
   string job_id = 1;
   string requested_by = 2;
@@ -329,6 +343,10 @@ message ListScansResponse {
   // How many passes are on record, so the page knows whether to offer more.
   int32 total = 2;
 }
+
+message ClearScansRequest {}
+
+message ClearScansResponse {}
 
 message CancelVideoDownloadRequest {
   string video_id = 1;

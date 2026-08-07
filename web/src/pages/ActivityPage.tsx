@@ -3,7 +3,9 @@ import { AlertTriangle, CheckCircle, Loader2, RefreshCw, RotateCcw, X } from 'lu
 import {
   useActivityJobs,
   useCancelJob,
+  useClearScans,
   useDismissJob,
+  useDismissJobs,
   useRefreshTopics,
   useRetryJob,
   useScans,
@@ -12,6 +14,7 @@ import { usePagedList } from '@/features/catalog/application/paged-list'
 import { ShowMore } from '@/features/catalog/ui/ShowMore'
 import type { IngestJob, ScanStatus } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatRelative } from '@/shared/lib/format'
+import { useToast } from '@/shared/ui/toast'
 
 /**
  * What the system has been doing, and what went wrong doing it.
@@ -33,16 +36,41 @@ import { formatRelative } from '@/shared/lib/format'
 export function ActivityPage() {
   const { data: jobs, isPending: jobsPending } = useActivityJobs()
   const refresh = useRefreshTopics()
+  const clearScans = useClearScans()
+  const dismissJobs = useDismissJobs()
+  const toast = useToast()
 
   const failed = (jobs ?? []).filter((j) => j.state === 'FAILED')
   const active = (jobs ?? []).filter((j) => j.state === 'RUNNING' || j.state === 'QUEUED')
   const done = (jobs ?? []).filter((j) => j.state === 'SUCCEEDED')
 
+  const handleClearScans = () => {
+    clearScans.mutate(undefined, {
+      onSuccess: () => toast('Scan history cleared'),
+    })
+  }
+
+  const handleDismissFailed = () => {
+    dismissJobs.mutate('FAILED', {
+      onSuccess: (count) => toast(`${count} failed job${count !== 1 ? 's' : ''} cleared`),
+    })
+  }
+
+  const handleDismissCompleted = () => {
+    dismissJobs.mutate('SUCCEEDED', {
+      onSuccess: (count) => toast(`${count} completed job${count !== 1 ? 's' : ''} cleared`),
+    })
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-medium">Activity</h1>
 
-      <ScanHistory refreshing={refresh.isPending} onRefresh={() => refresh.mutate()} />
+      <ScanHistory
+        refreshing={refresh.isPending}
+        onRefresh={() => refresh.mutate()}
+        onClearAll={handleClearScans}
+      />
 
       <section className="mt-8">
         <h2 className="text-lg font-medium">Downloads</h2>
@@ -55,20 +83,42 @@ export function ActivityPage() {
           </p>
         )}
 
-        <JobGroup title="Failed" tone="error" jobs={failed} render={(job) => <FailedRow job={job} />} />
+        <JobGroup
+          title="Failed"
+          tone="error"
+          jobs={failed}
+          render={(job) => <FailedRow job={job} />}
+          onClearAll={handleDismissFailed}
+          canClear={failed.length > 0}
+        />
         <JobGroup
           title="In progress"
           tone="active"
           jobs={active}
           render={(job) => <ActiveRow job={job} />}
         />
-        <JobGroup title="Completed" tone="done" jobs={done} render={(job) => <DoneRow job={job} />} />
+        <JobGroup
+          title="Completed"
+          tone="done"
+          jobs={done}
+          render={(job) => <DoneRow job={job} />}
+          onClearAll={handleDismissCompleted}
+          canClear={done.length > 0}
+        />
       </section>
     </div>
   )
 }
 
-function ScanHistory({ refreshing, onRefresh }: { refreshing: boolean; onRefresh: () => void }) {
+function ScanHistory({
+  refreshing,
+  onRefresh,
+  onClearAll,
+}: {
+  refreshing: boolean
+  onRefresh: () => void
+  onClearAll: () => void
+}) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending } = useScans()
   const scans = data?.pages.flatMap((page) => page.scans) ?? []
   const total = data?.pages[0]?.total ?? 0
@@ -77,15 +127,26 @@ function ScanHistory({ refreshing, onRefresh }: { refreshing: boolean; onRefresh
     <section className="mt-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-medium">Scans</h2>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-60"
-        >
-          <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
-          {refreshing ? 'Scanning…' : 'Scan now'}
-        </button>
+        <div className="flex items-center gap-2">
+          {scans.length > 0 && (
+            <button
+              type="button"
+              onClick={onClearAll}
+              className="rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
+            >
+              Clear all
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-60"
+          >
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
+            {refreshing ? 'Scanning…' : 'Scan now'}
+          </button>
+        </div>
       </div>
 
       {isPending && <p className="mt-3 text-sm text-text-2">Loading…</p>}
@@ -242,20 +303,35 @@ function JobGroup({
   tone,
   jobs,
   render,
+  onClearAll,
+  canClear,
 }: {
   title: string
   tone: 'error' | 'active' | 'done'
   jobs: IngestJob[]
   render: (job: IngestJob) => ReactNode
+  onClearAll?: () => void
+  canClear?: boolean
 }) {
   const { visible, remaining, showMore } = usePagedList(jobs)
   if (jobs.length === 0) return null
 
   return (
     <div className="mt-4">
-      <h3 className={'text-sm font-medium ' + (tone === 'error' ? 'text-amber-400' : 'text-text-2')}>
-        {title}
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className={'text-sm font-medium ' + (tone === 'error' ? 'text-amber-400' : 'text-text-2')}>
+          {title}
+        </h3>
+        {canClear && onClearAll && (
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
       {/* Each row renders its own <li> — they differ in shape — so the key goes
           on a keyed Fragment. Wrapping in anything real would make the list's
           children elements containing list items, which is not a list. */}

@@ -54,4 +54,6 @@ type ScanStore interface {
 	// ListScans reads them newest first, and reports the total so the page
 	// knows whether there is more.
 	ListScans(ctx context.Context, limit, offset int32) (scans []ScanResult, total int32, err error)
+	// ClearScans deletes every scan row.
+	ClearScans(ctx context.Context) error
 }

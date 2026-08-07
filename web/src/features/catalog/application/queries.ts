@@ -298,6 +298,17 @@ export function useDismissJob() {
   })
 }
 
+/** Dismisses all jobs with a given state. Returns the count for toast display. */
+export function useDismissJobs() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (state: string) => repo.dismissJobs(state),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['ingest-jobs'] })
+    },
+  })
+}
+
 export function useRetryJob() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -336,6 +347,16 @@ export function useScanStatus() {
     queryKey: ['scan-status'],
     queryFn: () => repo.getScanStatus(),
     staleTime: 30_000,
+  })
+}
+
+export function useClearScans() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => repo.clearScans(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['scans'] })
+    },
   })
 }
 

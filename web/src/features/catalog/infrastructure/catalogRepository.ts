@@ -79,6 +79,10 @@ export interface CatalogRepository {
   /** Queues the same URL again and returns the new job. */
   retryJob(jobId: string): Promise<IngestJob>
   listScans(limit: number, offset: number): Promise<ScanPage>
+  /** Deletes every scan row. */
+  clearScans(): Promise<void>
+  /** Dismisses all jobs with a given state, returning the count. */
+  dismissJobs(state: string): Promise<number>
 
   recordProgress(videoId: string, positionSeconds: number, watchedFraction: number): Promise<void>
   /** Hides a video from the feed and tells the recommender not to offer it. */
@@ -417,6 +421,18 @@ export const httpCatalogRepository: CatalogRepository = {
 
   async listScans(limit, offset) {
     return request<ScanPage>(`/scans${query({ limit: String(limit), offset: String(offset) })}`)
+  },
+
+  async clearScans() {
+    await request<void>('/scans/clear', { method: 'POST' })
+  },
+
+  async dismissJobs(state) {
+    const body = await request<{ dismissed: number }>('/ingest/dismiss-jobs', {
+      method: 'POST',
+      body: JSON.stringify({ state }),
+    })
+    return body.dismissed
   },
 
   async listJobs(activeOnly, options) {

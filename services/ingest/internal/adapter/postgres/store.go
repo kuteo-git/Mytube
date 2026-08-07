@@ -143,6 +143,17 @@ func (s *Store) Dismiss(ctx context.Context, jobID string) error {
 	return nil
 }
 
+// DismissByState hides every job with a given state. Returns the count.
+func (s *Store) DismissByState(ctx context.Context, state string) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE jobs SET dismissed_at = now()
+		WHERE state = $1 AND dismissed_at IS NULL`, state)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // CancelForVideo stops whatever transfer is running for a video, if any.
 //
 // By video rather than by job id because that is what the caller knows: the

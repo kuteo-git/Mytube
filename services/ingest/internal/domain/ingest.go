@@ -175,6 +175,9 @@ type JobStore interface {
 	// Dismiss hides a finished job. Only terminal states can be dismissed:
 	// hiding something still running would leave work with no way to see it.
 	Dismiss(ctx context.Context, jobID string) error
+	// DismissByState hides every job with a given state. Returns how many were
+	// dismissed so the caller can tell whether there was anything to clear.
+	DismissByState(ctx context.Context, state string) (int64, error)
 	// CancelForVideo stops any queued or running transfer for a video and
 	// reports how many it stopped. Zero is not an error.
 	CancelForVideo(ctx context.Context, videoID string) (int, error)

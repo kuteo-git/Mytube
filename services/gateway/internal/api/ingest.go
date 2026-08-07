@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -420,6 +421,24 @@ func (g *Gateway) handleDismissJob(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (g *Gateway) handleDismissJobs(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		g.writeErr(w, r, fmt.Errorf("reading body: %w", err))
+		return
+	}
+	resp, err := g.ingest.DismissJobs(r.Context(), connect.NewRequest(&ingestv1.DismissJobsRequest{
+		State: body.State,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int64{"dismissed": resp.Msg.GetDismissed()})
+}
+
 func (g *Gateway) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 	resp, err := g.ingest.RetryJob(r.Context(), connect.NewRequest(&ingestv1.RetryJobRequest{
 		JobId:       r.PathValue("id"),
@@ -449,6 +468,14 @@ func (g *Gateway) handleListScans(w http.ResponseWriter, r *http.Request) {
 		"scans": out,
 		"total": resp.Msg.GetTotal(),
 	})
+}
+
+func (g *Gateway) handleClearScans(w http.ResponseWriter, r *http.Request) {
+	if _, err := g.ingest.ClearScans(r.Context(), connect.NewRequest(&ingestv1.ClearScansRequest{})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleStream lists every way the client could play a video right now.

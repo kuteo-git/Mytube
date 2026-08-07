@@ -94,7 +94,8 @@ func (fakeStore) List(context.Context, bool, bool, int32) ([]domain.Job, error) 
 	return nil, nil
 }
 func (fakeStore) Cancel(context.Context, string) error  { return nil }
-func (fakeStore) Dismiss(context.Context, string) error { return nil }
+func (fakeStore) Dismiss(context.Context, string) error              { return nil }
+func (fakeStore) DismissByState(context.Context, string) (int64, error) { return 0, nil }
 func (fakeStore) Claim(context.Context, time.Duration) (domain.Job, error) {
 	return domain.Job{}, domain.ErrNotFound
 }
