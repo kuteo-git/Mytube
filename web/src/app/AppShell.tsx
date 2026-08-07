@@ -381,7 +381,11 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
         // Rounded whenever it is a card on a page: full-screen on a phone and
         // the docked player are edge-to-edge, and everything else matches the
         // 12px the thumbnails and cards around it use.
-        borderRadius: isMobile && mode === 'full' ? 0 : 12,
+        borderRadius: isMobile && mode === 'full'
+          ? 0
+          : isMobile && mode === 'mini'
+            ? '12px 12px 0 0'
+            : 12,
         // The bar reaches the bottom edge on a screen with no navigation, so
         // its surface runs under the home indicator the way every other bar in
         // the app does. Its *content* stays above it: the padding is inside the
