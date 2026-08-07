@@ -384,7 +384,7 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
         borderRadius: isMobile && mode === 'full'
           ? 0
           : isMobile && mode === 'mini'
-            ? '12px 12px 0 0'
+            ? '24px 24px 0 0'
             : 12,
         // The bar reaches the bottom edge on a screen with no navigation, so
         // its surface runs under the home indicator the way every other bar in
