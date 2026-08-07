@@ -89,7 +89,8 @@ export function SearchBox() {
             aria-controls="search-suggestions"
             aria-autocomplete="list"
             role="combobox"
-            className="h-full min-w-0 flex-1 rounded-l-full bg-transparent px-5 text-base outline-none placeholder:text-text-2"
+            className="h-full min-w-0 flex-1 rounded-l-full bg-transparent text-base outline-none placeholder:text-text-2"
+            style={{ paddingLeft: '1.5rem', paddingRight: '1.5rem' }}
           />
 
           {query && (
