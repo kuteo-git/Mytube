@@ -131,16 +131,22 @@ export function ThumbnailSurface({
   // left a grey YouTube tile on the card instead of the gradient below. onLoad
   // catches that one by its size; see isMissingThumbnail.
   const [failed, setFailed] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+
+  const gradient = `linear-gradient(135deg, hsl(${hue} 50% 30%), hsl(${(hue + 45) % 360} 55% 16%))`
 
   return (
     <div
-      style={{
-        // Shown while the image loads and if it fails, so the card never
-        // collapses or flashes white.
-        background: `linear-gradient(135deg, hsl(${hue} 50% 30%), hsl(${(hue + 45) % 360} 55% 16%))`,
-      }}
+      style={{ background: gradient }}
       className={clsx('relative aspect-video w-full overflow-hidden', rounded)}
     >
+      {/* Shimmer while the image is downloading. Opaque surface with animate-pulse,
+          same as VideoCardSkeleton — covers the gradient completely until the
+          real image arrives. */}
+      {src && !loaded && !failed && (
+        <div className="absolute inset-0 animate-pulse bg-surface" />
+      )}
+
       {src && !failed && (
         <img
           src={src}
@@ -153,6 +159,8 @@ export function ThumbnailSurface({
             const img = e.currentTarget
             if (isMissingThumbnail(img.currentSrc || img.src, img.naturalWidth, img.naturalHeight)) {
               setFailed(true)
+            } else {
+              setLoaded(true)
             }
           }}
         />
