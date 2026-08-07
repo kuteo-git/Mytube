@@ -63,7 +63,7 @@ export function ExternalVideoCard({
         onClick={go}
         className="block text-left"
       >
-        <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailUrl} alt={video.title}>
+        <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailUrl} alt={video.title} channelName={video.channelName}>
           {video.durationSeconds > 0 && (
             <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">
               {formatDuration(video.durationSeconds)}

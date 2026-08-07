@@ -113,12 +113,15 @@ export function ThumbnailSurface({
   hue,
   src,
   alt,
+  channelName,
   rounded = 'rounded-xl',
   children,
 }: {
   hue: number
   src?: string
   alt?: string
+  /** Shown centered on the gradient when there is no image to display. */
+  channelName?: string
   rounded?: string
   children?: ReactNode
 }) {
@@ -145,6 +148,19 @@ export function ThumbnailSurface({
           real image arrives. */}
       {src && !loaded && !failed && (
         <div className="absolute inset-0 animate-pulse bg-surface" />
+      )}
+
+      {/* When there is no image at all, show the channel name over a shimmer
+          so the card still reads as a video rather than a blank tile. */}
+      {(!src || failed) && channelName && (
+        <>
+          <div className="absolute inset-0 animate-pulse bg-surface" />
+          <span className="absolute inset-0 grid place-items-center">
+            <span className="line-clamp-2 px-3 text-center text-sm font-medium text-text-2">
+              {channelName}
+            </span>
+          </span>
+        </>
       )}
 
       {src && !failed && (

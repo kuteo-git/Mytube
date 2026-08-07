@@ -108,6 +108,7 @@ function SuggestionRow({ video }: { video: Video }) {
           hue={hueFromId(video.id)}
           src={mediaURL(video.thumbnailPath)}
           alt={video.title}
+          channelName={video.channel.name}
           rounded="rounded-lg"
         >
           <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">

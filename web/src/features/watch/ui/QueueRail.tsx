@@ -69,6 +69,7 @@ export function QueueRail({
                     hue={hueFromId(item.id)}
                     src={item.thumbnailUrl}
                     alt={item.title}
+                    channelName={item.channelName}
                     rounded="rounded-lg"
                   >
                     {item.durationSeconds > 0 && (

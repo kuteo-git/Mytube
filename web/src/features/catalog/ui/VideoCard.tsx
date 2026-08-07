@@ -52,7 +52,7 @@ export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?:
       onBlur={cancel}
     >
       <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
-        <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title}>
+        <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title} channelName={video.channel.name}>
           {video.reason === 'DISCOVERY' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
               Suggested

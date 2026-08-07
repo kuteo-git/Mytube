@@ -43,7 +43,7 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
             aria-hidden
             className="absolute inset-x-1.5 top-1 h-2 rounded-t-lg bg-white/25"
           />
-          <ThumbnailSurface hue={hueFromId(lead.id)} src={mediaURL(lead.thumbnailPath)} alt="">
+          <ThumbnailSurface hue={hueFromId(lead.id)} src={mediaURL(lead.thumbnailPath)} alt="" channelName={lead.channel.name}>
             <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5 rounded bg-badge px-2 py-1 text-xs font-medium">
               <ListVideo size={14} />
               Mix
@@ -59,7 +59,7 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
           </Link>
         </h3>
         {names.length > 0 && (
-          <p className="mt-1 clamp-1 text-xs text-text-2">
+          <p className="mt-1 clamp-2 text-xs text-text-2">
             {names.join(', ')}
             {videos.length > names.length && ', and more'}
           </p>
