@@ -73,7 +73,7 @@ export function SearchBox() {
 
   return (
     <div ref={containerRef} className="mx-auto flex max-w-[720px] flex-1 items-center gap-2 min-w-0">
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-w-0">
         <div className="flex h-10 items-center rounded-full border border-line bg-surface-input focus-within:border-ring">
           <input
             value={query}

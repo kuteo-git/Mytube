@@ -72,7 +72,7 @@ export function TopBar({
       }}
       aria-hidden={opacity === 0 ? true : undefined}
       className="chrome-blur absolute inset-x-0 top-0 z-40 flex items-center
-                 gap-2 px-4"
+                 gap-2 px-5"
     >
       <div className="flex shrink-0 items-center gap-1 min-[700px]:min-w-[156px]">
         {/* Desktop only. There it does two jobs — collapsing the rail, and on the
