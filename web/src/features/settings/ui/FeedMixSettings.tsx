@@ -10,6 +10,7 @@ import {
   setShare,
   videosPerWindow,
 } from '@/features/settings/domain/feed-mix'
+import { ActionBar } from '@/features/settings/ui/ActionBar'
 import { SettingsSection } from '@/features/settings/ui/SettingsSection'
 import { SliderRow } from '@/features/settings/ui/SliderRow'
 
@@ -118,7 +119,7 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
 
       <DefaultsNote defaults={defaults} />
 
-      <div className="flex items-center gap-3">
+      <ActionBar>
         <button
           type="button"
           disabled={!dirty || save.isPending}
@@ -144,7 +145,7 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
         {save.isError && (
           <span className="text-sm text-brand">Could not save. Is the gateway running?</span>
         )}
-      </div>
+      </ActionBar>
     </SettingsSection>
   )
 }

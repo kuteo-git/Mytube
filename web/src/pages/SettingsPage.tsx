@@ -28,6 +28,7 @@ import {
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { usePlayer } from '@/features/watch/application/player-context'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
+import { ActionBar } from '@/features/settings/ui/ActionBar'
 import {
   SettingRow,
   SettingsSection,
@@ -80,10 +81,13 @@ export function SettingsPage() {
  * that is content; the rest are read when you have decided to change or check
  * something.
  */
-const PHONE_MENU = [
+const PHONE_LIBRARY = [
   { to: '/saved', icon: Bookmark, label: 'Saved' },
   { to: '/storage', icon: HardDrive, label: 'Storage' },
   { to: '/activity', icon: Activity, label: 'Activity' },
+]
+
+const PHONE_PREFS = [
   { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
   { to: '/settings/narration', icon: Headphones, label: 'Narration' },
   { to: '/settings/translation', icon: Languages, label: 'Translation' },
@@ -91,21 +95,40 @@ const PHONE_MENU = [
 
 function PhoneMenu() {
   return (
-    <nav className="mt-4" aria-label="Settings">
-      {PHONE_MENU.map(({ to, icon: Icon, label }) => (
-        <Link
-          key={to}
-          to={to}
-          // 44px of height, which the padding and the text clear between them.
-          className="flex items-center gap-3 rounded-xl px-1 py-3.5 text-sm
-                     transition-colors hover:bg-surface-hover"
-        >
-          <Icon size={18} className="shrink-0 text-text-2" />
-          <span className="flex-1">{label}</span>
-          <ChevronRight size={18} className="shrink-0 text-text-2" />
-        </Link>
-      ))}
+    <nav className="mt-4 flex flex-col gap-6" aria-label="Settings">
+      <MenuGroup label="Library" items={PHONE_LIBRARY} />
+      <MenuGroup label="Preferences" items={PHONE_PREFS} />
     </nav>
+  )
+}
+
+function MenuGroup({
+  label,
+  items,
+}: {
+  label: string
+  items: Array<{ to: string; icon: typeof Bookmark; label: string }>
+}) {
+  return (
+    <div>
+      <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-text-2">
+        {label}
+      </h2>
+      <div className="mt-1">
+        {items.map(({ to, icon: Icon, label }) => (
+          <Link
+            key={to}
+            to={to}
+            className="flex items-center gap-3 rounded-xl px-1 py-3.5 text-sm
+                       transition-colors hover:bg-surface-hover"
+          >
+            <Icon size={18} className="shrink-0 text-text-2" />
+            <span className="flex-1">{label}</span>
+            <ChevronRight size={18} className="shrink-0 text-text-2" />
+          </Link>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -134,42 +157,47 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
       title="Narration"
       description="Open a video and come back here to hear these against it — the player keeps going in the corner."
     >
-      <SettingRow label="Voice">
-        <select
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-          value={prefs.voice}
-          aria-label="Voice"
-          onChange={(e) => update({ voice: e.target.value })}
-        >
-          {/* The stored voice is listed even if the service did not answer, so
-              a synthesiser that is down cannot silently reset the choice. */}
-          {!(voices ?? []).includes(prefs.voice) && (
-            <option value={prefs.voice}>{prefs.voice}</option>
-          )}
-          {(voices ?? [DEFAULT_VOICE]).map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
-      </SettingRow>
+      <div className="rounded-lg bg-surface-input p-3">
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">Audio</h3>
+        <div className="flex flex-col gap-4">
+          <SettingRow label="Voice">
+            <select
+              className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+              value={prefs.voice}
+              aria-label="Voice"
+              onChange={(e) => update({ voice: e.target.value })}
+            >
+              {/* The stored voice is listed even if the service did not answer, so
+                  a synthesiser that is down cannot silently reset the choice. */}
+              {!(voices ?? []).includes(prefs.voice) && (
+                <option value={prefs.voice}>{prefs.voice}</option>
+              )}
+              {(voices ?? [DEFAULT_VOICE]).map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </SettingRow>
 
-      <SliderRow
-        label="Voice volume"
-        value={prefs.voiceLevel}
-        max={MAX_VOICE_LEVEL}
-        format={percent}
-        onChange={(voiceLevel) => update({ voiceLevel })}
-        hint="Goes past 100% because synthesised speech is quieter than film audio."
-      />
+          <SliderRow
+            label="Voice volume"
+            value={prefs.voiceLevel}
+            max={MAX_VOICE_LEVEL}
+            format={percent}
+            onChange={(voiceLevel) => update({ voiceLevel })}
+            hint="Goes past 100% because synthesised speech is quieter than film audio."
+          />
 
-      <SliderRow
-        label="Video volume while speaking"
-        value={prefs.duckLevel}
-        max={1}
-        format={percent}
-        onChange={(duckLevel) => update({ duckLevel })}
-      />
+          <SliderRow
+            label="Video volume while speaking"
+            value={prefs.duckLevel}
+            max={1}
+            format={percent}
+            onChange={(duckLevel) => update({ duckLevel })}
+          />
+        </div>
+      </div>
     </SettingsSection>
   )
 }
@@ -250,12 +278,12 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         />
       </SettingRow>
 
-      <div className="flex gap-2">
+      <ActionBar>
         <button
           type="button"
           onClick={() => test.mutate(form)}
           disabled={test.isPending}
-          className="h-11 flex-1 rounded-lg bg-surface-hover text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
+          className="h-11 rounded-lg bg-surface-hover px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
         >
           {test.isPending ? 'Testing…' : 'Test'}
         </button>
@@ -263,11 +291,11 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
           type="button"
           onClick={() => save.mutate(form)}
           disabled={save.isPending}
-          className="h-11 flex-1 rounded-lg bg-invert-bg text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
+          className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
         >
           {save.isPending ? 'Saving…' : 'Save'}
         </button>
-      </div>
+      </ActionBar>
 
       {models.isError && (
         <p className="text-xs text-brand">Could not load the model list.</p>
