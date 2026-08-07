@@ -18,6 +18,18 @@
     <!-- Named, not described. "Library" was what the app is; this is what it is
          called, and a tab strip has room for one of the two. -->
     <title>MyTube</title>
+    <!-- The browser paints a white canvas before any CSS or JS loads. On mobile,
+         where the bundles are larger and the connection is slower, that white
+         frame can linger for a second or more before the dark theme kicks in.
+         These two tell the browser what colour to paint from the very first
+         frame, so the transition is invisible. -->
+    <meta name="color-scheme" content="dark" />
+    <style>
+      html, body {
+        background: #0f0f0f;
+        color-scheme: dark;
+      }
+    </style>
     <!-- The tab colour on Android, and the surface behind the status bar when
          the page is added to a home screen. Left out, that band renders white
          above a page that is entirely dark. -->
