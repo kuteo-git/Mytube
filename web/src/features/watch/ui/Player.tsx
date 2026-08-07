@@ -3018,10 +3018,36 @@ function SettingsMenu({
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [menuPos, setMenuPos] = useState<{ bottom: number; right: number } | null>(null)
+
+  // Measure the button's viewport position so the portalled dropdown can sit
+  // exactly where it would have been, just outside the clipping container.
+  useEffect(() => {
+    if (!open || sheet) return
+    const btn = buttonRef.current
+    if (!btn) return
+    const measure = () => {
+      const r = btn.getBoundingClientRect()
+      setMenuPos({
+        bottom: window.innerHeight - r.top, // distance from bottom edge
+        right: window.innerWidth - r.right, // distance from right edge
+      })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, { passive: true })
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure)
+      setMenuPos(null)
+    }
+  }, [open, sheet])
 
   return (
     <div ref={ref} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         aria-label="Settings"
         aria-expanded={open}
@@ -3034,43 +3060,42 @@ function SettingsMenu({
         <Settings size={22} />
       </button>
 
-      {open && !sheet && (
-        <ul
-          ref={listRef}
-          // Wider than it was: the segmented controls inside need room for four
-          // labels side by side, and the progress line needs room for a status
-          // and a count on one row. min-w-44 squeezed both onto two lines each.
-          className="absolute right-0 bottom-11 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
-        >
-          {children}
-        </ul>
-      )}
-
-      {/* On a phone the same list is a sheet at the foot of the screen, and it
-          is portalled out of the player to get there.
-
-          Not a style choice. The player clips its own contents — it has to, so
-          the picture keeps its corners — and on a phone it is only about two
-          hundred pixels tall. A dropdown opening upwards from the bar inside
-          that box has nowhere to go: the top of the list is simply cut off,
-          which is how this was reported. Rendering into the body puts it
-          outside the box that was doing the cutting. */}
-      {open && sheet &&
+      {/* The menu is portalled to document.body regardless of mode, because
+          the player host clips its contents with overflow-hidden (it has to,
+          to keep the video's rounded corners). On desktop the dropdown opens
+          upwards from the button; on mobile it is a bottom sheet. Both are
+          clipped by the player unless portalled out. */}
+      {open &&
         createPortal(
-          <>
-            <div
-              className="fixed inset-0 z-[60] bg-black/50"
-              onClick={() => setOpen(false)}
-              aria-hidden
-            />
+          !sheet && menuPos ? (
+            // Desktop: dropdown anchored to the button, opening upwards.
             <ul
               ref={listRef}
-              className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl bg-surface pt-2 text-sm shadow-2xl"
-              style={{ paddingBottom: 'calc(0.5rem + var(--safe-bottom))' }}
+              className="fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
+              style={{
+                bottom: `${menuPos.bottom}px`,
+                right: `${menuPos.right}px`,
+              }}
             >
               {children}
             </ul>
-          </>,
+          ) : sheet ? (
+            // Mobile: bottom sheet with a scrim.
+            <>
+              <div
+                className="fixed inset-0 z-[60] bg-black/50"
+                onClick={() => setOpen(false)}
+                aria-hidden
+              />
+              <ul
+                ref={listRef}
+                className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl bg-surface pt-2 text-sm shadow-2xl"
+                style={{ paddingBottom: 'calc(0.5rem + var(--safe-bottom))' }}
+              >
+                {children}
+              </ul>
+            </>
+          ) : null,
           document.body,
         )}
     </div>
