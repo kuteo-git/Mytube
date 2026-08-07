@@ -7,6 +7,7 @@ import { topPlayedQueueSearch } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useState } from 'react'
 
 /**
  * The most-played collection, presented as a stack of cards the way youtube.com
@@ -19,7 +20,10 @@ import { mediaURL } from '@/shared/lib/media'
 export function TopPlayedCard({ videos }: { videos: Video[] }) {
   if (videos.length === 0) return null
 
-  const lead = videos[0]
+  // Pick a random video as the lead each time the card mounts, so the thumbnail
+  // changes on every page load rather than always showing the same top entry.
+  const [leadIndex] = useState(() => Math.floor(Math.random() * videos.length))
+  const lead = videos[leadIndex]
   const names = videos
     .slice(0, 3)
     .map((v) => v.channel.name)
