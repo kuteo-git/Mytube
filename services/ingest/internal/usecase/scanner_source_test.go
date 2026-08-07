@@ -54,6 +54,11 @@ func (d *countingDownloader) ListPlaylist(_ context.Context, _ string, _, _ int3
 	}, nil
 }
 
+
+func (d *countingDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
+	return nil, nil
+}
+
 func (d *countingDownloader) FetchChannelFeed(_ context.Context, _ string) ([]domain.RSSEntry, error) {
 	return d.rssEntries, d.rssErr
 }

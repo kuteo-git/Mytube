@@ -86,6 +86,11 @@ type commentsResponse struct {
 	NextPageToken string       `json:"nextPageToken,omitempty"`
 }
 
+type fetchCommentsResponse struct {
+	Imported int32 `json:"imported"`
+	Skipped  bool  `json:"skipped,omitempty"`
+}
+
 type suggestionDTO struct {
 	Text string `json:"text"`
 	// TITLE, TOPIC or CHANNEL.

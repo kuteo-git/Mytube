@@ -42,6 +42,9 @@ service CatalogService {
   // Comments
   rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
   rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+  // Batch import of YouTube comments. Idempotent: comments whose id already
+  // exists are skipped with ON CONFLICT DO NOTHING.
+  rpc ImportComments(ImportCommentsRequest) returns (ImportCommentsResponse);
 
   // Interaction state. Lives here rather than in a separate service because
   // almost every video read needs it; splitting it out would turn one call
@@ -151,7 +154,8 @@ message VideoUserState {
 }
 
 message CommentAuthor {
-  string user_id = 1;
+  // Absent for imported YouTube comments (no local user).
+  optional string user_id = 1;
   string handle = 2;
   string avatar_path = 3;
 }
@@ -372,6 +376,26 @@ message CreateCommentRequest {
 
 message CreateCommentResponse {
   Comment comment = 1;
+}
+
+message ImportComment {
+  string id = 1;
+  // Empty for top-level comments.
+  string parent_id = 2;
+  string author_handle = 3;
+  string text = 4;
+  int64 published_at_unix = 6;
+  int64 like_count = 7;
+  optional string pinned_by = 8;
+}
+
+message ImportCommentsRequest {
+  string video_id = 1;
+  repeated ImportComment comments = 2;
+}
+
+message ImportCommentsResponse {
+  int32 imported = 1;
 }
 
 // ---------------------------------------------------------------------------

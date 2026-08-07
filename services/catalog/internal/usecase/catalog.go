@@ -194,10 +194,18 @@ func (c *Catalog) CreateComment(ctx context.Context, videoID, userID, handle, bo
 	return c.repo.CreateComment(ctx, domain.Comment{
 		ID:          c.newID(),
 		VideoID:     videoID,
-		Author:      domain.CommentAuthor{UserID: userID, Handle: handle},
+		Author:      domain.CommentAuthor{UserID: &userID, Handle: handle},
 		Body:        body,
 		PublishedAt: c.now(),
 	}, parentID)
+}
+
+// ImportComments passes YouTube comments through to the repository in one batch.
+func (c *Catalog) ImportComments(ctx context.Context, videoID string, comments []domain.ImportComment) (int32, error) {
+	if videoID == "" {
+		return 0, fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+	return c.repo.ImportComments(ctx, videoID, comments)
 }
 
 // RecordWatchProgress is also what refreshes last_accessed_at, so watching a

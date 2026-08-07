@@ -82,7 +82,7 @@ type VideoUserState struct {
 }
 
 type CommentAuthor struct {
-	UserID     string
+	UserID     *string // nil for imported YouTube comments
 	Handle     string
 	AvatarPath string
 }
@@ -97,6 +97,19 @@ type Comment struct {
 	PinnedBy    *string
 	Replies     []Comment
 }
+
+	// ImportComment is a YouTube comment ready to be batch-inserted into the
+	// catalog. Its own author is the source platform — not a local user — so the
+	// author is a handle rather than a user_id.
+	type ImportComment struct {
+		ID              string
+		ParentID        string
+		AuthorHandle    string
+		Text            string
+		PublishedAtUnix int64
+		LikeCount       int64
+		PinnedBy        *string
+	}
 
 type CommentSort string
 
@@ -192,6 +205,10 @@ type Repository interface {
 
 	ListComments(ctx context.Context, videoID string, sort CommentSort, page Page) ([]Comment, int32, error)
 	CreateComment(ctx context.Context, c Comment, parentID *string) (Comment, error)
+	// ImportComments batch-inserts YouTube comments. Idempotent: rows whose id
+	// already exists are skipped (ON CONFLICT DO NOTHING). Returns the number
+	// of rows actually inserted.
+	ImportComments(ctx context.Context, videoID string, comments []ImportComment) (int32, error)
 
 	RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)

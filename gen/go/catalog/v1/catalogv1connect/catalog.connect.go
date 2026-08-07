@@ -73,6 +73,9 @@ const (
 	// CatalogServiceCreateCommentProcedure is the fully-qualified name of the CatalogService's
 	// CreateComment RPC.
 	CatalogServiceCreateCommentProcedure = "/catalog.v1.CatalogService/CreateComment"
+	// CatalogServiceImportCommentsProcedure is the fully-qualified name of the CatalogService's
+	// ImportComments RPC.
+	CatalogServiceImportCommentsProcedure = "/catalog.v1.CatalogService/ImportComments"
 	// CatalogServiceRecordWatchProgressProcedure is the fully-qualified name of the CatalogService's
 	// RecordWatchProgress RPC.
 	CatalogServiceRecordWatchProgressProcedure = "/catalog.v1.CatalogService/RecordWatchProgress"
@@ -127,6 +130,9 @@ type CatalogServiceClient interface {
 	// Comments
 	ListComments(context.Context, *connect.Request[v1.ListCommentsRequest]) (*connect.Response[v1.ListCommentsResponse], error)
 	CreateComment(context.Context, *connect.Request[v1.CreateCommentRequest]) (*connect.Response[v1.CreateCommentResponse], error)
+	// Batch import of YouTube comments. Idempotent: comments whose id already
+	// exists are skipped with ON CONFLICT DO NOTHING.
+	ImportComments(context.Context, *connect.Request[v1.ImportCommentsRequest]) (*connect.Response[v1.ImportCommentsResponse], error)
 	// Interaction state. Lives here rather than in a separate service because
 	// almost every video read needs it; splitting it out would turn one call
 	// into an N+1 fan-out on the home grid.
@@ -238,6 +244,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("CreateComment")),
 			connect.WithClientOptions(opts...),
 		),
+		importComments: connect.NewClient[v1.ImportCommentsRequest, v1.ImportCommentsResponse](
+			httpClient,
+			baseURL+CatalogServiceImportCommentsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ImportComments")),
+			connect.WithClientOptions(opts...),
+		),
 		recordWatchProgress: connect.NewClient[v1.RecordWatchProgressRequest, v1.RecordWatchProgressResponse](
 			httpClient,
 			baseURL+CatalogServiceRecordWatchProgressProcedure,
@@ -305,6 +317,7 @@ type catalogServiceClient struct {
 	findBySourceURL     *connect.Client[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse]
 	listComments        *connect.Client[v1.ListCommentsRequest, v1.ListCommentsResponse]
 	createComment       *connect.Client[v1.CreateCommentRequest, v1.CreateCommentResponse]
+	importComments      *connect.Client[v1.ImportCommentsRequest, v1.ImportCommentsResponse]
 	recordWatchProgress *connect.Client[v1.RecordWatchProgressRequest, v1.RecordWatchProgressResponse]
 	setReaction         *connect.Client[v1.SetReactionRequest, v1.SetReactionResponse]
 	setSubscription     *connect.Client[v1.SetSubscriptionRequest, v1.SetSubscriptionResponse]
@@ -385,6 +398,11 @@ func (c *catalogServiceClient) CreateComment(ctx context.Context, req *connect.R
 	return c.createComment.CallUnary(ctx, req)
 }
 
+// ImportComments calls catalog.v1.CatalogService.ImportComments.
+func (c *catalogServiceClient) ImportComments(ctx context.Context, req *connect.Request[v1.ImportCommentsRequest]) (*connect.Response[v1.ImportCommentsResponse], error) {
+	return c.importComments.CallUnary(ctx, req)
+}
+
 // RecordWatchProgress calls catalog.v1.CatalogService.RecordWatchProgress.
 func (c *catalogServiceClient) RecordWatchProgress(ctx context.Context, req *connect.Request[v1.RecordWatchProgressRequest]) (*connect.Response[v1.RecordWatchProgressResponse], error) {
 	return c.recordWatchProgress.CallUnary(ctx, req)
@@ -453,6 +471,9 @@ type CatalogServiceHandler interface {
 	// Comments
 	ListComments(context.Context, *connect.Request[v1.ListCommentsRequest]) (*connect.Response[v1.ListCommentsResponse], error)
 	CreateComment(context.Context, *connect.Request[v1.CreateCommentRequest]) (*connect.Response[v1.CreateCommentResponse], error)
+	// Batch import of YouTube comments. Idempotent: comments whose id already
+	// exists are skipped with ON CONFLICT DO NOTHING.
+	ImportComments(context.Context, *connect.Request[v1.ImportCommentsRequest]) (*connect.Response[v1.ImportCommentsResponse], error)
 	// Interaction state. Lives here rather than in a separate service because
 	// almost every video read needs it; splitting it out would turn one call
 	// into an N+1 fan-out on the home grid.
@@ -560,6 +581,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("CreateComment")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceImportCommentsHandler := connect.NewUnaryHandler(
+		CatalogServiceImportCommentsProcedure,
+		svc.ImportComments,
+		connect.WithSchema(catalogServiceMethods.ByName("ImportComments")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceRecordWatchProgressHandler := connect.NewUnaryHandler(
 		CatalogServiceRecordWatchProgressProcedure,
 		svc.RecordWatchProgress,
@@ -638,6 +665,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListCommentsHandler.ServeHTTP(w, r)
 		case CatalogServiceCreateCommentProcedure:
 			catalogServiceCreateCommentHandler.ServeHTTP(w, r)
+		case CatalogServiceImportCommentsProcedure:
+			catalogServiceImportCommentsHandler.ServeHTTP(w, r)
 		case CatalogServiceRecordWatchProgressProcedure:
 			catalogServiceRecordWatchProgressHandler.ServeHTTP(w, r)
 		case CatalogServiceSetReactionProcedure:
@@ -717,6 +746,10 @@ func (UnimplementedCatalogServiceHandler) ListComments(context.Context, *connect
 
 func (UnimplementedCatalogServiceHandler) CreateComment(context.Context, *connect.Request[v1.CreateCommentRequest]) (*connect.Response[v1.CreateCommentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.CreateComment is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ImportComments(context.Context, *connect.Request[v1.ImportCommentsRequest]) (*connect.Response[v1.ImportCommentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ImportComments is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) RecordWatchProgress(context.Context, *connect.Request[v1.RecordWatchProgressRequest]) (*connect.Response[v1.RecordWatchProgressResponse], error) {

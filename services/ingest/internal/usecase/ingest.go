@@ -390,6 +390,25 @@ func (i *Ingest) ClearScans(ctx context.Context) error {
 	return i.scans.ClearScans(ctx)
 }
 
+// FetchComments reads YouTube comments for a video. The caller passes a video
+// id; the source URL is resolved through the library so the caller does not need
+// to know it.
+func (i *Ingest) FetchComments(ctx context.Context, videoID string) ([]domain.YouTubeComment, error) {
+	if videoID == "" {
+		return nil, fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+
+	sourceURL, err := i.library.SourceURLFor(ctx, videoID)
+	if err != nil {
+		return nil, err
+	}
+	if sourceURL == "" {
+		return nil, fmt.Errorf("video %s has no source url: %w", videoID, domain.ErrNotFound)
+	}
+
+	return i.downloader.FetchComments(ctx, sourceURL)
+}
+
 // CancelVideoDownload stops any transfer running for a video.
 //
 // Called when a viewer leaves the watch page. Pressing play schedules a copy so

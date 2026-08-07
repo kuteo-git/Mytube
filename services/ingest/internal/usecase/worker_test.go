@@ -51,6 +51,11 @@ func (f *fakeDownloader) FetchChannelArtwork(context.Context, domain.ChannelMeta
 }
 
 func (f *fakeDownloader) SaveThumbnail(ctx context.Context, url, videoID string) string { return "" }
+
+func (f *fakeDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
+	return nil, nil
+}
+
 func (f *fakeDownloader) FetchChannelFeed(context.Context, string) ([]domain.RSSEntry, error) {
 	return nil, nil
 }

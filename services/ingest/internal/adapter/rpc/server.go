@@ -303,3 +303,24 @@ func (s *Server) ExpandLibrary(ctx context.Context, req *connect.Request[ingestv
 	}
 	return connect.NewResponse(&ingestv1.ExpandLibraryResponse{VideosAdded: int32(added)}), nil
 }
+
+func (s *Server) FetchComments(ctx context.Context, req *connect.Request[ingestv1.FetchCommentsRequest]) (*connect.Response[ingestv1.FetchCommentsResponse], error) {
+	comments, err := s.ingest.FetchComments(ctx, req.Msg.GetVideoId())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	pb := make([]*ingestv1.YouTubeComment, len(comments))
+	for i, c := range comments {
+		pb[i] = &ingestv1.YouTubeComment{
+			Id:              c.ID,
+			ParentId:        c.ParentID,
+			Author:          c.Author,
+			AuthorId:        c.AuthorID,
+			Text:            c.Text,
+			PublishedAtUnix: c.PublishedAtUnix,
+			LikeCount:       c.LikeCount,
+			PinnedBy:        c.PinnedBy,
+		}
+	}
+	return connect.NewResponse(&ingestv1.FetchCommentsResponse{Comments: pb}), nil
+}

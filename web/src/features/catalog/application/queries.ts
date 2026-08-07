@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ReactionState } from '../domain/video'
-import type { Feed } from '../infrastructure/catalogRepository'
+import type { Feed, FetchCommentsResult } from '../infrastructure/catalogRepository'
 import { hideVideo } from './hidden'
 import { videoPollInterval } from './video-poll'
 import { httpCatalogRepository as repo } from '../infrastructure/catalogRepository'
@@ -128,11 +128,19 @@ export function useUpNext(videoId: string | undefined, channelFilter?: string) {
   })
 }
 
+const COMMENT_PAGE_SIZE = 20
+
 export function useComments(videoId: string | undefined) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['comments', videoId],
-    queryFn: () => repo.listComments(videoId!),
+    queryFn: ({ pageParam }) => repo.listComments(videoId!, pageParam, COMMENT_PAGE_SIZE),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
     enabled: Boolean(videoId),
+    select: (data) => ({
+      comments: data.pages.flatMap((p) => p.comments),
+      totalCount: data.pages[0]?.totalCount ?? 0,
+    }),
   })
 }
 
@@ -558,6 +566,16 @@ export function useAddComment(videoId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (text: string) => repo.addComment(videoId, text),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['comments', videoId] })
+    },
+  })
+}
+
+export function useFetchComments(videoId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => repo.fetchComments(videoId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['comments', videoId] })
     },

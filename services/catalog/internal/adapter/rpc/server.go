@@ -153,11 +153,16 @@ func videosToProto(vs []domain.Video) []*catalogv1.Video {
 }
 
 func commentToProto(c domain.Comment) *catalogv1.Comment {
+	var userID *string
+	if c.Author.UserID != nil {
+		uid := *c.Author.UserID
+		userID = &uid
+	}
 	return &catalogv1.Comment{
 		Id:      c.ID,
 		VideoId: c.VideoID,
 		Author: &catalogv1.CommentAuthor{
-			UserId:     c.Author.UserID,
+			UserId:     userID,
 			Handle:     c.Author.Handle,
 			AvatarPath: c.Author.AvatarPath,
 		},
@@ -514,4 +519,25 @@ func (s *Server) ListPinnedVideos(ctx context.Context, req *connect.Request[cata
 		Videos:        videosToProto(vs),
 		NextPageToken: nextPageToken(offset, req.Msg.GetPageSize(), len(vs)),
 	}), nil
+}
+
+func (s *Server) ImportComments(ctx context.Context, req *connect.Request[catalogv1.ImportCommentsRequest]) (*connect.Response[catalogv1.ImportCommentsResponse], error) {
+	in := req.Msg.GetComments()
+	comments := make([]domain.ImportComment, len(in))
+	for i, c := range in {
+		comments[i] = domain.ImportComment{
+			ID:              c.GetId(),
+			ParentID:        c.GetParentId(),
+			AuthorHandle:    c.GetAuthorHandle(),
+			Text:            c.GetText(),
+			PublishedAtUnix: c.GetPublishedAtUnix(),
+			LikeCount:       c.GetLikeCount(),
+			PinnedBy:        c.PinnedBy,
+		}
+	}
+	imported, err := s.catalog.ImportComments(ctx, req.Msg.GetVideoId(), comments)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ImportCommentsResponse{Imported: imported}), nil
 }

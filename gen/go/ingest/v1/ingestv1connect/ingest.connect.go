@@ -85,6 +85,9 @@ const (
 	// IngestServiceListChannelUploadsProcedure is the fully-qualified name of the IngestService's
 	// ListChannelUploads RPC.
 	IngestServiceListChannelUploadsProcedure = "/ingest.v1.IngestService/ListChannelUploads"
+	// IngestServiceFetchCommentsProcedure is the fully-qualified name of the IngestService's
+	// FetchComments RPC.
+	IngestServiceFetchCommentsProcedure = "/ingest.v1.IngestService/FetchComments"
 )
 
 // IngestServiceClient is a client for the ingest.v1.IngestService service.
@@ -154,6 +157,10 @@ type IngestServiceClient interface {
 	// page uses this rather than the local catalog so browsing a channel is not
 	// limited to whatever a scan happened to bring in.
 	ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error)
+	// Fetches comments for a video from YouTube via yt-dlp. Returns every comment
+	// in one call — yt-dlp's --write-comments has no pagination — so the gateway
+	// batches them into catalog and the frontend paginates from there.
+	FetchComments(context.Context, *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error)
 }
 
 // NewIngestServiceClient constructs a client for the ingest.v1.IngestService service. By default,
@@ -287,6 +294,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("ListChannelUploads")),
 			connect.WithClientOptions(opts...),
 		),
+		fetchComments: connect.NewClient[v1.FetchCommentsRequest, v1.FetchCommentsResponse](
+			httpClient,
+			baseURL+IngestServiceFetchCommentsProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("FetchComments")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -312,6 +325,7 @@ type ingestServiceClient struct {
 	cancelVideoDownload *connect.Client[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse]
 	expandLibrary       *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
 	listChannelUploads  *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
+	fetchComments       *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
 }
 
 // Search calls ingest.v1.IngestService.Search.
@@ -414,6 +428,11 @@ func (c *ingestServiceClient) ListChannelUploads(ctx context.Context, req *conne
 	return c.listChannelUploads.CallUnary(ctx, req)
 }
 
+// FetchComments calls ingest.v1.IngestService.FetchComments.
+func (c *ingestServiceClient) FetchComments(ctx context.Context, req *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error) {
+	return c.fetchComments.CallUnary(ctx, req)
+}
+
 // IngestServiceHandler is an implementation of the ingest.v1.IngestService service.
 type IngestServiceHandler interface {
 	// Searches upstream. Topics decide what the feed offers; search is how the
@@ -481,6 +500,10 @@ type IngestServiceHandler interface {
 	// page uses this rather than the local catalog so browsing a channel is not
 	// limited to whatever a scan happened to bring in.
 	ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error)
+	// Fetches comments for a video from YouTube via yt-dlp. Returns every comment
+	// in one call — yt-dlp's --write-comments has no pagination — so the gateway
+	// batches them into catalog and the frontend paginates from there.
+	FetchComments(context.Context, *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error)
 }
 
 // NewIngestServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -610,6 +633,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("ListChannelUploads")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceFetchCommentsHandler := connect.NewUnaryHandler(
+		IngestServiceFetchCommentsProcedure,
+		svc.FetchComments,
+		connect.WithSchema(ingestServiceMethods.ByName("FetchComments")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/ingest.v1.IngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IngestServiceSearchProcedure:
@@ -652,6 +681,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceExpandLibraryHandler.ServeHTTP(w, r)
 		case IngestServiceListChannelUploadsProcedure:
 			ingestServiceListChannelUploadsHandler.ServeHTTP(w, r)
+		case IngestServiceFetchCommentsProcedure:
+			ingestServiceFetchCommentsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -739,4 +770,8 @@ func (UnimplementedIngestServiceHandler) ExpandLibrary(context.Context, *connect
 
 func (UnimplementedIngestServiceHandler) ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ListChannelUploads is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) FetchComments(context.Context, *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.FetchComments is not implemented"))
 }

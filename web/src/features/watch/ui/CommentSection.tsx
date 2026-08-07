@@ -1,15 +1,27 @@
-import { ChevronDown, ListFilter, Pin, ThumbsDown, ThumbsUp } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ListFilter, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { Comment } from '@/features/catalog/domain/video'
-import { useAddComment, useComments } from '@/features/catalog/application/queries'
+import { useAddComment, useComments, useFetchComments } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
+import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { formatCount, formatRelative } from '@/shared/lib/format'
 import { hueFromId } from '@/shared/lib/hue'
 
 export function CommentSection({ videoId }: { videoId: string }) {
-  const { data } = useComments(videoId)
+  const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useComments(videoId)
   const addComment = useAddComment(videoId)
+  const fetchComments = useFetchComments(videoId)
   const [draft, setDraft] = useState('')
+  const [autoFetched, setAutoFetched] = useState(false)
+
+  // Auto-fetch YouTube comments when a video has none.
+  useEffect(() => {
+    if (isPending || autoFetched || fetchComments.isPending) return
+    if (data && data.totalCount === 0) {
+      setAutoFetched(true)
+      fetchComments.mutate()
+    }
+  }, [data?.totalCount, isPending, autoFetched])
 
   return (
     <section className="mt-6" aria-label="Comments">
@@ -43,13 +55,52 @@ export function CommentSection({ videoId }: { videoId: string }) {
         />
       </form>
 
-      <ul className="mt-6 flex flex-col gap-5">
-        {data?.comments.map((comment) => (
-          <li key={comment.id}>
-            <CommentThread comment={comment} />
-          </li>
-        ))}
-      </ul>
+      {/* Skeleton shimmer while fetching YouTube comments */}
+      {fetchComments.isPending && (
+        <div className="mt-6 flex flex-col gap-5">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex gap-3">
+              <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-surface" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 w-24 animate-pulse rounded bg-surface" />
+                <div className="h-3 w-full animate-pulse rounded bg-surface" />
+                <div className="h-3 w-2/3 animate-pulse rounded bg-surface" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error state with retry */}
+      {fetchComments.isError && (
+        <div className="mt-6 flex flex-col items-start gap-3 rounded-lg bg-surface p-4">
+          <p className="text-sm text-text-2">Could not load YouTube comments.</p>
+          <button
+            type="button"
+            onClick={() => fetchComments.mutate()}
+            className="flex items-center gap-2 rounded-lg bg-surface-hover px-4 py-2 text-sm font-medium transition-colors hover:bg-white/15"
+          >
+            <RefreshCw size={14} />
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!fetchComments.isPending && (
+        <ul className="mt-6 flex flex-col gap-5">
+          {data?.comments.map((comment) => (
+            <li key={comment.id}>
+              <CommentThread comment={comment} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <InfiniteList
+        hasMore={Boolean(hasNextPage)}
+        isLoading={isFetchingNextPage}
+        onLoadMore={() => void fetchNextPage()}
+      />
     </section>
   )
 }

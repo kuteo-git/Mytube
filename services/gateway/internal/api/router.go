@@ -118,6 +118,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/videos/{id}/up-next", g.handleUpNext)
 	mux.HandleFunc("GET /api/videos/{id}/comments", g.handleListComments)
 	mux.HandleFunc("POST /api/videos/{id}/comments", g.handleCreateComment)
+		mux.HandleFunc("POST /api/videos/{id}/comments/fetch", g.handleFetchComments)
 	mux.HandleFunc("POST /api/videos/{id}/progress", g.handleProgress)
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 
@@ -600,6 +601,61 @@ func (g *Gateway) handleListComments(w http.ResponseWriter, r *http.Request) {
 		Comments:      out,
 		TotalCount:    resp.Msg.GetTotalCount(),
 		NextPageToken: resp.Msg.GetNextPageToken(),
+	})
+}
+
+// handleFetchComments loads YouTube comments for a video and imports them into
+// the catalog. It short-circuits when comments already exist, so pressing play
+// twice does not fetch twice.
+func (g *Gateway) handleFetchComments(w http.ResponseWriter, r *http.Request) {
+	videoID := r.PathValue("id")
+	ctx := r.Context()
+
+	// Skip if comments are already in the database.
+	check, err := g.catalog.ListComments(ctx, connect.NewRequest(&catalogv1.ListCommentsRequest{
+		VideoId:  videoID,
+		PageSize: 1,
+	}))
+	if err == nil && check.Msg.GetTotalCount() > 0 {
+		writeJSON(w, http.StatusOK, fetchCommentsResponse{Imported: 0, Skipped: true})
+		return
+	}
+
+	// Fetch from YouTube.
+	comments, err := g.ingest.FetchComments(ctx, connect.NewRequest(&ingestv1.FetchCommentsRequest{
+		VideoId: videoID,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	// Map to catalog import format.
+	in := make([]*catalogv1.ImportComment, len(comments.Msg.GetComments()))
+	for i, c := range comments.Msg.GetComments() {
+		in[i] = &catalogv1.ImportComment{
+			Id:              c.GetId(),
+			ParentId:        c.GetParentId(),
+			AuthorHandle:    c.GetAuthor(),
+			Text:            c.GetText(),
+			PublishedAtUnix: c.GetPublishedAtUnix(),
+			LikeCount:       c.GetLikeCount(),
+			PinnedBy:        c.PinnedBy,
+		}
+	}
+
+	// Store in catalog.
+	resp, err := g.catalog.ImportComments(ctx, connect.NewRequest(&catalogv1.ImportCommentsRequest{
+		VideoId:  videoID,
+		Comments: in,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, fetchCommentsResponse{
+		Imported: resp.Msg.GetImported(),
 	})
 }
 

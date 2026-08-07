@@ -24,7 +24,7 @@ export interface CatalogRepository {
    */
   getVideoEnsuring(id: string): Promise<Video>
   listUpNext(currentVideoId: string, channelFilter?: string): Promise<Video[]>
-  listComments(videoId: string): Promise<CommentPage>
+  listComments(videoId: string, pageToken?: string, pageSize?: number): Promise<CommentPage>
   listTopics(): Promise<Topic[]>
   refreshTopics(): Promise<ScanStatus>
   getScanStatus(): Promise<ScanStatus>
@@ -89,6 +89,9 @@ export interface CatalogRepository {
   recordNotInterested(videoId: string): Promise<void>
   setReaction(videoId: string, reaction: ReactionState): Promise<number>
   addComment(videoId: string, text: string, parentCommentId?: string): Promise<Comment>
+	/** Fetches YouTube comments and imports them into the catalog. No-op when
+	 *  comments already exist. */
+	fetchComments(videoId: string): Promise<FetchCommentsResult>
 
   getChannel(channelId: string): Promise<ChannelPage>
   listChannelVideos(channelId: string, pageToken?: string): Promise<ChannelUploads>
@@ -101,6 +104,11 @@ export interface CatalogRepository {
   listPopular(limit?: number): Promise<Video[]>
 }
 
+
+export interface FetchCommentsResult {
+  imported: number
+  skipped?: boolean
+}
 export interface ChannelPage {
   channel: Channel
   videoCount: number
@@ -135,6 +143,7 @@ export interface Feed {
 export interface CommentPage {
   comments: Comment[]
   totalCount: number
+  nextPageToken?: string
 }
 
 /** A video found upstream, which may or may not have a catalog row yet. */
@@ -322,8 +331,12 @@ export const httpCatalogRepository: CatalogRepository = {
     return feed.videos
   },
 
-  listComments(videoId) {
-    return request<CommentPage>(`/videos/${encodeURIComponent(videoId)}/comments`)
+  listComments(videoId, pageToken, pageSize) {
+    const params = new URLSearchParams()
+    if (pageToken) params.set('pageToken', pageToken)
+    if (pageSize) params.set('pageSize', String(pageSize))
+    const qs = params.toString()
+    return request<CommentPage>(`/videos/${encodeURIComponent(videoId)}/comments${qs ? '?' + qs : ''}`)
   },
 
   async listTopics() {
@@ -467,6 +480,10 @@ export const httpCatalogRepository: CatalogRepository = {
       { method: 'POST', body: JSON.stringify({ reaction }) },
     )
     return likeCount
+  },
+
+  fetchComments(videoId) {
+    return request<FetchCommentsResult>(`/videos/${encodeURIComponent(videoId)}/comments/fetch`, { method: 'POST' })
   },
 
   addComment(videoId, text, parentCommentId) {

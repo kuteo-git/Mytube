@@ -35,6 +35,11 @@ type captionDownloader struct {
 	entered chan struct{}
 }
 
+
+func (c *captionDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
+	return nil, nil
+}
+
 func (c *captionDownloader) FetchSubtitles(context.Context, string, string, int32) []domain.SubtitleTrack {
 	c.mu.Lock()
 	c.started++

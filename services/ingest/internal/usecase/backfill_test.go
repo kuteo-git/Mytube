@@ -22,6 +22,11 @@ type previewDownloader struct {
 	requested []string
 }
 
+
+func (p *previewDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
+	return nil, nil
+}
+
 func (p *previewDownloader) Preview(_ context.Context, url string) (domain.ExternalVideo, error) {
 	p.mu.Lock()
 	p.requested = append(p.requested, url)

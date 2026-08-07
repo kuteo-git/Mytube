@@ -125,6 +125,21 @@ type RSSEntry struct {
 	PublishedAt time.Time
 	ViewCount   int64
 }
+	// YouTubeComment is a single comment fetched from YouTube via yt-dlp's
+	// --write-comments. Every comment is returned at once — yt-dlp has no
+	// pagination — so the gateway batches them into catalog and the frontend
+	// paginates from there.
+	type YouTubeComment struct {
+		ID              string
+		ParentID        string
+		Author          string
+		AuthorID        string
+		Text            string
+		PublishedAtUnix int64
+		LikeCount       int64
+		PinnedBy        *string
+	}
+
 
 // Downloader is the port over the external tool. Keeping it an interface is
 // what lets the use cases be exercised without touching the network.
@@ -155,6 +170,9 @@ type Downloader interface {
 	// playlist listing carries. An error is a missed opportunity, not a failed
 	// scan: the feed is supplementary.
 	FetchChannelFeed(ctx context.Context, channelID string) ([]RSSEntry, error)
+		// FetchComments reads YouTube comments for a video via yt-dlp's
+		// --write-comments. Every comment is returned at once.
+		FetchComments(ctx context.Context, videoURL string) ([]YouTubeComment, error)
 }
 
 // JobStore is the ingest-owned persistence port.

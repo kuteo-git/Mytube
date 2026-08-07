@@ -619,6 +619,64 @@ func (r *Repository) ListComments(ctx context.Context, videoID string, sort doma
 	return pageRoots, total, nil
 }
 
+func (r *Repository) ImportComments(ctx context.Context, videoID string, comments []domain.ImportComment) (int32, error) {
+	if len(comments) == 0 {
+		return 0, nil
+	}
+
+	// Build the set of IDs that appear in this batch. When a comment's parent
+	// is not in the batch, treat it as top-level instead of failing the FK.
+	knownIDs := make(map[string]bool, len(comments))
+	for _, c := range comments {
+		knownIDs[c.ID] = true
+	}
+
+	// Insert in rounds so a child never lands before its parent.
+	inserted := make(map[string]bool, len(comments))
+	var totalImported int32
+	for {
+		roundImported := int32(0)
+		for _, c := range comments {
+			if inserted[c.ID] {
+				continue
+			}
+
+			effectiveParent := c.ParentID
+			if effectiveParent != "" && !knownIDs[effectiveParent] {
+				effectiveParent = ""
+			}
+			if effectiveParent != "" && !inserted[effectiveParent] {
+				continue
+			}
+
+			var parentID *string
+			if effectiveParent != "" {
+				parentID = &effectiveParent
+			}
+
+			tag, err := r.pool.Exec(ctx, `
+				INSERT INTO comments (id, video_id, parent_comment_id, user_id, author_handle,
+				                      body, published_at, like_count, pinned_by)
+				VALUES ($1, $2, $3, NULL, $4, $5, to_timestamp($6), $7, $8)
+				ON CONFLICT (id) DO NOTHING`,
+				c.ID, videoID, parentID, c.AuthorHandle,
+				c.Text, c.PublishedAtUnix, c.LikeCount, c.PinnedBy)
+			if err != nil {
+				return totalImported, err
+			}
+
+			inserted[c.ID] = true
+			if tag.RowsAffected() > 0 {
+				roundImported++
+			}
+		}
+		totalImported += roundImported
+		if roundImported == 0 {
+			break
+		}
+	}
+	return totalImported, nil
+}
 func (r *Repository) CreateComment(ctx context.Context, c domain.Comment, parentID *string) (domain.Comment, error) {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO comments (id, video_id, parent_comment_id, user_id, author_handle,

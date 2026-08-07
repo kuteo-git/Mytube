@@ -856,6 +856,55 @@ func (d *Downloader) FetchChannelFeed(ctx context.Context, channelID string) ([]
 	return entries, nil
 }
 
+func (d *Downloader) FetchComments(ctx context.Context, videoURL string) ([]domain.YouTubeComment, error) {
+	result, err := ytdlp.New().
+		SkipDownload().
+		WriteComments().
+		DumpJSON().
+		NoPlaylist().
+		NoWarnings().
+		Run(ctx, videoURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch comments %q: %w", videoURL, err)
+	}
+
+	infos, err := result.GetExtractedInfo()
+	if err != nil {
+		return nil, err
+	}
+	if len(infos) == 0 {
+		return nil, nil
+	}
+
+	raw := infos[0].Comments
+	comments := make([]domain.YouTubeComment, 0, len(raw))
+	for _, c := range raw {
+		yc := domain.YouTubeComment{
+			ID:       deref(c.ID),
+			ParentID: deref(c.Parent),
+			Author:   deref(c.Author),
+			AuthorID: deref(c.AuthorID),
+			Text:     deref(c.Text),
+		}
+		if c.Timestamp != nil {
+			yc.PublishedAtUnix = int64(*c.Timestamp)
+		}
+		if c.LikeCount != nil {
+			yc.LikeCount = int64(*c.LikeCount)
+		}
+		if c.IsPinned != nil && *c.IsPinned {
+			pinnedBy := deref(c.Author)
+			yc.PinnedBy = &pinnedBy
+		}
+		// "root" means top-level, not a reply.
+		if yc.ParentID == "root" {
+			yc.ParentID = ""
+		}
+		comments = append(comments, yc)
+	}
+	return comments, nil
+}
+
 // FetchChannelArtwork downloads the avatar and banner and returns their paths
 // under the media root.
 func (d *Downloader) FetchChannelArtwork(ctx context.Context, m domain.ChannelMetadata) (avatarPath, bannerPath string) {

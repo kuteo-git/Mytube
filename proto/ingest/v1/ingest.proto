@@ -85,6 +85,11 @@ service IngestService {
   // page uses this rather than the local catalog so browsing a channel is not
   // limited to whatever a scan happened to bring in.
   rpc ListChannelUploads(ListChannelUploadsRequest) returns (ListChannelUploadsResponse);
+
+  // Fetches comments for a video from YouTube via yt-dlp. Returns every comment
+  // in one call — yt-dlp's --write-comments has no pagination — so the gateway
+  // batches them into catalog and the frontend paginates from there.
+  rpc FetchComments(FetchCommentsRequest) returns (FetchCommentsResponse);
 }
 
 message ListChannelUploadsRequest {
@@ -356,4 +361,28 @@ message CancelVideoDownloadRequest {
 message CancelVideoDownloadResponse {
   // How many transfers were stopped. Zero is the ordinary case and not an error.
   int32 cancelled = 1;
+}
+
+// A single YouTube comment as returned by yt-dlp's --write-comments.
+message YouTubeComment {
+  string id = 1;
+  // Empty for top-level comments; set for replies.
+  string parent_id = 2;
+  string author = 3;
+  string author_id = 4;
+  string text = 5;
+  // Unix epoch seconds. yt-dlp returns timestamp as an integer, not an RFC 3339
+  // string, so a google.protobuf.Timestamp would lose precision on parse.
+  int64 published_at_unix = 6;
+  int64 like_count = 7;
+  // Set when the comment is pinned; carries the handle that pinned it.
+  optional string pinned_by = 8;
+}
+
+message FetchCommentsRequest {
+  string video_id = 1;
+}
+
+message FetchCommentsResponse {
+  repeated YouTubeComment comments = 1;
 }
