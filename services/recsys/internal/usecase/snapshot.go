@@ -32,6 +32,10 @@ type SnapshotStore struct {
 type snapshotEntry struct {
 	ranked []domain.RankedVideo
 	seen   map[string]struct{}
+	// Whose ordering this is: "<user>|<topic>". Kept so that a client asking for
+	// a first page can be given the session it is already reading rather than a
+	// new one — see Latest.
+	key string
 	// When the ordering was frozen. Expiry is measured from here and nowhere
 	// else: reading a snapshot used to push its deadline back, which turned the
 	// TTL into a sliding window and meant a viewer who kept scrolling never
@@ -66,6 +70,7 @@ func (s *SnapshotStore) Put(key string, rankedVideos []domain.RankedVideo) strin
 	s.entries[id] = &snapshotEntry{
 		ranked:  append([]domain.RankedVideo(nil), rankedVideos...),
 		seen:    seen,
+		key:     key,
 		created: time.Now(),
 	}
 	return id
@@ -80,6 +85,42 @@ func (s *SnapshotStore) Get(id string) ([]domain.RankedVideo, bool) {
 		return nil, false
 	}
 	return entry.ranked, true
+}
+
+// Latest returns the newest live ordering for a key, if there is one.
+//
+// This is what keeps a scroll in one piece. A first-page request carries no
+// token, and building a new ordering for every one of them looks harmless until
+// you remember what a client actually does: an infinite query refetches *all* of
+// its pages, replaying each stored page parameter — page one with nothing, page
+// two with the token it already had. Page one would come back from a brand new
+// ordering while page two was still reading the old one, and the two spliced
+// together repeat whatever they have in common. Measured on this library: four
+// duplicates in the first forty-eight videos.
+//
+// Reusing the live session makes a refetch idempotent. A genuinely new session
+// still gets a new ordering — after the TTL, or after InvalidateUser drops it
+// because the viewer watched something.
+//
+// Ids sort by their trailing counter, but only within a key; comparing creation
+// times is what stays true regardless.
+func (s *SnapshotStore) Latest(key string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var (
+		bestID string
+		best   time.Time
+	)
+	for id, entry := range s.entries {
+		if entry.key != key || entry.expired(s.ttl) {
+			continue
+		}
+		if bestID == "" || entry.created.After(best) {
+			bestID, best = id, entry.created
+		}
+	}
+	return bestID, bestID != ""
 }
 
 // InvalidateUser drops every frozen ordering belonging to one viewer.

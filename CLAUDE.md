@@ -227,6 +227,7 @@ In up-next, everything not a relationship to the video playing (channel affinity
 ### Feed mechanics
 
 - `GetFeedPage` freezes ranking into a per-session snapshot (TTL 30 minutes) so pages do not repeat. The TTL runs from creation, **not** from last read — a sliding window meant a viewer who kept scrolling never re-ranked.
+- A request with no page token **reuses the viewer's live snapshot** rather than minting a new one, and the offset is **never rewound**. An infinite query refetches every page it holds — page one with no token, page two with the token it already had — so building a fresh ordering per tokenless request spliced two orderings together and repeated whatever they shared.
 - A WATCH signal above the bounce threshold invalidates that viewer's snapshots, so the next Home load reflects what they just watched. Appending would not do: new material goes to the tail by design.
 - `GET /api/feed/explain[?video=<id>]` returns every video's score component by component, its slot, its position, and for excluded videos which rule dropped it. Debug only, no UI. Tune with it rather than by eye.
 - `GET /api/settings/feed-mix/buckets` counts how many videos each share can draw on. The sliders divide a page; a share can only be filled from a bucket that has videos in it, and that was invisible until it was measured.

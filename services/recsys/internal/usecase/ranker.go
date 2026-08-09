@@ -276,14 +276,34 @@ func (r *Ranker) GetFeedPage(
 		return FeedPage{}, err
 	}
 
+	key := userID + "|" + topic
 	ordering, ok := r.snapshots.Get(snapshotID)
 	if !ok {
-		snapshotID = r.snapshots.Put(userID+"|"+topic, fresh)
-		ordering, _ = r.snapshots.Get(snapshotID)
-		offset = 0
-	} else if r.snapshots.Append(snapshotID, fresh) > 0 {
+		// The named ordering is gone, or none was named. Before minting a new
+		// one, take the session this viewer is already reading.
+		//
+		// Without this, every first-page request built a fresh ordering — and a
+		// client refetching an infinite query asks for *all* of its pages, page
+		// one with no token and page two with the token it already had. Page one
+		// then came from a new ordering while page two was still reading the old,
+		// and the two spliced together repeat whatever they have in common.
+		// Measured: four duplicates in the first forty-eight videos.
+		if existing, found := r.snapshots.Latest(key); found {
+			snapshotID = existing
+		} else {
+			snapshotID = r.snapshots.Put(key, fresh)
+		}
 		ordering, _ = r.snapshots.Get(snapshotID)
 	}
+	// New material belongs at the tail of whichever ordering is being served,
+	// behind everything the viewer has already scrolled past.
+	if r.snapshots.Append(snapshotID, fresh) > 0 {
+		ordering, _ = r.snapshots.Get(snapshotID)
+	}
+
+	// The offset is never rewound. It used to be reset to zero whenever a new
+	// ordering was built, which handed a client asking for page three the whole
+	// of page one again — the duplication itself, rather than a guard against it.
 
 	start := int(offset)
 	if start > len(ordering) {
