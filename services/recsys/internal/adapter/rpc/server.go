@@ -66,7 +66,8 @@ func (s *Server) GetFeed(ctx context.Context, req *connect.Request[recsysv1.GetF
 	}
 
 	page, err := s.ranker.GetFeedPage(ctx, req.Msg.GetUserId(), req.Msg.GetCategory(),
-		snapshotID, req.Msg.GetPageSize(), offset, mix, req.Msg.GetLanguages())
+		snapshotID, req.Msg.GetPageSize(), offset, mix, req.Msg.GetLanguages(),
+		tuningFrom(req.Msg.GetTuning()))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -128,4 +129,76 @@ func (s *Server) RecordImpressions(ctx context.Context, req *connect.Request[rec
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return connect.NewResponse(&recsysv1.RecordImpressionsResponse{}), nil
+}
+
+// ExplainFeed hands back the ranker's working, unchanged.
+//
+// No shaping happens here beyond turning the breakdown into protobuf. The
+// endpoint's only value is that it says exactly what the ranker did, and an
+// adapter that tidied the numbers on the way out would remove the reason to have
+// it at all.
+func (s *Server) ExplainFeed(
+	ctx context.Context, req *connect.Request[recsysv1.ExplainFeedRequest],
+) (*connect.Response[recsysv1.ExplainFeedResponse], error) {
+	mix := usecase.FeedMix{
+		Subscribed: int(req.Msg.GetMix().GetSubscribedPercent()),
+		Affinity:   int(req.Msg.GetMix().GetAffinityPercent()),
+		Discovery:  int(req.Msg.GetMix().GetDiscoveryPercent()),
+	}
+
+	breakdowns, err := s.ranker.ExplainFeed(ctx, req.Msg.GetUserId(),
+		req.Msg.GetCategory(), mix, req.Msg.GetLanguages(),
+		tuningFrom(req.Msg.GetTuning()))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	out := make([]*recsysv1.VideoExplanation, 0, len(breakdowns))
+	for _, b := range breakdowns {
+		out = append(out, &recsysv1.VideoExplanation{
+			VideoId:        b.VideoID,
+			ExcludedReason: b.Excluded,
+			Components:     b.Components(),
+			Score:          b.Score,
+			Reason:         reasons[b.Reason],
+			Slot:           b.Slot.String(),
+			Position:       int32(b.Position),
+		})
+	}
+	return connect.NewResponse(&recsysv1.ExplainFeedResponse{Videos: out}), nil
+}
+
+// tuningFrom carries protobuf's optional fields across as pointers.
+//
+// The presence distinction survives the whole way, and it has to: a session
+// blend of zero is a real setting — "ignore what I am watching right now" — and
+// an absent field means "use the built-in value". Flattening them would make an
+// older gateway that sends no tuning at all look like one asking for zeros, and
+// a zero maximum age is a feed with nothing in it.
+func tuningFrom(t *recsysv1.RankingTuning) usecase.Tuning {
+	if t == nil {
+		return usecase.Tuning{}
+	}
+	out := usecase.Tuning{
+		SessionBlend:        t.SessionBlend,
+		RecencyHalfLifeDays: t.RecencyHalfLifeDays,
+		SoftmaxTemperature:  t.SoftmaxTemperature,
+	}
+	if t.FreshSubscribedPercent != nil {
+		v := int(*t.FreshSubscribedPercent)
+		out.FreshSubscribedPercent = &v
+	}
+	if t.FreshnessWindowHours != nil {
+		v := int(*t.FreshnessWindowHours)
+		out.FreshnessWindowHours = &v
+	}
+	if t.MaxPublishedAgeDays != nil {
+		v := int(*t.MaxPublishedAgeDays)
+		out.MaxPublishedAgeDays = &v
+	}
+	if t.SamplePoolSize != nil {
+		v := int(*t.SamplePoolSize)
+		out.SamplePoolSize = &v
+	}
+	return out
 }

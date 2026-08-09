@@ -94,6 +94,135 @@ func (s *Scanner) Run(ctx context.Context) {
 	}
 }
 
+// RunSubscribed keeps followed channels close to live, on its own timer.
+//
+// The full pass cannot do this. It walks every source in topics.yaml with flat
+// listings, takes minutes, and is deliberately hourly — going below that buys
+// little for curated topics and starts to look like a bot. But an hour is the
+// whole of how late a followed channel's upload can be, and an hour late is what
+// "I never see new videos from my subscriptions" actually was.
+//
+// This pass is affordable at five-minute intervals because it is not a scan. It
+// reads one static XML document per subscribed channel — the same feed the full
+// pass already fetches for its dates — and writes metadata only. No listing, no
+// per-video metadata fetch, nothing counted against the quota that CLAUDE.md §8.6
+// warns about, and no downloads queued: the row exists so the feed can rank it,
+// and bytes are still fetched when somebody presses play.
+func (s *Scanner) RunSubscribed(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := s.ScanSubscribed(ctx); err != nil {
+				s.logger.Warn("subscribed scan", "error", err)
+			}
+		}
+	}
+}
+
+// ScanSubscribed upserts recent uploads from every followed channel via RSS.
+//
+// It deliberately does not take the scan lock. A full pass and this one can
+// overlap: both end in an upsert of the same rows with the same values, and
+// making the cheap pass wait on the expensive one would give back the latency it
+// exists to remove.
+func (s *Scanner) ScanSubscribed(ctx context.Context) error {
+	channels, err := s.library.ListSubscribedChannels(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, channel := range channels {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		entries := s.fetchChannelFeed(ctx, channel.ID)
+		for _, entry := range entries {
+			// Only genuinely recent uploads. The feed carries fifteen videos and
+			// most of them are old news the full pass has already filed; writing
+			// them all back every five minutes would be a lot of work to change
+			// nothing.
+			if entry.PublishedAt.IsZero() ||
+				time.Since(entry.PublishedAt) > subscribedFreshWindow {
+				continue
+			}
+			s.upsertFromFeed(ctx, entry, channel)
+		}
+	}
+	return nil
+}
+
+// How recent an upload has to be for the fast pass to write it.
+//
+// Matched to the feed's own freshness window: past it, a video is no longer
+// something the viewer is waiting for, and the hourly pass will file it with a
+// better listing than RSS can give.
+const subscribedFreshWindow = 48 * time.Hour
+
+// upsertFromFeed writes one RSS entry as a catalog row.
+//
+// Failures are logged and skipped rather than returned. One channel whose feed
+// has a malformed entry must not stop the other nineteen from being brought up
+// to date, and there is nothing for a caller to do about it either way.
+func (s *Scanner) upsertFromFeed(
+	ctx context.Context, entry domain.RSSEntry, channel domain.SubscribedChannel,
+) {
+	if entry.Title == "" {
+		return
+	}
+
+	video := domain.ExternalVideo{
+		ID:          entry.VideoID,
+		Title:       entry.Title,
+		SourceURL:   "https://www.youtube.com/watch?v=" + entry.VideoID,
+		PublishedAt: entry.PublishedAt,
+		ViewCount:   entry.ViewCount,
+		// The feed's own channel id and name, falling back to the subscription
+		// record. They agree in every ordinary case; the fallback is for a feed
+		// that omits the author block rather than for a disagreement.
+		ChannelID:    firstNonEmpty(entry.ChannelID, channel.ID),
+		ChannelName:  firstNonEmpty(entry.ChannelName, channel.Name),
+		ThumbnailURL: entry.ThumbnailURL,
+	}
+	if video.ChannelID == "" || video.ChannelName == "" {
+		return
+	}
+	// No topic. RSS does not carry YouTube's category, and guessing one here
+	// would file the video permanently under a guess — an already-known video
+	// keeps whatever topic it was first given. Unfiled is recoverable; wrong is
+	// not.
+
+	if err := s.library.UpsertChannel(ctx, video); err != nil {
+		s.logger.Warn("upsert channel from feed", "channel", video.ChannelID, "error", err)
+		return
+	}
+	if local := s.fetch.SaveThumbnail(ctx, video.ThumbnailURL, video.ID); local != "" {
+		video.ThumbnailURL = local
+	}
+	if video.Language == "" && isLatinTitle(video.Title) {
+		video.Language = "en"
+	}
+	if err := s.library.UpsertVideo(ctx, video, "QUEUED"); err != nil {
+		s.logger.Warn("upsert video from feed", "video", video.ID, "error", err)
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func (s *Scanner) LastScan() domain.ScanResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()

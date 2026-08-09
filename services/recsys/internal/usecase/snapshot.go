@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,9 +30,18 @@ type SnapshotStore struct {
 }
 
 type snapshotEntry struct {
-	ranked  []domain.RankedVideo
-	seen    map[string]struct{}
-	touched time.Time
+	ranked []domain.RankedVideo
+	seen   map[string]struct{}
+	// When the ordering was frozen. Expiry is measured from here and nowhere
+	// else: reading a snapshot used to push its deadline back, which turned the
+	// TTL into a sliding window and meant a viewer who kept scrolling never
+	// re-ranked at all. The ordering they were given on opening the app was the
+	// ordering they had until they stopped.
+	created time.Time
+}
+
+func (e *snapshotEntry) expired(ttl time.Duration) bool {
+	return time.Since(e.created) > ttl
 }
 
 func NewSnapshotStore(ttl time.Duration) *SnapshotStore {
@@ -56,7 +66,7 @@ func (s *SnapshotStore) Put(key string, rankedVideos []domain.RankedVideo) strin
 	s.entries[id] = &snapshotEntry{
 		ranked:  append([]domain.RankedVideo(nil), rankedVideos...),
 		seen:    seen,
-		touched: time.Now(),
+		created: time.Now(),
 	}
 	return id
 }
@@ -66,11 +76,36 @@ func (s *SnapshotStore) Get(id string) ([]domain.RankedVideo, bool) {
 	defer s.mu.Unlock()
 
 	entry, ok := s.entries[id]
-	if !ok || time.Since(entry.touched) > s.ttl {
+	if !ok || entry.expired(s.ttl) {
 		return nil, false
 	}
-	entry.touched = time.Now()
 	return entry.ranked, true
+}
+
+// InvalidateUser drops every frozen ordering belonging to one viewer.
+//
+// Called when they watch something. The snapshot exists so that paging through a
+// feed does not repeat videos, and that is worth keeping — but it also means the
+// ordering cannot respond to anything, and the one moment a feed most obviously
+// should respond is the moment somebody finishes a video and comes back. Append
+// is no answer: new material goes to the tail by design, which is exactly where
+// a video matching what the viewer just watched must not go.
+//
+// The separator is part of the match. Snapshot ids are keyed "<user>|<topic>#n",
+// so a bare prefix test would let user1 invalidate user10.
+func (s *SnapshotStore) InvalidateUser(userID string) {
+	if userID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	prefix := userID + "|"
+	for id := range s.entries {
+		if strings.HasPrefix(id, prefix) {
+			delete(s.entries, id)
+		}
+	}
 }
 
 // Append adds videos the snapshot has not served yet, at the tail. New material
@@ -81,7 +116,7 @@ func (s *SnapshotStore) Append(id string, extra []domain.RankedVideo) int {
 	defer s.mu.Unlock()
 
 	entry, ok := s.entries[id]
-	if !ok || time.Since(entry.touched) > s.ttl {
+	if !ok || entry.expired(s.ttl) {
 		return 0
 	}
 
@@ -94,13 +129,12 @@ func (s *SnapshotStore) Append(id string, extra []domain.RankedVideo) int {
 		entry.ranked = append(entry.ranked, r)
 		added++
 	}
-	entry.touched = time.Now()
 	return added
 }
 
 func (s *SnapshotStore) evictExpiredLocked() {
 	for id, entry := range s.entries {
-		if time.Since(entry.touched) > s.ttl {
+		if entry.expired(s.ttl) {
 			delete(s.entries, id)
 		}
 	}

@@ -124,6 +124,16 @@ type RSSEntry struct {
 	VideoID     string
 	PublishedAt time.Time
 	ViewCount   int64
+	// Enough to build a catalog row without any other call.
+	//
+	// The scan pass only ever used this to fill in dates and view counts on rows
+	// a listing had already produced, so these went unread. The fast pass over
+	// subscribed channels has no listing behind it — the feed is the whole of
+	// what it knows — and a video with no title is not a row anybody can be shown.
+	Title        string
+	ChannelID    string
+	ChannelName  string
+	ThumbnailURL string
 }
 	// YouTubeComment is a single comment fetched from YouTube via yt-dlp's
 	// --write-comments. Every comment is returned at once — yt-dlp has no

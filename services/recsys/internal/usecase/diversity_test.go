@@ -18,7 +18,7 @@ func dominatedLibrary(dominant, others int) ([]domain.VideoFeatures, map[string]
 	for i := 0; i < dominant; i++ {
 		id := "dom_" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 		features = append(features, domain.VideoFeatures{
-			VideoID: id, ChannelID: "ch_dominant", Topics: []string{"Music"}, AddedAt: now,
+			VideoID: id, ChannelID: "ch_dominant", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now,
 		})
 	}
 	// Watch history concentrated on the dominant channel, which is what drives
@@ -29,14 +29,14 @@ func dominatedLibrary(dominant, others int) ([]domain.VideoFeatures, map[string]
 	for i := 0; i < dominant/2; i++ {
 		features = append(features, domain.VideoFeatures{
 			VideoID:   "seen_" + string(rune('a'+i%26)),
-			ChannelID: "ch_dominant", Topics: []string{"Music"}, AddedAt: now,
+			ChannelID: "ch_dominant", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now,
 		})
 	}
 
 	for i := 0; i < others; i++ {
 		id := "other_" + string(rune('a'+i%26)) + string(rune('a'+i/26))
 		features = append(features, domain.VideoFeatures{
-			VideoID: id, ChannelID: "ch_" + string(rune('a'+i%20)), AddedAt: now,
+			VideoID: id, ChannelID: "ch_" + string(rune('a'+i%20)), AddedAt: now, PublishedAt: now,
 		})
 	}
 	return features, watched
@@ -52,7 +52,7 @@ func TestOneChannelCannotOwnThePage(t *testing.T) {
 		stubFeatures{features: features},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestChannelDiversityReordersAndNeverDrops(t *testing.T) {
 		channelOf[id] = "ch_one"
 	}
 
-	out := applyChannelDiversity(ranked, channelOf, maxPerChannelPerWindow, quotaWindow)
+	out := applyChannelDiversity(ranked, channelOf, nil, maxPerChannelPerWindow, quotaWindow)
 
 	if len(out) != len(ranked) {
 		t.Fatalf("got %d videos back from %d", len(out), len(ranked))
@@ -120,7 +120,7 @@ func TestChannelDiversityLeavesAnAlreadyVariedPageAlone(t *testing.T) {
 		channelOf[id] = "ch_" + string(rune('a'+i))
 	}
 
-	out := applyChannelDiversity(ranked, channelOf, maxPerChannelPerWindow, quotaWindow)
+	out := applyChannelDiversity(ranked, channelOf, nil, maxPerChannelPerWindow, quotaWindow)
 	for i := range ranked {
 		if out[i].VideoID != ranked[i].VideoID {
 			t.Fatalf("position %d changed from %q to %q with no channel repeated",
@@ -141,7 +141,7 @@ func TestVideosWithNoKnownChannelAreNeverHeldBack(t *testing.T) {
 		channelOf[id] = ""
 	}
 
-	out := applyChannelDiversity(ranked, channelOf, maxPerChannelPerWindow, quotaWindow)
+	out := applyChannelDiversity(ranked, channelOf, nil, maxPerChannelPerWindow, quotaWindow)
 	for i := range ranked {
 		if out[i].VideoID != ranked[i].VideoID {
 			t.Fatalf("a video with no known channel was reordered at position %d", i)
@@ -157,13 +157,13 @@ func TestUpNextDrawsOnSeveralChannelsWithinTheSubject(t *testing.T) {
 	// "identical".
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "current", ChannelID: "ch_home", Topics: []string{"Entertainment"}, AddedAt: now},
+		{VideoID: "current", ChannelID: "ch_home", Topics: []string{"Entertainment"}, AddedAt: now, PublishedAt: now},
 	}
 	// Plenty from the current channel, so an uncapped rail would be all of it.
 	for i := 0; i < 20; i++ {
 		features = append(features, domain.VideoFeatures{
 			VideoID:   "home_" + string(rune('a'+i)),
-			ChannelID: "ch_home", Topics: []string{"Entertainment"}, AddedAt: now,
+			ChannelID: "ch_home", Topics: []string{"Entertainment"}, AddedAt: now, PublishedAt: now,
 		})
 	}
 	// Other channels covering the same subject. Ten of them, as the real
@@ -172,7 +172,7 @@ func TestUpNextDrawsOnSeveralChannelsWithinTheSubject(t *testing.T) {
 		features = append(features, domain.VideoFeatures{
 			VideoID:   "peer_" + string(rune('a'+i%26)) + string(rune('a'+i/26)),
 			ChannelID: "ch_peer_" + string(rune('a'+i%10)),
-			Topics:    []string{"Entertainment"}, AddedAt: now,
+			Topics:    []string{"Entertainment"}, AddedAt: now, PublishedAt: now,
 		})
 	}
 

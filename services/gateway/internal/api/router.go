@@ -74,6 +74,10 @@ func (g *Gateway) Routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/feed", g.handleFeed)
+	mux.HandleFunc("GET /api/feed/explain", g.handleExplainFeed)
+	mux.HandleFunc("GET /api/settings/feed-mix/buckets", g.handleFeedMixBuckets)
+	mux.HandleFunc("GET /api/settings/ranking", g.handleGetRanking)
+	mux.HandleFunc("POST /api/settings/ranking", g.handleSaveRanking)
 	mux.HandleFunc("GET /api/search", g.handleSearch)
 	mux.HandleFunc("GET /api/suggest", g.handleSuggest)
 	mux.HandleFunc("GET /api/discover", g.handleDiscover)
@@ -233,7 +237,8 @@ func (g *Gateway) handleFeed(w http.ResponseWriter, r *http.Request) {
 			AffinityPercent:   int32(mix.Affinity),
 			DiscoveryPercent:  int32(mix.Discovery),
 		},
-			Languages: languages,
+		Languages: languages,
+		Tuning:    g.loadRanking().toProto(),
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
@@ -842,4 +847,66 @@ func (g *Gateway) handleListSubscriptions(w http.ResponseWriter, r *http.Request
 		out = append(out, toChannelDTO(c))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"channels": out})
+}
+
+// handleExplainFeed exposes the ranker's working over HTTP.
+//
+// A debugging surface with no UI behind it, and no plans for one. It exists
+// because the feed's constants have always been tuned by looking at a page and
+// forming an impression, and an impression cannot separate "this weight is
+// wrong" from "this weight is right and something further down is throwing it
+// away". The second of those went unnoticed for months.
+//
+// Returns metadata-free output — ids, numbers and slot names — for the same
+// reason recsys itself does: hydrating titles here would mean a catalog round
+// trip for every video in the library, on an endpoint nobody is waiting on.
+func (g *Gateway) handleExplainFeed(w http.ResponseWriter, r *http.Request) {
+	mix := loadFeedMix(g.feedMixPath())
+
+	resp, err := g.recsys.ExplainFeed(r.Context(), connect.NewRequest(&recsysv1.ExplainFeedRequest{
+		UserId:    g.userID(r),
+		Category:  r.URL.Query().Get("topic"),
+		Languages: r.URL.Query()["lang"],
+		Mix: &recsysv1.FeedMix{
+			SubscribedPercent: int32(mix.Subscribed),
+			AffinityPercent:   int32(mix.Affinity),
+			DiscoveryPercent:  int32(mix.Discovery),
+		},
+		Tuning: g.loadRanking().toProto(),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	// ?video=<id> narrows to one video, which is the form the question usually
+	// takes: not "explain the feed" but "why is this one not in it".
+	wanted := r.URL.Query().Get("video")
+
+	type explanation struct {
+		VideoID    string             `json:"videoId"`
+		Position   int32              `json:"position"`
+		Score      float64            `json:"score"`
+		Slot       string             `json:"slot"`
+		Reason     string             `json:"reason"`
+		Excluded   string             `json:"excluded,omitempty"`
+		Components map[string]float64 `json:"components,omitempty"`
+	}
+
+	out := make([]explanation, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		if wanted != "" && v.GetVideoId() != wanted {
+			continue
+		}
+		out = append(out, explanation{
+			VideoID:    v.GetVideoId(),
+			Position:   v.GetPosition(),
+			Score:      v.GetScore(),
+			Slot:       v.GetSlot(),
+			Reason:     v.GetReason().String(),
+			Excluded:   v.GetExcludedReason(),
+			Components: v.GetComponents(),
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
 }

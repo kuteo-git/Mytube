@@ -17,6 +17,14 @@ func (s stubFeatures) ListVideoFeatures(context.Context) ([]domain.VideoFeatures
 type stubStore struct {
 	profile   domain.UserProfile
 	retention map[string]float32
+	coverage  map[string]int
+	// Set to have ImpressionCoverage fail, so that the feed's behaviour when it
+	// cannot tell what has been shown can be asserted rather than assumed.
+	coverageErr error
+}
+
+func (s stubStore) ImpressionCoverage(context.Context) (map[string]int, error) {
+	return s.coverage, s.coverageErr
 }
 
 func (stubStore) AppendSignal(context.Context, domain.Signal) error         { return nil }
@@ -39,6 +47,7 @@ func emptyProfile() domain.UserProfile {
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
 		RecentlyWatched:   map[string]bool{},
+		SessionWatched:    map[string]float32{},
 	}
 }
 
@@ -46,9 +55,10 @@ func features(n int) []domain.VideoFeatures {
 	out := make([]domain.VideoFeatures, 0, n)
 	for i := 0; i < n; i++ {
 		out = append(out, domain.VideoFeatures{
-			VideoID:   string(rune('a'+i/26)) + string(rune('a'+i%26)),
-			ChannelID: "chan1",
-			AddedAt:   time.Now(),
+			VideoID:     string(rune('a'+i/26)) + string(rune('a'+i%26)),
+			ChannelID:   "chan1",
+			AddedAt:     time.Now(),
+			PublishedAt: time.Now(),
 		})
 	}
 	return out
@@ -61,7 +71,7 @@ func TestPagingNeverRepeatsAVideo(t *testing.T) {
 	ranker.snapshots = NewSnapshotStore(time.Minute)
 
 	ctx := context.Background()
-	first, err := ranker.GetFeedPage(ctx, "user1", "", "", 20, 0, DefaultFeedMix, nil)
+	first, err := ranker.GetFeedPage(ctx, "user1", "", "", 20, 0, DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("page 1: %v", err)
 	}
@@ -76,7 +86,7 @@ func TestPagingNeverRepeatsAVideo(t *testing.T) {
 	}
 	ranker.store = stubStore{profile: profile}
 
-	second, err := ranker.GetFeedPage(ctx, "user1", "", first.SnapshotID, 20, 20, DefaultFeedMix, nil)
+	second, err := ranker.GetFeedPage(ctx, "user1", "", first.SnapshotID, 20, 20, DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("page 2: %v", err)
 	}
@@ -96,7 +106,7 @@ func TestRemainingReportsHowMuchFeedIsLeft(t *testing.T) {
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features(50)})
 	ranker.snapshots = NewSnapshotStore(time.Minute)
 
-	page, err := ranker.GetFeedPage(context.Background(), "user1", "", "", 20, 0, DefaultFeedMix, nil)
+	page, err := ranker.GetFeedPage(context.Background(), "user1", "", "", 20, 0, DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("page: %v", err)
 	}

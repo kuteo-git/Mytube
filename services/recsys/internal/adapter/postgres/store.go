@@ -30,12 +30,45 @@ func (s *Store) RecordImpressions(ctx context.Context, userID string, videoIDs [
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO impressions (user_id, video_id, shown_at)
 		SELECT $1, unnest($2::text[]), now()
-		ON CONFLICT (user_id, video_id) DO UPDATE SET shown_at = now()`,
+		ON CONFLICT (user_id, video_id) DO UPDATE
+		  SET shown_at = now(), shown_count = impressions.shown_count + 1`,
 		userID, videoIDs)
 	return err
 }
 
-// BuildProfile derives everything ranking needs in three queries. It is
+// ImpressionCoverage reports how many times each video has been shown to anyone.
+//
+// Household-wide rather than per viewer, and that is the point: whether a video
+// has had its chance is a fact about the video. Two people in one house asking
+// for something new should not each be shown the same three unfamiliar videos.
+//
+// Like VideoRetention, this says nothing about who is asking, and like it, a
+// failure here must degrade rather than empty: the caller ranks on without it.
+func (s *Store) ImpressionCoverage(ctx context.Context) (map[string]int, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT video_id, sum(shown_count)::int
+		FROM impressions
+		GROUP BY video_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var (
+			videoID string
+			count   int
+		)
+		if err := rows.Scan(&videoID, &count); err != nil {
+			return nil, err
+		}
+		out[videoID] = count
+	}
+	return out, rows.Err()
+}
+
+// BuildProfile derives everything ranking needs in five queries. It is
 // recomputed per request rather than cached, which is what lets the feed react
 // to the video that just finished playing.
 func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindow time.Duration) (domain.UserProfile, error) {
@@ -46,6 +79,7 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
 		RecentlyWatched:   map[string]bool{},
+		SessionWatched:    map[string]float32{},
 	}
 	if userID == "" {
 		return profile, nil
@@ -164,9 +198,62 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		profile.RecentlyWatched[videoID] = true
 	}
 	rows.Close()
+	if err := rows.Err(); err != nil {
+		return profile, err
+	}
+
+	// The current sitting: the last few videos this viewer actually watched.
+	//
+	// Narrower than RecentlyWatched above in all three of its dimensions, and
+	// each narrowing is doing something. The fraction filter drops videos that
+	// were opened and closed, which say what somebody does not want. The limit
+	// keeps it to a sitting rather than an afternoon — read fifty videos here and
+	// it stops disagreeing with the watch history, and a signal that agrees with
+	// the one beside it is not a signal. Ordering by the most recent row per
+	// video rather than by the first is what makes the newest thing watched the
+	// one that counts.
+	rows, err = s.pool.Query(ctx, `
+		SELECT video_id, max(watched_fraction)
+		FROM signals
+		WHERE user_id = $1 AND type = 'WATCH' AND video_id <> ''
+		  AND occurred_at > now() - $2::interval
+		GROUP BY video_id
+		HAVING max(watched_fraction) > $3
+		ORDER BY max(occurred_at) DESC
+		LIMIT $4`,
+		userID, sessionWindow.String(), sessionBounceThreshold, sessionMaxVideos)
+	if err != nil {
+		return profile, err
+	}
+	for rows.Next() {
+		var (
+			videoID  string
+			fraction float32
+		)
+		if err := rows.Scan(&videoID, &fraction); err != nil {
+			rows.Close()
+			return profile, err
+		}
+		profile.SessionWatched[videoID] = fraction
+	}
+	rows.Close()
 
 	return profile, rows.Err()
 }
+
+// The sitting the feed reacts to.
+//
+// Defined here rather than beside the blend that consumes them, because they are
+// arguments to a query and nothing else reads them. How much weight the sitting
+// carries is a ranking decision and lives in the usecase; how far back it reaches
+// is a question about rows.
+const (
+	sessionWindow    = 2 * time.Hour
+	sessionMaxVideos = 3
+	// Matches usecase.bounceThreshold: opening something and leaving is not part
+	// of what the viewer came for.
+	sessionBounceThreshold = 0.02
+)
 
 // How recently a video must have been watched to count as "just now".
 //

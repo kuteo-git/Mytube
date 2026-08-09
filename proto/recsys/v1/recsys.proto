@@ -27,6 +27,17 @@ service RecommendationService {
   rpc RecordSignal(RecordSignalRequest) returns (RecordSignalResponse);
   // Suppresses items already shown, so the grid does not repeat itself.
   rpc RecordImpressions(RecordImpressionsRequest) returns (RecordImpressionsResponse);
+
+  // The same ranking with its working shown, for tuning and for answering
+  // "why is this video here" and "where did that one go".
+  //
+  // A debug surface with no UI behind it, and deliberately so. Every constant
+  // in the ranker has been set by looking at a page and forming an impression,
+  // and an impression cannot tell "this weight is wrong" from "this weight is
+  // right and something downstream is discarding it" — which is precisely the
+  // distinction that was missed when the quota shuffled each bucket uniformly
+  // and made the entire score decorative.
+  rpc ExplainFeed(ExplainFeedRequest) returns (ExplainFeedResponse);
 }
 
 // Why a video was surfaced. Sent to the client for debugging and to let the UI
@@ -88,6 +99,8 @@ message GetFeedRequest {
   // Language codes the viewer wants to see, e.g. ["en", "vi"].
   // Empty means no filter — show all languages.
   repeated string languages = 7;
+  // Optional. Absent means the built-in ranking constants.
+  RankingTuning tuning = 8;
 }
 
 message GetFeedResponse {
@@ -154,3 +167,77 @@ message RecordImpressionsRequest {
 }
 
 message RecordImpressionsResponse {}
+
+message ExplainFeedRequest {
+  string user_id = 1;
+  // Same filters the feed itself takes, so the explanation describes the page
+  // the viewer is actually looking at.
+  string category = 2;
+  FeedMix mix = 3;
+  repeated string languages = 4;
+  RankingTuning tuning = 5;
+}
+
+// One video's score with its working shown.
+//
+// The components are a map rather than a field per term. They are read by a
+// person, they change whenever the ranker is tuned, and giving each one a field
+// number would mean a proto edit and a regeneration every time somebody tries a
+// different weight — which is the thing this message exists to make cheap.
+message VideoExplanation {
+  string video_id = 1;
+  // Empty when the video is in the feed; otherwise why it is not, in words.
+  // Every other field is meaningless when this is set.
+  string excluded_reason = 2;
+  // Named contributions, in the units they are applied in: additive terms are
+  // points, multipliers are factors.
+  map<string, double> components = 3;
+  double score = 4;
+  RecommendationReason reason = 5;
+  // Which share of the page it competes for, as a name.
+  string slot = 6;
+  // Its position in the feed as served, or -1 when it is not in the feed. Not
+  // derivable from the score: the quota and the per-channel cap both reorder.
+  int32 position = 7;
+}
+
+message ExplainFeedResponse {
+  // Videos in the feed first, in the order they would be served, then the ones
+  // that were excluded.
+  repeated VideoExplanation videos = 1;
+}
+
+// Ranking constants the household can move without a rebuild.
+//
+// Every field is optional, and absent means "use the built-in value". Zero is a
+// real setting for several of these — a session blend of zero says "ignore what
+// I am watching right now" — so presence and zero must be distinguishable, which
+// is the whole reason for the optional keyword here.
+//
+// Sent with the request like FeedMix, and for the same reason: recsys keeps no
+// configuration of its own (CLAUDE.md §3). The file lives at the gateway, where
+// it can be edited by hand.
+//
+// Deliberately not every weight in the ranker. These are the settings that
+// answer a question somebody actually has; the two dozen score weights answer
+// questions nobody asks, and exposing them would trade the one thing this
+// heuristic has over a model — that every number can be explained — for knobs.
+message RankingTuning {
+  // How much of the affinity multiplier is decided by the current sitting
+  // rather than the whole watch history. 0 = ignore the sitting, 1 = ignore
+  // the history.
+  optional double session_blend = 1;
+  // Share of the page reserved for new uploads from followed channels.
+  optional int32 fresh_subscribed_percent = 2;
+  // How long a video counts as new, in hours.
+  optional int32 freshness_window_hours = 3;
+  // Videos published longer ago than this never reach the home page.
+  optional int32 max_published_age_days = 4;
+  // How fast the "recently added to the library" boost decays.
+  optional double recency_half_life_days = 5;
+  // How sharply the feed's ordering follows the score. Lower is stricter.
+  optional double softmax_temperature = 6;
+  // How many of each bucket's best are entered into the draw. Raising it past
+  // a few hundred is what let low-scoring videos onto the first page.
+  optional int32 sample_pool_size = 7;
+}

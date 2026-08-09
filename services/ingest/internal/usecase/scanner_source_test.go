@@ -54,7 +54,6 @@ func (d *countingDownloader) ListPlaylist(_ context.Context, _ string, _, _ int3
 	}, nil
 }
 
-
 func (d *countingDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
 	return nil, nil
 }
@@ -452,4 +451,130 @@ func TestIsLatinTitle(t *testing.T) {
 	}
 }
 
+// feedDownloader answers only the RSS call, and records how many listings the
+// caller asked for. The count is the point of the fast pass: it must reach a new
+// upload without doing any of the expensive work a scan does.
+type feedDownloader struct {
+	deepenDownloader
+	entries   []domain.RSSEntry
+	err       error
+	listCalls int
+	feedCalls int
+}
 
+func (d *feedDownloader) FetchChannelFeed(context.Context, string) ([]domain.RSSEntry, error) {
+	d.feedCalls++
+	return d.entries, d.err
+}
+
+func (d *feedDownloader) ListPlaylist(context.Context, string, int32, int32) (string, []domain.ExternalVideo, error) {
+	d.listCalls++
+	return "", nil, nil
+}
+
+func newFeedScanner(down *feedDownloader, library *recordingLibrary) *Scanner {
+	return NewScanner(
+		nil, down, nil, library, nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		time.Hour,
+	)
+}
+
+// The reported bug, at the ingest end: an upload half an hour old has to be a
+// row in the catalog long before the hourly pass gets round to it. Nothing the
+// ranker does can surface a video the library has never heard of.
+func TestTheFastPassPicksUpAnUploadFromMinutesAgo(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}, channels: map[string]domain.ExternalVideo{}}
+	down := &feedDownloader{
+		entries: []domain.RSSEntry{{
+			VideoID:      "brandNew",
+			Title:        "Something just posted",
+			ChannelID:    "UC_followed",
+			ChannelName:  "A Channel",
+			ThumbnailURL: "https://img.test/brandNew.jpg",
+			PublishedAt:  time.Now().Add(-30 * time.Minute),
+			ViewCount:    412,
+		}},
+	}
+	library.subscribed = []domain.SubscribedChannel{{ID: "UC_followed", Name: "A Channel"}}
+
+	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+		t.Fatalf("ScanSubscribed: %v", err)
+	}
+
+	if len(library.added) != 1 || library.added[0] != "brandNew" {
+		t.Fatalf("videos written = %v, want just brandNew", library.added)
+	}
+	written := library.channels["brandNew"]
+	if written.Title == "" || written.ChannelID != "UC_followed" {
+		t.Fatalf("row written as %+v; a video with no title or channel is not a "+
+			"row anybody can be shown", written)
+	}
+	if written.PublishedAt.IsZero() {
+		t.Fatal("no publish date was written, and the feed drops videos that have none")
+	}
+}
+
+// What makes five-minute intervals defensible. If this pass listed anything, it
+// would be a scan, and running a scan twelve times an hour is how a household IP
+// gets blocked — see CLAUDE.md §8.6.
+func TestTheFastPassNeverAsksForAListing(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}}
+	library.subscribed = []domain.SubscribedChannel{{ID: "UC_a"}, {ID: "UC_b"}}
+	down := &feedDownloader{}
+
+	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+		t.Fatalf("ScanSubscribed: %v", err)
+	}
+
+	if down.listCalls != 0 {
+		t.Fatalf("the fast pass made %d listing calls, want none", down.listCalls)
+	}
+	if down.feedCalls != 2 {
+		t.Fatalf("read %d feeds for 2 subscribed channels", down.feedCalls)
+	}
+}
+
+// The RSS window holds fifteen uploads, most of them old news the hourly pass
+// filed long ago. Rewriting all of them every five minutes would be a great deal
+// of work to change nothing.
+func TestTheFastPassIgnoresOlderUploadsInTheSameFeed(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}}
+	library.subscribed = []domain.SubscribedChannel{{ID: "UC_followed", Name: "A Channel"}}
+	down := &feedDownloader{entries: []domain.RSSEntry{
+		{
+			VideoID: "recent", Title: "Recent", ChannelID: "UC_followed",
+			ChannelName: "A Channel", PublishedAt: time.Now().Add(-2 * time.Hour),
+		},
+		{
+			VideoID: "lastMonth", Title: "Old", ChannelID: "UC_followed",
+			ChannelName: "A Channel", PublishedAt: time.Now().Add(-30 * 24 * time.Hour),
+		},
+		{
+			VideoID: "undated", Title: "No date", ChannelID: "UC_followed",
+			ChannelName: "A Channel",
+		},
+	}}
+
+	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+		t.Fatalf("ScanSubscribed: %v", err)
+	}
+
+	if len(library.added) != 1 || library.added[0] != "recent" {
+		t.Fatalf("videos written = %v, want just the recent one", library.added)
+	}
+}
+
+// One unreachable feed must not cost the other nineteen channels their pass.
+func TestOneBrokenFeedDoesNotStopTheRest(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}}
+	library.subscribed = []domain.SubscribedChannel{{ID: "UC_broken"}, {ID: "UC_fine"}}
+	down := &feedDownloader{err: errors.New("connection reset")}
+
+	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+		t.Fatalf("a failing feed became a failing pass: %v", err)
+	}
+	if down.feedCalls != 2 {
+		t.Fatalf("stopped after %d feeds; every channel gets its own try", down.feedCalls)
+	}
+}

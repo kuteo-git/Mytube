@@ -149,6 +149,12 @@ func main() {
 		envDuration("SCAN_INTERVAL", time.Hour),
 	)
 	go scanner.Run(ctx)
+	// A second, much cheaper timer over subscribed channels only. The full pass
+	// above is bounded by how expensive listings are; this one reads one static
+	// RSS document per followed channel, which is what lets it run twelve times
+	// as often and bring the worst-case delay on a subscription's new upload down
+	// from an hour to five minutes.
+	go scanner.RunSubscribed(ctx, envDuration("SUBSCRIBED_SCAN_INTERVAL", 5*time.Minute))
 
 	store := jobStore
 	expander := usecase.NewExpander(

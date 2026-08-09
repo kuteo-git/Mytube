@@ -48,6 +48,9 @@ const (
 	// RecommendationServiceRecordImpressionsProcedure is the fully-qualified name of the
 	// RecommendationService's RecordImpressions RPC.
 	RecommendationServiceRecordImpressionsProcedure = "/recsys.v1.RecommendationService/RecordImpressions"
+	// RecommendationServiceExplainFeedProcedure is the fully-qualified name of the
+	// RecommendationService's ExplainFeed RPC.
+	RecommendationServiceExplainFeedProcedure = "/recsys.v1.RecommendationService/ExplainFeed"
 )
 
 // RecommendationServiceClient is a client for the recsys.v1.RecommendationService service.
@@ -64,6 +67,16 @@ type RecommendationServiceClient interface {
 	RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error)
 	// Suppresses items already shown, so the grid does not repeat itself.
 	RecordImpressions(context.Context, *connect.Request[v1.RecordImpressionsRequest]) (*connect.Response[v1.RecordImpressionsResponse], error)
+	// The same ranking with its working shown, for tuning and for answering
+	// "why is this video here" and "where did that one go".
+	//
+	// A debug surface with no UI behind it, and deliberately so. Every constant
+	// in the ranker has been set by looking at a page and forming an impression,
+	// and an impression cannot tell "this weight is wrong" from "this weight is
+	// right and something downstream is discarding it" — which is precisely the
+	// distinction that was missed when the quota shuffled each bucket uniformly
+	// and made the entire score decorative.
+	ExplainFeed(context.Context, *connect.Request[v1.ExplainFeedRequest]) (*connect.Response[v1.ExplainFeedResponse], error)
 }
 
 // NewRecommendationServiceClient constructs a client for the recsys.v1.RecommendationService
@@ -107,6 +120,12 @@ func NewRecommendationServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(recommendationServiceMethods.ByName("RecordImpressions")),
 			connect.WithClientOptions(opts...),
 		),
+		explainFeed: connect.NewClient[v1.ExplainFeedRequest, v1.ExplainFeedResponse](
+			httpClient,
+			baseURL+RecommendationServiceExplainFeedProcedure,
+			connect.WithSchema(recommendationServiceMethods.ByName("ExplainFeed")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -117,6 +136,7 @@ type recommendationServiceClient struct {
 	getMostWatched    *connect.Client[v1.GetMostWatchedRequest, v1.GetMostWatchedResponse]
 	recordSignal      *connect.Client[v1.RecordSignalRequest, v1.RecordSignalResponse]
 	recordImpressions *connect.Client[v1.RecordImpressionsRequest, v1.RecordImpressionsResponse]
+	explainFeed       *connect.Client[v1.ExplainFeedRequest, v1.ExplainFeedResponse]
 }
 
 // GetFeed calls recsys.v1.RecommendationService.GetFeed.
@@ -144,6 +164,11 @@ func (c *recommendationServiceClient) RecordImpressions(ctx context.Context, req
 	return c.recordImpressions.CallUnary(ctx, req)
 }
 
+// ExplainFeed calls recsys.v1.RecommendationService.ExplainFeed.
+func (c *recommendationServiceClient) ExplainFeed(ctx context.Context, req *connect.Request[v1.ExplainFeedRequest]) (*connect.Response[v1.ExplainFeedResponse], error) {
+	return c.explainFeed.CallUnary(ctx, req)
+}
+
 // RecommendationServiceHandler is an implementation of the recsys.v1.RecommendationService service.
 type RecommendationServiceHandler interface {
 	// Ranked ids for the home grid.
@@ -158,6 +183,16 @@ type RecommendationServiceHandler interface {
 	RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error)
 	// Suppresses items already shown, so the grid does not repeat itself.
 	RecordImpressions(context.Context, *connect.Request[v1.RecordImpressionsRequest]) (*connect.Response[v1.RecordImpressionsResponse], error)
+	// The same ranking with its working shown, for tuning and for answering
+	// "why is this video here" and "where did that one go".
+	//
+	// A debug surface with no UI behind it, and deliberately so. Every constant
+	// in the ranker has been set by looking at a page and forming an impression,
+	// and an impression cannot tell "this weight is wrong" from "this weight is
+	// right and something downstream is discarding it" — which is precisely the
+	// distinction that was missed when the quota shuffled each bucket uniformly
+	// and made the entire score decorative.
+	ExplainFeed(context.Context, *connect.Request[v1.ExplainFeedRequest]) (*connect.Response[v1.ExplainFeedResponse], error)
 }
 
 // NewRecommendationServiceHandler builds an HTTP handler from the service implementation. It
@@ -197,6 +232,12 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 		connect.WithSchema(recommendationServiceMethods.ByName("RecordImpressions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	recommendationServiceExplainFeedHandler := connect.NewUnaryHandler(
+		RecommendationServiceExplainFeedProcedure,
+		svc.ExplainFeed,
+		connect.WithSchema(recommendationServiceMethods.ByName("ExplainFeed")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/recsys.v1.RecommendationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RecommendationServiceGetFeedProcedure:
@@ -209,6 +250,8 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 			recommendationServiceRecordSignalHandler.ServeHTTP(w, r)
 		case RecommendationServiceRecordImpressionsProcedure:
 			recommendationServiceRecordImpressionsHandler.ServeHTTP(w, r)
+		case RecommendationServiceExplainFeedProcedure:
+			recommendationServiceExplainFeedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -236,4 +279,8 @@ func (UnimplementedRecommendationServiceHandler) RecordSignal(context.Context, *
 
 func (UnimplementedRecommendationServiceHandler) RecordImpressions(context.Context, *connect.Request[v1.RecordImpressionsRequest]) (*connect.Response[v1.RecordImpressionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.RecordImpressions is not implemented"))
+}
+
+func (UnimplementedRecommendationServiceHandler) ExplainFeed(context.Context, *connect.Request[v1.ExplainFeedRequest]) (*connect.Response[v1.ExplainFeedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.ExplainFeed is not implemented"))
 }

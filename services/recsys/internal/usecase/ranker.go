@@ -122,6 +122,17 @@ const (
 	// which a video from an unsubscribed channel is classified as discovery.
 	// 0.15 means "essentially no meaningful connection to anything watched."
 	discoveryAffinityThreshold = 0.15
+	// What a video never shown to anybody earns inside the discovery share, and
+	// how fast that fades as it is offered.
+	//
+	// The weight sits just above weightDiscoveryBase so that novelty orders the
+	// bucket without overturning the modest affinity signal that is still in
+	// there. The decay is measured in showings: at three the bonus is a third of
+	// its full value, at ten it is gone. Three is about a week of pages for one
+	// household — long enough to be a fair trial, short enough that a video
+	// nobody wants stops asking.
+	weightUnseen     = 1.5
+	explorationDecay = 3.0
 	// Videos published within this window get a freshness boost proportional to
 	// their view count, so breaking news surfaces immediately without needing
 	// anyone in the household to have watched it first.
@@ -132,6 +143,11 @@ const (
 	// View-count cap for the freshness log factor, so one viral video does not
 	// dominate the entire first page.
 	maxFreshnessViewCount = 1_000_000
+	// How much of the affinity multiplier is decided by the current sitting
+	// rather than by the whole watch history. See the blend in rankAll.
+	// How far back a sitting reaches, and how many of its videos are read, are
+	// decided by the query that builds SessionWatched — see the store.
+	sessionBlend = 0.5
 )
 
 type Ranker struct {
@@ -154,7 +170,23 @@ func (r *Ranker) RecordSignal(ctx context.Context, s domain.Signal) error {
 	if s.OccurredAt.IsZero() {
 		s.OccurredAt = r.now()
 	}
-	return r.store.AppendSignal(ctx, s)
+	if err := r.store.AppendSignal(ctx, s); err != nil {
+		return err
+	}
+
+	// Watching something is the one signal that should visibly change the feed
+	// before the viewer asks it to. Dropping their frozen orderings is what lets
+	// it: the next time Home loads it ranks again, with the last few minutes of
+	// watching in the profile.
+	//
+	// The bounce threshold is the filter. Watch signals are appended every few
+	// seconds of playback and again the instant something is opened, so reacting
+	// to all of them would re-rank on a video the viewer looked at and closed —
+	// which is not a statement of interest, and is already scored as the opposite.
+	if s.Type == domain.SignalWatch && s.WatchedFraction > bounceThreshold {
+		r.snapshots.InvalidateUser(s.UserID)
+	}
+	return nil
 }
 
 func (r *Ranker) RecordImpressions(ctx context.Context, userID string, videoIDs []string) error {
@@ -166,12 +198,12 @@ func (r *Ranker) RecordImpressions(ctx context.Context, userID string, videoIDs 
 
 // recencyBoost decays from 1 towards 0 with a fortnight half-life, so a freshly
 // ingested video leads the grid without permanently owning it.
-func recencyBoost(addedAt time.Time, now time.Time) float64 {
+func recencyBoost(addedAt time.Time, now time.Time, halfLifeDays float64) float64 {
 	days := now.Sub(addedAt).Hours() / 24
 	if days < 0 {
 		days = 0
 	}
-	return math.Exp(-days / recencyHalfLifeDay)
+	return math.Exp(-days / halfLifeDays)
 }
 
 const publishedHalfLifeDay = 365
@@ -233,12 +265,13 @@ func (r *Ranker) GetFeedPage(
 	pageSize, offset int32,
 	mix FeedMix,
 	languages []string,
+	tuning Tuning,
 ) (FeedPage, error) {
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 24
 	}
 
-	fresh, err := r.rankAll(ctx, userID, topic, mix, languages)
+	fresh, err := r.rankAll(ctx, userID, topic, mix, languages, tuning)
 	if err != nil {
 		return FeedPage{}, err
 	}
@@ -272,16 +305,16 @@ func (r *Ranker) GetFeedPage(
 // window, scaled by view count. A video published an hour ago with high views
 // gets the strongest boost; one published 23h ago with no views gets none.
 // Videos outside the window or with no published date are unchanged (1.0).
-func freshnessBoost(publishedAt time.Time, viewCount int64, now time.Time) float64 {
+func freshnessBoost(publishedAt time.Time, viewCount int64, now time.Time, window time.Duration) float64 {
 	if publishedAt.IsZero() {
 		return 1.0
 	}
 	age := now.Sub(publishedAt)
-	if age >= freshnessWindow {
+	if age >= window {
 		return 1.0
 	}
 	// Linear decay from 1.0 (now) to 0.0 (at the freshness boundary).
-	recency := 1.0 - age.Seconds()/freshnessWindow.Seconds()
+	recency := 1.0 - age.Seconds()/window.Seconds()
 	// Log-scale view count, paginated so one viral video doesn't dominate.
 	// Zero views still gets a floor so breaking news with no known count
 	// still surfaces — it just earns less than a proven video would.
@@ -295,23 +328,24 @@ func freshnessBoost(publishedAt time.Time, viewCount int64, now time.Time) float
 	return 1.0 + weightFreshness*recency*viewFactor
 }
 
-func (r *Ranker) rankAll(
-	ctx context.Context,
-	userID, topic string,
-	mix FeedMix,
-	languages []string,
-) ([]domain.RankedVideo, error) {
+// buildInputs gathers everything the score depends on that is not the video.
+//
+// Split out of rankAll so that ExplainFeed scores through exactly the same
+// values. Two code paths computing the same profile would eventually disagree,
+// and an explanation that disagrees with the feed is worse than none.
+func (r *Ranker) buildInputs(
+	ctx context.Context, userID, topic string, languages []string, tuning Tuning,
+) ([]domain.VideoFeatures, rankInputs, error) {
 	features, err := r.features.ListVideoFeatures(ctx)
 	if err != nil {
-		return nil, err
+		return nil, rankInputs{}, err
 	}
 	profile, err := r.store.BuildProfile(ctx, userID, impressionWindow)
 	if err != nil {
-		return nil, err
+		return nil, rankInputs{}, err
 	}
 
-	watchAffinity := buildWatchAffinity(features, profile.WatchedFraction)
-	likes := buildLikeAffinity(features, profile.Liked)
+	now := r.now()
 
 	// How well each video holds an audience, across everyone. A blip reading
 	// this must not empty the feed: without it every video simply scores as
@@ -321,8 +355,13 @@ func (r *Ranker) rankAll(
 		retention = map[string]float32{}
 	}
 
-	now := r.now()
-	ranked := make([]domain.RankedVideo, 0, len(features))
+	// How much of a chance each video has already had. Same failure posture as
+	// retention: without it every video looks unseen, which is where the feed
+	// started and is not worse than no feed.
+	coverage, err := r.store.ImpressionCoverage(ctx)
+	if err != nil {
+		coverage = map[string]int{}
+	}
 
 	// Count dislikes per channel, against how many of that channel's videos
 	// there are to dislike. Both are needed: the count alone treated three out
@@ -341,7 +380,7 @@ func (r *Ranker) rankAll(
 			dislikedPerChannel[f.ChannelID]++
 		}
 	}
-	channelSuppressed := func(channelID string) bool {
+	suppressed := func(channelID string) bool {
 		if profile.Subscribed[channelID] {
 			return false
 		}
@@ -359,160 +398,57 @@ func (r *Ranker) rankAll(
 			float64(count)/float64(total) >= channelDislikeShare
 	}
 
-	// What the dislikes say beyond the videos they were pressed on. Subtracted
-	// rather than added, and aged — see buildDislikeAffinity.
-	dislikes := buildDislikeAffinity(features, profile.Disliked, now)
+	return features, rankInputs{
+		profile:       profile,
+		watchAffinity: buildWatchAffinity(features, profile.WatchedFraction),
+		// The same computation over the last few videos only. Built the same way
+		// because it is the same question asked over a shorter window, and two
+		// different notions of "what this person likes" would be one too many.
+		sessionAffinity: buildWatchAffinity(features, profile.SessionWatched),
+		likes:           buildLikeAffinity(features, profile.Liked),
+		// What the dislikes say beyond the videos they were pressed on. Subtracted
+		// rather than added, and aged — see buildDislikeAffinity.
+		dislikes:   buildDislikeAffinity(features, profile.Disliked, now),
+		retention:  retention,
+		coverage:   coverage,
+		suppressed: suppressed,
+		topic:      topic,
+		languages:  languages,
+		now:        now,
+		tuning:     tuning.resolve(),
+	}, nil
+}
 
-	// Which share of the page each video competes for. Recorded here because
-	// this loop is where subscription and affinity are already being weighed;
+func (r *Ranker) rankAll(
+	ctx context.Context,
+	userID, topic string,
+	mix FeedMix,
+	languages []string,
+	tuning Tuning,
+) ([]domain.RankedVideo, error) {
+	features, in, err := r.buildInputs(ctx, userID, topic, languages, tuning)
+	if err != nil {
+		return nil, err
+	}
+
+	// Which share of the page each video competes for. Recorded as scoring goes
+	// because that is where subscription and affinity are already being weighed;
 	// asking again afterwards would be asking the same questions twice and
 	// risking a different answer.
 	slots := make(map[string]feedSlot, len(features))
+	ranked := make([]domain.RankedVideo, 0, len(features))
 
 	for _, f := range features {
-		if !matchesTopic(f, topic) {
+		breakdown := scoreVideo(f, in)
+		if breakdown.Excluded != "" {
 			continue
 		}
-		if _, disliked := profile.Disliked[f.VideoID]; disliked {
-			continue
-		}
-		if channelSuppressed(f.ChannelID) {
-			continue
-		}
-		if f.MediaState == "MEDIA_STATE_FAILED" {
-			continue
-		}
-		if f.MediaState == "MEDIA_STATE_EVICTED" {
-			continue
-		}
-
-		fraction, opened := profile.WatchedFraction[f.VideoID]
-		if opened && fraction >= watchedEnoughThreshold {
-			continue
-		}
-			// When a language filter is set, skip videos whose language is
-			// unknown or does not match one of the allowed codes.
-			if len(languages) > 0 {
-				if f.Language == "" {
-					continue
-				}
-				allowed := false
-				for _, lang := range languages {
-					if strings.EqualFold(f.Language, lang) {
-						allowed = true
-						break
-					}
-				}
-				if !allowed {
-					continue
-				}
-			}
-		// Videos without a publish date are skipped — the feed only ranks
-		// content whose age is known. AddedAt is a fallback for the age
-		// penalty on the ranking side, not for surfacing in the feed.
-		if f.PublishedAt.IsZero() || f.PublishedAt.Unix() <= 0 {
-			continue
-		}
-		if now.Sub(f.PublishedAt).Hours()/24 > maxPublishedAgeDays {
-			continue
-		}
-		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now)
-		reason := domain.ReasonRecentlyAdded
-		// Assigned alongside the reason but not from it. The watch states come
-		// first because they describe a video the viewer has already committed
-		// to; where it came from only decides the rest.
-		slot := slotOther
-
-		switch {
-		case isContinueWatching(fraction):
-			score += weightContinueWatching
-			reason = domain.ReasonContinueWatching
-			slot = slotContinueWatching
-		case isWatched(fraction):
-			// Already finished — don't suggest again.
-			continue
-		case opened:
-			// Opened and left almost immediately.
-			score -= penaltyBounced
-			reason = domain.ReasonBounced
-		default:
-			score += weightNeverWatched
-			reason = domain.ReasonNeverWatched
-		}
-
-		if profile.Subscribed[f.ChannelID] {
-			score += weightSubscribed
-			if reason == domain.ReasonRecentlyAdded || reason == domain.ReasonNeverWatched {
-				reason = domain.ReasonSubscribedChannel
-			}
-			if slot == slotOther {
-				slot = slotSubscribed
-			}
-		}
-
-		// Affinity is multiplicative, not additive. Additive affinity gave a
-		// video from an unwatched channel ~3.0 and an affinity-matched video
-		// ~5.5 — a 1.8× gap too narrow to survive quota interleaving, where
-		// each bucket picks independently. Multiplicative runs 0.5× to 2.5×,
-		// which is a 5× gap: enough that affinity content dominates its bucket
-		// and discovery stays in its own.
-		//
-		// Only watch-based affinity goes in the multiplier — channels and
-		// topics, both normalised 0..1. Likes stay additive: they are rare
-		// (9 vs 2,045 watch signals in this library) and already weight 2.0.
-		channelAff := watchAffinity.Channels[f.ChannelID]
-		topicAff := watchAffinity.TopicScore(f)
-		combinedAffinity := (weightChannelAffinity*channelAff + weightTopicAffinity*topicAff) /
-			(weightChannelAffinity + weightTopicAffinity)
-		affinityMultiplier := 0.5 + 2.0*combinedAffinity
-
-		// Discovery: outside the viewer's affinity and not a channel they
-		// chose to follow. Gets a dedicated reason so the quota can reserve a
-		// window for unfamiliar material.
-		//
-		// The complement of that test is the affinity slot: not subscribed, but
-		// matching what this viewer watches. It had no share of its own before,
-		// which is why "more of what I like" could not be turned up or down —
-		// those videos were spread across the never-watched and recently-added
-		// buckets, mixed in with everything else that happened to be new.
-		if !profile.Subscribed[f.ChannelID] {
-			if combinedAffinity < discoveryAffinityThreshold {
-				reason = domain.ReasonDiscovery
-				score += weightDiscoveryBase
-				if slot == slotOther {
-					slot = slotDiscovery
-				}
-			} else if slot == slotOther {
-				slot = slotAffinity
-			}
-		}
-
-		score *= affinityMultiplier
-
-		score += weightLikeAffinity * likes.Score(f)
-		// The other half of the same sentence. Outside the multiplier for the
-		// same reason likes are: reactions are rare next to watch signals, and
-		// scaling a rejection by how much the viewer likes the channel it came
-		// from is not what the rejection said.
-		score -= weightDislikeAffinity * dislikes.Score(f)
-		score += weightRetention * float64(retention[f.VideoID])
-
-		if profile.RecentImpressions[f.VideoID] {
-			score -= penaltyImpression
-		}
-
-		score *= publishedAgePenalty(f.PublishedAt, f.AddedAt, now)
-		// Fresh videos get a boost; subscribed channels get more.
-		// Freshness alone surfaces breaking news; the subscription
-		// multiplier ensures followed channels are never missed.
-		score *= freshnessBoost(f.PublishedAt, f.ViewCount, now)
-		if profile.Subscribed[f.ChannelID] && !f.PublishedAt.IsZero() &&
-			now.Sub(f.PublishedAt) < freshnessWindow {
-			score *= 3.0
-		}
-
-		slots[f.VideoID] = slot
-		ranked = append(ranked, domain.RankedVideo{VideoID: f.VideoID, Score: score, Reason: reason})
+		slots[f.VideoID] = breakdown.Slot
+		ranked = append(ranked, domain.RankedVideo{
+			VideoID: f.VideoID,
+			Score:   breakdown.Score,
+			Reason:  breakdown.Reason,
+		})
 	}
 
 	sortRanked(ranked)
@@ -530,8 +466,8 @@ func (r *Ranker) rankAll(
 	// Both apply to the feed, which is what someone browses. Up-next is a
 	// different question — "what follows this?" — and deliberately keeps its
 	// pure same-channel-first ordering.
-	return applyChannelDiversity(applyDiscoveryQuota(ranked, slots, mix), channelOf,
-		maxPerChannelPerWindow, quotaWindow), nil
+	return applyChannelDiversity(applyDiscoveryQuota(ranked, slots, mix, in.tuning), channelOf,
+		slots, maxPerChannelPerWindow, quotaWindow), nil
 }
 
 // MostWatched is the "played the most" collection, ordered by time spent.
@@ -578,7 +514,11 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 			continue
 		}
 
-		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now)
+		// Up-next deliberately ranks on the built-in constants. The advanced
+		// settings answer "what should my home page look like"; the rail beside a
+		// playing video is not that question, and a number moved on a settings
+		// screen should not silently reorder it.
+		score := weightRecentlyAdded * recencyBoost(f.AddedAt, now, recencyHalfLifeDay)
 		reason := domain.ReasonRecentlyAdded
 
 		if current != nil {

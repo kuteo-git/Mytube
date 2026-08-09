@@ -29,14 +29,47 @@ type feedMix struct {
 	Discovery  int `json:"discoveryPercent"`
 }
 
-// defaultFeedMix mirrors usecase.DefaultFeedMix, and must keep mirroring it.
+// defaultFeedMix is what "Reset to default" returns to.
 //
 // Duplicated rather than imported: the gateway does not link the ranker, and a
 // REST layer reaching into another service's use cases for a constant is the
-// dependency this architecture exists to prevent. The number is the same one
-// the old fixed quota produced, so installing this changes nothing until a
-// slider moves.
-var defaultFeedMix = feedMix{Subscribed: 25, Affinity: 60, Discovery: 15}
+// dependency this architecture exists to prevent.
+//
+// It was 25/60/15, which was the split the fixed quota it replaced produced. On
+// a library where nearly everything comes from subscribed channels that turned
+// out to be badly wrong — the affinity slot held twenty-five videos against
+// three and a half thousand subscribed ones, so a 60% affinity share spent half
+// of every page scraping that bucket's floor while videos scoring three times
+// higher went unused. A default that leads somewhere bad is worse than no
+// default, because it is where the reset button sends you.
+var defaultFeedMix = feedMix{Subscribed: 60, Affinity: 20, Discovery: 20}
+
+// The shares the sliders never divide, in whole percent.
+//
+// Sent to the browser rather than hard-coded there. The settings page used to
+// carry its own copy and spent a release quoting 82% after the fresh-subscribed
+// share took ten of it — every slider's "N of 24" readout was overstated by a
+// seventh, on the one screen whose job is to say what the numbers mean.
+//
+// The fresh share is a setting now, so it is read from the ranking config
+// rather than assumed.
+const (
+	shareContinueWatchingPercent  = 10
+	shareRewatchPercent           = 8
+	defaultFreshSubscribedPercent = 10
+)
+
+func (g *Gateway) fixedShares() map[string]int {
+	fresh := defaultFreshSubscribedPercent
+	if set := g.loadRanking().FreshSubscribedPercent; set != nil {
+		fresh = *set
+	}
+	return map[string]int{
+		"continueWatching": shareContinueWatchingPercent,
+		"rewatch":          shareRewatchPercent,
+		"freshSubscribed":  fresh,
+	}
+}
 
 func (g *Gateway) feedMixPath() string {
 	return filepath.Join(g.configDir, "feed-mix.json")
@@ -97,6 +130,9 @@ func (g *Gateway) handleGetFeedMix(w http.ResponseWriter, _ *http.Request) {
 			"affinityPercent":   defaultFeedMix.Affinity,
 			"discoveryPercent":  defaultFeedMix.Discovery,
 		},
+		// What is not up for division, so the page can work out what a slider is
+		// a percentage *of* rather than guessing.
+		"fixedShares": g.fixedShares(),
 	})
 }
 

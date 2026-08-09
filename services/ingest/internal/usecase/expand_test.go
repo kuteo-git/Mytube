@@ -20,6 +20,8 @@ type recordingLibrary struct {
 	// missingTopics is what ListVideosNeedingBackfill hands back, so a backfill
 	// test can control exactly which videos a pass sees.
 	missingTopics []domain.VideoRef
+	// subscribed is what ListSubscribedChannels hands back.
+	subscribed []domain.SubscribedChannel
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -44,7 +46,7 @@ func (r *recordingLibrary) UpsertChannelArtwork(context.Context, domain.ChannelM
 	return nil
 }
 func (r *recordingLibrary) ListSubscribedChannels(context.Context) ([]domain.SubscribedChannel, error) {
-	return nil, nil
+	return r.subscribed, nil
 }
 func (r *recordingLibrary) ListVideosNeedingBackfill(context.Context, int32) ([]domain.VideoRef, error) {
 	return r.missingTopics, nil

@@ -31,13 +31,25 @@ type rssFeed struct {
 }
 
 type rssEntry struct {
-	VideoID   string          `xml:"http://www.youtube.com/xml/schemas/2015 videoId"`
-	Published string          `xml:"published"`
-	Media     rssMediaGroup   `xml:"http://search.yahoo.com/mrss/ group"`
+	VideoID   string        `xml:"http://www.youtube.com/xml/schemas/2015 videoId"`
+	ChannelID string        `xml:"http://www.youtube.com/xml/schemas/2015 channelId"`
+	Title     string        `xml:"title"`
+	Published string        `xml:"published"`
+	Author    rssAuthor     `xml:"author"`
+	Media     rssMediaGroup `xml:"http://search.yahoo.com/mrss/ group"`
+}
+
+type rssAuthor struct {
+	Name string `xml:"name"`
 }
 
 type rssMediaGroup struct {
+	Thumbnail rssMediaThumbnail `xml:"http://search.yahoo.com/mrss/ thumbnail"`
 	Community rssMediaCommunity `xml:"http://search.yahoo.com/mrss/ community"`
+}
+
+type rssMediaThumbnail struct {
+	URL string `xml:"url,attr"`
 }
 
 type rssMediaCommunity struct {
@@ -838,7 +850,13 @@ func (d *Downloader) FetchChannelFeed(ctx context.Context, channelID string) ([]
 		if e.VideoID == "" {
 			continue
 		}
-		entry := domain.RSSEntry{VideoID: e.VideoID}
+		entry := domain.RSSEntry{
+			VideoID:      e.VideoID,
+			Title:        e.Title,
+			ChannelID:    e.ChannelID,
+			ChannelName:  e.Author.Name,
+			ThumbnailURL: e.Media.Thumbnail.URL,
+		}
 
 		if e.Published != "" {
 			if parsed, err := time.Parse(time.RFC3339, e.Published); err == nil {

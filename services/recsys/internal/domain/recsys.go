@@ -85,6 +85,16 @@ type UserProfile struct {
 	// which records whether something was ever watched and not when: deciding
 	// what follows a video needs "just now" specifically.
 	RecentlyWatched map[string]bool
+	// The handful of videos this viewer has actually watched in the current
+	// sitting, with how far they got.
+	//
+	// Watch history says what someone likes; this says what they came for today.
+	// The two disagree constantly and the disagreement is the point — a viewer
+	// with two years of music in their history who has spent the last hour on
+	// cooking videos is asking for cooking videos, and a feed built only from the
+	// accumulated total cannot tell. It is deliberately small: a handful of
+	// recent videos, not a second history.
+	SessionWatched map[string]float32
 }
 
 type RankedVideo struct {
@@ -109,6 +119,12 @@ type SignalStore interface {
 	// ranking prefer material that holds an audience over material that merely
 	// gets opened.
 	VideoRetention(ctx context.Context) (map[string]float32, error)
+	// ImpressionCoverage reports how many times each video has been shown to
+	// anyone in the household. Like VideoRetention it is a property of the video
+	// rather than of the viewer asking, and it is what lets the discovery share
+	// work through the library instead of re-offering the same few videos every
+	// time somebody asks for something new.
+	ImpressionCoverage(ctx context.Context) (map[string]int, error)
 }
 
 // FeatureSource pulls the video projection from the catalog service over RPC.

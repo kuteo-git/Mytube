@@ -154,6 +154,7 @@ Every element either does something real or is dropped.
 - Subtitles are fetched before the media file. The subtitle pass runs on play, never on prefetch.
 - `/activity` shows the download queue and scan history.
 - The scanner runs every hour (`SCAN_INTERVAL`). It uses flat listings; RSS fills in missing `published_at` and `viewCount` gaps without overwriting existing values.
+- A **second, fast pass** (`SUBSCRIBED_SCAN_INTERVAL`, default 5 min) reads RSS only, for subscribed channels only, and upserts uploads published within 48h. Metadata only — it queues no downloads and requests no listings, which is what makes it affordable at that rate. It exists because an hour is the whole of how late a followed channel's upload can be.
 - Feed and search use `useInfiniteQuery` with a real "Load more" button.
 
 ## 6. Recommendation
@@ -162,7 +163,7 @@ Every element either does something real or is dropped.
 
 ### Feed mix
 
-`/settings` → "Home feed" has three adjustable sliders totaling 100, dividing 82% of the page:
+`/settings` → "Home feed" has three adjustable sliders totaling 100, dividing whatever the fixed shares leave (72% by default):
 
 | Slider | Meaning | Default |
 |---|---|---|
@@ -170,11 +171,18 @@ Every element either does something real or is dropped.
 | More of what you watch | not subscribed, `combinedAffinity ≥ 0.15` | 60% |
 | Something new | not subscribed, below threshold | 15% |
 
-The remaining 18% is fixed: continue watching 10% + rewatch 8%.
+The remaining 28% is fixed: continue watching 10% + rewatch 8% + **new from followed channels 10%**.
+
+The last of those (`slotFreshSubscribed`: subscribed channel, published within `freshnessWindow`) is fixed for the same reason as the other two — it is not a taste. It is also the one slot exempt from the per-channel cap, because a channel that posted twice this morning is not the thing that cap was written to stop.
 
 - `feedSlot` is separate from `Reason`.
 - Zero means gone; those videos go to the end.
-- Stored at the gateway (`config/feed-mix.json`), sent in `GetFeedRequest.mix`. Recsys holds no config.
+- Buckets are ordered by **softmax sampling on the score** (`exp(score/T)`, Gumbel top-k, `softmaxTemperature = 0.6`), never uniformly shuffled. A uniform shuffle makes `freshnessBoost` and `penaltyImpression` inert and the score decorative.
+- Sampling is confined to the best `samplePoolSize = 5 × quotaWindow` of each bucket. Gumbel noise grows like `log N`, so over the whole bucket a library of a few thousand always floats something worthless to the front — measured as 8 of the first 24 scoring below zero. Capping the pool makes the behaviour independent of library size; lowering the temperature alone does not.
+- The mix must match the shape of the library, not just taste. Here nearly everything comes from subscribed channels, so the `affinity` slot holds ~25 videos against 3,400 subscribed — a 60% affinity share spent half the page scraping that bucket's floor. Check bucket sizes with `/api/feed/explain` before tuning the sliders.
+- Stored at the gateway (`data/feed-mix.json`), sent in `GetFeedRequest.mix`. Recsys holds no config.
+- Default mix is **60/20/20**. It was 25/60/15 — the split the fixed quota it replaced produced — which on this library gave 60% of the page to a bucket holding 25 videos. A default that leads somewhere bad is worse than none, because it is where the reset button sends you.
+- The fixed shares are **sent to the browser**, never hard-coded there. The page carried its own copy once and spent a release quoting 82% after the fresh-subscribed share took ten of it.
 - One mix for the household.
 - Saving drops the `['feed']` cache.
 
@@ -193,6 +201,8 @@ The remaining 18% is fixed: continue watching 10% + rewatch 8%.
 | Affinity from dislikes | same axes, decaying 90-day half-life | ×−0.7 |
 | Global retention | `avg(max(fraction) per viewer)` | ×1.5 |
 | Shown in last 24h | | −2.0 |
+| Session intent | affinity over the last ≤3 videos watched in 2h | blended 50/50 into `combinedAffinity` |
+| Never shown to anyone | `exp(-shown_count/3)`, **discovery slot only** | ×1.5 |
 
 Key rules:
 - `BOUNCED` is its own Reason.
@@ -216,7 +226,20 @@ In up-next, everything not a relationship to the video playing (channel affinity
 
 ### Feed mechanics
 
-- `GetFeedPage` freezes ranking into a per-session snapshot (TTL 30 minutes) so pages do not repeat.
+- `GetFeedPage` freezes ranking into a per-session snapshot (TTL 30 minutes) so pages do not repeat. The TTL runs from creation, **not** from last read — a sliding window meant a viewer who kept scrolling never re-ranked.
+- A WATCH signal above the bounce threshold invalidates that viewer's snapshots, so the next Home load reflects what they just watched. Appending would not do: new material goes to the tail by design.
+- `GET /api/feed/explain[?video=<id>]` returns every video's score component by component, its slot, its position, and for excluded videos which rule dropped it. Debug only, no UI. Tune with it rather than by eye.
+- `GET /api/settings/feed-mix/buckets` counts how many videos each share can draw on. The sliders divide a page; a share can only be filled from a bucket that has videos in it, and that was invisible until it was measured.
+
+### Advanced settings
+
+`/settings/advanced` exposes seven ranking constants: `sessionBlend`, `freshSubscribedPercent`, `freshnessWindowHours`, `maxPublishedAgeDays`, `recencyHalfLifeDays`, `softmaxTemperature`, `samplePoolSize`.
+
+- Stored at the gateway (`data/ranking.json`, hand-editable), sent in `GetFeedRequest.tuning` / `ExplainFeedRequest.tuning`. Recsys still holds no config.
+- Every field is **optional with explicit presence**, all the way from proto to JSON. Zero is a real setting for several — a session blend of zero means "ignore this sitting" — and an absent field means "use the built-in value". Flattening them would make an older gateway look like one asking for a zero maximum age, which is an empty feed.
+- Recsys **clamps** out-of-range values rather than refusing them, and publishes the ranges via `TuningBounds()` so the sliders cannot disagree with the clamp.
+- **Up-next is deliberately not tuned.** It answers a different question, and a number moved on a settings screen must not silently reorder the rail beside a playing video.
+- The two dozen `weight*`/`penalty*` constants are **not** exposed. §6's value is that every score can be explained; twenty knobs nobody remembers setting is how that is lost.
 - When a snapshot falls below 48 videos, `ExpandLibrary` runs: deepen `topics.yaml` sources → InnerTube related → search by topic name. Only one expansion at a time.
 - Videos older than 365 days (PublishedAt, or AddedAt fallback) are filtered from Home.
 

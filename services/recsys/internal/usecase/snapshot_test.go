@@ -53,6 +53,60 @@ func TestAppendAddsOnlyUnseenVideosAndPutsThemAtTheTail(t *testing.T) {
 	}
 }
 
+// A snapshot has to age from when it was made, not from when it was last read.
+//
+// Get used to refresh the expiry on every access, which made the thirty-minute
+// TTL a sliding window: someone scrolling steadily never re-ranked, so nothing
+// that arrived after they opened the page could ever reach the top of it.
+func TestASnapshotExpiresEvenWhileItIsBeingRead(t *testing.T) {
+	store := NewSnapshotStore(20 * time.Millisecond)
+	id := store.Put("user1|Tech", ranked("a"))
+
+	for i := 0; i < 8; i++ {
+		time.Sleep(5 * time.Millisecond)
+		store.Get(id)
+	}
+
+	if _, ok := store.Get(id); ok {
+		t.Fatal("a snapshot read continuously never expired; the feed would be " +
+			"frozen for as long as the viewer keeps scrolling")
+	}
+}
+
+// What makes session intent visible. The feed reacts to the video that just
+// finished only if the ordering it was frozen into is thrown away first.
+func TestWatchingSomethingDropsThatViewersSnapshots(t *testing.T) {
+	store := NewSnapshotStore(time.Minute)
+	mine := store.Put("user1|", ranked("a", "b"))
+	mineByTopic := store.Put("user1|Tech", ranked("a", "b"))
+	theirs := store.Put("user2|", ranked("a", "b"))
+
+	store.InvalidateUser("user1")
+
+	if _, ok := store.Get(mine); ok {
+		t.Fatal("the viewer's own snapshot survived their watching something")
+	}
+	if _, ok := store.Get(mineByTopic); ok {
+		t.Fatal("a topic-filtered snapshot of the same viewer survived")
+	}
+	if _, ok := store.Get(theirs); !ok {
+		t.Fatal("another household member's feed was reordered under them")
+	}
+}
+
+// user1 must not take user10's snapshots with it. The key is a prefix, and a
+// prefix match without the separator is the classic way to get this wrong.
+func TestInvalidatingOneViewerDoesNotMatchASimilarlyNamedOne(t *testing.T) {
+	store := NewSnapshotStore(time.Minute)
+	other := store.Put("user10|", ranked("a"))
+
+	store.InvalidateUser("user1")
+
+	if _, ok := store.Get(other); !ok {
+		t.Fatal("invalidating user1 also dropped user10's snapshot")
+	}
+}
+
 func TestExpiredSnapshotIsReportedMissing(t *testing.T) {
 	store := NewSnapshotStore(time.Millisecond)
 	id := store.Put("user1|Tech", ranked("a"))

@@ -1,7 +1,9 @@
 package usecase
 
 import (
+	"math"
 	"math/rand"
+	"sort"
 	"time"
 
 	"github.com/lucnguyen/local-youtube/services/recsys/internal/domain"
@@ -25,6 +27,17 @@ const (
 	slotSubscribed
 	slotAffinity
 	slotDiscovery
+	// slotFreshSubscribed is a video published in the last two days by a channel
+	// the viewer follows.
+	//
+	// Separate from slotSubscribed because the two answer different questions.
+	// That slot is "how much of my page comes from channels I follow", which is a
+	// preference and belongs on a slider. This one is "did I miss anything", which
+	// is not a preference at all — nobody follows a channel in order to find out
+	// about its uploads a week later. Scoring cannot deliver it: the subscribed
+	// share is about five places wide, and a household following twenty channels
+	// loses that race routinely.
+	slotFreshSubscribed
 )
 
 // The two shares the viewer cannot adjust.
@@ -37,9 +50,25 @@ const (
 const (
 	shareContinueWatching = 0.10
 	shareRewatch          = 0.08
-	// What is left for the three the viewer does control.
-	shareAdjustable = 1 - shareContinueWatching - shareRewatch
+	// New uploads from followed channels. Fixed for the same reason as the other
+	// two: it is not a taste, and a viewer asking for more discovery is not asking
+	// to stop being told when the channels they follow post.
+	shareFreshSubscribed = 0.10
 )
+
+// adjustableShare is what the three sliders divide between them.
+//
+// A function rather than a constant because the fresh-subscribed share is now
+// settable, and a hard-coded 72% would be wrong the moment somebody moved it —
+// which is the same class of mistake as the 82% the settings page was still
+// showing after this share was introduced.
+func adjustableShare(shareFresh float64) float64 {
+	left := 1 - shareContinueWatching - shareRewatch - shareFresh
+	if left < 0 {
+		return 0
+	}
+	return left
+}
 
 // FeedMix is how the adjustable share is divided, in percent.
 //
@@ -72,13 +101,13 @@ var DefaultFeedMix = FeedMix{Subscribed: 25, Affinity: 60, Discovery: 15}
 // Percentages that do not add to a hundred are honoured by ratio rather than
 // rejected: 3/2/1 and 50/33/17 describe the same feed, and a service is not the
 // place to argue about arithmetic the UI already does.
-func (m FeedMix) normalised() (subscribed, affinity, discovery float64) {
+func (m FeedMix) normalised(shareFresh float64) (subscribed, affinity, discovery float64) {
 	total := m.Subscribed + m.Affinity + m.Discovery
 	if total <= 0 {
 		m = DefaultFeedMix
 		total = m.Subscribed + m.Affinity + m.Discovery
 	}
-	scale := shareAdjustable / float64(total)
+	scale := adjustableShare(shareFresh) / float64(total)
 	return float64(m.Subscribed) * scale,
 		float64(m.Affinity) * scale,
 		float64(m.Discovery) * scale
@@ -101,9 +130,12 @@ type quotaBucket struct {
 	floor bool
 }
 
-func bucketsFor(mix FeedMix) []quotaBucket {
-	subscribed, affinity, discovery := mix.normalised()
+func bucketsFor(mix FeedMix, t resolvedTuning) []quotaBucket {
+	subscribed, affinity, discovery := mix.normalised(t.shareFreshSubscribed)
 	return []quotaBucket{
+		// First, so that on the rare page where something is genuinely new it is
+		// at the top rather than a third of the way down.
+		{slot: slotFreshSubscribed, share: t.shareFreshSubscribed, floor: true},
 		{slot: slotAffinity, share: affinity},
 		{slot: slotSubscribed, share: subscribed},
 		{slot: slotDiscovery, share: discovery},
@@ -121,11 +153,12 @@ func applyDiscoveryQuota(
 	ranked []domain.RankedVideo,
 	slots map[string]feedSlot,
 	mix FeedMix,
+	t resolvedTuning,
 ) []domain.RankedVideo {
 	if len(ranked) == 0 {
 		return ranked
 	}
-	buckets := bucketsFor(mix)
+	buckets := bucketsFor(mix, t)
 
 	// Split by slot, preserving the score order within each bucket.
 	bySlot := make(map[feedSlot][]domain.RankedVideo, len(buckets))
@@ -139,14 +172,23 @@ func applyDiscoveryQuota(
 		bySlot[slot] = append(bySlot[slot], v)
 	}
 
-	// Shuffle each bucket so the feed looks different on each refresh.
-	// Seeded by the minute so it changes often enough to feel dynamic without
-	// flipping every request.
+	// Reorder each bucket by sampling on its scores, so the feed looks different
+	// on each refresh without the score ceasing to matter.
+	//
+	// This was a uniform shuffle, and that was the single largest defect in the
+	// feed. Every weight in ranker.go, every penalty, and both of the terms whose
+	// whole purpose is to move a video to the front — freshnessBoost and
+	// penaltyImpression — were computed, sorted, and then discarded here. A video
+	// published an hour ago on a followed channel holds the highest score in the
+	// library and was dropped into a uniformly random position among hundreds of
+	// subscribed candidates, reaching the five places per window about as often as
+	// anything else. The reported symptom was that new uploads never appeared; the
+	// cause was that nothing appeared for any reason at all.
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for _, bucket := range buckets {
-		shuffleSlice(bySlot[bucket.slot], rng)
+		sampleByScore(bySlot[bucket.slot], rng, t)
 	}
-	shuffleSlice(other, rng)
+	sampleByScore(other, rng, t)
 
 	// A share of zero is an instruction, not a shortage: those videos are held
 	// back entirely rather than filling gaps later, which is the difference
@@ -273,8 +315,17 @@ func capPerChannel(
 //
 // Like the reason quota this reorders and never drops: a video pushed out of
 // one window appears in the next, so nothing becomes unreachable by scrolling.
+// Fresh uploads from followed channels are exempt, which is not an exception so
+// much as the rule applied honestly. The cap exists to stop a channel the viewer
+// watches constantly from *being* the page — a channel that posted twice this
+// morning is not doing that, and hiding the second upload behind a rule aimed at
+// the first is how "I never see new videos" happens. That slot is bounded by its
+// own share, so the exemption cannot cost more than a tenth of the window.
 func applyChannelDiversity(
-	ranked []domain.RankedVideo, channelOf map[string]string, perChannel, window int,
+	ranked []domain.RankedVideo,
+	channelOf map[string]string,
+	slots map[string]feedSlot,
+	perChannel, window int,
 ) []domain.RankedVideo {
 	if len(ranked) == 0 || len(channelOf) == 0 || perChannel <= 0 || window <= 0 {
 		return ranked
@@ -293,9 +344,10 @@ func applyChannelDiversity(
 
 	take := func(video domain.RankedVideo) bool {
 		channel := channelOf[video.VideoID]
+		exempt := slots[video.VideoID] == slotFreshSubscribed
 		// A video whose channel is unknown cannot crowd a channel out, so it is
 		// never held back.
-		if channel != "" && seen[channel] >= perChannel {
+		if !exempt && channel != "" && seen[channel] >= perChannel {
 			return false
 		}
 		out = append(out, video)
@@ -330,9 +382,81 @@ func applyChannelDiversity(
 	return append(out, deferred...)
 }
 
-// shuffleSlice randomly reorders a slice using the provided source.
-func shuffleSlice(s []domain.RankedVideo, rng *rand.Rand) {
-	rng.Shuffle(len(s), func(i, j int) {
-		s[i], s[j] = s[j], s[i]
-	})
+// How sharply sampling favours the higher score.
+//
+// Scores in this ranker run from roughly -10 to 30, and most of a bucket sits
+// within a few points of its neighbours. At this temperature a one-point lead is
+// worth about 5:1 and a five-point lead is decisive, which is the shape wanted:
+// videos that are genuinely close trade places between refreshes, and a video
+// that is not close does not.
+const softmaxTemperature = 0.6
+
+// How many of a bucket's best are sampled. The rest stay in score order.
+//
+// This exists because the first attempt did not have it, and the failure is
+// worth recording. Gumbel noise is unbounded, and the largest of N draws grows
+// like log N — so over a bucket of a few thousand, some low-scoring video always
+// draws a value large enough to reach the front. Measured on the real library:
+// eight of the first twenty-four videos scored below zero while the catalogue
+// held two dozen above fourteen. It passed its unit test, which used a bucket of
+// two hundred, because at that size the worst noise is about five points and the
+// gap it had to cross was ten.
+//
+// Capping the pool is the fix rather than lowering the temperature further,
+// because it removes the dependence on library size entirely: the noise a video
+// must overcome is now a property of this constant and nothing else. Five windows
+// of material is far more than anybody scrolls in one sitting, and past it the
+// impression penalty is what keeps pages from repeating.
+const samplePoolSize = 5 * quotaWindow
+
+// sampleByScore reorders a bucket in place, drawing without replacement with
+// probability proportional to exp(score/T).
+//
+// Implemented with the Gumbel top-k trick: adding Gumbel noise to each score and
+// sorting is provably the same distribution as drawing one at a time by softmax
+// weight, and it is one sort rather than a quadratic loop over a bucket that can
+// hold the whole library.
+//
+// Scores are shifted by the maximum before exponentiating — or rather, the shift
+// is unnecessary here precisely because the Gumbel form never exponentiates at
+// all, which is the other reason to prefer it: a bucket of deeply negative scores
+// cannot collapse to a vector of zero weights with nothing left to draw from.
+func sampleByScore(videos []domain.RankedVideo, rng *rand.Rand, t resolvedTuning) {
+	if len(videos) < 2 {
+		return
+	}
+	// Only the head is sampled. The caller hands buckets in score order, so this
+	// is the best samplePoolSize of them; everything behind stays where it was.
+	if t.samplePoolSize > 0 && len(videos) > t.samplePoolSize {
+		videos = videos[:t.samplePoolSize]
+	}
+	keys := make([]float64, len(videos))
+	order := make([]int, len(videos))
+	for i, v := range videos {
+		keys[i] = v.Score/t.softmaxTemperature + gumbel(rng)
+		order[i] = i
+	}
+	// The permutation is sorted rather than the videos: sorting the videos
+	// directly would move them out from under the keys, which are indexed by the
+	// original position.
+	sort.SliceStable(order, func(i, j int) bool { return keys[order[i]] > keys[order[j]] })
+
+	sorted := make([]domain.RankedVideo, len(videos))
+	for i, from := range order {
+		sorted[i] = videos[from]
+	}
+	copy(videos, sorted)
+}
+
+// gumbel draws from the standard Gumbel distribution.
+//
+// rng.Float64 returns [0,1), and log(0) is -Inf, which would sort a video to the
+// very back rather than merely far back. Nudging the draw off zero costs nothing
+// and keeps every key finite.
+func gumbel(rng *rand.Rand) float64 {
+	u := rng.Float64()
+	if u <= 0 {
+		u = math.SmallestNonzeroFloat64
+	}
+	return -math.Log(-math.Log(u))
 }

@@ -44,9 +44,9 @@ func TestQuotaKeepsUnfamiliarVideosInTheFirstPageEvenWhenTheyScoreLowest(t *test
 	ranked = append(ranked, slotted(slotRewatch, 20, "rw", slots)...)
 	ranked = append(ranked, slotted(slotDiscovery, 20, "dc", slots)...)
 
-	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix)
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
 
-	// 15% of the 82% adjustable share, over 24 slots, is 2 places.
+	// 15% of the 72% adjustable share, over 24 slots, is 2 places.
 	if n := countSlot(got[:24], slots, slotDiscovery); n < 2 {
 		t.Fatalf("first page had %d discovery videos, want at least 2", n)
 	}
@@ -59,7 +59,7 @@ func TestQuotaDropsNothing(t *testing.T) {
 	ranked = append(ranked, slotted(slotAffinity, 3, "af", slots)...)
 	ranked = append(ranked, slotted(slotContinueWatching, 2, "cw", slots)...)
 
-	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix)
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
 
 	assertSameSet(t, got, ranked)
 }
@@ -70,7 +70,7 @@ func TestQuotaFallsBackToScoreWhenABucketIsEmpty(t *testing.T) {
 	slots := map[string]feedSlot{}
 	ranked := slotted(slotAffinity, 30, "af", slots)
 
-	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix)
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
 
 	assertSameSet(t, got, ranked)
 }
@@ -82,7 +82,7 @@ func TestAVideoWithNoSlotStillReachesTheFeed(t *testing.T) {
 	ranked := slotted(slotAffinity, 3, "af", slots)
 	ranked = append(ranked, domain.RankedVideo{VideoID: "bounced", Score: 0.1})
 
-	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix)
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
 
 	assertSameSet(t, got, ranked)
 }
@@ -96,9 +96,9 @@ func TestTheMixDecidesHowMuchOfThePageEachSourceGets(t *testing.T) {
 	ranked = append(ranked, slotted(slotDiscovery, 40, "dc", slots)...)
 
 	subscriberHeavy := applyDiscoveryQuota(ranked, slots,
-		FeedMix{Subscribed: 80, Affinity: 10, Discovery: 10})
+		FeedMix{Subscribed: 80, Affinity: 10, Discovery: 10}, defaultTuning())
 	explorer := applyDiscoveryQuota(ranked, slots,
-		FeedMix{Subscribed: 10, Affinity: 10, Discovery: 80})
+		FeedMix{Subscribed: 10, Affinity: 10, Discovery: 80}, defaultTuning())
 
 	subs := countSlot(subscriberHeavy[:24], slots, slotSubscribed)
 	explorerSubs := countSlot(explorer[:24], slots, slotSubscribed)
@@ -122,7 +122,7 @@ func TestZeroMeansNoneOfThatOnThePage(t *testing.T) {
 	ranked = append(ranked, slotted(slotDiscovery, 30, "dc", slots)...)
 
 	got := applyDiscoveryQuota(ranked, slots,
-		FeedMix{Subscribed: 100, Affinity: 0, Discovery: 0})
+		FeedMix{Subscribed: 100, Affinity: 0, Discovery: 0}, defaultTuning())
 
 	if n := countSlot(got[:24], slots, slotDiscovery); n != 0 {
 		t.Fatalf("discovery set to zero still put %d videos on the first page", n)
@@ -141,7 +141,7 @@ func TestTheFixedSharesKeepTheirFloor(t *testing.T) {
 	ranked = append(ranked, slotted(slotAffinity, 100, "af", slots)...)
 	ranked = append(ranked, slotted(slotContinueWatching, 1, "cw", slots)...)
 
-	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix)
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
 
 	if n := countSlot(got[:24], slots, slotContinueWatching); n != 1 {
 		t.Fatal("the one continue-watching video did not make the first page")
@@ -151,8 +151,8 @@ func TestTheFixedSharesKeepTheirFloor(t *testing.T) {
 func TestAnUnsetMixIsTheDefaultMix(t *testing.T) {
 	// What a caller that has never heard of the setting sends. It must not be
 	// read as "nothing at all", which is the one combination with no meaning.
-	subscribed, affinity, discovery := FeedMix{}.normalised()
-	wantSub, wantAff, wantDis := DefaultFeedMix.normalised()
+	subscribed, affinity, discovery := FeedMix{}.normalised(shareFreshSubscribed)
+	wantSub, wantAff, wantDis := DefaultFeedMix.normalised(shareFreshSubscribed)
 
 	if subscribed != wantSub || affinity != wantAff || discovery != wantDis {
 		t.Fatalf("an empty mix normalised to %.3f/%.3f/%.3f, want the defaults %.3f/%.3f/%.3f",
@@ -165,15 +165,205 @@ func TestTheMixIsReadAsARatio(t *testing.T) {
 	// a hundred are arithmetic the UI already does; the service honours the
 	// proportions rather than arguing.
 	small := FeedMix{Subscribed: 3, Affinity: 2, Discovery: 1}
-	subscribed, affinity, discovery := small.normalised()
+	subscribed, affinity, discovery := small.normalised(shareFreshSubscribed)
 
-	if total := subscribed + affinity + discovery; total < shareAdjustable-1e-9 ||
-		total > shareAdjustable+1e-9 {
-		t.Fatalf("shares summed to %.4f, want the adjustable share %.4f",
-			total, shareAdjustable)
+	want := adjustableShare(shareFreshSubscribed)
+	if total := subscribed + affinity + discovery; total < want-1e-9 ||
+		total > want+1e-9 {
+		t.Fatalf("shares summed to %.4f, want the adjustable share %.4f", total, want)
 	}
 	if subscribed <= affinity {
 		t.Fatalf("3 against 2 came out as %.3f against %.3f", subscribed, affinity)
+	}
+}
+
+// The bug that started this: the quota used to shuffle each bucket uniformly
+// before taking its share, so the score decided nothing about the first page.
+// A video that outscores its bucket by an order of magnitude — which is what a
+// video published an hour ago on a followed channel is — landed in a uniformly
+// random position among hundreds and reached the page about as often as any
+// other. Everything the ranker computes runs through here.
+func TestTheHighestScoringVideoUsuallyLeadsItsBucket(t *testing.T) {
+	const trials = 200
+	leads := 0
+	for i := 0; i < trials; i++ {
+		slots := map[string]feedSlot{}
+		// One video far above the rest, then a long tail it has to beat.
+		// slotted scores its first video at n, so the leader has to clear 200.
+		ranked := []domain.RankedVideo{{VideoID: "top", Score: 230}}
+		slots["top"] = slotAffinity
+		ranked = append(ranked, slotted(slotAffinity, 200, "af", slots)...)
+
+		got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+		if got[0].VideoID == "top" {
+			leads++
+		}
+	}
+	// Uniform shuffle put it first about 1 time in 200. Sampling by score has to
+	// be overwhelmingly more decisive than that to be worth the name.
+	if leads < trials*9/10 {
+		t.Fatalf("the top-scoring video led %d of %d pages; the score is not "+
+			"deciding the order", leads, trials)
+	}
+}
+
+// Sampling must not depend on how big the library is.
+//
+// The regression this exists for, measured on the real catalogue: with the whole
+// bucket in the draw, eight of the first twenty-four videos scored below zero
+// while two dozen above fourteen sat unused. Gumbel noise is unbounded and the
+// largest of N draws grows like log N, so at four thousand candidates something
+// worthless always draws its way to the front. The test above missed it because
+// two hundred candidates is not four thousand — which is the whole lesson.
+func TestALargeLibraryDoesNotLetWorthlessVideosOntoTheFirstPage(t *testing.T) {
+	slots := map[string]feedSlot{}
+	var ranked []domain.RankedVideo
+	// The shape of the real thing: a few dozen good videos and thousands of
+	// mediocre-to-bad ones, all in one bucket.
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("good%d", i)
+		slots[id] = slotAffinity
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: 15 - float64(i)*0.02})
+	}
+	for i := 0; i < 4000; i++ {
+		id := fmt.Sprintf("weak%d", i)
+		slots[id] = slotAffinity
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: 2 - float64(i)*0.001})
+	}
+	sortRanked(ranked)
+
+	for trial := 0; trial < 20; trial++ {
+		got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+		for i, v := range got[:24] {
+			if v.Score < 0 {
+				t.Fatalf("trial %d: position %d holds a video scoring %.2f while "+
+					"forty above fourteen were available", trial, i, v.Score)
+			}
+		}
+	}
+}
+
+// The other half of the same requirement. Freezing the order outright would fix
+// the bug above and reintroduce the one the shuffle was there to prevent: a feed
+// that looks identical every time it is opened.
+func TestVideosWithEqualScoresDoNotAlwaysLandInTheSameOrder(t *testing.T) {
+	orders := map[string]bool{}
+	for i := 0; i < 100; i++ {
+		slots := map[string]feedSlot{}
+		var ranked []domain.RankedVideo
+		for _, id := range []string{"a", "b", "c", "d", "e"} {
+			slots[id] = slotAffinity
+			ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: 5})
+		}
+
+		got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+		var key string
+		for _, v := range got {
+			key += v.VideoID
+		}
+		orders[key] = true
+	}
+	if len(orders) < 2 {
+		t.Fatal("five equally scored videos always came back in one order; " +
+			"the feed would look the same on every refresh")
+	}
+}
+
+// Sampling reorders; it must not lose or duplicate anything, and the guarantee
+// applies to a bucket of one as much as to a bucket of a thousand.
+func TestSamplingByScoreKeepsEveryVideo(t *testing.T) {
+	slots := map[string]feedSlot{}
+	var ranked []domain.RankedVideo
+	ranked = append(ranked, slotted(slotAffinity, 50, "af", slots)...)
+	ranked = append(ranked, slotted(slotDiscovery, 1, "dc", slots)...)
+
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+
+	assertSameSet(t, got, ranked)
+}
+
+// Scores here are not bounded below — a bounced video from a disliked topic
+// goes well under zero — and exp of a large negative must not become a zero
+// weight that the draw cannot handle.
+func TestSamplingSurvivesNegativeScores(t *testing.T) {
+	slots := map[string]feedSlot{}
+	ranked := []domain.RankedVideo{
+		{VideoID: "worst", Score: -40},
+		{VideoID: "bad", Score: -12},
+		{VideoID: "best", Score: -1},
+	}
+	for _, v := range ranked {
+		slots[v.VideoID] = slotAffinity
+	}
+
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+
+	assertSameSet(t, got, ranked)
+}
+
+// The reported symptom, stated as a test: a channel the viewer follows publishes,
+// and the video has to be on the first screen. Not probably — the subscribed
+// bucket is five places wide and a household with twenty followed channels will
+// lose that race often enough to be noticed, which is what was noticed.
+func TestAFreshVideoFromAFollowedChannelAlwaysReachesTheFirstPage(t *testing.T) {
+	slots := map[string]feedSlot{}
+	var ranked []domain.RankedVideo
+	// A saturated feed: the subscribed bucket is already full of older uploads
+	// that all outscore the new one.
+	ranked = append(ranked, slotted(slotSubscribed, 100, "sub", slots)...)
+	ranked = append(ranked, slotted(slotAffinity, 100, "af", slots)...)
+	slots["justPublished"] = slotFreshSubscribed
+	ranked = append(ranked, domain.RankedVideo{VideoID: "justPublished", Score: 0.1})
+
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+
+	if countSlot(got[:24], slots, slotFreshSubscribed) != 1 {
+		t.Fatal("a video published an hour ago on a followed channel did not make " +
+			"the first page, which is the whole reason this slot exists")
+	}
+}
+
+// The share is a reservation, not a hole in the page. Most of the time nothing
+// is fresh, and on those days the place has to go to somebody else.
+func TestTheFreshShareIsGivenBackWhenNothingIsFresh(t *testing.T) {
+	slots := map[string]feedSlot{}
+	ranked := slotted(slotAffinity, 50, "af", slots)
+
+	got := applyDiscoveryQuota(ranked, slots, DefaultFeedMix, defaultTuning())
+
+	if len(got) < 24 {
+		t.Fatalf("page came back %d long; an unused reservation must not shorten it",
+			len(got))
+	}
+	assertSameSet(t, got, ranked)
+}
+
+// A household following three channels that each post twice in a day should see
+// all six. The per-channel cap is right for the rest of the feed and wrong here:
+// it exists to stop a heavily watched channel becoming the page, and a channel
+// that posted twice today is not doing that.
+func TestTheChannelCapDoesNotApplyToFreshSubscribedVideos(t *testing.T) {
+	slots := map[string]feedSlot{}
+	channelOf := map[string]string{}
+	var ranked []domain.RankedVideo
+	for i := 0; i < 6; i++ {
+		id := fmt.Sprintf("new%d", i)
+		slots[id] = slotFreshSubscribed
+		channelOf[id] = "ch_followed"
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(20 - i)})
+	}
+	for i := 0; i < 50; i++ {
+		id := fmt.Sprintf("other%d", i)
+		slots[id] = slotAffinity
+		channelOf[id] = fmt.Sprintf("ch_%d", i)
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(10 - i)})
+	}
+
+	got := applyChannelDiversity(ranked, channelOf, slots, maxPerChannelPerWindow, quotaWindow)
+
+	if n := countSlot(got[:24], slots, slotFreshSubscribed); n != 6 {
+		t.Fatalf("%d of 6 new uploads from the followed channel reached the first "+
+			"window; the cap must not apply to them", n)
 	}
 }
 

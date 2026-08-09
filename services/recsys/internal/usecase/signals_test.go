@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -35,8 +36,8 @@ func profileWith(watched map[string]float32) domain.UserProfile {
 // test rather than to shared attributes.
 func twoVideos(addedAt time.Time) []domain.VideoFeatures {
 	return []domain.VideoFeatures{
-		{VideoID: "bounced", ChannelID: "ch_a", Topics: []string{"Cooking"}, AddedAt: addedAt},
-		{VideoID: "fresh", ChannelID: "ch_b", Topics: []string{"Gaming"}, AddedAt: addedAt},
+		{VideoID: "bounced", ChannelID: "ch_a", Topics: []string{"Cooking"}, AddedAt: addedAt, PublishedAt: addedAt},
+		{VideoID: "fresh", ChannelID: "ch_b", Topics: []string{"Gaming"}, AddedAt: addedAt, PublishedAt: addedAt},
 	}
 }
 
@@ -49,7 +50,7 @@ func TestBouncedVideoScoresBelowOneNeverOpened(t *testing.T) {
 	store := stubStore{profile: profileWith(map[string]float32{"bounced": 0.01})}
 	ranker := NewRanker(store, stubFeatures{features: twoVideos(now)})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestUnopenedVideoIsNotTreatedAsBounced(t *testing.T) {
 		stubFeatures{features: twoVideos(now)},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -92,8 +93,8 @@ func TestUnopenedVideoIsNotTreatedAsBounced(t *testing.T) {
 func TestRetentionLiftsVideosThatHoldAnAudience(t *testing.T) {
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "holds", ChannelID: "ch_a", AddedAt: now},
-		{VideoID: "loses", ChannelID: "ch_b", AddedAt: now},
+		{VideoID: "holds", ChannelID: "ch_a", AddedAt: now, PublishedAt: now},
+		{VideoID: "loses", ChannelID: "ch_b", AddedAt: now, PublishedAt: now},
 	}
 	store := stubStore{
 		profile:   emptyProfile(),
@@ -101,7 +102,7 @@ func TestRetentionLiftsVideosThatHoldAnAudience(t *testing.T) {
 	}
 	ranker := NewRanker(store, stubFeatures{features: features})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -115,10 +116,10 @@ func TestWatchingBuildsTopicAffinityWithoutAnyLikes(t *testing.T) {
 	// Taste has to be readable from watching, or it is not readable at all.
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "seen_1", ChannelID: "ch_a", Topics: []string{"Cooking"}, AddedAt: now},
-		{VideoID: "seen_2", ChannelID: "ch_b", Topics: []string{"Cooking"}, AddedAt: now},
-		{VideoID: "same_topic", ChannelID: "ch_c", Topics: []string{"Cooking"}, AddedAt: now},
-		{VideoID: "other_topic", ChannelID: "ch_d", Topics: []string{"Gaming"}, AddedAt: now},
+		{VideoID: "seen_1", ChannelID: "ch_a", Topics: []string{"Cooking"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "seen_2", ChannelID: "ch_b", Topics: []string{"Cooking"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "same_topic", ChannelID: "ch_c", Topics: []string{"Cooking"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "other_topic", ChannelID: "ch_d", Topics: []string{"Gaming"}, AddedAt: now, PublishedAt: now},
 	}
 	store := stubStore{profile: profileWith(map[string]float32{
 		"seen_1": 0.9,
@@ -126,7 +127,7 @@ func TestWatchingBuildsTopicAffinityWithoutAnyLikes(t *testing.T) {
 	})}
 	ranker := NewRanker(store, stubFeatures{features: features})
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestWatchAffinityIsBoundedByItsStrongestEntry(t *testing.T) {
 	for i := 0; i < 60; i++ {
 		id := string(rune('a'+i%26)) + string(rune('a'+i/26))
 		features = append(features, domain.VideoFeatures{
-			VideoID: id, ChannelID: "ch_a", Topics: []string{"Cooking"}, AddedAt: now,
+			VideoID: id, ChannelID: "ch_a", Topics: []string{"Cooking"}, AddedAt: now, PublishedAt: now,
 		})
 		watched[id] = 1.0
 	}
@@ -173,8 +174,8 @@ func TestWatchAffinityWeightsByHowMuchWasWatched(t *testing.T) {
 	// for its channel exactly as hard as one watched to the end.
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "finished", ChannelID: "ch_loved", Topics: []string{"Cooking"}, AddedAt: now},
-		{VideoID: "abandoned", ChannelID: "ch_meh", Topics: []string{"Gaming"}, AddedAt: now},
+		{VideoID: "finished", ChannelID: "ch_loved", Topics: []string{"Cooking"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "abandoned", ChannelID: "ch_meh", Topics: []string{"Gaming"}, AddedAt: now, PublishedAt: now},
 	}
 	affinity := buildWatchAffinity(features, map[string]float32{
 		"finished":  0.95,
@@ -196,7 +197,7 @@ func TestRetentionFailureDoesNotEmptyTheFeed(t *testing.T) {
 		stubFeatures{features: twoVideos(now)},
 	)
 
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -218,10 +219,10 @@ func TestUpNextDoesNotOfferBackSomethingJustWatched(t *testing.T) {
 	// viewer to where they started, forever.
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "a", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
-		{VideoID: "b", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
-		{VideoID: "c", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
-		{VideoID: "d", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "a", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "b", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "c", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "d", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
 	}
 	profile := emptyProfile()
 	// Arrived at "b" from "a", moments ago.
@@ -246,8 +247,8 @@ func TestUpNextStillOffersSomethingWatchedLongAgo(t *testing.T) {
 	// cannot afford to retire everything on first viewing.
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "old_favourite", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
-		{VideoID: "current", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "old_favourite", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "current", ChannelID: "ch", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
 	}
 	profile := emptyProfile()
 	// Watched at some point, but not in this sitting.
@@ -271,14 +272,14 @@ func TestUpNextPrefersRelatednessOverGeneralTaste(t *testing.T) {
 	// weight affinity did not come third, it won.
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "current", ChannelID: "ch_games", Topics: []string{"Entertainment"}, AddedAt: now},
+		{VideoID: "current", ChannelID: "ch_games", Topics: []string{"Entertainment"}, AddedAt: now, PublishedAt: now},
 		// Shares the current video's topic, from a channel never watched.
-		{VideoID: "related", ChannelID: "ch_other_games", Topics: []string{"Entertainment"}, AddedAt: now},
+		{VideoID: "related", ChannelID: "ch_other_games", Topics: []string{"Entertainment"}, AddedAt: now, PublishedAt: now},
 		// The viewer's favourite channel and topic, unrelated to what is playing.
-		{VideoID: "favourite", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "favourite", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
 		// What builds that taste.
-		{VideoID: "history_1", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now},
-		{VideoID: "history_2", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now},
+		{VideoID: "history_1", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "history_2", ChannelID: "ch_music", Topics: []string{"Music"}, AddedAt: now, PublishedAt: now},
 	}
 	profile := profileWith(map[string]float32{"history_1": 1.0, "history_2": 1.0})
 
@@ -334,7 +335,7 @@ func TestDislikingMostOfAChannelSuppressesIt(t *testing.T) {
 	features := []domain.VideoFeatures{}
 	for i, id := range []string{"a1", "a2", "a3", "a4", "a5"} {
 		features = append(features, domain.VideoFeatures{
-			VideoID: id, ChannelID: "ch_small", Topics: []string{"Gaming"}, AddedAt: now,
+			VideoID: id, ChannelID: "ch_small", Topics: []string{"Gaming"}, AddedAt: now, PublishedAt: now,
 		})
 		_ = i
 	}
@@ -344,7 +345,7 @@ func TestDislikingMostOfAChannelSuppressesIt(t *testing.T) {
 	profile.Disliked["a3"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -365,6 +366,7 @@ func TestThreeDislikesInALargeChannelAreJustThreeDislikes(t *testing.T) {
 			ChannelID: "ch_big",
 			Topics:    []string{"Gaming"},
 			AddedAt:   now,
+			PublishedAt: now,
 		})
 	}
 	profile := emptyProfile()
@@ -373,7 +375,7 @@ func TestThreeDislikesInALargeChannelAreJustThreeDislikes(t *testing.T) {
 	profile.Disliked["b2"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -393,15 +395,15 @@ func TestRejectingATopicPushesTheRestOfItDown(t *testing.T) {
 	// the gap.
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "rejected", ChannelID: "ch_a", Topics: []string{"Reaction"}, AddedAt: now},
-		{VideoID: "sameTopic", ChannelID: "ch_b", Topics: []string{"Reaction"}, AddedAt: now},
-		{VideoID: "otherTopic", ChannelID: "ch_c", Topics: []string{"Cooking"}, AddedAt: now},
+		{VideoID: "rejected", ChannelID: "ch_a", Topics: []string{"Reaction"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "sameTopic", ChannelID: "ch_b", Topics: []string{"Reaction"}, AddedAt: now, PublishedAt: now},
+		{VideoID: "otherTopic", ChannelID: "ch_c", Topics: []string{"Cooking"}, AddedAt: now, PublishedAt: now},
 	}
 	profile := emptyProfile()
 	profile.Disliked["rejected"] = now
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -434,6 +436,7 @@ func TestEnoughRejectionsSuppressALargeChannelWhateverTheShare(t *testing.T) {
 			ChannelID: "ch_large",
 			Topics:    []string{"Music"},
 			AddedAt:   now,
+			PublishedAt: now,
 		})
 	}
 	profile := emptyProfile()
@@ -442,7 +445,7 @@ func TestEnoughRejectionsSuppressALargeChannelWhateverTheShare(t *testing.T) {
 	}
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -462,6 +465,7 @@ func TestSubscribingStillOverridesEnoughRejections(t *testing.T) {
 			ChannelID: "ch_followed",
 			Topics:    []string{"Music"},
 			AddedAt:   now,
+			PublishedAt: now,
 		})
 	}
 	profile := emptyProfile()
@@ -471,7 +475,7 @@ func TestSubscribingStillOverridesEnoughRejections(t *testing.T) {
 	}
 
 	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -483,8 +487,8 @@ func TestSubscribingStillOverridesEnoughRejections(t *testing.T) {
 func TestFreshnessBoostMultiplier(t *testing.T) {
 	now := time.Now()
 	highViews := int64(50000)
-	bonus := freshnessBoost(now.Add(-1*time.Hour), highViews, now)
-	none := freshnessBoost(now.Add(-49*time.Hour), highViews, now)
+	bonus := freshnessBoost(now.Add(-1*time.Hour), highViews, now, freshnessWindow)
+	none := freshnessBoost(now.Add(-49*time.Hour), highViews, now, freshnessWindow)
 	if bonus <= 1.0 {
 		t.Fatalf("fresh video with %d views got %.2f, want > 1.0", highViews, bonus)
 	}
@@ -495,7 +499,7 @@ func TestFreshnessBoostMultiplier(t *testing.T) {
 
 func TestFreshnessBoostNoViewsStillGivesFloorBoost(t *testing.T) {
 	now := time.Now()
-	score := freshnessBoost(now.Add(-30*time.Minute), 0, now)
+	score := freshnessBoost(now.Add(-30*time.Minute), 0, now, freshnessWindow)
 	if score <= 1.0 {
 		t.Fatalf("fresh video with no views got %.2f, want > 1.0 (floor boost)", score)
 	}
@@ -503,7 +507,7 @@ func TestFreshnessBoostNoViewsStillGivesFloorBoost(t *testing.T) {
 
 func TestFreshnessBoostNoPublishedDateGivesNoBonus(t *testing.T) {
 	now := time.Now()
-	score := freshnessBoost(time.Time{}, 100000, now)
+	score := freshnessBoost(time.Time{}, 100000, now, freshnessWindow)
 	if score != 1.0 {
 		t.Fatalf("video with no published date got %.2f, want 1.0", score)
 	}
@@ -512,8 +516,8 @@ func TestFreshnessBoostNoPublishedDateGivesNoBonus(t *testing.T) {
 func TestFreshnessBoostMoreViewsOutranksFewerViews(t *testing.T) {
 	now := time.Now()
 	publishedAt := now.Add(-2 * time.Hour)
-	popular := freshnessBoost(publishedAt, 500000, now)
-	unknown := freshnessBoost(publishedAt, 100, now)
+	popular := freshnessBoost(publishedAt, 500000, now, freshnessWindow)
+	unknown := freshnessBoost(publishedAt, 100, now, freshnessWindow)
 	if popular <= unknown {
 		t.Fatalf("500k views scored %.2f against 100 views at %.2f",
 			popular, unknown)
@@ -523,12 +527,12 @@ func TestFreshnessBoostMoreViewsOutranksFewerViews(t *testing.T) {
 func TestLanguageFilterHidesUnwantedLanguage(t *testing.T) {
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "en_video", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "en"},
-		{VideoID: "ar_video", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, Language: "ar"},
-		{VideoID: "vi_video", ChannelID: "ch_c", Topics: []string{"News"}, AddedAt: now, Language: "vi"},
+		{VideoID: "en_video", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "en"},
+		{VideoID: "ar_video", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "ar"},
+		{VideoID: "vi_video", ChannelID: "ch_c", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "vi"},
 	}
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en", "vi"})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en", "vi"}, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -546,11 +550,11 @@ func TestLanguageFilterHidesUnwantedLanguage(t *testing.T) {
 func TestLanguageFilterHidesUnknownLanguage(t *testing.T) {
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "known", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "en"},
-		{VideoID: "unknown", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, Language: ""},
+		{VideoID: "known", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "en"},
+		{VideoID: "unknown", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: ""},
 	}
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en", "vi"})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en", "vi"}, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -565,17 +569,266 @@ func TestLanguageFilterHidesUnknownLanguage(t *testing.T) {
 func TestNoLanguageFilterShowsEverything(t *testing.T) {
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "en_video", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "en"},
-		{VideoID: "ar_video", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, Language: "ar"},
-		{VideoID: "no_lang", ChannelID: "ch_c", Topics: []string{"News"}, AddedAt: now, Language: ""},
+		{VideoID: "en_video", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "en"},
+		{VideoID: "ar_video", ChannelID: "ch_b", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "ar"},
+		{VideoID: "no_lang", ChannelID: "ch_c", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: ""},
 	}
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
 	if len(ranked) != 3 {
 		t.Fatalf("no language filter should show all 3 videos, got %d", len(ranked))
+	}
+}
+
+// discoveryFixture is a viewer with no history at all, so every video falls into
+// the discovery slot and the only thing separating them is how often each has
+// already been offered.
+func discoveryFixture(now time.Time, ids ...string) []domain.VideoFeatures {
+	out := make([]domain.VideoFeatures, 0, len(ids))
+	for i, id := range ids {
+		out = append(out, domain.VideoFeatures{
+			VideoID:     id,
+			ChannelID:   fmt.Sprintf("ch_%d", i),
+			Topics:      []string{"Gaming"},
+			AddedAt:     now,
+			PublishedAt: now.Add(-72 * time.Hour),
+		})
+	}
+	return out
+}
+
+// What "something new" is supposed to mean. Before this, the discovery share
+// ranked by score over a set that barely moves, so the same handful of
+// unfamiliar videos came back every time while most of the library was never
+// offered once.
+func TestSomethingNewPrefersWhatNobodyHasBeenShown(t *testing.T) {
+	now := time.Now()
+	features := discoveryFixture(now, "neverShown", "shownOften")
+	store := stubStore{
+		profile:  emptyProfile(),
+		coverage: map[string]int{"shownOften": 12},
+	}
+
+	ranker := NewRanker(store, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+
+	unseen := scoreOf(t, ranked, "neverShown").Score
+	stale := scoreOf(t, ranked, "shownOften").Score
+	if unseen <= stale {
+		t.Fatalf("a video nobody has seen scored %.2f against %.2f for one offered "+
+			"a dozen times and never opened", unseen, stale)
+	}
+}
+
+// The bonus decays rather than switching off, so a video offered twice still
+// beats one offered twenty times. A step function would sort the whole library
+// into "new" and "not new" and then have nothing left to say.
+func TestTheExplorationBonusDecaysWithEveryShowing(t *testing.T) {
+	now := time.Now()
+	features := discoveryFixture(now, "once", "several", "many")
+	store := stubStore{
+		profile:  emptyProfile(),
+		coverage: map[string]int{"once": 1, "several": 4, "many": 20},
+	}
+
+	ranker := NewRanker(store, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+
+	once := scoreOf(t, ranked, "once").Score
+	several := scoreOf(t, ranked, "several").Score
+	many := scoreOf(t, ranked, "many").Score
+	if !(once > several && several > many) {
+		t.Fatalf("scores by exposure came out %.3f / %.3f / %.3f, want strictly "+
+			"decreasing", once, several, many)
+	}
+}
+
+// Same posture as VideoRetention: a query that fails must cost the feed a signal,
+// never its contents.
+func TestLosingTheImpressionCountsDoesNotEmptyTheFeed(t *testing.T) {
+	now := time.Now()
+	features := discoveryFixture(now, "a", "b")
+	store := stubStore{profile: emptyProfile(), coverageErr: errors.New("no table")}
+
+	ranker := NewRanker(store, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll returned an error rather than ranking on: %v", err)
+	}
+	if len(ranked) != 2 {
+		t.Fatalf("expected 2 ranked videos, got %d", len(ranked))
+	}
+}
+
+// sessionFixture is a viewer with a long history of one subject and a candidate
+// from each of two subjects, so that changing only the session shows what the
+// session does.
+func sessionFixture(now time.Time) ([]domain.VideoFeatures, domain.UserProfile) {
+	var features []domain.VideoFeatures
+	profile := emptyProfile()
+	// Two years of music.
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("history%d", i)
+		features = append(features, domain.VideoFeatures{
+			VideoID: id, ChannelID: "ch_music", Topics: []string{"Music"},
+			AddedAt: now, PublishedAt: now.Add(-24 * time.Hour),
+		})
+		profile.WatchedFraction[id] = 1.0
+	}
+	// One cooking video, watched this afternoon.
+	features = append(features, domain.VideoFeatures{
+		VideoID: "cooked", ChannelID: "ch_kitchen", Topics: []string{"Cooking"},
+		AddedAt: now, PublishedAt: now.Add(-24 * time.Hour),
+	})
+	profile.WatchedFraction["cooked"] = 0.9
+
+	// The two candidates, identical but for their subject.
+	features = append(features,
+		domain.VideoFeatures{
+			VideoID: "moreMusic", ChannelID: "ch_music2", Topics: []string{"Music"},
+			AddedAt: now, PublishedAt: now.Add(-24 * time.Hour),
+		},
+		domain.VideoFeatures{
+			VideoID: "moreCooking", ChannelID: "ch_kitchen2", Topics: []string{"Cooking"},
+			AddedAt: now, PublishedAt: now.Add(-24 * time.Hour),
+		})
+	return features, profile
+}
+
+func TestWhatTheViewerIsWatchingNowOutweighsWhatTheyUsuallyWatch(t *testing.T) {
+	now := time.Now()
+	features, profile := sessionFixture(now)
+
+	withoutSession := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	before, err := withoutSession.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	baseline := scoreOf(t, before, "moreCooking").Score
+
+	// The same viewer, one cooking video into a sitting.
+	sessionProfile := profile
+	sessionProfile.SessionWatched = map[string]float32{"cooked": 0.9}
+	withSession := NewRanker(stubStore{profile: sessionProfile}, stubFeatures{features: features})
+	after, err := withSession.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+
+	if got := scoreOf(t, after, "moreCooking").Score; got <= baseline {
+		t.Fatalf("another cooking video scored %.2f during a cooking session "+
+			"against %.2f outside one; the session changed nothing", got, baseline)
+	}
+	if cooking, music := scoreOf(t, after, "moreCooking").Score,
+		scoreOf(t, after, "moreMusic").Score; cooking <= music {
+		t.Fatalf("an hour into cooking videos, cooking scored %.2f against music "+
+			"at %.2f", cooking, music)
+	}
+}
+
+// The other side of the same trade. A session is a nudge, not a takeover: two
+// years of history must not be erased by one video, or the viewer loses the
+// ability to change their mind back.
+func TestOneVideoDoesNotEraseTheWatchHistory(t *testing.T) {
+	now := time.Now()
+	features, profile := sessionFixture(now)
+	profile.SessionWatched = map[string]float32{"cooked": 0.9}
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+
+	// Music is what this viewer watches, and it stays clearly on the page.
+	if !present(ranked[:min(24, len(ranked))], "moreMusic") {
+		t.Fatal("one cooking video pushed the viewer's whole subject off the " +
+			"first screen")
+	}
+}
+
+// A viewer who has just opened the app has no session, and must rank exactly as
+// they did before this existed.
+func TestNoSessionRanksOnTheHistoryAlone(t *testing.T) {
+	now := time.Now()
+	features, profile := sessionFixture(now)
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+
+	if music, cooking := scoreOf(t, ranked, "moreMusic").Score,
+		scoreOf(t, ranked, "moreCooking").Score; music <= cooking {
+		t.Fatalf("with no session, the viewer's own subject scored %.2f against "+
+			"%.2f for one they have watched once", music, cooking)
+	}
+}
+
+// The bug report, end to end: "I don't see new videos from channels I'm
+// subscribed to, the kind published 30 minutes or an hour ago."
+//
+// Written against rankAll rather than the quota alone because that is where it
+// went wrong. Every part in isolation was correct — the score was right, the
+// buckets were right — and the video still did not appear, because the quota
+// shuffled the bucket before taking its share.
+func TestANewUploadFromAFollowedChannelIsOnTheFirstScreen(t *testing.T) {
+	now := time.Now()
+	profile := emptyProfile()
+	profile.Subscribed["ch_followed"] = true
+
+	var features []domain.VideoFeatures
+	// A realistic library: the followed channel has a long back catalogue, and
+	// there is plenty of other material competing for the page.
+	for i := 0; i < 150; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:     fmt.Sprintf("old%d", i),
+			ChannelID:   "ch_followed",
+			Topics:      []string{"Music"},
+			AddedAt:     now.Add(-time.Duration(i) * 24 * time.Hour),
+			PublishedAt: now.Add(-time.Duration(i+3) * 24 * time.Hour),
+		})
+	}
+	for i := 0; i < 150; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:     fmt.Sprintf("other%d", i),
+			ChannelID:   fmt.Sprintf("ch_%d", i),
+			Topics:      []string{"Music"},
+			AddedAt:     now,
+			PublishedAt: now.Add(-time.Duration(i+3) * 24 * time.Hour),
+		})
+	}
+	features = append(features, domain.VideoFeatures{
+		VideoID:     "just_published",
+		ChannelID:   "ch_followed",
+		Topics:      []string{"Music"},
+		AddedAt:     now,
+		PublishedAt: now.Add(-30 * time.Minute),
+	})
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+
+	// Repeated because the ordering is sampled, and "usually on the first screen"
+	// is not what a subscription promises.
+	for trial := 0; trial < 20; trial++ {
+		ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+		if err != nil {
+			t.Fatalf("rankAll: %v", err)
+		}
+		if !present(ranked[:24], "just_published") {
+			t.Fatalf("trial %d: a video published 30 minutes ago on a followed "+
+				"channel was not on the first screen", trial)
+		}
 	}
 }
 
@@ -592,7 +845,7 @@ func TestFreshVideoWithHighViewsOutranksOlderVideo(t *testing.T) {
 		},
 	}
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil)
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}
@@ -607,10 +860,10 @@ func TestFreshVideoWithHighViewsOutranksOlderVideo(t *testing.T) {
 func TestLanguageFilterCaseInsensitive(t *testing.T) {
 	now := time.Now()
 	features := []domain.VideoFeatures{
-		{VideoID: "caps", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, Language: "EN"},
+		{VideoID: "caps", ChannelID: "ch_a", Topics: []string{"News"}, AddedAt: now, PublishedAt: now, Language: "EN"},
 	}
 	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
-	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en"})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, []string{"en"}, Tuning{})
 	if err != nil {
 		t.Fatalf("rankAll: %v", err)
 	}

@@ -310,7 +310,9 @@ type GetFeedRequest struct {
 	Mix *FeedMix `protobuf:"bytes,6,opt,name=mix,proto3" json:"mix,omitempty"`
 	// Language codes the viewer wants to see, e.g. ["en", "vi"].
 	// Empty means no filter — show all languages.
-	Languages     []string `protobuf:"bytes,7,rep,name=languages,proto3" json:"languages,omitempty"`
+	Languages []string `protobuf:"bytes,7,rep,name=languages,proto3" json:"languages,omitempty"`
+	// Optional. Absent means the built-in ranking constants.
+	Tuning        *RankingTuning `protobuf:"bytes,8,opt,name=tuning,proto3" json:"tuning,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -390,6 +392,13 @@ func (x *GetFeedRequest) GetMix() *FeedMix {
 func (x *GetFeedRequest) GetLanguages() []string {
 	if x != nil {
 		return x.Languages
+	}
+	return nil
+}
+
+func (x *GetFeedRequest) GetTuning() *RankingTuning {
+	if x != nil {
+		return x.Tuning
 	}
 	return nil
 }
@@ -894,6 +903,352 @@ func (*RecordImpressionsResponse) Descriptor() ([]byte, []int) {
 	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{11}
 }
 
+type ExplainFeedRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Same filters the feed itself takes, so the explanation describes the page
+	// the viewer is actually looking at.
+	Category      string         `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
+	Mix           *FeedMix       `protobuf:"bytes,3,opt,name=mix,proto3" json:"mix,omitempty"`
+	Languages     []string       `protobuf:"bytes,4,rep,name=languages,proto3" json:"languages,omitempty"`
+	Tuning        *RankingTuning `protobuf:"bytes,5,opt,name=tuning,proto3" json:"tuning,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExplainFeedRequest) Reset() {
+	*x = ExplainFeedRequest{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExplainFeedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExplainFeedRequest) ProtoMessage() {}
+
+func (x *ExplainFeedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExplainFeedRequest.ProtoReflect.Descriptor instead.
+func (*ExplainFeedRequest) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExplainFeedRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ExplainFeedRequest) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ExplainFeedRequest) GetMix() *FeedMix {
+	if x != nil {
+		return x.Mix
+	}
+	return nil
+}
+
+func (x *ExplainFeedRequest) GetLanguages() []string {
+	if x != nil {
+		return x.Languages
+	}
+	return nil
+}
+
+func (x *ExplainFeedRequest) GetTuning() *RankingTuning {
+	if x != nil {
+		return x.Tuning
+	}
+	return nil
+}
+
+// One video's score with its working shown.
+//
+// The components are a map rather than a field per term. They are read by a
+// person, they change whenever the ranker is tuned, and giving each one a field
+// number would mean a proto edit and a regeneration every time somebody tries a
+// different weight — which is the thing this message exists to make cheap.
+type VideoExplanation struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	VideoId string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	// Empty when the video is in the feed; otherwise why it is not, in words.
+	// Every other field is meaningless when this is set.
+	ExcludedReason string `protobuf:"bytes,2,opt,name=excluded_reason,json=excludedReason,proto3" json:"excluded_reason,omitempty"`
+	// Named contributions, in the units they are applied in: additive terms are
+	// points, multipliers are factors.
+	Components map[string]float64   `protobuf:"bytes,3,rep,name=components,proto3" json:"components,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	Score      float64              `protobuf:"fixed64,4,opt,name=score,proto3" json:"score,omitempty"`
+	Reason     RecommendationReason `protobuf:"varint,5,opt,name=reason,proto3,enum=recsys.v1.RecommendationReason" json:"reason,omitempty"`
+	// Which share of the page it competes for, as a name.
+	Slot string `protobuf:"bytes,6,opt,name=slot,proto3" json:"slot,omitempty"`
+	// Its position in the feed as served, or -1 when it is not in the feed. Not
+	// derivable from the score: the quota and the per-channel cap both reorder.
+	Position      int32 `protobuf:"varint,7,opt,name=position,proto3" json:"position,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VideoExplanation) Reset() {
+	*x = VideoExplanation{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VideoExplanation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VideoExplanation) ProtoMessage() {}
+
+func (x *VideoExplanation) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VideoExplanation.ProtoReflect.Descriptor instead.
+func (*VideoExplanation) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *VideoExplanation) GetVideoId() string {
+	if x != nil {
+		return x.VideoId
+	}
+	return ""
+}
+
+func (x *VideoExplanation) GetExcludedReason() string {
+	if x != nil {
+		return x.ExcludedReason
+	}
+	return ""
+}
+
+func (x *VideoExplanation) GetComponents() map[string]float64 {
+	if x != nil {
+		return x.Components
+	}
+	return nil
+}
+
+func (x *VideoExplanation) GetScore() float64 {
+	if x != nil {
+		return x.Score
+	}
+	return 0
+}
+
+func (x *VideoExplanation) GetReason() RecommendationReason {
+	if x != nil {
+		return x.Reason
+	}
+	return RecommendationReason_RECOMMENDATION_REASON_UNSPECIFIED
+}
+
+func (x *VideoExplanation) GetSlot() string {
+	if x != nil {
+		return x.Slot
+	}
+	return ""
+}
+
+func (x *VideoExplanation) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+type ExplainFeedResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Videos in the feed first, in the order they would be served, then the ones
+	// that were excluded.
+	Videos        []*VideoExplanation `protobuf:"bytes,1,rep,name=videos,proto3" json:"videos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExplainFeedResponse) Reset() {
+	*x = ExplainFeedResponse{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExplainFeedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExplainFeedResponse) ProtoMessage() {}
+
+func (x *ExplainFeedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExplainFeedResponse.ProtoReflect.Descriptor instead.
+func (*ExplainFeedResponse) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ExplainFeedResponse) GetVideos() []*VideoExplanation {
+	if x != nil {
+		return x.Videos
+	}
+	return nil
+}
+
+// Ranking constants the household can move without a rebuild.
+//
+// Every field is optional, and absent means "use the built-in value". Zero is a
+// real setting for several of these — a session blend of zero says "ignore what
+// I am watching right now" — so presence and zero must be distinguishable, which
+// is the whole reason for the optional keyword here.
+//
+// Sent with the request like FeedMix, and for the same reason: recsys keeps no
+// configuration of its own (CLAUDE.md §3). The file lives at the gateway, where
+// it can be edited by hand.
+//
+// Deliberately not every weight in the ranker. These are the settings that
+// answer a question somebody actually has; the two dozen score weights answer
+// questions nobody asks, and exposing them would trade the one thing this
+// heuristic has over a model — that every number can be explained — for knobs.
+type RankingTuning struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// How much of the affinity multiplier is decided by the current sitting
+	// rather than the whole watch history. 0 = ignore the sitting, 1 = ignore
+	// the history.
+	SessionBlend *float64 `protobuf:"fixed64,1,opt,name=session_blend,json=sessionBlend,proto3,oneof" json:"session_blend,omitempty"`
+	// Share of the page reserved for new uploads from followed channels.
+	FreshSubscribedPercent *int32 `protobuf:"varint,2,opt,name=fresh_subscribed_percent,json=freshSubscribedPercent,proto3,oneof" json:"fresh_subscribed_percent,omitempty"`
+	// How long a video counts as new, in hours.
+	FreshnessWindowHours *int32 `protobuf:"varint,3,opt,name=freshness_window_hours,json=freshnessWindowHours,proto3,oneof" json:"freshness_window_hours,omitempty"`
+	// Videos published longer ago than this never reach the home page.
+	MaxPublishedAgeDays *int32 `protobuf:"varint,4,opt,name=max_published_age_days,json=maxPublishedAgeDays,proto3,oneof" json:"max_published_age_days,omitempty"`
+	// How fast the "recently added to the library" boost decays.
+	RecencyHalfLifeDays *float64 `protobuf:"fixed64,5,opt,name=recency_half_life_days,json=recencyHalfLifeDays,proto3,oneof" json:"recency_half_life_days,omitempty"`
+	// How sharply the feed's ordering follows the score. Lower is stricter.
+	SoftmaxTemperature *float64 `protobuf:"fixed64,6,opt,name=softmax_temperature,json=softmaxTemperature,proto3,oneof" json:"softmax_temperature,omitempty"`
+	// How many of each bucket's best are entered into the draw. Raising it past
+	// a few hundred is what let low-scoring videos onto the first page.
+	SamplePoolSize *int32 `protobuf:"varint,7,opt,name=sample_pool_size,json=samplePoolSize,proto3,oneof" json:"sample_pool_size,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RankingTuning) Reset() {
+	*x = RankingTuning{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RankingTuning) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RankingTuning) ProtoMessage() {}
+
+func (x *RankingTuning) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RankingTuning.ProtoReflect.Descriptor instead.
+func (*RankingTuning) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RankingTuning) GetSessionBlend() float64 {
+	if x != nil && x.SessionBlend != nil {
+		return *x.SessionBlend
+	}
+	return 0
+}
+
+func (x *RankingTuning) GetFreshSubscribedPercent() int32 {
+	if x != nil && x.FreshSubscribedPercent != nil {
+		return *x.FreshSubscribedPercent
+	}
+	return 0
+}
+
+func (x *RankingTuning) GetFreshnessWindowHours() int32 {
+	if x != nil && x.FreshnessWindowHours != nil {
+		return *x.FreshnessWindowHours
+	}
+	return 0
+}
+
+func (x *RankingTuning) GetMaxPublishedAgeDays() int32 {
+	if x != nil && x.MaxPublishedAgeDays != nil {
+		return *x.MaxPublishedAgeDays
+	}
+	return 0
+}
+
+func (x *RankingTuning) GetRecencyHalfLifeDays() float64 {
+	if x != nil && x.RecencyHalfLifeDays != nil {
+		return *x.RecencyHalfLifeDays
+	}
+	return 0
+}
+
+func (x *RankingTuning) GetSoftmaxTemperature() float64 {
+	if x != nil && x.SoftmaxTemperature != nil {
+		return *x.SoftmaxTemperature
+	}
+	return 0
+}
+
+func (x *RankingTuning) GetSamplePoolSize() int32 {
+	if x != nil && x.SamplePoolSize != nil {
+		return *x.SamplePoolSize
+	}
+	return 0
+}
+
 var File_recsys_v1_recsys_proto protoreflect.FileDescriptor
 
 const file_recsys_v1_recsys_proto_rawDesc = "" +
@@ -906,7 +1261,7 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\aFeedMix\x12-\n" +
 	"\x12subscribed_percent\x18\x01 \x01(\x05R\x11subscribedPercent\x12)\n" +
 	"\x10affinity_percent\x18\x02 \x01(\x05R\x0faffinityPercent\x12+\n" +
-	"\x11discovery_percent\x18\x03 \x01(\x05R\x10discoveryPercent\"\xe6\x01\n" +
+	"\x11discovery_percent\x18\x03 \x01(\x05R\x10discoveryPercent\"\x98\x02\n" +
 	"\x0eGetFeedRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x1b\n" +
@@ -916,7 +1271,8 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\vclient_hour\x18\x05 \x01(\x05R\n" +
 	"clientHour\x12$\n" +
 	"\x03mix\x18\x06 \x01(\v2\x12.recsys.v1.FeedMixR\x03mix\x12\x1c\n" +
-	"\tlanguages\x18\a \x03(\tR\tlanguages\"\x92\x01\n" +
+	"\tlanguages\x18\a \x03(\tR\tlanguages\x120\n" +
+	"\x06tuning\x18\b \x01(\v2\x18.recsys.v1.RankingTuningR\x06tuning\"\x92\x01\n" +
 	"\x0fGetFeedResponse\x12.\n" +
 	"\x06videos\x18\x01 \x03(\v2\x16.recsys.v1.RankedVideoR\x06videos\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12'\n" +
@@ -948,7 +1304,43 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\x18RecordImpressionsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tvideo_ids\x18\x02 \x03(\tR\bvideoIds\"\x1b\n" +
-	"\x19RecordImpressionsResponse*\xa5\x03\n" +
+	"\x19RecordImpressionsResponse\"\xbf\x01\n" +
+	"\x12ExplainFeedRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
+	"\bcategory\x18\x02 \x01(\tR\bcategory\x12$\n" +
+	"\x03mix\x18\x03 \x01(\v2\x12.recsys.v1.FeedMixR\x03mix\x12\x1c\n" +
+	"\tlanguages\x18\x04 \x03(\tR\tlanguages\x120\n" +
+	"\x06tuning\x18\x05 \x01(\v2\x18.recsys.v1.RankingTuningR\x06tuning\"\xe1\x02\n" +
+	"\x10VideoExplanation\x12\x19\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12'\n" +
+	"\x0fexcluded_reason\x18\x02 \x01(\tR\x0eexcludedReason\x12K\n" +
+	"\n" +
+	"components\x18\x03 \x03(\v2+.recsys.v1.VideoExplanation.ComponentsEntryR\n" +
+	"components\x12\x14\n" +
+	"\x05score\x18\x04 \x01(\x01R\x05score\x127\n" +
+	"\x06reason\x18\x05 \x01(\x0e2\x1f.recsys.v1.RecommendationReasonR\x06reason\x12\x12\n" +
+	"\x04slot\x18\x06 \x01(\tR\x04slot\x12\x1a\n" +
+	"\bposition\x18\a \x01(\x05R\bposition\x1a=\n" +
+	"\x0fComponentsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"J\n" +
+	"\x13ExplainFeedResponse\x123\n" +
+	"\x06videos\x18\x01 \x03(\v2\x1b.recsys.v1.VideoExplanationR\x06videos\"\xb9\x04\n" +
+	"\rRankingTuning\x12(\n" +
+	"\rsession_blend\x18\x01 \x01(\x01H\x00R\fsessionBlend\x88\x01\x01\x12=\n" +
+	"\x18fresh_subscribed_percent\x18\x02 \x01(\x05H\x01R\x16freshSubscribedPercent\x88\x01\x01\x129\n" +
+	"\x16freshness_window_hours\x18\x03 \x01(\x05H\x02R\x14freshnessWindowHours\x88\x01\x01\x128\n" +
+	"\x16max_published_age_days\x18\x04 \x01(\x05H\x03R\x13maxPublishedAgeDays\x88\x01\x01\x128\n" +
+	"\x16recency_half_life_days\x18\x05 \x01(\x01H\x04R\x13recencyHalfLifeDays\x88\x01\x01\x124\n" +
+	"\x13softmax_temperature\x18\x06 \x01(\x01H\x05R\x12softmaxTemperature\x88\x01\x01\x12-\n" +
+	"\x10sample_pool_size\x18\a \x01(\x05H\x06R\x0esamplePoolSize\x88\x01\x01B\x10\n" +
+	"\x0e_session_blendB\x1b\n" +
+	"\x19_fresh_subscribed_percentB\x19\n" +
+	"\x17_freshness_window_hoursB\x19\n" +
+	"\x17_max_published_age_daysB\x19\n" +
+	"\x17_recency_half_life_daysB\x16\n" +
+	"\x14_softmax_temperatureB\x13\n" +
+	"\x11_sample_pool_size*\xa5\x03\n" +
 	"\x14RecommendationReason\x12%\n" +
 	"!RECOMMENDATION_REASON_UNSPECIFIED\x10\x00\x12+\n" +
 	"'RECOMMENDATION_REASON_CONTINUE_WATCHING\x10\x01\x12(\n" +
@@ -969,13 +1361,14 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\x15SIGNAL_TYPE_SUBSCRIBE\x10\x04\x12\x1b\n" +
 	"\x17SIGNAL_TYPE_UNSUBSCRIBE\x10\x05\x12\x16\n" +
 	"\x12SIGNAL_TYPE_SEARCH\x10\x06\x12\x14\n" +
-	"\x10SIGNAL_TYPE_SKIP\x10\a2\xa9\x03\n" +
+	"\x10SIGNAL_TYPE_SKIP\x10\a2\xf7\x03\n" +
 	"\x15RecommendationService\x12@\n" +
 	"\aGetFeed\x12\x19.recsys.v1.GetFeedRequest\x1a\x1a.recsys.v1.GetFeedResponse\x12F\n" +
 	"\tGetUpNext\x12\x1b.recsys.v1.GetUpNextRequest\x1a\x1c.recsys.v1.GetUpNextResponse\x12U\n" +
 	"\x0eGetMostWatched\x12 .recsys.v1.GetMostWatchedRequest\x1a!.recsys.v1.GetMostWatchedResponse\x12O\n" +
 	"\fRecordSignal\x12\x1e.recsys.v1.RecordSignalRequest\x1a\x1f.recsys.v1.RecordSignalResponse\x12^\n" +
-	"\x11RecordImpressions\x12#.recsys.v1.RecordImpressionsRequest\x1a$.recsys.v1.RecordImpressionsResponseB\x9f\x01\n" +
+	"\x11RecordImpressions\x12#.recsys.v1.RecordImpressionsRequest\x1a$.recsys.v1.RecordImpressionsResponse\x12L\n" +
+	"\vExplainFeed\x12\x1d.recsys.v1.ExplainFeedRequest\x1a\x1e.recsys.v1.ExplainFeedResponseB\x9f\x01\n" +
 	"\rcom.recsys.v1B\vRecsysProtoP\x01Z<github.com/lucnguyen/local-youtube/gen/go/recsys/v1;recsysv1\xa2\x02\x03RXX\xaa\x02\tRecsys.V1\xca\x02\tRecsys\\V1\xe2\x02\x15Recsys\\V1\\GPBMetadata\xea\x02\n" +
 	"Recsys::V1b\x06proto3"
 
@@ -992,7 +1385,7 @@ func file_recsys_v1_recsys_proto_rawDescGZIP() []byte {
 }
 
 var file_recsys_v1_recsys_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_recsys_v1_recsys_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_recsys_v1_recsys_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_recsys_v1_recsys_proto_goTypes = []any{
 	(RecommendationReason)(0),         // 0: recsys.v1.RecommendationReason
 	(SignalType)(0),                   // 1: recsys.v1.SignalType
@@ -1008,31 +1401,44 @@ var file_recsys_v1_recsys_proto_goTypes = []any{
 	(*RecordSignalResponse)(nil),      // 11: recsys.v1.RecordSignalResponse
 	(*RecordImpressionsRequest)(nil),  // 12: recsys.v1.RecordImpressionsRequest
 	(*RecordImpressionsResponse)(nil), // 13: recsys.v1.RecordImpressionsResponse
-	(*timestamppb.Timestamp)(nil),     // 14: google.protobuf.Timestamp
+	(*ExplainFeedRequest)(nil),        // 14: recsys.v1.ExplainFeedRequest
+	(*VideoExplanation)(nil),          // 15: recsys.v1.VideoExplanation
+	(*ExplainFeedResponse)(nil),       // 16: recsys.v1.ExplainFeedResponse
+	(*RankingTuning)(nil),             // 17: recsys.v1.RankingTuning
+	nil,                               // 18: recsys.v1.VideoExplanation.ComponentsEntry
+	(*timestamppb.Timestamp)(nil),     // 19: google.protobuf.Timestamp
 }
 var file_recsys_v1_recsys_proto_depIdxs = []int32{
 	0,  // 0: recsys.v1.RankedVideo.reason:type_name -> recsys.v1.RecommendationReason
 	3,  // 1: recsys.v1.GetFeedRequest.mix:type_name -> recsys.v1.FeedMix
-	2,  // 2: recsys.v1.GetFeedResponse.videos:type_name -> recsys.v1.RankedVideo
-	2,  // 3: recsys.v1.GetMostWatchedResponse.videos:type_name -> recsys.v1.RankedVideo
-	2,  // 4: recsys.v1.GetUpNextResponse.videos:type_name -> recsys.v1.RankedVideo
-	1,  // 5: recsys.v1.RecordSignalRequest.type:type_name -> recsys.v1.SignalType
-	14, // 6: recsys.v1.RecordSignalRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	4,  // 7: recsys.v1.RecommendationService.GetFeed:input_type -> recsys.v1.GetFeedRequest
-	8,  // 8: recsys.v1.RecommendationService.GetUpNext:input_type -> recsys.v1.GetUpNextRequest
-	6,  // 9: recsys.v1.RecommendationService.GetMostWatched:input_type -> recsys.v1.GetMostWatchedRequest
-	10, // 10: recsys.v1.RecommendationService.RecordSignal:input_type -> recsys.v1.RecordSignalRequest
-	12, // 11: recsys.v1.RecommendationService.RecordImpressions:input_type -> recsys.v1.RecordImpressionsRequest
-	5,  // 12: recsys.v1.RecommendationService.GetFeed:output_type -> recsys.v1.GetFeedResponse
-	9,  // 13: recsys.v1.RecommendationService.GetUpNext:output_type -> recsys.v1.GetUpNextResponse
-	7,  // 14: recsys.v1.RecommendationService.GetMostWatched:output_type -> recsys.v1.GetMostWatchedResponse
-	11, // 15: recsys.v1.RecommendationService.RecordSignal:output_type -> recsys.v1.RecordSignalResponse
-	13, // 16: recsys.v1.RecommendationService.RecordImpressions:output_type -> recsys.v1.RecordImpressionsResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	17, // 2: recsys.v1.GetFeedRequest.tuning:type_name -> recsys.v1.RankingTuning
+	2,  // 3: recsys.v1.GetFeedResponse.videos:type_name -> recsys.v1.RankedVideo
+	2,  // 4: recsys.v1.GetMostWatchedResponse.videos:type_name -> recsys.v1.RankedVideo
+	2,  // 5: recsys.v1.GetUpNextResponse.videos:type_name -> recsys.v1.RankedVideo
+	1,  // 6: recsys.v1.RecordSignalRequest.type:type_name -> recsys.v1.SignalType
+	19, // 7: recsys.v1.RecordSignalRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	3,  // 8: recsys.v1.ExplainFeedRequest.mix:type_name -> recsys.v1.FeedMix
+	17, // 9: recsys.v1.ExplainFeedRequest.tuning:type_name -> recsys.v1.RankingTuning
+	18, // 10: recsys.v1.VideoExplanation.components:type_name -> recsys.v1.VideoExplanation.ComponentsEntry
+	0,  // 11: recsys.v1.VideoExplanation.reason:type_name -> recsys.v1.RecommendationReason
+	15, // 12: recsys.v1.ExplainFeedResponse.videos:type_name -> recsys.v1.VideoExplanation
+	4,  // 13: recsys.v1.RecommendationService.GetFeed:input_type -> recsys.v1.GetFeedRequest
+	8,  // 14: recsys.v1.RecommendationService.GetUpNext:input_type -> recsys.v1.GetUpNextRequest
+	6,  // 15: recsys.v1.RecommendationService.GetMostWatched:input_type -> recsys.v1.GetMostWatchedRequest
+	10, // 16: recsys.v1.RecommendationService.RecordSignal:input_type -> recsys.v1.RecordSignalRequest
+	12, // 17: recsys.v1.RecommendationService.RecordImpressions:input_type -> recsys.v1.RecordImpressionsRequest
+	14, // 18: recsys.v1.RecommendationService.ExplainFeed:input_type -> recsys.v1.ExplainFeedRequest
+	5,  // 19: recsys.v1.RecommendationService.GetFeed:output_type -> recsys.v1.GetFeedResponse
+	9,  // 20: recsys.v1.RecommendationService.GetUpNext:output_type -> recsys.v1.GetUpNextResponse
+	7,  // 21: recsys.v1.RecommendationService.GetMostWatched:output_type -> recsys.v1.GetMostWatchedResponse
+	11, // 22: recsys.v1.RecommendationService.RecordSignal:output_type -> recsys.v1.RecordSignalResponse
+	13, // 23: recsys.v1.RecommendationService.RecordImpressions:output_type -> recsys.v1.RecordImpressionsResponse
+	16, // 24: recsys.v1.RecommendationService.ExplainFeed:output_type -> recsys.v1.ExplainFeedResponse
+	19, // [19:25] is the sub-list for method output_type
+	13, // [13:19] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_recsys_v1_recsys_proto_init() }
@@ -1040,13 +1446,14 @@ func file_recsys_v1_recsys_proto_init() {
 	if File_recsys_v1_recsys_proto != nil {
 		return
 	}
+	file_recsys_v1_recsys_proto_msgTypes[15].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_recsys_v1_recsys_proto_rawDesc), len(file_recsys_v1_recsys_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   12,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
