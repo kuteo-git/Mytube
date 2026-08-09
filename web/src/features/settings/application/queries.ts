@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { FeedMix } from '@/features/settings/domain/feed-mix'
+import type { RankingSettings } from '@/features/settings/domain/ranking'
 import {
   settingsRepository,
   type StoredFeedMix,
@@ -60,6 +61,49 @@ export function useSaveFeedMix() {
       // Dropping the cached feed sends the next request without a page token,
       // and the ranker starts a new snapshot under the new mix.
       void client.invalidateQueries({ queryKey: ['feed'] })
+    },
+  })
+}
+
+/**
+ * How many videos each share has to choose from.
+ *
+ * Its own query, loaded after the sliders rather than with them. It costs a full
+ * ranking pass, and the sliders are useful without it — so a slow or failed
+ * count should cost the reader a line of context, not the setting.
+ */
+export function useBucketSizes() {
+  return useQuery({
+    queryKey: ['feed-mix-buckets'],
+    queryFn: () => settingsRepository.getBucketSizes(),
+    // Changes as the library grows, but nothing on this page changes it.
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+}
+
+export function useRanking() {
+  return useQuery({
+    queryKey: ['ranking'],
+    queryFn: () => settingsRepository.getRanking(),
+    staleTime: Infinity,
+  })
+}
+
+export function useSaveRanking() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (settings: RankingSettings) => settingsRepository.saveRanking(settings),
+    onSuccess: (saved) => {
+      client.setQueryData(['ranking'], saved)
+      // Same reason the mix does it: the feed is frozen into a snapshot, so a
+      // change would otherwise stay invisible until it expired and look exactly
+      // like a setting that does nothing.
+      void client.invalidateQueries({ queryKey: ['feed'] })
+      // The fresh-subscribed share is one of these settings, and it decides how
+      // much the three mix sliders divide — so their readouts are now stale.
+      void client.invalidateQueries({ queryKey: ['feed-mix'] })
+      void client.invalidateQueries({ queryKey: ['feed-mix-buckets'] })
     },
   })
 }

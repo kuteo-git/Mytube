@@ -12,10 +12,16 @@ vi.mock('@/features/settings/application/queries', () => ({
   useSaveTranslateConfig: () => ({ mutate: () => {}, isPending: false }),
   useTestTranslate: () => ({ mutate: () => {}, isPending: false, data: undefined }),
   useTranslateModels: () => ({ mutate: () => {}, data: [], isPending: false, isPaused: false }),
+  useRanking: () => ({ data: {}, isPending: false, isError: false, refetch: () => {} }),
+  useSaveRanking: () => ({ mutate: () => {}, isPending: false }),
 }))
 
 vi.mock('@/features/settings/ui/FeedMixSettings', () => ({
   FeedMixSettings: () => <div>feed mix panel</div>,
+}))
+
+vi.mock('@/features/settings/ui/AdvancedSettings', () => ({
+  AdvancedSettings: () => <div>advanced panel</div>,
 }))
 
 function renderAt(width: number) {
@@ -55,6 +61,7 @@ describe('Settings on a phone', () => {
     // hunting for the one control you came for, and it is never the one on top.
     phone()
     expect(screen.queryByText('feed mix panel')).not.toBeInTheDocument()
+    expect(screen.queryByText('advanced panel')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Home feed' })).toHaveAttribute(
       'href',
       '/settings/feed',
@@ -75,6 +82,7 @@ describe('Settings on a phone', () => {
       '/settings/feed',
       '/settings/narration',
       '/settings/translation',
+      '/settings/advanced',
     ])
   })
 
@@ -90,6 +98,7 @@ describe('Settings on a desktop', () => {
   it('shows the panels themselves, with room for them', () => {
     desktop()
     expect(screen.getByText('feed mix panel')).toBeInTheDocument()
+    expect(screen.getByText('advanced panel')).toBeInTheDocument()
   })
 
   it('adds no links, because the sidebar already has them', () => {

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 /**
  * A slider with its label above it and its value beside the label.
  *
@@ -9,20 +11,30 @@
 export function SliderRow({
   label,
   value,
+  min = 0,
   max,
   step = 0.05,
   onChange,
   format,
   hint,
+  trailing,
 }: {
   label: string
   value: number
+  /**
+   * Zero for shares of a page, where zero means "none of this". The advanced
+   * settings need a real floor: a sampling temperature of zero freezes the feed
+   * into one order, and a maximum age of zero empties it.
+   */
+  min?: number
   max: number
   /** Whole numbers for shares of a feed; fractions for volumes. */
   step?: number
   onChange: (v: number) => void
   format: (v: number) => string
   hint?: string
+  /** Shown beside the readout — a badge, a reset, anything the row owns. */
+  trailing?: ReactNode
 }) {
   return (
     <div>
@@ -30,12 +42,15 @@ export function SliderRow({
         <label htmlFor={`slider-${label}`} className="text-sm text-text-2">
           {label}
         </label>
-        <span className="tabular-nums text-sm font-medium">{format(value)}</span>
+        <div className="flex items-baseline gap-2">
+          {trailing}
+          <span className="tabular-nums text-sm font-medium">{format(value)}</span>
+        </div>
       </div>
       <input
         id={`slider-${label}`}
         type="range"
-        min={0}
+        min={min}
         max={max}
         step={step}
         value={value}

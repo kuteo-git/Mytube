@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file recsys/v1/recsys.proto.
  */
 export const file_recsys_v1_recsys: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWNzeXMvdjEvcmVjc3lzLnByb3RvEglyZWNzeXMudjEiXwoLUmFua2VkVmlkZW8SEAoIdmlkZW9faWQYASABKAkSDQoFc2NvcmUYAiABKAISLwoGcmVhc29uGAMgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uIloKB0ZlZWRNaXgSGgoSc3Vic2NyaWJlZF9wZXJjZW50GAEgASgFEhgKEGFmZmluaXR5X3BlcmNlbnQYAiABKAUSGQoRZGlzY292ZXJ5X3BlcmNlbnQYAyABKAUiowEKDkdldEZlZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEwoLY2xpZW50X2hvdXIYBSABKAUSHwoDbWl4GAYgASgLMhIucmVjc3lzLnYxLkZlZWRNaXgSEQoJbGFuZ3VhZ2VzGAcgAygJImsKD0dldEZlZWRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3JlbWFpbmluZ19jb3VudBgDIAEoBSI3ChVHZXRNb3N0V2F0Y2hlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBSJAChZHZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEiYKBnZpZGVvcxgBIAMoCzIWLnJlY3N5cy52MS5SYW5rZWRWaWRlbyJ8ChBHZXRVcE5leHRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSGAoQY3VycmVudF92aWRlb19pZBgCIAEoCRIWCg5jaGFubmVsX2ZpbHRlchgDIAEoCRIRCglwYWdlX3NpemUYBCABKAUSEgoKcGFnZV90b2tlbhgFIAEoBSJUChFHZXRVcE5leHRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgFIrcBChNSZWNvcmRTaWduYWxSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSIwoEdHlwZRgCIAEoDjIVLnJlY3N5cy52MS5TaWduYWxUeXBlEhAKCHZpZGVvX2lkGAMgASgJEg0KBXF1ZXJ5GAQgASgJEhgKEHdhdGNoZWRfZnJhY3Rpb24YBSABKAISLwoLb2NjdXJyZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIhYKFFJlY29yZFNpZ25hbFJlc3BvbnNlIj4KGFJlY29yZEltcHJlc3Npb25zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCXZpZGVvX2lkcxgCIAMoCSIbChlSZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlKqUDChRSZWNvbW1lbmRhdGlvblJlYXNvbhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fVU5TUEVDSUZJRUQQABIrCidSRUNPTU1FTkRBVElPTl9SRUFTT05fQ09OVElOVUVfV0FUQ0hJTkcQARIoCiRSRUNPTU1FTkRBVElPTl9SRUFTT05fUkVDRU5UTFlfQURERUQQAhInCiNSRUNPTU1FTkRBVElPTl9SRUFTT05fTkVWRVJfV0FUQ0hFRBADEiwKKFJFQ09NTUVOREFUSU9OX1JFQVNPTl9TVUJTQ1JJQkVEX0NIQU5ORUwQBBIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fUkVXQVRDSBAFEiYKIlJFQ09NTUVOREFUSU9OX1JFQVNPTl9TQU1FX0NIQU5ORUwQBhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fU0hBUkVEX1RBR1MQBxIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fQk9VTkNFRBAIEiMKH1JFQ09NTUVOREFUSU9OX1JFQVNPTl9ESVNDT1ZFUlkQCSrVAQoKU2lnbmFsVHlwZRIbChdTSUdOQUxfVFlQRV9VTlNQRUNJRklFRBAAEhUKEVNJR05BTF9UWVBFX1dBVENIEAESFAoQU0lHTkFMX1RZUEVfTElLRRACEhcKE1NJR05BTF9UWVBFX0RJU0xJS0UQAxIZChVTSUdOQUxfVFlQRV9TVUJTQ1JJQkUQBBIbChdTSUdOQUxfVFlQRV9VTlNVQlNDUklCRRAFEhYKElNJR05BTF9UWVBFX1NFQVJDSBAGEhQKEFNJR05BTF9UWVBFX1NLSVAQBzKpAwoVUmVjb21tZW5kYXRpb25TZXJ2aWNlEkAKB0dldEZlZWQSGS5yZWNzeXMudjEuR2V0RmVlZFJlcXVlc3QaGi5yZWNzeXMudjEuR2V0RmVlZFJlc3BvbnNlEkYKCUdldFVwTmV4dBIbLnJlY3N5cy52MS5HZXRVcE5leHRSZXF1ZXN0GhwucmVjc3lzLnYxLkdldFVwTmV4dFJlc3BvbnNlElUKDkdldE1vc3RXYXRjaGVkEiAucmVjc3lzLnYxLkdldE1vc3RXYXRjaGVkUmVxdWVzdBohLnJlY3N5cy52MS5HZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEk8KDFJlY29yZFNpZ25hbBIeLnJlY3N5cy52MS5SZWNvcmRTaWduYWxSZXF1ZXN0Gh8ucmVjc3lzLnYxLlJlY29yZFNpZ25hbFJlc3BvbnNlEl4KEVJlY29yZEltcHJlc3Npb25zEiMucmVjc3lzLnYxLlJlY29yZEltcHJlc3Npb25zUmVxdWVzdBokLnJlY3N5cy52MS5SZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlQp8BCg1jb20ucmVjc3lzLnYxQgtSZWNzeXNQcm90b1ABWjxnaXRodWIuY29tL2x1Y25ndXllbi9sb2NhbC15b3V0dWJlL2dlbi9nby9yZWNzeXMvdjE7cmVjc3lzdjGiAgNSWFiqAglSZWNzeXMuVjHKAglSZWNzeXNcVjHiAhVSZWNzeXNcVjFcR1BCTWV0YWRhdGHqAgpSZWNzeXM6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChZyZWNzeXMvdjEvcmVjc3lzLnByb3RvEglyZWNzeXMudjEiXwoLUmFua2VkVmlkZW8SEAoIdmlkZW9faWQYASABKAkSDQoFc2NvcmUYAiABKAISLwoGcmVhc29uGAMgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uIloKB0ZlZWRNaXgSGgoSc3Vic2NyaWJlZF9wZXJjZW50GAEgASgFEhgKEGFmZmluaXR5X3BlcmNlbnQYAiABKAUSGQoRZGlzY292ZXJ5X3BlcmNlbnQYAyABKAUizQEKDkdldEZlZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEwoLY2xpZW50X2hvdXIYBSABKAUSHwoDbWl4GAYgASgLMhIucmVjc3lzLnYxLkZlZWRNaXgSEQoJbGFuZ3VhZ2VzGAcgAygJEigKBnR1bmluZxgIIAEoCzIYLnJlY3N5cy52MS5SYW5raW5nVHVuaW5nImsKD0dldEZlZWRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3JlbWFpbmluZ19jb3VudBgDIAEoBSI3ChVHZXRNb3N0V2F0Y2hlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBSJAChZHZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEiYKBnZpZGVvcxgBIAMoCzIWLnJlY3N5cy52MS5SYW5rZWRWaWRlbyJ8ChBHZXRVcE5leHRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSGAoQY3VycmVudF92aWRlb19pZBgCIAEoCRIWCg5jaGFubmVsX2ZpbHRlchgDIAEoCRIRCglwYWdlX3NpemUYBCABKAUSEgoKcGFnZV90b2tlbhgFIAEoBSJUChFHZXRVcE5leHRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgFIrcBChNSZWNvcmRTaWduYWxSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSIwoEdHlwZRgCIAEoDjIVLnJlY3N5cy52MS5TaWduYWxUeXBlEhAKCHZpZGVvX2lkGAMgASgJEg0KBXF1ZXJ5GAQgASgJEhgKEHdhdGNoZWRfZnJhY3Rpb24YBSABKAISLwoLb2NjdXJyZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIhYKFFJlY29yZFNpZ25hbFJlc3BvbnNlIj4KGFJlY29yZEltcHJlc3Npb25zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCXZpZGVvX2lkcxgCIAMoCSIbChlSZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlIpUBChJFeHBsYWluRmVlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIfCgNtaXgYAyABKAsyEi5yZWNzeXMudjEuRmVlZE1peBIRCglsYW5ndWFnZXMYBCADKAkSKAoGdHVuaW5nGAUgASgLMhgucmVjc3lzLnYxLlJhbmtpbmdUdW5pbmcikQIKEFZpZGVvRXhwbGFuYXRpb24SEAoIdmlkZW9faWQYASABKAkSFwoPZXhjbHVkZWRfcmVhc29uGAIgASgJEj8KCmNvbXBvbmVudHMYAyADKAsyKy5yZWNzeXMudjEuVmlkZW9FeHBsYW5hdGlvbi5Db21wb25lbnRzRW50cnkSDQoFc2NvcmUYBCABKAESLwoGcmVhc29uGAUgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uEgwKBHNsb3QYBiABKAkSEAoIcG9zaXRpb24YByABKAUaMQoPQ29tcG9uZW50c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiQgoTRXhwbGFpbkZlZWRSZXNwb25zZRIrCgZ2aWRlb3MYASADKAsyGy5yZWNzeXMudjEuVmlkZW9FeHBsYW5hdGlvbiKvAwoNUmFua2luZ1R1bmluZxIaCg1zZXNzaW9uX2JsZW5kGAEgASgBSACIAQESJQoYZnJlc2hfc3Vic2NyaWJlZF9wZXJjZW50GAIgASgFSAGIAQESIwoWZnJlc2huZXNzX3dpbmRvd19ob3VycxgDIAEoBUgCiAEBEiMKFm1heF9wdWJsaXNoZWRfYWdlX2RheXMYBCABKAVIA4gBARIjChZyZWNlbmN5X2hhbGZfbGlmZV9kYXlzGAUgASgBSASIAQESIAoTc29mdG1heF90ZW1wZXJhdHVyZRgGIAEoAUgFiAEBEh0KEHNhbXBsZV9wb29sX3NpemUYByABKAVIBogBAUIQCg5fc2Vzc2lvbl9ibGVuZEIbChlfZnJlc2hfc3Vic2NyaWJlZF9wZXJjZW50QhkKF19mcmVzaG5lc3Nfd2luZG93X2hvdXJzQhkKF19tYXhfcHVibGlzaGVkX2FnZV9kYXlzQhkKF19yZWNlbmN5X2hhbGZfbGlmZV9kYXlzQhYKFF9zb2Z0bWF4X3RlbXBlcmF0dXJlQhMKEV9zYW1wbGVfcG9vbF9zaXplKqUDChRSZWNvbW1lbmRhdGlvblJlYXNvbhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fVU5TUEVDSUZJRUQQABIrCidSRUNPTU1FTkRBVElPTl9SRUFTT05fQ09OVElOVUVfV0FUQ0hJTkcQARIoCiRSRUNPTU1FTkRBVElPTl9SRUFTT05fUkVDRU5UTFlfQURERUQQAhInCiNSRUNPTU1FTkRBVElPTl9SRUFTT05fTkVWRVJfV0FUQ0hFRBADEiwKKFJFQ09NTUVOREFUSU9OX1JFQVNPTl9TVUJTQ1JJQkVEX0NIQU5ORUwQBBIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fUkVXQVRDSBAFEiYKIlJFQ09NTUVOREFUSU9OX1JFQVNPTl9TQU1FX0NIQU5ORUwQBhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fU0hBUkVEX1RBR1MQBxIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fQk9VTkNFRBAIEiMKH1JFQ09NTUVOREFUSU9OX1JFQVNPTl9ESVNDT1ZFUlkQCSrVAQoKU2lnbmFsVHlwZRIbChdTSUdOQUxfVFlQRV9VTlNQRUNJRklFRBAAEhUKEVNJR05BTF9UWVBFX1dBVENIEAESFAoQU0lHTkFMX1RZUEVfTElLRRACEhcKE1NJR05BTF9UWVBFX0RJU0xJS0UQAxIZChVTSUdOQUxfVFlQRV9TVUJTQ1JJQkUQBBIbChdTSUdOQUxfVFlQRV9VTlNVQlNDUklCRRAFEhYKElNJR05BTF9UWVBFX1NFQVJDSBAGEhQKEFNJR05BTF9UWVBFX1NLSVAQBzL3AwoVUmVjb21tZW5kYXRpb25TZXJ2aWNlEkAKB0dldEZlZWQSGS5yZWNzeXMudjEuR2V0RmVlZFJlcXVlc3QaGi5yZWNzeXMudjEuR2V0RmVlZFJlc3BvbnNlEkYKCUdldFVwTmV4dBIbLnJlY3N5cy52MS5HZXRVcE5leHRSZXF1ZXN0GhwucmVjc3lzLnYxLkdldFVwTmV4dFJlc3BvbnNlElUKDkdldE1vc3RXYXRjaGVkEiAucmVjc3lzLnYxLkdldE1vc3RXYXRjaGVkUmVxdWVzdBohLnJlY3N5cy52MS5HZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEk8KDFJlY29yZFNpZ25hbBIeLnJlY3N5cy52MS5SZWNvcmRTaWduYWxSZXF1ZXN0Gh8ucmVjc3lzLnYxLlJlY29yZFNpZ25hbFJlc3BvbnNlEl4KEVJlY29yZEltcHJlc3Npb25zEiMucmVjc3lzLnYxLlJlY29yZEltcHJlc3Npb25zUmVxdWVzdBokLnJlY3N5cy52MS5SZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlEkwKC0V4cGxhaW5GZWVkEh0ucmVjc3lzLnYxLkV4cGxhaW5GZWVkUmVxdWVzdBoeLnJlY3N5cy52MS5FeHBsYWluRmVlZFJlc3BvbnNlQp8BCg1jb20ucmVjc3lzLnYxQgtSZWNzeXNQcm90b1ABWjxnaXRodWIuY29tL2x1Y25ndXllbi9sb2NhbC15b3V0dWJlL2dlbi9nby9yZWNzeXMvdjE7cmVjc3lzdjGiAgNSWFiqAglSZWNzeXMuVjHKAglSZWNzeXNcVjHiAhVSZWNzeXNcVjFcR1BCTWV0YWRhdGHqAgpSZWNzeXM6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message recsys.v1.RankedVideo
@@ -134,6 +134,13 @@ export type GetFeedRequest = Message<"recsys.v1.GetFeedRequest"> & {
    * @generated from field: repeated string languages = 7;
    */
   languages: string[];
+
+  /**
+   * Optional. Absent means the built-in ranking constants.
+   *
+   * @generated from field: recsys.v1.RankingTuning tuning = 8;
+   */
+  tuning?: RankingTuning;
 };
 
 /**
@@ -374,6 +381,211 @@ export const RecordImpressionsResponseSchema: GenMessage<RecordImpressionsRespon
   messageDesc(file_recsys_v1_recsys, 11);
 
 /**
+ * @generated from message recsys.v1.ExplainFeedRequest
+ */
+export type ExplainFeedRequest = Message<"recsys.v1.ExplainFeedRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * Same filters the feed itself takes, so the explanation describes the page
+   * the viewer is actually looking at.
+   *
+   * @generated from field: string category = 2;
+   */
+  category: string;
+
+  /**
+   * @generated from field: recsys.v1.FeedMix mix = 3;
+   */
+  mix?: FeedMix;
+
+  /**
+   * @generated from field: repeated string languages = 4;
+   */
+  languages: string[];
+
+  /**
+   * @generated from field: recsys.v1.RankingTuning tuning = 5;
+   */
+  tuning?: RankingTuning;
+};
+
+/**
+ * Describes the message recsys.v1.ExplainFeedRequest.
+ * Use `create(ExplainFeedRequestSchema)` to create a new message.
+ */
+export const ExplainFeedRequestSchema: GenMessage<ExplainFeedRequest> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 12);
+
+/**
+ * One video's score with its working shown.
+ *
+ * The components are a map rather than a field per term. They are read by a
+ * person, they change whenever the ranker is tuned, and giving each one a field
+ * number would mean a proto edit and a regeneration every time somebody tries a
+ * different weight — which is the thing this message exists to make cheap.
+ *
+ * @generated from message recsys.v1.VideoExplanation
+ */
+export type VideoExplanation = Message<"recsys.v1.VideoExplanation"> & {
+  /**
+   * @generated from field: string video_id = 1;
+   */
+  videoId: string;
+
+  /**
+   * Empty when the video is in the feed; otherwise why it is not, in words.
+   * Every other field is meaningless when this is set.
+   *
+   * @generated from field: string excluded_reason = 2;
+   */
+  excludedReason: string;
+
+  /**
+   * Named contributions, in the units they are applied in: additive terms are
+   * points, multipliers are factors.
+   *
+   * @generated from field: map<string, double> components = 3;
+   */
+  components: { [key: string]: number };
+
+  /**
+   * @generated from field: double score = 4;
+   */
+  score: number;
+
+  /**
+   * @generated from field: recsys.v1.RecommendationReason reason = 5;
+   */
+  reason: RecommendationReason;
+
+  /**
+   * Which share of the page it competes for, as a name.
+   *
+   * @generated from field: string slot = 6;
+   */
+  slot: string;
+
+  /**
+   * Its position in the feed as served, or -1 when it is not in the feed. Not
+   * derivable from the score: the quota and the per-channel cap both reorder.
+   *
+   * @generated from field: int32 position = 7;
+   */
+  position: number;
+};
+
+/**
+ * Describes the message recsys.v1.VideoExplanation.
+ * Use `create(VideoExplanationSchema)` to create a new message.
+ */
+export const VideoExplanationSchema: GenMessage<VideoExplanation> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 13);
+
+/**
+ * @generated from message recsys.v1.ExplainFeedResponse
+ */
+export type ExplainFeedResponse = Message<"recsys.v1.ExplainFeedResponse"> & {
+  /**
+   * Videos in the feed first, in the order they would be served, then the ones
+   * that were excluded.
+   *
+   * @generated from field: repeated recsys.v1.VideoExplanation videos = 1;
+   */
+  videos: VideoExplanation[];
+};
+
+/**
+ * Describes the message recsys.v1.ExplainFeedResponse.
+ * Use `create(ExplainFeedResponseSchema)` to create a new message.
+ */
+export const ExplainFeedResponseSchema: GenMessage<ExplainFeedResponse> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 14);
+
+/**
+ * Ranking constants the household can move without a rebuild.
+ *
+ * Every field is optional, and absent means "use the built-in value". Zero is a
+ * real setting for several of these — a session blend of zero says "ignore what
+ * I am watching right now" — so presence and zero must be distinguishable, which
+ * is the whole reason for the optional keyword here.
+ *
+ * Sent with the request like FeedMix, and for the same reason: recsys keeps no
+ * configuration of its own (CLAUDE.md §3). The file lives at the gateway, where
+ * it can be edited by hand.
+ *
+ * Deliberately not every weight in the ranker. These are the settings that
+ * answer a question somebody actually has; the two dozen score weights answer
+ * questions nobody asks, and exposing them would trade the one thing this
+ * heuristic has over a model — that every number can be explained — for knobs.
+ *
+ * @generated from message recsys.v1.RankingTuning
+ */
+export type RankingTuning = Message<"recsys.v1.RankingTuning"> & {
+  /**
+   * How much of the affinity multiplier is decided by the current sitting
+   * rather than the whole watch history. 0 = ignore the sitting, 1 = ignore
+   * the history.
+   *
+   * @generated from field: optional double session_blend = 1;
+   */
+  sessionBlend?: number;
+
+  /**
+   * Share of the page reserved for new uploads from followed channels.
+   *
+   * @generated from field: optional int32 fresh_subscribed_percent = 2;
+   */
+  freshSubscribedPercent?: number;
+
+  /**
+   * How long a video counts as new, in hours.
+   *
+   * @generated from field: optional int32 freshness_window_hours = 3;
+   */
+  freshnessWindowHours?: number;
+
+  /**
+   * Videos published longer ago than this never reach the home page.
+   *
+   * @generated from field: optional int32 max_published_age_days = 4;
+   */
+  maxPublishedAgeDays?: number;
+
+  /**
+   * How fast the "recently added to the library" boost decays.
+   *
+   * @generated from field: optional double recency_half_life_days = 5;
+   */
+  recencyHalfLifeDays?: number;
+
+  /**
+   * How sharply the feed's ordering follows the score. Lower is stricter.
+   *
+   * @generated from field: optional double softmax_temperature = 6;
+   */
+  softmaxTemperature?: number;
+
+  /**
+   * How many of each bucket's best are entered into the draw. Raising it past
+   * a few hundred is what let low-scoring videos onto the first page.
+   *
+   * @generated from field: optional int32 sample_pool_size = 7;
+   */
+  samplePoolSize?: number;
+};
+
+/**
+ * Describes the message recsys.v1.RankingTuning.
+ * Use `create(RankingTuningSchema)` to create a new message.
+ */
+export const RankingTuningSchema: GenMessage<RankingTuning> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 15);
+
+/**
  * Why a video was surfaced. Sent to the client for debugging and to let the UI
  * group results later without recomputing anything.
  *
@@ -557,6 +769,24 @@ export const RecommendationService: GenService<{
     methodKind: "unary";
     input: typeof RecordImpressionsRequestSchema;
     output: typeof RecordImpressionsResponseSchema;
+  },
+  /**
+   * The same ranking with its working shown, for tuning and for answering
+   * "why is this video here" and "where did that one go".
+   *
+   * A debug surface with no UI behind it, and deliberately so. Every constant
+   * in the ranker has been set by looking at a page and forming an impression,
+   * and an impression cannot tell "this weight is wrong" from "this weight is
+   * right and something downstream is discarding it" — which is precisely the
+   * distinction that was missed when the quota shuffled each bucket uniformly
+   * and made the entire score decorative.
+   *
+   * @generated from rpc recsys.v1.RecommendationService.ExplainFeed
+   */
+  explainFeed: {
+    methodKind: "unary";
+    input: typeof ExplainFeedRequestSchema;
+    output: typeof ExplainFeedResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_recsys_v1_recsys, 0);

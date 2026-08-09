@@ -9,13 +9,17 @@ const defaults = {
   discoveryPercent: 15,
 }
 
-const getFeedMix = vi.fn(async () => ({ ...defaults, defaults }))
+const fixedShares = { continueWatching: 10, rewatch: 8, freshSubscribed: 10 }
+
+const getFeedMix = vi.fn(async () => ({ ...defaults, defaults, fixedShares }))
 const saveFeedMix = vi.fn(async (mix: unknown) => mix)
+const getBucketSizes = vi.fn(async () => ({}) as Record<string, number>)
 
 vi.mock('@/features/settings/infrastructure/settingsRepository', () => ({
   settingsRepository: {
     getFeedMix: () => getFeedMix(),
     saveFeedMix: (mix: unknown) => saveFeedMix(mix),
+    getBucketSizes: () => getBucketSizes(),
   },
 }))
 
@@ -39,9 +43,11 @@ beforeEach(() => {
   // Implementations, not just call counts: a test that makes one of these throw
   // would otherwise hand the failure to whichever test ran next.
   getFeedMix.mockReset()
-  getFeedMix.mockImplementation(async () => ({ ...defaults, defaults }))
+  getFeedMix.mockImplementation(async () => ({ ...defaults, defaults, fixedShares }))
   saveFeedMix.mockReset()
   saveFeedMix.mockImplementation(async (mix: unknown) => mix)
+  getBucketSizes.mockReset()
+  getBucketSizes.mockImplementation(async () => ({}))
 })
 
 describe('FeedMixSettings', () => {
@@ -53,7 +59,8 @@ describe('FeedMixSettings', () => {
     expect(slider(/More of what you watch/).value).toBe('60')
     expect(slider(/Something new/).value).toBe('15')
     // A percentage of a page nobody should have to work out by hand.
-    expect(screen.getAllByText(/60% · 12 of 24/).length).toBeGreaterThan(0)
+    // 60% of the 72% the three sliders divide, over a window of 24.
+    expect(screen.getAllByText(/60% · 10 of 24/).length).toBeGreaterThan(0)
   })
 
   it('takes from the other two when one is raised', async () => {
@@ -140,7 +147,50 @@ describe('FeedMixSettings', () => {
     renderSection()
     await waitFor(() => expect(screen.getByText('Defaults')).toBeTruthy())
 
-    expect(screen.getByText(/82% of the page/)).toBeTruthy()
+    expect(screen.getByText(/72% of the page/)).toBeTruthy()
     expect(screen.getByText(/part way through \(10%\)/)).toBeTruthy()
+  })
+})
+
+describe('what each share has to choose from', () => {
+  // The failure this exists to surface: the sliders divide a page, but a share
+  // can only be filled from videos that exist. The affinity bucket held
+  // twenty-five videos against three and a half thousand subscribed ones, so a
+  // 60% share spent half of every page scraping its floor — and nothing on this
+  // screen would have told anybody.
+  it('warns when a share is larger than the library can fill', async () => {
+    getBucketSizes.mockImplementation(async () => ({
+      subscribed: 3432,
+      affinity: 25,
+      discovery: 158,
+    }))
+    renderSection()
+
+    await waitFor(() =>
+      expect(screen.getByText(/Only 25 videos fit this/)).toBeTruthy(),
+    )
+    // And a bucket with plenty in it is not news, so it is stated plainly.
+    expect(screen.getByText(/3432 videos fit this/)).toBeTruthy()
+  })
+
+  it('says so plainly when a share has nothing at all', async () => {
+    getBucketSizes.mockImplementation(async () => ({ discovery: 0 }))
+    renderSection()
+
+    await waitFor(() =>
+      expect(screen.getByText(/Nothing in your library fits this/)).toBeTruthy(),
+    )
+  })
+
+  // The count costs a full ranking pass. Losing it must cost a line of context,
+  // never the setting.
+  it('still works when the count cannot be fetched', async () => {
+    getBucketSizes.mockImplementation(async () => {
+      throw new Error('recsys is down')
+    })
+    renderSection()
+
+    await waitFor(() => expect(slider(/Channels you follow/)).toBeTruthy())
+    expect(slider(/Channels you follow/).value).toBe('25')
   })
 })

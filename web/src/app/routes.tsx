@@ -7,6 +7,7 @@ import { SavedPage } from '@/pages/SavedPage'
 import { SearchResultsPage } from '@/pages/SearchResultsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import {
+  AdvancedSettingsPage,
   FeedSettingsPage,
   NarrationSettingsPage,
   TranslationSettingsPage,
@@ -43,6 +44,7 @@ export const pageRoutes = (
     {/* One panel each, for the phone's Settings menu. The desktop page still
         shows all three together; only the arrangement differs. */}
     <Route path="/settings/feed" element={<FeedSettingsPage />} />
+    <Route path="/settings/advanced" element={<AdvancedSettingsPage />} />
     <Route path="/settings/narration" element={<NarrationSettingsPage />} />
     <Route path="/settings/translation" element={<TranslationSettingsPage />} />
     <Route path="/channel/:channelId" element={<ChannelPage />} />

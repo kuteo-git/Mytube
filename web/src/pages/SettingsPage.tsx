@@ -8,6 +8,7 @@ import {
   Headphones,
   Languages,
   LayoutGrid,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -25,6 +26,7 @@ import {
   saveNarrationAudioPrefs,
   type NarrationAudioPrefs,
 } from '@/features/settings/application/settings-prefs'
+import { AdvancedSettings } from '@/features/settings/ui/AdvancedSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { usePlayer } from '@/features/watch/application/player-context'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
@@ -62,6 +64,9 @@ export function SettingsPage() {
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
+      {/* Last, because it is the one section you arrive at having decided to
+          change how the ranking behaves rather than what the page contains. */}
+      <AdvancedSettings />
     </div>
   )
 }
@@ -91,6 +96,7 @@ const PHONE_PREFS = [
   { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
   { to: '/settings/narration', icon: Headphones, label: 'Narration' },
   { to: '/settings/translation', icon: Languages, label: 'Translation' },
+  { to: '/settings/advanced', icon: SlidersHorizontal, label: 'Advanced' },
 ]
 
 function PhoneMenu() {

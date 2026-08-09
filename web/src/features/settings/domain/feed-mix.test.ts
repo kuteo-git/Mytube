@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ADJUSTABLE_PERCENT,
+  adjustablePercent,
+  FALLBACK_FIXED_SHARES,
   type FeedMix,
+  type FixedShares,
   mixTotal,
   setShare,
   videosPerWindow,
@@ -63,17 +65,36 @@ describe('setShare', () => {
 })
 
 describe('videosPerWindow', () => {
+  const fixed = FALLBACK_FIXED_SHARES
+
   // The readout beside each slider. A percentage of a percentage of a page is
   // arithmetic nobody should do in their head to learn what the setting does.
   it('counts against the adjustable share, not the whole page', () => {
-    expect(videosPerWindow(100)).toBe(Math.round((ADJUSTABLE_PERCENT / 100) * 24))
-    expect(videosPerWindow(0)).toBe(0)
+    expect(videosPerWindow(100, fixed)).toBe(Math.round((adjustablePercent(fixed) / 100) * 24))
+    expect(videosPerWindow(0, fixed)).toBe(0)
   })
 
   it('gives the default mix a recognisable first page', () => {
-    // 25/60/15 over the 82% adjustable share of 24 slots.
-    expect(videosPerWindow(25)).toBe(5)
-    expect(videosPerWindow(60)).toBe(12)
-    expect(videosPerWindow(15)).toBe(3)
+    // 60/20/20 over the 72% adjustable share of 24 slots.
+    expect(videosPerWindow(60, fixed)).toBe(10)
+    expect(videosPerWindow(20, fixed)).toBe(3)
+  })
+
+  // The regression this file exists to prevent from happening twice. The page
+  // carried its own copy of the fixed shares and went on quoting 82% after the
+  // fresh-subscribed share took ten of it, so every readout was a seventh too
+  // high — on the one screen whose whole job is to say what the numbers mean.
+  it('follows the fixed shares rather than a number written here', () => {
+    const wider: FixedShares = { ...fixed, freshSubscribed: 30 }
+    expect(adjustablePercent(wider)).toBe(52)
+    expect(videosPerWindow(100, wider)).toBeLessThan(videosPerWindow(100, fixed))
+  })
+
+  // Somebody can set the fresh share high enough to leave nothing. The readout
+  // has to say zero rather than go negative.
+  it('cannot report a negative page', () => {
+    const swallowed: FixedShares = { continueWatching: 50, rewatch: 40, freshSubscribed: 40 }
+    expect(adjustablePercent(swallowed)).toBe(0)
+    expect(videosPerWindow(100, swallowed)).toBe(0)
   })
 })

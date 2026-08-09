@@ -29,6 +29,7 @@ const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   [(p) => p === '/storage', 'Storage'],
   [(p) => p === '/activity', 'Activity'],
   [(p) => p === '/settings/feed', 'Home feed'],
+  [(p) => p === '/settings/advanced', 'Advanced'],
   [(p) => p === '/settings/narration', 'Narration'],
   [(p) => p === '/settings/translation', 'Translation'],
 ]

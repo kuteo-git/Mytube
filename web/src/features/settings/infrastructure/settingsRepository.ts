@@ -6,7 +6,8 @@
  * last four characters, which is enough to recognise and not enough to use.
  */
 
-import type { FeedMix } from '@/features/settings/domain/feed-mix'
+import type { FeedMix, FixedShares } from '@/features/settings/domain/feed-mix'
+import type { RankingSettings } from '@/features/settings/domain/ranking'
 
 /**
  * The saved mix, with the defaults the server would fall back to.
@@ -17,7 +18,22 @@ import type { FeedMix } from '@/features/settings/domain/feed-mix'
  */
 export interface StoredFeedMix extends FeedMix {
   defaults: FeedMix
+  /**
+   * The shares the sliders do not divide.
+   *
+   * Sent rather than assumed, so the readout beside each slider cannot go on
+   * quoting a figure that stopped being true when a new fixed share appeared.
+   */
+  fixedShares: FixedShares
 }
+
+/**
+ * How many videos each share currently has to choose from, keyed by slot name.
+ *
+ * A separate call from the mix itself. This one is a full ranking pass, and
+ * folding it into the 147-byte file read would make the sliders wait on it.
+ */
+export type BucketSizes = Record<string, number>
 
 export interface TranslateConfig {
   baseUrl: string
@@ -42,6 +58,25 @@ export const settingsRepository = {
   async listVoices(): Promise<string[]> {
     const r = await fetch('/api/tts/voices')
     return (await json<{ voices: string[] }>(r)).voices ?? []
+  },
+
+  async getBucketSizes(): Promise<BucketSizes> {
+    const r = await fetch('/api/settings/feed-mix/buckets')
+    return (await json<{ buckets: BucketSizes }>(r)).buckets ?? {}
+  },
+
+  async getRanking(): Promise<RankingSettings> {
+    const r = await fetch('/api/settings/ranking')
+    return (await json<{ settings: RankingSettings }>(r)).settings ?? {}
+  },
+
+  async saveRanking(settings: RankingSettings): Promise<RankingSettings> {
+    const r = await fetch('/api/settings/ranking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    })
+    return (await json<{ settings: RankingSettings }>(r)).settings ?? {}
   },
 
   async getTranslateConfig(): Promise<TranslateConfig> {

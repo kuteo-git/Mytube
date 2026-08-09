@@ -1,3 +1,4 @@
+import { AdvancedSettings } from '@/features/settings/ui/AdvancedSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { NarrationSettings, TranslationSettings } from './SettingsPage'
 
@@ -34,6 +35,14 @@ export function TranslationSettingsPage() {
   return (
     <div className="px-4 pb-16">
       <TranslationSettings headless />
+    </div>
+  )
+}
+
+export function AdvancedSettingsPage() {
+  return (
+    <div className="px-4 pb-16">
+      <AdvancedSettings headless />
     </div>
   )
 }

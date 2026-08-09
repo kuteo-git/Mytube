@@ -23,21 +23,37 @@ export const FEED_MIX_KEYS: FeedMixKey[] = [
 ]
 
 /**
- * The two shares nobody can move, and why they are not on the page.
+ * The shares nobody divides here, and why they are not sliders.
  *
- * Finishing something you started and going back to something you finished are
- * states of the watch history, not sources of new material. Making them compete
- * with the sliders would mean a viewer who wants more discovery is asked to
- * give up the video they were halfway through.
+ * Finishing something you started, going back to something you finished, and
+ * being told when a channel you follow posts are not tastes. Making them compete
+ * with the sliders would mean a viewer who wants more discovery is asked to give
+ * up the video they were halfway through, or to stop hearing about new uploads.
  *
- * Kept here so the note under the sliders and the arithmetic in the readout
- * cannot drift apart. Mirrors shareContinueWatching/shareRewatch in the ranker.
+ * Read from the server rather than written here. This file used to carry its own
+ * copy and spent a release saying the sliders divided 82% of the page — true
+ * until the fresh-subscribed share took ten of it, after which every "N of 24"
+ * readout was overstated by a seventh. On the one screen whose job is to say
+ * what the numbers mean.
  */
-export const FIXED_SHARES = { continueWatching: 10, rewatch: 8 } as const
+export interface FixedShares {
+  continueWatching: number
+  rewatch: number
+  freshSubscribed: number
+}
 
-/** What the three sliders divide between them. */
-export const ADJUSTABLE_PERCENT =
-  100 - FIXED_SHARES.continueWatching - FIXED_SHARES.rewatch
+/** What the server falls back to, and what the page shows before it answers. */
+export const FALLBACK_FIXED_SHARES: FixedShares = {
+  continueWatching: 10,
+  rewatch: 8,
+  freshSubscribed: 10,
+}
+
+/** What the three sliders divide between them, given the shares that are spoken for. */
+export function adjustablePercent(fixed: FixedShares): number {
+  const left = 100 - fixed.continueWatching - fixed.rewatch - fixed.freshSubscribed
+  return left > 0 ? left : 0
+}
 
 /** The window the ratios are applied over, matching the ranker's page size. */
 export const FEED_WINDOW = 24
@@ -93,6 +109,6 @@ function clampPercent(value: number): number {
  * videos. Shown beside each slider for the same reason the storage page shows
  * gigabytes rather than a ratio.
  */
-export function videosPerWindow(percent: number): number {
-  return Math.round((percent / 100) * (ADJUSTABLE_PERCENT / 100) * FEED_WINDOW)
+export function videosPerWindow(percent: number, fixed: FixedShares): number {
+  return Math.round((percent / 100) * (adjustablePercent(fixed) / 100) * FEED_WINDOW)
 }
