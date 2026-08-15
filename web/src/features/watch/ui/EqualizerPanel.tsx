@@ -69,17 +69,15 @@ export function EqualizerSetting({
   }
 
   /**
-   * Choosing a room switches the reverb on and starts it at a quarter wet.
+   * Choosing a room selects it. Switching the reverb off is the switch's job.
    *
-   * Pressing the same one again switches it off, which is what makes this a row
-   * of rooms rather than a row of rooms plus an Off button that means the same
-   * thing as whichever one is currently lit.
+   * Pressing the lit room used to turn the whole thing off, which was the only
+   * way to reach silence when there was no switch. Now that Environment has one
+   * — the same row the equaliser has, because they are the same kind of thing —
+   * that would be a second, hidden control for a setting already on screen, and
+   * the two would disagree about what pressing a lit room means.
    */
   const pickRoom = (name: ReverbPresetName) => {
-    if (reverb.enabled && reverb.preset === name) {
-      setReverb({ ...reverb, enabled: false })
-      return
-    }
     setReverb({ enabled: true, preset: name, wet: reverb.wet || DEFAULT_WET })
   }
 
@@ -210,11 +208,17 @@ export function EqualizerSetting({
         than recorded, and two labels over one sound would be a control that
         cannot do what its name says.
       */}
-      <li className="px-4 pb-3 pt-1">
-        <div className="pb-1.5 text-xs text-text-2">Environment</div>
+      <SettingRowLike
+        label="Environment"
+        on={reverb.enabled}
+        onToggle={() => setReverb({ ...reverb, enabled: !reverb.enabled })}
+      />
+
+      {reverb.enabled && (
+      <li className="px-4 pb-3">
         <div role="radiogroup" aria-label="Environment" className="flex flex-wrap gap-1">
           {REVERB_PRESETS.map((p) => {
-            const on = reverb.enabled && reverb.preset === p.name
+            const on = reverb.preset === p.name
             return (
               <button
                 key={p.name}
@@ -236,32 +240,29 @@ export function EqualizerSetting({
           })}
         </div>
 
-        {reverb.enabled && (
-          <>
-            <div className="flex items-center gap-2 pt-2">
-              <span className="w-14 shrink-0 text-xs text-text-2">Dry/Wet</span>
-              <input
-                type="range"
-                aria-label="Dry wet mix"
-                min={0}
-                max={100}
-                step={1}
-                value={Math.round(reverb.wet * 100)}
-                onChange={(e) => setReverb({ ...reverb, wet: Number(e.target.value) / 100 })}
-                className="min-w-0 flex-1 accent-brand"
-              />
-              <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
-                {Math.round(reverb.wet * 100)}%
-              </span>
-            </div>
-            {bypassed && (
-              <p className="pt-1 text-[10px] text-brand" role="status">
-                Also off in fullscreen
-              </p>
-            )}
-          </>
+        <div className="flex items-center gap-2 pt-2">
+          <span className="w-14 shrink-0 text-xs text-text-2">Dry/Wet</span>
+          <input
+            type="range"
+            aria-label="Dry wet mix"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(reverb.wet * 100)}
+            onChange={(e) => setReverb({ ...reverb, wet: Number(e.target.value) / 100 })}
+            className="min-w-0 flex-1 accent-brand"
+          />
+          <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
+            {Math.round(reverb.wet * 100)}%
+          </span>
+        </div>
+        {bypassed && (
+          <p className="pt-1 text-[10px] text-brand" role="status">
+            Also off in fullscreen
+          </p>
         )}
       </li>
+      )}
     </>
   )
 }

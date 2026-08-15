@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -168,6 +168,45 @@ function renderWatch() {
     </QueryClientProvider>,
   )
 }
+
+describe('the audio menu', () => {
+  it('lives behind its own button, not the gear', async () => {
+    // The gear holds what belongs to this video — rendition, subtitles, reading
+    // them aloud. The equaliser and the room belong to the speakers in front of
+    // the viewer, and they outgrew a menu row besides: ten sliders, a preamp,
+    // four rooms and a mix pushed everything else below the fold on a phone.
+    renderWatch()
+    await waitFor(() => expect(document.querySelectorAll('video').length).toBe(2))
+
+    const audio = screen.getByLabelText('Audio')
+    await act(async () => {
+      fireEvent.click(audio)
+    })
+
+    expect(screen.getByRole('switch', { name: /Equalizer/ })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /Environment/ })).toBeInTheDocument()
+  })
+
+  it('keeps the rooms behind the Environment switch', async () => {
+    // The same shape as the equaliser above it, and for the same reason: a row
+    // of rooms with no way to reach silence made "off" mean pressing whichever
+    // one happened to be lit.
+    renderWatch()
+    await waitFor(() => expect(document.querySelectorAll('video').length).toBe(2))
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Audio'))
+    })
+
+    expect(screen.queryByRole('radiogroup', { name: 'Environment' })).toBeNull()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: /Environment/ }))
+    })
+
+    expect(screen.getByRole('radiogroup', { name: 'Environment' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Dry wet mix')).toBeInTheDocument()
+  })
+})
 
 describe('the player and the audio graph', () => {
   it('routes both layers once they exist, not once at mount', async () => {

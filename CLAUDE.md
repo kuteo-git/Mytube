@@ -191,7 +191,7 @@ video B → gainB ─┘                          └→ convolver → wet ─�
 - Bands are `lowshelf` 32 Hz, `peaking` 64 Hz–8 kHz at `Q = √2`, `highshelf` 16 kHz. Peaking at the extremes would leave the floor and ceiling unmoved. Preamp only ever **cuts** (−12…0 dB): it is the headroom the boosts are paid for, and every preset ships with its own.
 - "Off" is every filter at 0 dB, **not** a disconnected chain — a biquad at unity is transparent, so on and off cannot fail differently.
 - **On iOS, native fullscreen bypasses Web Audio entirely** and the EQ silently stops applying. The panel says "EQ off in fullscreen" while `webkitPresentationMode === 'fullscreen'` — a state-driven label, because this is a question that only occurs to someone at the moment the sound stops changing.
-- The gear menu is now unconditional in the full player: the EQ is the first setting there that belongs to the listener rather than to the video.
+- **Sound has its own button in the control bar, left of the gear** (`SlidersVertical`, `aria-label="Audio"`). The gear holds what belongs to *this video* — rendition, subtitles, reading them aloud; the equaliser and the room belong to the speakers the viewer is sitting in front of. They also outgrew a menu row: ten sliders, a preamp, four rooms and a mix pushed everything else on the gear below the fold on a phone. `SettingsMenu` takes `icon`/`label` and is no longer "the gear"; everything reusable in it is below the button (portal out of `overflow-hidden`, measured anchoring, dropdown-or-sheet, outside-press). The gear keeps its original condition — without it, moving the EQ out would leave it opening on nothing.
 
 #### Environment (reverb)
 
@@ -201,7 +201,8 @@ eqMac's "Environment" is macOS's `AVAudioUnitReverb` with a preset and its `wetD
 - Impulse responses are **capped at 2.5s** and built **lazily, once per preset, then cached**. Convolution scales with the tail, this is headed for a TV browser, and each build is a loop over hundreds of thousands of samples. No auto-disable on weak hardware: that would be guessing about a device nobody has plugged in yet.
 - **The convolver holds no buffer until a room is chosen** — a loaded convolver convolves even at zero wet gain, which is the one avoidable cost in this graph.
 - **The room splits off after the EQ and before the preamp.** After, so it answers the sound the viewer chose; before, because reverb *adds* energy, and the preamp is the trim that pays for clipping.
-- Dry/wet is a plain crossfade summing to 1, ramped over 60 ms rather than the EQ's 20 ms — a filter moving fast is inaudible, a reverb tail appearing fast is a swell. Default **off**; choosing a room starts it at **25% wet**. Pressing the lit room again switches it off.
+- Dry/wet is a plain crossfade summing to 1, ramped over 60 ms rather than the EQ's 20 ms — a filter moving fast is inaudible, a reverb tail appearing fast is a swell. Default **off**; switching it on starts at **25% wet**.
+- **Environment has its own on/off row, the same shape as the equaliser's**, and the rooms and mix appear only when it is on. Pressing the lit room used to be the way off — the only one available with no switch — which made "off" mean pressing whichever room happened to be selected.
 - The two halves are pushed by **separate effects** keyed on each: moving an EQ slider has nothing to say to an impulse response.
 - **"Spatial Audio" is a different eqMac feature** (stereo widening / HRTF), not reverb. Deliberately not built.
 

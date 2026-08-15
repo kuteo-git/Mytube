@@ -8,6 +8,7 @@ import {
   Play,
   Settings,
   SkipForward,
+  SlidersVertical,
   Volume1,
   Volume2,
   VolumeX,
@@ -2936,35 +2937,57 @@ export function Player({
               four output modes. Turning it "on" from the bar could not say
               whether that meant subtitles, a voice, or both. */}
 
-          {/* Only offered when there is more than one way to play the video.
-              A quality menu over a single source would be a control that
-              cannot do anything — unless the gear is also carrying the
-              narration settings, which it is whenever this video can be
-              narrated, and those are reachable nowhere else. */}
-          {/* The gear is now unconditional in the full player. It used to be
-              offered only when this video had something to configure — several
-              renditions, or subtitles to narrate — and the equaliser is the
-              first setting here that belongs to the listener rather than to the
-              video, so there is always something behind it. */}
+          {/* Sound has its own button, beside the gear rather than inside it.
+              The gear holds settings that belong to this video — which
+              rendition, which subtitles, whether to read them aloud — and the
+              equaliser and the room belong to the speakers in front of the
+              viewer. They also outgrew a menu row: ten sliders, a preamp, four
+              rooms and a mix is a panel, and it pushed everything else on the
+              gear below the fold on a phone.
+
+              Left of the gear on purpose. The gear stays next to picture-in-
+              picture and full screen, which is where a hand already goes for
+              it. */}
           {variant === 'full' && (
             <SettingsMenu
               buttonClassName={controlButton}
               sheet={coarse}
               onOpenChange={trackMenu}
+              icon={<SlidersVertical size={22} />}
+              label="Audio"
             >
-              {resolutionRow}
-              {subtitleRows}
-              {narrationRows}
               <EqualizerSetting
                 audio={audio}
                 onChange={setAudio}
                 element={front()}
                 tall={coarse}
               />
-              {autoplayRow}
-              {translateGroup}
             </SettingsMenu>
           )}
+
+          {/* Only offered when there is more than one way to play the video.
+              A quality menu over a single source would be a control that
+              cannot do anything — unless the gear is also carrying the
+              narration settings, which it is whenever this video can be
+              narrated, and those are reachable nowhere else.
+
+              The condition came back when the equaliser moved out. It had been
+              dropped while the gear carried a setting every video has; without
+              it the gear would now open on nothing at all. */}
+          {(qualityOptions.length > 1 || coarse || narrationAvailable) &&
+            variant === 'full' && (
+              <SettingsMenu
+                buttonClassName={controlButton}
+                sheet={coarse}
+                onOpenChange={trackMenu}
+              >
+                {resolutionRow}
+                {subtitleRows}
+                {narrationRows}
+                {autoplayRow}
+                {translateGroup}
+              </SettingsMenu>
+            )}
 
           {/* Picture-in-picture, offered only where the browser has it.
               On iOS this is the *only* way playback survives leaving the page:
@@ -3146,18 +3169,26 @@ export function Player({
  * CLAUDE.md §8b.
  */
 /**
- * The settings panel behind the gear.
+ * A panel behind a button in the control bar.
  *
  * It used to be the quality menu with everything else bolted underneath, which
  * is why quality was a list of rows while every setting added later was a
  * segmented control. It renders what it is handed now, and quality is one group
  * among four rather than the one the frame was built around.
+ *
+ * Now that it is handed a button as well, it is no longer "the gear" — the
+ * sound settings have one of their own beside it. Everything that made this
+ * worth reusing is below the button: the portal out of the player's
+ * `overflow-hidden`, the measured anchoring, the dropdown-or-sheet split, and
+ * the outside-press handling that has to know the list is not inside the ref.
  */
 function SettingsMenu({
   onOpenChange,
   buttonClassName,
   children,
   sheet,
+  icon,
+  label = 'Settings',
 }: {
   buttonClassName?: string
   children?: React.ReactNode
@@ -3165,6 +3196,10 @@ function SettingsMenu({
   sheet?: boolean
   /** Lets the player keep its chrome up while this is open. */
   onOpenChange: (open: boolean) => void
+  /** What the button shows. The gear when nothing says otherwise. */
+  icon?: React.ReactNode
+  /** Names the button for a screen reader, and says which panel this is. */
+  label?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -3219,7 +3254,7 @@ function SettingsMenu({
       <button
         ref={buttonRef}
         type="button"
-        aria-label="Settings"
+        aria-label={label}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={
@@ -3227,7 +3262,7 @@ function SettingsMenu({
           'grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10'
         }
       >
-        <Settings size={22} />
+        {icon ?? <Settings size={22} />}
       </button>
 
       {/* The menu is portalled to document.body regardless of mode, because
