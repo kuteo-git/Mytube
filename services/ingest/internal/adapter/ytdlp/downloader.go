@@ -226,7 +226,7 @@ func (d *Downloader) Search(ctx context.Context, query string, limit int32) ([]d
 
 	// A flat playlist search fetches listing metadata only: no formats are
 	// resolved, which is what keeps search fast and reduces upstream load.
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeListing).
 		FlatPlaylist().
 		DumpJSON().
 		NoWarnings().
@@ -251,7 +251,7 @@ func (d *Downloader) Search(ctx context.Context, query string, limit int32) ([]d
 }
 
 func (d *Downloader) Preview(ctx context.Context, url string) (domain.ExternalVideo, error) {
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeMedia).
 		SkipDownload().
 		NoPlaylist().
 		DumpJSON().
@@ -284,7 +284,7 @@ func (d *Downloader) ListPlaylist(ctx context.Context, url string, offset, limit
 	start := offset + 1
 	end := offset + limit
 
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeListing).
 		FlatPlaylist().
 		DumpJSON().
 		PlaylistItems(fmt.Sprintf("%d:%d", start, end)).
@@ -323,7 +323,7 @@ func (d *Downloader) ListPlaylist(ctx context.Context, url string, offset, limit
 // cannot play separate tracks, and in practice this caps instant playback at
 // whatever muxed rendition upstream still publishes.
 func (d *Downloader) ResolveStream(ctx context.Context, videoURL string) (domain.StreamLocation, error) {
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeMedia).
 		SkipDownload().
 		NoPlaylist().
 		DumpJSON().
@@ -456,7 +456,7 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		return domain.DownloadResult{}, err
 	}
 
-	cmd := ytdlp.New().
+	cmd := newCommand(purposeMedia).
 		// Same codec preference as the live remux, and for the same reason.
 		//
 		// Without it yt-dlp takes whatever is "best", which on YouTube today
@@ -626,7 +626,7 @@ func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target strin
 	// YouTube rate-limits the caption endpoint far more aggressively than the
 	// media one and answers 429 readily. Pacing requests and retrying is what
 	// makes captions arrive at all; failing costs nothing.
-	cmd := ytdlp.New().
+	cmd := newCommand(purposeMedia).
 		SkipDownload().
 		SubLangs(subtitleLanguages).
 		ConvertSubs("vtt").
@@ -693,7 +693,7 @@ func subtitleLabel(language string) string {
 // URL with no entries at all. `--playlist-items 0` is the cheap way to do it:
 // it returns the container's metadata and skips every video in it.
 func (d *Downloader) ChannelInfo(ctx context.Context, channelURL string) (domain.ChannelMetadata, error) {
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeListing).
 		DumpSingleJSON().
 		FlatPlaylist().
 		PlaylistItems("0").
@@ -905,7 +905,7 @@ func (d *Downloader) FetchChannelFeed(ctx context.Context, channelID string) ([]
 }
 
 func (d *Downloader) FetchComments(ctx context.Context, videoURL string) ([]domain.YouTubeComment, error) {
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeMedia).
 		SkipDownload().
 		WriteComments().
 		DumpJSON().

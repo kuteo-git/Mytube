@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"github.com/lrstanley/go-ytdlp"
 )
 
 // RemuxStream is a live 1080p stream assembled on the fly.
@@ -117,7 +115,7 @@ func (d *Downloader) ResolveRemuxURLs(ctx context.Context, videoURL string, heig
 		height = 1080
 	}
 
-	result, err := ytdlp.New().
+	result, err := newCommand(purposeMedia).
 		Format(fmt.Sprintf(remuxFormat, height, height, height)).
 		GetURL().
 		NoPlaylist().
