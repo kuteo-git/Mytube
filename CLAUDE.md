@@ -82,6 +82,9 @@ The player climbs tiers: `instant` starts immediately → a hidden `remux` eleme
 - `?prefetch=1` resolves and caches the stream URL; it **does not** queue a download.
 - First viewing is 360p by design; the player labels which tier it is on.
 - Cancelled downloads use `NoPart()` + `NoContinue()`: partial data is discarded so a resume does not ask YouTube for an impossible range.
+- **Cancelling has to reach the process, and the heartbeat is the only place it can.** The worker runs on its own, so the job row is the one thing both sides see: `Heartbeat` updates only a row still `RUNNING` and returns `ErrJobNotRunning` otherwise, which cancels the transfer's context. Marking the row alone left yt-dlp downloading a video nobody was waiting for. A cancelled video is written `EVICTED`, not `FAILED` — nothing went wrong, and `FAILED` offers a Retry.
+- **A live broadcast is refused as a download job.** It has no end to download to: yt-dlp follows it for as long as it lasts, and the single worker slot stayed occupied for hours while every later job sat queued at 0%. `is_live`/`is_upcoming` are refused; `was_live` and `post_live` are ordinary videos with a finite recording.
+- **The download retries** (`Retries(5)` + `FragmentRetries(5)`). googlevideo refuses intermittently — the same 403 the instant tier meets — and one of those arriving partway through used to end the job outright, measured at 36% after ten megabytes had landed.
 
 ### Eviction
 

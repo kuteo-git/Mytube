@@ -198,15 +198,30 @@ func (s *Store) Claim(ctx context.Context, lease time.Duration) (domain.Job, err
 }
 
 func (s *Store) Heartbeat(ctx context.Context, jobID string, lease time.Duration, p domain.Progress) error {
-	_, err := s.pool.Exec(ctx, `
+	// Only a job still running may be heartbeated, and a heartbeat that lands on
+	// nothing is how the transfer learns it was cancelled.
+	//
+	// The cancel writes to this row from another process — the worker runs on
+	// its own — so this is the one channel between them. Without it, cancelling
+	// marked the row and left yt-dlp running: for an ordinary video that wastes
+	// a download nobody wants, and for a livestream it never ends at all, which
+	// held the single worker slot for as long as the process lived and left
+	// every later job queued at 0%.
+	tag, err := s.pool.Exec(ctx, `
 		UPDATE jobs SET
 			progress = $2,
 			downloaded_bytes = $3,
 			total_bytes = $4,
 			lease_expires_at = now() + $5::interval
-		WHERE id = $1`,
+		WHERE id = $1 AND state = 'RUNNING'`,
 		jobID, p.Fraction, p.DownloadedBytes, p.TotalBytes, lease.String())
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrJobNotRunning
+	}
+	return nil
 }
 
 func (s *Store) MarkResolved(ctx context.Context, jobID, videoID, title string) error {

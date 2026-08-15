@@ -14,6 +14,12 @@ var (
 	// streams. A bare <video> element cannot play those, so instant playback is
 	// simply unavailable for that video and the caller must wait for the copy.
 	ErrNoProgressiveFormat = errors.New("no directly playable format available")
+	// ErrJobNotRunning is what a heartbeat reports when the job it belongs to is
+	// no longer running — cancelled, most often, by a viewer leaving the page.
+	// The worker runs in its own process, so the job row is the only place the
+	// two can speak, and the heartbeat is the only moment a transfer in flight
+	// listens.
+	ErrJobNotRunning = errors.New("job is no longer running")
 )
 
 type JobState string
@@ -72,6 +78,9 @@ type ExternalVideo struct {
 	// metadata fetch or detected from the title when yt-dlp did not carry one.
 	// Empty when neither source could determine it.
 	Language string
+	// IsLive marks a broadcast still in progress. Only a full metadata fetch
+	// reports it; a flat listing never does.
+	IsLive bool
 }
 
 // ChannelMetadata is everything a channel page needs that a flat video listing

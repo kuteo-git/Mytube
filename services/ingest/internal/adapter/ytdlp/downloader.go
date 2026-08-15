@@ -102,6 +102,23 @@ func deref[T any](p *T) T {
 	return *p
 }
 
+// isStillBroadcasting reports whether the download would never end.
+//
+// "Upcoming" counts, because yt-dlp waits for such a stream to begin and then
+// records it. "Was live" and "post live" do not: those have a finite recording,
+// which is an ordinary video however it was made.
+func isStillBroadcasting(info *ytdlp.ExtractedInfo) bool {
+	if info.LiveStatus != nil {
+		switch *info.LiveStatus {
+		case ytdlp.ExtractedLiveStatusIsLive, ytdlp.ExtractedLiveStatusIsUpcoming:
+			return true
+		default:
+			return false
+		}
+	}
+	return deref(info.IsLive)
+}
+
 func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 	v := domain.ExternalVideo{
 		ID:              info.ID,
@@ -113,6 +130,7 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		ThumbnailURL:    deref(info.Thumbnail),
 		SourceURL:       deref(info.WebpageURL),
 		Description:     deref(info.Description),
+		IsLive:          isStillBroadcasting(info),
 	}
 
 	// Flat listings carry no per-entry channel at all: yt-dlp reports the
@@ -479,6 +497,19 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		// partial data lives in `.part` files — resumable, but also litter that
 		// nothing in the eviction sweep knows how to collect.
 		NoContinue().
+		// A single refused request must not lose the whole transfer.
+		//
+		// googlevideo answers 403 intermittently — see CLAUDE.md §4 on the same
+		// refusal met by the instant tier — and without retries one of those
+		// arriving partway through ended the job outright. Measured on
+		// `3xKjuGk4eJU`: "unable to download video data: HTTP Error 403" at 36%,
+		// after ten megabytes had already landed.
+		//
+		// Fragment retries matter as much: a DASH transfer is made of hundreds of
+		// requests, so the chance of meeting one refusal approaches certainty
+		// over a long video.
+		Retries("5").
+		FragmentRetries("5").
 		Output(target)
 
 	if onProgress != nil {
