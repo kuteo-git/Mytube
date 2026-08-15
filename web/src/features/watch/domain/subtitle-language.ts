@@ -43,3 +43,78 @@ export function hasHumanVietnamese(
 export function captionsSettled(subtitles: { language: string }[]): boolean {
   return subtitles.some((s) => s.language !== MACHINE_LANGUAGE)
 }
+
+/**
+ * The mode a `<track>` must be in, given everything that has a say in it.
+ *
+ * One definition, used everywhere a mode is written: the pass that applies the
+ * preference, the handover between the two video elements, and the listener
+ * that puts it back when something else changes it. They used to disagree —
+ * only the handover kept Vietnamese alive for the narrator — and a mode written
+ * in three places with two meanings is a mode nobody can predict.
+ *
+ * - In the bar there are no subtitles at all: drawn proportionally to a 128px
+ *   picture they are a few illegible pixels over the only part of it there is.
+ *   The preference is untouched, so they return the moment it is a picture.
+ * - Vietnamese is never `disabled` while reading aloud, because a disabled
+ *   track has its VTT load cancelled and the voice stops mid-sentence. Hidden
+ *   keeps the cues without drawing them.
+ */
+export function desiredTrackMode(input: {
+  trackLanguage: string
+  captions: string | null
+  bar: boolean
+  narrationOn: boolean
+}): 'showing' | 'hidden' | 'disabled' {
+  const wanted = !input.bar && input.trackLanguage === input.captions
+  if (wanted) return 'showing'
+  const isVi =
+    input.trackLanguage === 'vi' || input.trackLanguage === 'vie'
+  if (isVi && input.narrationOn) return 'hidden'
+  return 'disabled'
+}
+
+/** One row of the "Subtitles" setting, past the "Off" that always leads it. */
+export type SubtitleOption = { value: string; label: string; hint: string }
+
+/**
+ * The subtitle choices this video actually offers.
+ *
+ * Computed rather than rendered inline, because whether there are any is what
+ * decides if the setting is shown at all. A row reading "Off" with nothing to
+ * turn on is a dead control, and §5 has no dead controls — which is what a
+ * video with no captions, or with only captions in languages nobody here reads,
+ * used to get.
+ */
+export function subtitleOptions(
+  subtitles: { language: string; label: string; generated: boolean }[],
+): SubtitleOption[] {
+  const hasVi = hasHumanVietnamese(subtitles)
+  const hasEn = subtitles.some((s) => /^en/.test(s.language))
+  const options: SubtitleOption[] = subtitles
+    .filter((t) => /^(en|eng|vi|vie|vi-x-mt)$/.test(t.language))
+    .map((t) => ({
+      value: t.language,
+      label:
+        t.language === MACHINE_LANGUAGE
+          ? 'VI (auto)'
+          : /^en/.test(t.language)
+            ? 'EN'
+            : 'VI',
+      hint: t.label + (t.generated ? ' (auto-generated)' : ''),
+    }))
+  // Offered before it exists, when it is the viewer who can bring it into
+  // existence: choosing it is what starts the translation, and the gateway only
+  // attaches the track once a file has been written. Only where it could be
+  // produced — English to work from, and no Vietnamese written by a person.
+  if (!subtitles.some((t) => t.language === MACHINE_LANGUAGE) && hasEn && !hasVi) {
+    options.push({
+      value: MACHINE_LANGUAGE,
+      label: 'VI (auto)',
+      // The track's own name is content, read in the language it is written in,
+      // as the gateway's machineVTTLabel already is. The rest is UI copy.
+      hint: 'Tiếng Việt (dịch máy) — translated as you watch',
+    })
+  }
+  return options
+}

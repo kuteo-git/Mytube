@@ -21,6 +21,7 @@ const (
 	excludedDisliked         = "disliked"
 	excludedChannelSuppresed = "channel suppressed by dislikes"
 	excludedMediaFailed      = "media failed"
+	excludedMediaUnavailable = "media unavailable upstream"
 	excludedMediaEvicted     = "media evicted"
 	excludedWatchedEnough    = "already watched"
 	excludedFinished         = "finished"
@@ -164,6 +165,13 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 	switch f.MediaState {
 	case "MEDIA_STATE_FAILED":
 		out.Excluded = excludedMediaFailed
+		return out
+	case "MEDIA_STATE_UNAVAILABLE":
+		// Members-only, private or removed. It stays reachable through search
+		// and the channel page — the library does hold it, and knowing why it
+		// cannot be watched is worth something — but putting it on the home
+		// page is inviting a press on something that cannot open.
+		out.Excluded = excludedMediaUnavailable
 		return out
 	case "MEDIA_STATE_EVICTED":
 		out.Excluded = excludedMediaEvicted

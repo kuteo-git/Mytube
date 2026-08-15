@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
 // Remuxer is the part of the downloader that assembles a playable stream from
@@ -25,19 +28,31 @@ type SourceLookup interface {
 	SourceURLFor(ctx context.Context, videoID string) (string, error)
 }
 
+// Refusals is what this handler knows about upstream saying no for good.
+//
+// It is here because this handler is often the first to be told: a video nobody
+// has downloaded is met by the player asking for a stream, not by the queue.
+// Whichever request hears the refusal is the one that records it.
+type Refusals interface {
+	NoteUpstreamFailure(ctx context.Context, sourceURL, videoID string, cause error)
+	Refusal(ctx context.Context, sourceURL string) (domain.UnavailableSource, bool)
+}
+
 type Handler struct {
-	remux         Remuxer
+	remux         *cachedRemuxURLs
 	sources       SourceLookup
+	refusals      Refusals
 	defaultHeight int32
 	logger        *slog.Logger
 }
 
-func NewHandler(remux Remuxer, sources SourceLookup, defaultHeight int32, logger *slog.Logger) *Handler {
+func NewHandler(remux Remuxer, sources SourceLookup, refusals Refusals, defaultHeight int32, logger *slog.Logger) *Handler {
 	// Wrapped so that seeking — which reopens the mux, and may do so several
 	// times a minute — does not re-run yt-dlp each time.
 	return &Handler{
 		remux:         newCachedRemuxURLs(remux),
 		sources:       sources,
+		refusals:      refusals,
 		defaultHeight: defaultHeight,
 		logger:        logger,
 	}
@@ -78,6 +93,9 @@ func (h *Handler) handleStreamStart(w http.ResponseWriter, r *http.Request) {
 	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, h.defaultHeight)
 	if err != nil || len(urls) == 0 {
 		h.logger.Warn("resolve remux urls for start", "video", videoID, "error", err)
+		if h.refuse(w, ctx, sourceURL, videoID, err) {
+			return
+		}
 		http.Error(w, "cannot resolve media", http.StatusBadGateway)
 		return
 	}
@@ -154,11 +172,20 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	// repeated; a caller that omits it gets one done on its behalf.
 	audioStart := queryFloat(r, "audioAt")
 
+	// Asking at all is pointless when upstream has already refused for good,
+	// and each ask is another extract counted against this address.
+	if h.refuseKnown(w, ctx, sourceURL) {
+		return
+	}
+
 	resolveStart := time.Now()
 	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, height)
 	resolveTook := time.Since(resolveStart)
 	if err != nil {
 		h.logger.Warn("resolve remux urls", "video", videoID, "error", err)
+		if h.refuse(w, ctx, sourceURL, videoID, err) {
+			return
+		}
 		http.Error(w, "cannot resolve media", http.StatusBadGateway)
 		return
 	}
@@ -171,11 +198,33 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	stream, err := h.remux.OpenRemux(ctx, urls, startSeconds, audioStart)
+	// OpenRemux returns the moment ffmpeg starts, long before it has tried to
+	// read anything, so a URL upstream refuses cannot be noticed here — the
+	// status was already committed as 200 and the browser met an empty body,
+	// which it reports as DEMUXER_ERROR_COULD_NOT_OPEN with nothing else said.
+	//
+	// Waiting for the first bytes is what turns that into something answerable:
+	// no bytes means ffmpeg died, which for a stream that resolved cleanly means
+	// the URLs are dead. Dropping them and resolving once more is nearly always
+	// enough, and the header has not been written yet, so the retry is invisible
+	// to the player.
+	stream, head, err := h.openRemuxWithHead(ctx, urls, startSeconds, audioStart)
 	if err != nil {
 		h.logger.Warn("open remux", "video", videoID, "error", err)
-		http.Error(w, "cannot open stream", http.StatusBadGateway)
-		return
+
+		h.remux.forget(sourceURL, height)
+		urls, resolveErr := h.remux.ResolveRemuxURLs(ctx, sourceURL, height)
+		if resolveErr != nil {
+			h.logger.Warn("resolve remux urls again", "video", videoID, "error", resolveErr)
+			http.Error(w, "cannot open stream", http.StatusBadGateway)
+			return
+		}
+		stream, head, err = h.openRemuxWithHead(ctx, urls, startSeconds, audioStart)
+		if err != nil {
+			h.logger.Warn("open remux after re-resolve", "video", videoID, "error", err)
+			http.Error(w, "cannot open stream", http.StatusBadGateway)
+			return
+		}
 	}
 	// Closing kills ffmpeg. Without it a viewer who navigates away would leave
 	// a process pulling the rest of the video for nothing.
@@ -195,9 +244,79 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Accept-Ranges", "none")
 	w.WriteHeader(http.StatusOK)
 
-	written, err := io.Copy(w, stream)
+	// The bytes already read to prove the stream opened are part of the file and
+	// must go out ahead of the rest, or the fMP4 loses its header.
+	written, err := io.Copy(w, io.MultiReader(bytes.NewReader(head), stream))
 	if err != nil && ctx.Err() == nil {
 		h.logger.Warn("remux stream ended early", "video", videoID, "error", err)
 	}
 	h.logger.Info("live mux closed", "video", videoID, "bytes", written)
+}
+
+// openRemuxWithHead starts a mux and reads its first bytes, so that a stream
+// which never produces any is reported as a failure to open rather than as an
+// empty but successful response.
+//
+// The bytes are handed back rather than discarded: they are the start of the
+// fMP4, and the initialisation segment is exactly the part a player cannot do
+// without.
+func (h *Handler) openRemuxWithHead(
+	ctx context.Context, urls []string, startSeconds, audioStart float64,
+) (io.ReadCloser, []byte, error) {
+	stream, err := h.remux.OpenRemux(ctx, urls, startSeconds, audioStart)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	head := make([]byte, 32*1024)
+	n, err := io.ReadFull(stream, head)
+	if n > 0 {
+		return stream, head[:n], nil
+	}
+	_ = stream.Close()
+	if err == nil {
+		err = io.ErrUnexpectedEOF
+	}
+	return nil, nil, err
+}
+
+// refuse answers a permanent upstream refusal, and records it on the way.
+//
+// 409 rather than 502: nothing here is broken. The gateway is working, yt-dlp
+// is working, and YouTube gave a clear answer — this video is not ours to
+// fetch. A 502 says "try again", which is exactly what must not happen.
+func (h *Handler) refuse(w http.ResponseWriter, ctx context.Context, sourceURL, videoID string, cause error) bool {
+	if h.refusals == nil || cause == nil {
+		return false
+	}
+	reason, permanent := domain.ReasonOf(domain.AsUnavailable(cause))
+	if !permanent {
+		return false
+	}
+	h.refusals.NoteUpstreamFailure(ctx, sourceURL, videoID, cause)
+	writeUnavailable(w, reason)
+	return true
+}
+
+// refuseKnown answers from what has already been recorded, without asking
+// upstream at all.
+func (h *Handler) refuseKnown(w http.ResponseWriter, ctx context.Context, sourceURL string) bool {
+	if h.refusals == nil {
+		return false
+	}
+	refusal, found := h.refusals.Refusal(ctx, sourceURL)
+	if !found {
+		return false
+	}
+	writeUnavailable(w, refusal.Reason)
+	return true
+}
+
+func writeUnavailable(w http.ResponseWriter, reason domain.UnavailableReason) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusConflict)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"code":   "video_unavailable",
+		"reason": string(reason),
+	})
 }

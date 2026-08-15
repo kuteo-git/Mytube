@@ -76,6 +76,12 @@ enum MediaState {
   MEDIA_STATE_READY = 3;
   MEDIA_STATE_EVICTED = 4;
   MEDIA_STATE_FAILED = 5;
+  // Upstream will not hand this video over, and asking again will not change
+  // that: members-only, private, or removed. Distinct from FAILED, which means
+  // "the attempt did not work" and carries an offer to try again — an offer
+  // that, made here, is how one members-only video collected thirteen jobs in
+  // two minutes.
+  MEDIA_STATE_UNAVAILABLE = 6;
 }
 
 enum Reaction {

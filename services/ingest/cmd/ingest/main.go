@@ -127,6 +127,12 @@ func main() {
 	// ingest use cases, while the scanner is what writes it.
 	ingest.SetScanStore(jobStore)
 
+	// Reports the catalogue never received, finished now. A refusal is recorded
+	// by whichever request met it, and that can be a moment when catalog is
+	// restarting — leaving a video that will never arrive looking merely queued,
+	// which is a video the feed goes on offering.
+	ingest.ReconcileUnavailable(ctx)
+
 	go usecase.NewWorker(ingest, logger).Run(ctx)
 
 	// The scanner is what fills the library, and the interval is the whole of
@@ -174,6 +180,7 @@ func main() {
 	httpapi.NewHandler(
 		downloader,
 		catalogclient.New(catalogHTTP, catalogURL, devUserID),
+		ingest,
 		defaultHeight,
 		logger,
 	).Routes(mux)

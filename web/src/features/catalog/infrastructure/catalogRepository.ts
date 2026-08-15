@@ -240,7 +240,18 @@ export interface StreamSources {
    * the video as downloaded for as long as it stayed open.
    */
   repaired?: boolean
+  /**
+   * Upstream has refused this video for good: members-only, private, removed.
+   *
+   * Apart from `streamError`, which is a sentence about something that went
+   * wrong and might not next time. This is an answer, and the player draws no
+   * retry from it — the reason is a word from a closed set precisely so the UI
+   * branches on it rather than reading English out of an error.
+   */
+  unavailable?: { reason: UnavailableReason }
 }
+
+export type UnavailableReason = 'members_only' | 'private' | 'removed' | 'unavailable'
 
 export type JobState = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'
 

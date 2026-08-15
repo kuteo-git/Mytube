@@ -82,7 +82,7 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
       remux: { url: REMUX_URL, height: 1080, name: 'remux' },
     })),
     getRemuxStart: (id: string, at: number) => getRemuxStart(id, at),
-    listUpNext: vi.fn(async () => []),
+    listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
     listPopular: vi.fn(async () => []),
     listComments: vi.fn(async () => ({ comments: [], nextPageToken: '' })),
     listTopics: vi.fn(async () => []),

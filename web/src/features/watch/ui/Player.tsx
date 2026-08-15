@@ -16,6 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
+import type { UnavailableReason } from '@/features/catalog/infrastructure/catalogRepository'
 import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
 import { resolveRemuxStart, useStream } from '@/features/catalog/application/queries'
 import { useDownloadProgress } from '@/features/catalog/application/download'
@@ -66,7 +67,9 @@ import {
 import {
   MACHINE_LANGUAGE,
   captionsSettled,
+  desiredTrackMode,
   hasHumanVietnamese,
+  subtitleOptions,
 } from '@/features/watch/domain/subtitle-language'
 import {
   canGoFullscreen,
@@ -590,6 +593,10 @@ export function Player({
   // handoverToBack, which copies text track modes across the swap.
   useEffect(() => { captionsRef.current = captions }, [captions])
   useEffect(() => { narrationOnRef.current = narrationOn }, [narrationOn])
+  // Read for the same reason as the two above: `desiredTrackMode` needs to know
+  // whether this is the bar, and the handover callback is deliberately stable.
+  const barRef = useRef(false)
+  useEffect(() => { barRef.current = bar }, [bar])
   const [autoplayEnabled, setAutoplayEnabled] = useAutoplayPreference()
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
@@ -715,6 +722,18 @@ export function Player({
   // half-watched film is barely begun.
   const duration =
     !streaming && offsetSeconds === 0 && elementDuration > 0 ? elementDuration : durationSeconds
+
+  // Why this video cannot be fetched, when it cannot.
+  //
+  // Two witnesses, and either is enough: the catalogue's state, which is what a
+  // page opened later sees, and the stream answer, which is what the request
+  // that just discovered it sees. The reason itself only ever comes from the
+  // server — it is upstream's word, not a guess made here.
+  const unavailableReason: UnavailableReason | null = sources?.unavailable
+    ? sources.unavailable.reason
+    : mediaState === 'UNAVAILABLE'
+      ? 'unavailable'
+      : null
 
   const playable = Boolean(frontSrc) && !loadFailed
   // Captions no longer wait for the media file: ingest publishes them ahead of
@@ -1262,15 +1281,12 @@ export function Player({
       next.muted = current.muted
       for (let i = 0; i < next.textTracks.length; i++) {
         const track = next.textTracks[i]
-        const isVi = track.language === 'vi' || track.language === 'vie'
-        // Never disable the Vietnamese track when narration is on: the
-        // browser would cancel the VTT load and the viewer would lose the
-        // thuyết minh audio mid-sentence during the upgrade.
-        if (isVi && narrationOnRef.current) {
-          track.mode = 'hidden'
-          continue
-        }
-        track.mode = track.language === captionsRef.current ? 'showing' : 'disabled'
+        track.mode = desiredTrackMode({
+          trackLanguage: track.language,
+          captions: captionsRef.current,
+          bar: barRef.current,
+          narrationOn: narrationOnRef.current,
+        })
       }
 
       // Freeze position tracking across the exchange for the same reason a
@@ -1527,9 +1543,13 @@ export function Player({
   // Translations are filed under the model that produced them, so the player
   // has to know which model is configured before it reads or writes the cache.
   const { data: translateConfig } = useTranslateConfig()
+  // Told even when the answer is "none configured". Announcing only a model
+  // that exists left the pass waiting on a reply that was never going to come,
+  // and a wait is indistinguishable from work: it reported "Loading subtitles…"
+  // against a subtitle file that had loaded minutes earlier.
   useEffect(() => {
-    if (translateConfig?.model) setCachePartition(translateConfig.model)
-  }, [translateConfig?.model])
+    if (translateConfig) setCachePartition(translateConfig.model ?? '')
+  }, [translateConfig])
 
   // The translated track only exists once the file behind it has been written,
   // and the subtitle list was fetched long before that.
@@ -1561,20 +1581,19 @@ export function Player({
     if (elements.length === 0) return
     let frame = 0
     const apply = () => {
-      if (elements.every((el) => el.textTracks.length === 0)) {
-        frame = requestAnimationFrame(apply)
-        return
-      }
       for (const element of elements) {
         for (let i = 0; i < element.textTracks.length; i++) {
           const track = element.textTracks[i]
-          // Off entirely in the bar. Subtitles are drawn by the browser at a
-          // size proportional to the video, and across a 128px thumbnail that
-          // is a couple of illegible pixels sitting over the only part of the
-          // picture there is. The preference is untouched, so they come back
-          // the moment the player is a picture again.
-          track.mode =
-            !bar && track.language === captionsRef.current ? 'showing' : 'disabled'
+          const want = desiredTrackMode({
+            trackLanguage: track.language,
+            captions: captionsRef.current,
+            bar: barRef.current,
+            narrationOn: narrationOnRef.current,
+          })
+          // Written only when it differs. Assigning a mode is what fires the
+          // list's `change` event, and the listener below answers that event by
+          // assigning a mode.
+          if (track.mode !== want) track.mode = want
           // A cue's own align/position beats any stylesheet, and YouTube's
           // auto-captions carry them on every line. The gateway strips them when
           // it serves a subtitle, but in the LAN deployment Caddy takes that route
@@ -1584,8 +1603,6 @@ export function Player({
         }
       }
     }
-    frame = requestAnimationFrame(apply)
-
     // Cues arrive after the track itself does, and a track only parses them
     // once its mode leaves 'disabled' — so the pass above sees an empty list
     // the first time and this is what catches the real one.
@@ -1593,25 +1610,73 @@ export function Player({
       const track = (e.target as TextTrack | null) ?? null
       if (track) centreCues(track.cues)
     }
-    const lists = elements.map((el) => el.textTracks)
-    for (const tracks of lists) {
-      for (let i = 0; i < tracks.length; i++) {
-        tracks[i].addEventListener('cuechange', onCues)
+
+    // The preference is not only ours to write.
+    //
+    // A browser performs an automatic track selection of its own — the spec
+    // lets it honour the viewer's system caption settings — and it does so when
+    // tracks are attached to an element, which for a video being downloaded is
+    // long after this effect last ran. The reported fault: open a new video,
+    // wait for the file to land, and English subtitles appear while the setting
+    // still reads Off.
+    //
+    // So the preference is enforced rather than applied. `change` fires on the
+    // list whenever any track's mode is altered by anyone, and `addtrack` when
+    // one appears; both answers are the same pass, and it writes only where the
+    // mode disagrees, so our own writes settle instead of echoing.
+    //
+    // Guarded: a TextTrackList is an EventTarget in every browser, but jsdom
+    // hands back a bare object, and a player that throws while mounting is a
+    // worse fault than the one being fixed.
+    const onListChange = () => apply()
+    const listens = (target: { addEventListener?: unknown }) =>
+      typeof target.addEventListener === 'function'
+
+    // Listening waits for the tracks, exactly as applying does. Subscribing to
+    // the lists this effect saw at mount would be subscribing to nothing: the
+    // tracks it has to survive are the ones that do not exist yet.
+    let lists: TextTrackList[] = []
+    const attach = () => {
+      lists = elements.map((el) => el.textTracks)
+      for (const tracks of lists) {
+        for (let i = 0; i < tracks.length; i++) {
+          if (listens(tracks[i])) tracks[i].addEventListener('cuechange', onCues)
+        }
+        if (!listens(tracks)) continue
+        tracks.addEventListener('change', onListChange)
+        tracks.addEventListener('addtrack', onListChange)
       }
     }
+
+    // The rAF loop waits for the browser to build the backing TextTrack
+    // objects; only the wait is re-armed, so a `change` event arriving mid-wait
+    // cannot start a second loop nobody cancels.
+    const waitThenApply = () => {
+      if (elements.every((el) => el.textTracks.length === 0)) {
+        frame = requestAnimationFrame(waitThenApply)
+        return
+      }
+      attach()
+      apply()
+    }
+    frame = requestAnimationFrame(waitThenApply)
 
     return () => {
       cancelAnimationFrame(frame)
       for (const tracks of lists) {
+        if (listens(tracks)) {
+          tracks.removeEventListener('change', onListChange)
+          tracks.removeEventListener('addtrack', onListChange)
+        }
         for (let i = 0; i < tracks.length; i++) {
-          tracks[i].removeEventListener('cuechange', onCues)
+          if (listens(tracks[i])) tracks[i].removeEventListener('cuechange', onCues)
         }
       }
     }
     // Keyed on the tracks' addresses rather than on how many there are: the
     // translated track keeps its place in the list while its URL changes, so a
     // count would not notice it being replaced.
-  }, [captions, frontSrc, frontIsA, subtitleKey, trackRevision, bar])
+  }, [captions, frontSrc, frontIsA, subtitleKey, trackRevision, bar, narrationOn])
 
 
   const toggleSpeak = useCallback(() => {
@@ -1637,19 +1702,27 @@ export function Player({
    * says how far that has got. It appears only while it is happening, because a
    * progress line for work nobody started is a status about nothing.
    */
+  //
+  // The two halves are reported separately because they are asked for
+  // separately. Translation happens only where there is English and no
+  // Vietnamese of the video's own; synthesis happens wherever there are
+  // Vietnamese lines to say, translated or not. Gating both on translation hid
+  // the voice's progress entirely on a video that came with Vietnamese — the
+  // one case where nothing has to be translated and the wait is all synthesis.
+  const showTranslateStatus =
+    canTranslate && (narrationOn || captions === MACHINE_LANGUAGE)
+  // Only shown to someone who asked to hear it: choosing the translated
+  // subtitle track produces no speech, so a synthesis bar there would report on
+  // work that is not happening.
+  const showSpeechStatus = narrationOn && narrationAvailable
   const translateGroup =
-    canTranslate && (narrationOn || captions === MACHINE_LANGUAGE) ? (
+    showTranslateStatus || showSpeechStatus ? (
       <>
         <li className="my-1 border-t border-line" aria-hidden />
-        <NarrationStatus progress={progress} />
-        {/*
-          The second half of the same journey, and only shown to someone who
-          asked to hear it: choosing the translated subtitle track produces no
-          speech, so a synthesis bar there would report on work that is not
-          happening. Translating is what makes lines available to say, so the
-          two read top to bottom in the order they occur.
-        */}
-        {narrationOn && <SpeechStatus progress={speechProgress} />}
+        {/* Translating is what makes lines available to say, so the two read
+            top to bottom in the order they occur. */}
+        {showTranslateStatus && <NarrationStatus progress={progress} />}
+        {showSpeechStatus && <SpeechStatus progress={speechProgress} />}
       </>
     ) : undefined
 
@@ -1661,58 +1734,22 @@ export function Player({
     />
   ) : undefined
 
-  const subtitleRows = (
-    <SegmentedSetting
-      label="Subtitles"
-      value={captions ?? 'off'}
-      onSelect={(v: string) => setCaptions(v === 'off' ? null : v)}
-      tall={coarse}
-      options={[
-        { value: 'off', label: 'Off' },
-        // The machine translation is in this list because the gateway offers it
-        // as a track once one has been written. It needs no special case here,
-        // and neither does anything else: one renderer, one list, one answer.
-        ...subtitles
-          .filter((t) => /^(en|eng|vi|vie|vi-x-mt)$/.test(t.language))
-          .map((t) => ({
-            value: t.language,
-            label:
-              t.language === MACHINE_LANGUAGE
-                ? 'VI (auto)'
-                : /^en/.test(t.language)
-                  ? 'EN'
-                  : 'VI',
-            hint: t.label + (t.generated ? ' (auto-generated)' : ''),
-          })),
-        // Offered before it exists, when it is the viewer who can bring it into
-        // existence.
-        //
-        // The track is attached by the gateway only once a file has been
-        // written, so listing what is on disk alone made this unreachable:
-        // choosing it is what starts the translation, and it could not be
-        // chosen until the translation had already happened. The way in was
-        // switching on read-aloud, which is a different feature answering a
-        // different question.
-        //
-        // Only where it can actually be produced: English to translate from,
-        // and no Vietnamese track written by a person — the same two conditions
-        // the pass itself checks, asked here so the menu never offers work that
-        // would be refused.
-        ...(!subtitles.some((t) => t.language === MACHINE_LANGUAGE) && hasEn && !hasVi
-          ? [
-              {
-                value: MACHINE_LANGUAGE,
-                label: 'VI (auto)',
-                // The track's own name is content — it is read by the viewer in
-                // the language it is written in, as the gateway's
-                // machineVTTLabel already is. The sentence after it is UI copy.
-                hint: 'Tiếng Việt (dịch máy) — translated as you watch',
-              },
-            ]
-          : []),
-      ]}
-    />
-  )
+  // What this video can actually offer, built once: whether there is anything
+  // is what decides if the setting appears at all. A row reading "Off" beside
+  // nothing to turn on is a dead control — which is what a video with no
+  // captions used to be given.
+  const captionOptions = subtitleOptions(subtitles)
+
+  const subtitleRows =
+    captionOptions.length > 0 ? (
+      <SegmentedSetting
+        label="Subtitles"
+        value={captions ?? 'off'}
+        onSelect={(v: string) => setCaptions(v === 'off' ? null : v)}
+        tall={coarse}
+        options={[{ value: 'off', label: 'Off' }, ...captionOptions]}
+      />
+    ) : undefined
 
   /**
    * Whether the line on screen is also read aloud.
@@ -2552,7 +2589,13 @@ export function Player({
                   // And a video restored from a previous visit does not start at
                   // all: it is an offer, and an offer that begins playing on its
                   // own is not an offer.
-                  if (autoplay) element.play().catch(() => undefined)
+                  if (autoplay) {
+                    element
+                      .play()
+                      .catch((err) =>
+                        console.error('[debug] autoplay play() rejected', videoId, element.src, err?.name, err?.message),
+                      )
+                  }
                 }}
                 // Only meaningful on the layer being prepared: it means the
                 // replacement has reached its mark and can take over.
@@ -2606,7 +2649,15 @@ export function Player({
                       }
                     : undefined
                 }
-                onError={() => {
+                onError={(e) => {
+                  console.error(
+                    '[debug] video element error',
+                    videoId,
+                    isFront ? 'front' : 'back',
+                    e.currentTarget.error?.code,
+                    e.currentTarget.error?.message,
+                    e.currentTarget.src,
+                  )
                   if (!isFront) {
                     // An upgrade that will not load is not a failure worth
                     // showing: what is on screen still works. Abandon it.
@@ -2644,7 +2695,9 @@ export function Player({
             ? 'Finding a stream…'
             : loadFailed
               ? 'The stream could not be loaded.'
-              : mediaState === 'EVICTED'
+              : unavailableReason
+                ? unavailableCopy(unavailableReason)
+                : mediaState === 'EVICTED'
                 ? 'The media file was removed to reclaim disk space, and upstream has nothing directly playable. Re-download it to watch again.'
                 : sources?.streamError
                   ? sources.streamError
@@ -3214,7 +3267,15 @@ function NarrationStatus({
   // no better than no status at all — it was reported as "stuck on preparing".
   const label: Record<typeof p.phase, string> = {
     idle: 'Not started',
+    // Each step before the first batch says which step it is. One word over all
+    // of them meant a pass held up by the translator settings — or by hashing a
+    // long video's cues — claimed to be loading subtitles that were already on
+    // screen, and there was no way to tell which from the outside.
+    'waiting-config': 'Waiting for translator settings…',
+    'no-translator': 'No translation model configured — set one in Settings',
+    'reading-cache': 'Reading saved translations…',
     'waiting-subtitles': 'Loading subtitles…',
+    hashing: 'Preparing cues…',
     'no-subtitles': 'No subtitles available',
     'not-needed': 'Already Vietnamese — nothing to translate',
     translating: 'Translating…',
@@ -3234,7 +3295,13 @@ function NarrationStatus({
     // belonged to the group before it rather than being its own thing.
     <li className="px-4 py-3" aria-live="polite">
       <div className="flex items-baseline justify-between gap-2 pb-1 text-xs">
-        <span className={p.phase === 'no-subtitles' ? 'text-brand' : 'text-text-2'}>
+        <span
+          className={
+            p.phase === 'no-subtitles' || p.phase === 'no-translator'
+              ? 'text-brand'
+              : 'text-text-2'
+          }
+        >
           {label[p.phase]}
         </span>
         {bar && (
@@ -3558,4 +3625,25 @@ function VolumeControl({
       />
     </div>
   )
+}
+
+/**
+ * What to say about a video YouTube will not hand over.
+ *
+ * Each reason gets its own sentence because each one leads somewhere different:
+ * a members-only video can be unlocked by joining the channel, a removed one is
+ * gone for everybody. "Could not be fetched" sends the viewer nowhere, which is
+ * what the 500 it replaced did.
+ */
+export function unavailableCopy(reason: UnavailableReason): string {
+  switch (reason) {
+    case 'members_only':
+      return 'This video is members-only on YouTube. Join the channel there to watch it — it cannot be fetched into the library.'
+    case 'private':
+      return 'This video is private on YouTube, so it cannot be fetched.'
+    case 'removed':
+      return 'This video has been removed from YouTube, so it cannot be fetched.'
+    default:
+      return 'YouTube will not hand this video over, so it cannot be fetched.'
+  }
 }

@@ -264,3 +264,83 @@ func (s *Store) AdvanceOffset(ctx context.Context, sourceURL string, by int32) e
 		    updated_at = now()`, sourceURL, by)
 	return err
 }
+
+// Refusals upstream has made permanently.
+//
+// Kept in ingest's own schema because "can this URL be fetched" is ingest's
+// question about upstream, not the catalogue's about the library.
+
+func (s *Store) MarkUnavailable(ctx context.Context, u domain.UnavailableSource) error {
+	// The first refusal wins. A later one says nothing new, and rewriting
+	// first_seen_at would lose the only thing this table records about time.
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO unavailable_sources (source_url, video_id, reason, detail)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (source_url) DO UPDATE
+		SET video_id = CASE WHEN unavailable_sources.video_id = ''
+		                    THEN EXCLUDED.video_id
+		                    ELSE unavailable_sources.video_id END`,
+		u.SourceURL, u.VideoID, string(u.Reason), u.Detail)
+	return err
+}
+
+func (s *Store) UnavailableSourceFor(ctx context.Context, sourceURL string) (domain.UnavailableSource, bool, error) {
+	var (
+		u      domain.UnavailableSource
+		reason string
+	)
+	err := s.pool.QueryRow(ctx, `
+		SELECT source_url, video_id, reason, detail, first_seen_at
+		FROM unavailable_sources WHERE source_url = $1`, sourceURL).
+		Scan(&u.SourceURL, &u.VideoID, &reason, &u.Detail, &u.FirstSeenAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.UnavailableSource{}, false, nil
+	}
+	if err != nil {
+		return domain.UnavailableSource{}, false, err
+	}
+	u.Reason = domain.UnavailableReason(reason)
+	return u, true, nil
+}
+
+func (s *Store) ClearUnavailable(ctx context.Context, sourceURL string) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM unavailable_sources WHERE source_url = $1`, sourceURL)
+	return err
+}
+
+func (s *Store) UnreportedUnavailable(ctx context.Context, limit int32) ([]domain.UnavailableSource, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT source_url, video_id, reason, detail, first_seen_at
+		FROM unavailable_sources
+		WHERE reported_at IS NULL
+		ORDER BY first_seen_at
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.UnavailableSource
+	for rows.Next() {
+		var (
+			u      domain.UnavailableSource
+			reason string
+		)
+		if err := rows.Scan(&u.SourceURL, &u.VideoID, &reason, &u.Detail, &u.FirstSeenAt); err != nil {
+			return nil, err
+		}
+		u.Reason = domain.UnavailableReason(reason)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) MarkUnavailableReported(ctx context.Context, sourceURL string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE unavailable_sources SET reported_at = now() WHERE source_url = $1`, sourceURL)
+	return err
+}

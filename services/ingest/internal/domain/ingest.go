@@ -217,6 +217,30 @@ type JobStore interface {
 	Finish(ctx context.Context, jobID string, state JobState, errorMessage string) error
 	// ReleaseExpired returns jobs whose worker died back to the queue.
 	ReleaseExpired(ctx context.Context) (int, error)
+
+	// MarkUnavailable records that upstream has permanently refused a URL.
+	// Idempotent: the first refusal is the one kept, because the first is when
+	// it started being true.
+	MarkUnavailable(ctx context.Context, u UnavailableSource) error
+	// UnavailableSourceFor reports a recorded refusal, if there is one.
+	UnavailableSourceFor(ctx context.Context, sourceURL string) (UnavailableSource, bool, error)
+	// ClearUnavailable forgets a refusal, so the URL can be tried again. Only a
+	// person asking for it gets here — see Ingest.RetryJob.
+	ClearUnavailable(ctx context.Context, sourceURL string) error
+	// UnreportedUnavailable lists refusals the catalogue has not been told
+	// about yet, so a restart can finish what a catalog outage interrupted.
+	UnreportedUnavailable(ctx context.Context, limit int32) ([]UnavailableSource, error)
+	// MarkUnavailableReported records that catalog now knows.
+	MarkUnavailableReported(ctx context.Context, sourceURL string) error
+}
+
+// UnavailableSource is a URL upstream will not hand over, and why.
+type UnavailableSource struct {
+	SourceURL   string
+	VideoID     string
+	Reason      UnavailableReason
+	Detail      string
+	FirstSeenAt time.Time
 }
 
 // Library is the port over the catalog service. Ingest never writes to

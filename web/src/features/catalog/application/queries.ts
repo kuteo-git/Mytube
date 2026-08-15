@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ReactionState } from '../domain/video'
-import type { Feed, FetchCommentsResult } from '../infrastructure/catalogRepository'
+import type { Feed } from '../infrastructure/catalogRepository'
 import { hideVideo } from './hidden'
 import { videoPollInterval } from './video-poll'
 import { httpCatalogRepository as repo } from '../infrastructure/catalogRepository'

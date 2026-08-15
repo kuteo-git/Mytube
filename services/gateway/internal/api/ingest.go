@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -78,6 +79,18 @@ type streamDTO struct {
 	// True when this request corrected a catalog row that claimed a file the
 	// disk does not have. The client refetches the video once on seeing it.
 	Repaired bool `json:"repaired,omitempty"`
+	// Set when upstream has refused this video for good. Distinct from
+	// StreamError, which is a sentence about something that went wrong and
+	// might not next time: this is an answer, and the player draws no retry
+	// from it.
+	Unavailable *unavailableDTO `json:"unavailable,omitempty"`
+}
+
+// unavailableDTO says why a video cannot be fetched, in a word the client can
+// branch on rather than a message it would have to read.
+type unavailableDTO struct {
+	// members_only | private | removed | unavailable
+	Reason string `json:"reason"`
 }
 
 func toJobDTO(j *ingestv1.Job) jobDTO {
@@ -560,6 +573,17 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Nothing to fetch and nothing to play. Answered before the download is
+	// scheduled and before any upstream source is offered: every one of them
+	// would be a request against a video YouTube has already refused, which is
+	// how thirteen jobs for one video happened in two minutes.
+	if v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_UNAVAILABLE {
+		writeJSON(w, http.StatusOK, streamDTO{
+			Unavailable: &unavailableDTO{Reason: unavailableReasonOf(ctx, g, videoID)},
+		})
+		return
+	}
+
 	// Pressing play is what schedules a download. Enqueue is idempotent per
 	// source URL, so repeated resolves attach to the running job.
 	if !prefetch && v.GetSourceUrl() != "" {
@@ -600,7 +624,15 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		// When no local copy exists and the instant URL is gone, the
 		// remux is the only path. If ResolveStream failed because YouTube
 		// blocked access, the remux fails too. Tell the player why.
-		if out.Local == nil {
+		if connect.CodeOf(resolveErr) == connect.CodeAborted {
+			// Upstream refused for good. Not a stream error to be shown and
+			// retried — an answer, and the remux beside it could only produce
+			// the same one, so it is withdrawn rather than left as a button.
+			out.Remux = nil
+			out.Unavailable = &unavailableDTO{
+				Reason: unavailableReason(resolveErr.Error()),
+			}
+		} else if out.Local == nil {
 			// Strip the gRPC framing ("internal: ") from the yt-dlp message
 			// so the player shows a readable reason instead of a stack trace.
 			msg := resolveErr.Error()
@@ -611,7 +643,14 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		out.Instant = &sourceDTO{
-			URL:       resolved.Msg.GetUrl(),
+			// Proxied through the gateway rather than handed to the browser
+			// directly. The upstream URL is signed to the IP that resolved it —
+			// the server's — and a viewer on a different public IP (any LAN
+			// behind CGNAT, which is the common case, not an edge case) gets a
+			// refused request the browser reports as a generic format error.
+			// Routing it through the same process that resolved it keeps the
+			// request on the IP the signature actually matches.
+			URL:       "/api/videos/" + url.PathEscape(videoID) + "/instant",
 			Height:    resolved.Msg.GetHeight(),
 			MimeType:  resolved.Msg.GetMimeType(),
 			Seekable:  true,
@@ -712,4 +751,302 @@ func (g *Gateway) handleRemuxStream(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// handleInstantStream proxies the progressive upstream file rather than
+// handing its URL to the browser.
+//
+// The URL googlevideo.com returns is signed to the IP that requested it. That
+// is this server's IP, not the viewer's — and on any LAN behind CGNAT (the
+// common case, not a corner one) those two IPs differ per connection. A
+// browser sent the raw URL gets a request YouTube refuses, which shows up as
+// a generic "format error" with no useful reason attached, and a video that
+// has no local copy yet — everything not already downloaded — never starts.
+// Fetching it here keeps the request on the IP the signature was issued for.
+//
+// Resolved fresh on every request rather than cached in the gateway: ingest
+// already caches and refreshes the signed URL (resolvecache.go) for as long
+// as it stays valid, so a second cache here would only be another place for
+// it to go stale.
+func (g *Gateway) handleInstantStream(w http.ResponseWriter, r *http.Request) {
+	videoID := r.PathValue("id")
+
+	resp, err := g.fetchInstant(r, videoID, false)
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	if resp == nil {
+		http.Error(w, "cannot open stream", http.StatusBadGateway)
+		return
+	}
+
+	// An upstream refusal arrives as a perfectly successful round trip: err is
+	// nil and the status carries the bad news. Passing it straight through left
+	// no trace anywhere, and the player reports it only as a generic format
+	// error — which is how a run of 403s stayed unexplained for a day.
+	//
+	// The refusal is a property of the URL, not of the video: a signed URL is
+	// occasionally handed over already dead, redirecting to a host that answers
+	// 403 for every request until the URL expires — measured at 20 of 20 —
+	// while resolving again yields a working one on the first try. Without this
+	// retry the dead URL stays cached for the best part of an hour, so that one
+	// video is unplayable while every other video plays, which is exactly how
+	// this looked from the sofa.
+	if resp.StatusCode >= http.StatusBadRequest {
+		g.logger.Warn("instant proxy refused, resolving again",
+			"video", videoID,
+			"status", resp.StatusCode,
+			"range", r.Header.Get("Range"),
+			"url", resp.Request.URL.String())
+		_ = resp.Body.Close()
+
+		resp, err = g.fetchInstant(r, videoID, true)
+		if err != nil {
+			g.writeErr(w, r, err)
+			return
+		}
+		if resp == nil {
+			http.Error(w, "cannot open stream", http.StatusBadGateway)
+			return
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			// Twice in a row is no longer a poisoned URL. Pass it on rather than
+			// keep asking: a third request would only add to whatever count
+			// upstream is keeping against this address.
+			g.logger.Warn("instant proxy refused after re-resolve",
+				"video", videoID,
+				"status", resp.StatusCode,
+				"url", resp.Request.URL.String())
+		}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// A client that asked for no range is owed the whole file under a 200, and
+	// answering it with the single bounded piece fetched upstream would hand it
+	// eight megabytes of a video and call that the end. A browser's <video>
+	// always sends a range, but a television's may not, and that is the screen
+	// this is all eventually for.
+	if r.Header.Get("Range") == "" && resp.StatusCode == http.StatusPartialContent {
+		g.streamWholeInstant(w, r, videoID, resp)
+		return
+	}
+
+	for _, header := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control"} {
+		if v := resp.Header.Get(header); v != "" {
+			w.Header().Set(header, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	copyStream(w, resp.Body)
+}
+
+// streamWholeInstant answers a request that carried no range, by fetching the
+// file a bounded piece at a time and writing them out as one continuous 200.
+//
+// first is the piece already fetched, and is consumed here.
+func (g *Gateway) streamWholeInstant(w http.ResponseWriter, r *http.Request, videoID string, first *http.Response) {
+	total, ok := totalFromContentRange(first.Header.Get("Content-Range"))
+	if !ok {
+		// Without the total there is no way to say where the file ends, so the
+		// piece in hand is all this can honestly offer.
+		g.logger.Warn("instant proxy: no content-range on a partial response",
+			"video", videoID, "content_range", first.Header.Get("Content-Range"))
+		w.WriteHeader(http.StatusBadGateway)
+		return
+	}
+
+	if v := first.Header.Get("Content-Type"); v != "" {
+		w.Header().Set("Content-Type", v)
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.WriteHeader(http.StatusOK)
+
+	written := copyStream(w, first.Body)
+	_ = first.Body.Close()
+
+	for written < total {
+		next := r.Clone(r.Context())
+		next.Header.Set("Range", fmt.Sprintf("bytes=%d-", written))
+
+		resp, err := g.fetchInstant(next, videoID, false)
+		if err != nil || resp == nil || resp.StatusCode >= http.StatusBadRequest {
+			// A refusal here truncates the video in silence — the status was
+			// written long ago and says 200 — so the piece is worth asking for
+			// twice, on a freshly resolved URL, exactly as the opening one is.
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			resp, err = g.fetchInstant(next, videoID, true)
+			if err != nil || resp == nil || resp.StatusCode >= http.StatusBadRequest {
+				if resp != nil {
+					_ = resp.Body.Close()
+				}
+				g.logger.Warn("instant proxy: piece refused mid-file",
+					"video", videoID, "from", written, "error", err)
+				return
+			}
+		}
+		n := copyStream(w, resp.Body)
+		_ = resp.Body.Close()
+		if n == 0 {
+			return // no progress: stop rather than loop forever
+		}
+		written += n
+	}
+}
+
+// totalFromContentRange reads the file's size out of "bytes 0-8388607/34801931".
+func totalFromContentRange(contentRange string) (int64, bool) {
+	_, size, found := strings.Cut(contentRange, "/")
+	if !found || size == "*" {
+		return 0, false
+	}
+	total, err := strconv.ParseInt(strings.TrimSpace(size), 10, 64)
+	if err != nil || total <= 0 {
+		return 0, false
+	}
+	return total, true
+}
+
+// copyStream forwards a body, flushing as it goes so the player receives bytes
+// while they are still arriving rather than at the end. Returns how many bytes
+// reached the client.
+func copyStream(w http.ResponseWriter, body io.Reader) int64 {
+	flusher, _ := w.(http.Flusher)
+	buf := make([]byte, 64*1024)
+	var written int64
+	for {
+		n, readErr := body.Read(buf)
+		if n > 0 {
+			count, writeErr := w.Write(buf[:n])
+			written += int64(count)
+			if writeErr != nil {
+				return written
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if readErr != nil {
+			return written
+		}
+	}
+}
+
+// How much of the file one upstream request may ask for.
+//
+// Measured, not guessed. Asking for 1 MiB or 2 MiB was answered 206 every time
+// — 10 of 10 across fresh URLs — while asking for 8 MiB tracked the open-ended
+// request exactly, succeeding and failing in step with it. Past some size
+// googlevideo stops treating a range as a range and answers with the redirect
+// that leads to a 403, so the size is the safeguard and it has to stay under
+// that line rather than near it.
+//
+// 2 MiB is around 40 seconds of the 360p rendition this tier serves, and the
+// player asks for the next piece the moment it needs one.
+const instantChunkBytes = 2 << 20
+
+// boundedRange turns whatever the browser asked for into a range with an end.
+//
+// A suffix range ("bytes=-500", the last N bytes) is passed through: it is
+// already bounded, and it is how a player reads a trailing index.
+func boundedRange(browserRange string) string {
+	const prefix = "bytes="
+	spec, found := strings.CutPrefix(strings.TrimSpace(browserRange), prefix)
+	if !found {
+		// No range at all: the browser wants the file from the start.
+		return fmt.Sprintf("%s0-%d", prefix, instantChunkBytes-1)
+	}
+	// Only the first range of a multi-range request is honoured, which is what
+	// this proxy has always done — googlevideo does not serve multipart ranges.
+	spec, _, _ = strings.Cut(spec, ",")
+	spec = strings.TrimSpace(spec)
+
+	start, end, ok := strings.Cut(spec, "-")
+	if !ok || start == "" {
+		return prefix + spec
+	}
+	if end != "" {
+		return prefix + spec // already bounded
+	}
+	first, err := strconv.ParseInt(start, 10, 64)
+	if err != nil {
+		return prefix + spec
+	}
+	return fmt.Sprintf("%s%d-%d", prefix, first, first+instantChunkBytes-1)
+}
+
+// fetchInstant resolves the upstream URL and opens it, standing in for the
+// browser. A nil response with a nil error means the connection itself failed
+// and has already been logged; the caller answers 502.
+//
+// refresh discards ingest's cached URL first, which is what makes retrying
+// worth anything — asking again for the same dead URL would fail identically.
+func (g *Gateway) fetchInstant(r *http.Request, videoID string, refresh bool) (*http.Response, error) {
+	resolved, err := g.ingest.ResolveStream(r.Context(), connect.NewRequest(&ingestv1.ResolveStreamRequest{
+		VideoId: videoID,
+		Refresh: refresh,
+	}))
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, resolved.Msg.GetUrl(), nil)
+	if err != nil {
+		return nil, err
+	}
+	// The player seeks this tier with real HTTP range requests, so the range the
+	// browser asks for has to reach the upstream — but never open-ended.
+	//
+	// An open-ended request ("bytes=0-", or none at all) asks googlevideo for
+	// the rest of the file in one response, and it answers that with a redirect
+	// to a host which then refuses: 403, measured at up to 9 of 12 attempts on
+	// one video and varying by the minute. The identical URL asked for a bounded
+	// range answers 206 every time — 10 of 10, including URLs whose open-ended
+	// request had just been refused.
+	//
+	// `bytes=0-` is exactly what Chrome sends to open a video, which is why a
+	// video with no local copy would not start while everything already on disk
+	// played normally.
+	//
+	// Answering 206 with fewer bytes than were asked for is what a range request
+	// permits, and the player already knows how to ask for the next piece.
+	req.Header.Set("Range", boundedRange(r.Header.Get("Range")))
+	// A signed URL is only half of what googlevideo checks: a request with no
+	// User-Agent at all — Go's http.Client sends none by default when one
+	// isn't set — is refused with a 403 the same as a bad signature is. This
+	// URL was only ever meant to be requested by an actual browser, which
+	// supplies this automatically; standing in for the browser means doing
+	// the same.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+	req.Header.Set("Referer", "https://www.youtube.com/")
+	req.Header.Set("Origin", "https://www.youtube.com")
+
+	// A dedicated client with no timeout, for the same reason the remux proxy
+	// uses one: the response lasts as long as the video does.
+	resp, err := g.streamClient.Do(req)
+	if err != nil {
+		g.logger.Warn("instant proxy", "video", videoID, "error", err, "refresh", refresh)
+		return nil, nil
+	}
+	return resp, nil
+}
+
+// unavailableReasonOf asks ingest why a video it has already given up on cannot
+// be fetched.
+//
+// The catalogue records the state, not the reason: the reason is what upstream
+// said, which is ingest's to keep. One resolve is enough — it answers from the
+// record without touching YouTube.
+func unavailableReasonOf(ctx context.Context, g *Gateway, videoID string) string {
+	_, err := g.ingest.ResolveStream(ctx, connect.NewRequest(&ingestv1.ResolveStreamRequest{
+		VideoId: videoID,
+	}))
+	if err == nil {
+		return "unavailable"
+	}
+	return unavailableReason(err.Error())
 }

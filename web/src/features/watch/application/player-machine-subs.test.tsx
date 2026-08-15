@@ -94,7 +94,7 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
       remux: null,
     })),
     getRemuxStart: vi.fn(async () => 0),
-    listUpNext: vi.fn(async () => []),
+    listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
     listPopular: vi.fn(async () => []),
     listComments: vi.fn(async () => ({ comments: [], nextPageToken: '' })),
     listTopics: vi.fn(async () => []),
@@ -226,5 +226,91 @@ describe('the machine-translated Vietnamese track', () => {
     await openCaptionMenu()
 
     expect(screen.queryByText('VI (auto)')).not.toBeInTheDocument()
+  })
+})
+
+describe('the Subtitles setting', () => {
+  // A row reading "Off" with nothing to turn on is a control that cannot do
+  // anything, which §5 does not allow. It was rendered unconditionally, so
+  // every video with no captions carried one.
+  it('is absent from a video with no subtitles', async () => {
+    subtitles = []
+    render(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })}
+      >
+        <MemoryRouter initialEntries={['/watch/abc']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/watch/:videoId" element={<WatchPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull())
+    await settle()
+
+    // With no captions and one rendition there is nothing in the panel at all,
+    // so the gear goes with it — but the assertion that matters is the row.
+    const settings = screen.queryByLabelText('Settings')
+    if (settings) {
+      await act(async () => {
+        fireEvent.click(settings)
+      })
+      await settle()
+    }
+    expect(screen.queryByText('Subtitles')).not.toBeInTheDocument()
+  })
+
+  it('is offered when the video carries a track', async () => {
+    await openCaptionMenu()
+    expect(screen.getByText('Subtitles')).toBeInTheDocument()
+  })
+})
+
+describe('the speech status', () => {
+  /**
+   * Reading aloud builds an AudioContext, which jsdom does not have. Nothing
+   * here listens to it; it only has to exist.
+   */
+  class FakeAudioContext {
+    state = 'running'
+    resume() {
+      return Promise.resolve()
+    }
+    close() {
+      return Promise.resolve()
+    }
+    suspend() {
+      return Promise.resolve()
+    }
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('AudioContext', FakeAudioContext)
+    // Read aloud, as though switched on in an earlier sitting.
+    window.localStorage.setItem('yt-narration-speak-v1', '1')
+  })
+
+  // The reported fault. Synthesis progress was shown only where a translation
+  // was also being made — so a video that came with Vietnamese of its own, the
+  // one case where nothing has to be translated and the whole wait is
+  // synthesis, reported nothing at all.
+  it('is shown for a video whose Vietnamese was written by a person', async () => {
+    subtitles = [humanVietnamese]
+    await openCaptionMenu()
+
+    expect(screen.getByText(/^Speech/)).toBeInTheDocument()
+    // Nothing to translate, so that half says nothing.
+    expect(screen.queryByText('Not started')).not.toBeInTheDocument()
+  })
+
+  it('still reports both halves when the Vietnamese has to be translated', async () => {
+    subtitles = [english]
+    await openCaptionMenu()
+
+    expect(screen.getByText(/^Speech/)).toBeInTheDocument()
+    expect(screen.getByText('Not started')).toBeInTheDocument()
   })
 })

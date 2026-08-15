@@ -101,6 +101,15 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 	// marked as downloading, instead of appearing only once bytes have landed.
 	meta, err := i.downloader.Preview(ctx, job.SourceURL)
 	if err != nil {
+		// A refusal that will not change. Recorded before the job is failed, so
+		// nothing queues this URL again, and the catalogue is told so the video
+		// can say why rather than sitting on "queued" for ever.
+		//
+		// The id comes from the URL: Preview is where it would have been
+		// learned, and it is precisely Preview that failed. Everything in this
+		// system builds the URL from the id, so reading it back is that
+		// construction reversed rather than a guess.
+		i.recordUnavailable(ctx, job.SourceURL, videoIDFromURL(job.SourceURL), err)
 		return err
 	}
 	if meta.ID == "" {

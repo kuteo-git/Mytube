@@ -148,7 +148,15 @@ export function translatedCue(text: string): string | undefined {
  */
 export type NarrationPhase =
   | 'idle'
+  // The four steps that come before the first batch, each named. They were one
+  // phase called 'waiting-subtitles', which is how a pass stuck waiting for the
+  // translator settings reported "Loading subtitles…" against subtitles that
+  // were already on screen — and left no way to tell which step was slow.
+  | 'waiting-config'
+  | 'no-translator'
+  | 'reading-cache'
   | 'waiting-subtitles'
+  | 'hashing'
   | 'no-subtitles'
   | 'not-needed'
   | 'translating'
@@ -273,7 +281,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
   _passGeneration++
   _passTotal = 0
   _passDone = 0
-  _passPhase = 'waiting-subtitles'
+  _passPhase = 'waiting-config'
   _passThrew = ''
   _passStartedAt = 0
   _passBaseline = 0
@@ -290,13 +298,21 @@ export function startTranslationPass(videoId: string, fromTime: number) {
       // Which model is configured decides which partition these belong in, and
       // that answer comes from the server. Reading before it lands would file
       // this video's work under the wrong model.
-      await whenPartitionReady()
+      const configured = await whenPartitionReady()
       if (generation !== _passGeneration) return
+      if (!configured) {
+        // Nothing to translate with. Saying so is the whole of what can be
+        // done here: the answer lives in Settings, not in waiting longer.
+        _passPhase = 'no-translator'
+        return
+      }
 
+      _passPhase = 'reading-cache'
       const byHash = await loadNarrationCache(videoId)
       if (generation !== _passGeneration) return
 
       // Wait for the cue list, which loadViSubtitles is fetching in parallel.
+      _passPhase = 'waiting-subtitles'
       const cues = await whenCuesReady()
       if (generation !== _passGeneration) return
       if (cues.length === 0) {
@@ -313,6 +329,11 @@ export function startTranslationPass(videoId: string, fromTime: number) {
 
       const first = nearestCueIndex(cues, fromTime)
       const allTexts = cues.map((c) => c.text)
+      // Hashing is the video's whole cue list through a SHA-1 written in
+      // JavaScript — `crypto.subtle` does not exist outside a secure context,
+      // and this is served over plain HTTP to a LAN address. On a long video it
+      // is long enough to be worth its own name on the status line.
+      _passPhase = 'hashing'
       const hashes = await Promise.all(allTexts.map(hashCue))
       if (generation !== _passGeneration) return
 
@@ -436,7 +457,17 @@ export function startTranslationPass(videoId: string, fromTime: number) {
     } finally {
       if (generation === _passGeneration) {
         _passRunning = false
-        if (_passPhase === 'translating' || _passPhase === 'waiting-subtitles') {
+        // Every phase that means "still on the way there". 'no-translator',
+        // 'no-subtitles' and 'not-needed' are answers, and an answer must not
+        // be overwritten with a failure.
+        const unfinished: NarrationPhase[] = [
+          'translating',
+          'waiting-config',
+          'reading-cache',
+          'waiting-subtitles',
+          'hashing',
+        ]
+        if (unfinished.includes(_passPhase)) {
           // 'failed', never 'idle'. Falling back to idle meant a pass that ran
           // to the end and got nothing usable back reported itself as "not
           // started" — the one description guaranteed to send whoever reads it

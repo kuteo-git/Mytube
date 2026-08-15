@@ -27,11 +27,12 @@ describe('who is allowed to end a translation pass', () => {
     // restart it. This is the second time that shape of bug has shipped.
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})))
     startTranslationPass('vid1', 0)
-    expect(narrationProgress().phase).toBe('waiting-subtitles')
+    // The first step is waiting for the configured model, not for the cues.
+    expect(narrationProgress().phase).toBe('waiting-config')
 
     resetNarration()
 
-    expect(narrationProgress().phase).toBe('waiting-subtitles')
+    expect(narrationProgress().phase).toBe('waiting-config')
     expect(narrationProgress().running).toBe(true)
   })
 
@@ -55,7 +56,7 @@ describe('who is allowed to end a translation pass', () => {
     startTranslationPass('vid1', 0)
 
     expect(narrationProgress().running).toBe(true)
-    expect(narrationProgress().phase).toBe('waiting-subtitles')
+    expect(narrationProgress().phase).toBe('waiting-config')
   })
 })
 

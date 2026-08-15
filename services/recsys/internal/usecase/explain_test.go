@@ -117,3 +117,50 @@ func TestAnExcludedVideoSaysWhichRuleDroppedIt(t *testing.T) {
 		}
 	}
 }
+
+// A video upstream will not hand over is not a video to put on the home page.
+//
+// It stays reachable through search and the channel page — the library does
+// hold it, and knowing why it cannot be played is worth something — but the
+// feed offers things to press, and this one cannot open.
+func TestUnavailableVideosAreKeptOutOfTheFeed(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{
+			VideoID:     "members_only",
+			ChannelID:   "ch_1",
+			AddedAt:     now,
+			PublishedAt: now.Add(-time.Hour),
+			MediaState:  "MEDIA_STATE_UNAVAILABLE",
+		},
+		{
+			VideoID:     "watchable",
+			ChannelID:   "ch_2",
+			AddedAt:     now,
+			PublishedAt: now.Add(-time.Hour),
+			MediaState:  "MEDIA_STATE_READY",
+		},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+
+	explained, err := ranker.ExplainFeed(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("ExplainFeed: %v", err)
+	}
+
+	for _, e := range explained {
+		switch e.VideoID {
+		case "members_only":
+			if e.Excluded != excludedMediaUnavailable {
+				t.Fatalf("excluded as %q, want %q", e.Excluded, excludedMediaUnavailable)
+			}
+			if e.Position != -1 {
+				t.Fatalf("excluded but reports position %d", e.Position)
+			}
+		case "watchable":
+			if e.Excluded != "" {
+				t.Fatalf("a ready video was excluded as %q", e.Excluded)
+			}
+		}
+	}
+}

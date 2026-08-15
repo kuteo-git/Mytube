@@ -160,7 +160,11 @@ export function WatchPage() {
           <DescriptionBox video={video} />
         </div>
 
-        <CommentSection videoId={video.id} />
+        {/* Not for a video YouTube will not hand over. The section fetches
+            comments the moment it has none, so leaving it there is a request
+            per visit to an endpoint that can only answer "no" — which is how
+            this was found: a 500 on /comments/fetch. */}
+        {video.mediaState !== 'UNAVAILABLE' && <CommentSection videoId={video.id} />}
       </div>
 
       <div className="w-full shrink-0 min-[1000px]:w-[402px]">

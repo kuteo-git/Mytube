@@ -48,10 +48,24 @@ A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **in
 | Source | What it is | Seek |
 |---|---|---|
 | `local` | File on disk | ✅ |
-| `instant` | YouTube raw progressive URL (itag 18, 360p), range-requested by the browser | ✅ |
+| `instant` | YouTube progressive file (itag 18, 360p), proxied through the gateway and range-requested by the browser | ✅ |
 | `remux` | Two adaptive tracks muxed directly into fMP4, 1080p | ⚠️ reopen stream |
 
 The player climbs tiers: `instant` starts immediately → a hidden `remux` element prepares at `position + 20s` (5s after a seek) → handover when the playhead reaches it → `local` once the download lands. No transcoding, no HLS.
+
+`instant`'s URL is proxied (`GET /api/videos/{id}/instant`) rather than handed to the browser raw. Googlevideo signs it to the IP that resolved it — the gateway's — and a viewer's IP differs from that on any LAN behind CGNAT, which is the ordinary case here, not an edge one. The raw URL then gets refused by YouTube in a way the `<video>` element reports as a generic format error, so a video with no local copy yet — everything that has never been downloaded — never starts playing on its own. Resolved fresh per request rather than cached at the gateway, since ingest already caches and refreshes the signed URL for as long as it stays valid.
+
+### Never ask googlevideo for an open-ended range
+
+**An upstream request must always carry a bounded `Range`, and the bound must stay small.** Ask for the rest of the file — `Range: bytes=0-`, or no range at all — and googlevideo answers with a redirect to a host that then refuses: **403**, on 9 of 12 attempts on one video and varying by the minute. The identical URL asked for 1 MiB or 2 MiB answers **206 every time, 10 of 10**.
+
+`bytes=0-` is exactly what Chrome sends to open a video. This is the whole of "some videos play, some don't": a video with a local copy never needs an upstream request, so it always played, while a video without one could not start — and the player has no way to say why, reporting only a generic format error.
+
+- **Size is the safeguard, so it must stay under the line rather than near it.** 8 MiB tracked the open-ended request exactly, succeeding and failing in step with it; `instantChunkBytes` is **2 MiB**, about 40 seconds of the 360p rendition. Never raise it without measuring again.
+- **A request that carried no range still gets the whole file under a 200**, fetched a piece at a time. Answering it with one bounded piece would hand a television 2 MiB of a video and call that the end.
+- **Both tiers re-resolve once on refusal**, for the residue that bounding does not cover. `ResolveStreamRequest.refresh` drops ingest's cached URL, because retrying the same dead URL fails identically — the refusal is a property of the URL, measured at 20 of 20 on one. Refused twice is a real answer and is passed to the browser; a third request only adds to whatever count upstream keeps against this address.
+- **The remux tier waits for the first bytes before committing a status.** `OpenRemux` returns when ffmpeg *starts*, long before it has read anything, so a refusal used to arrive as `200` with an empty body — which the browser reports only as `DEMUXER_ERROR_COULD_NOT_OPEN`. Those first bytes are the fMP4's initialisation segment and are written ahead of the rest, never discarded.
+- **An upstream status ≥400 is logged.** It arrives as a *successful* round trip — `err` is nil, the status carries the bad news — so passing it through left no trace anywhere. A day was spent looking at the player for a fault that never logged a line.
 
 ### Remux rules
 
@@ -84,6 +98,20 @@ Every video has `last_accessed_at` + `pinned`. Above the high-water mark, the **
 | Root unreadable | Return `streamError`; write nothing |
 
 Order matters: check the root first. A loose cable must not mark the whole library evicted.
+
+### Videos upstream will not hand over
+
+`MEDIA_STATE_UNAVAILABLE` — members-only, private, removed. Separate from `FAILED`, which means "the attempt did not work" and carries an offer to retry; that offer is what turned one members-only video into **13 download jobs in two minutes** (83 failed jobs over 10 URLs in the library).
+
+- `domain.ClassifyUnavailable` (ingest) is the only place a yt-dlp failure is called permanent. It matches yt-dlp's own wording and **excludes anything mentioning a rate limit, a bot check, or "try again later"** — a temporary refusal recorded as permanent would bury hundreds of videos in one bad afternoon. Age-gating and geo-blocking are deliberately temporary: cookies or a route can answer both.
+- Recorded in `ingest.unavailable_sources` (ingest's own schema — "can this URL be fetched" is ingest's question about upstream). **`Submit` refuses a recorded URL**, which is the one chokepoint every route in shares: play, prefetch, repair, scanner.
+- Every path that meets upstream records it — Preview, comments, stream resolve, remux — because a video nobody has downloaded is met first by the player asking for a stream. Catalog is told through the service and marked `UNAVAILABLE`; a report the catalogue never received is finished by `ReconcileUnavailable` at start.
+- Never retried automatically. **Pressing Retry on `/activity` clears the record**, because a members-only video does sometimes open to everyone later.
+- HTTP: **409 + `{"code":"video_unavailable","reason":"members_only|private|removed|unavailable"}`**, never 500/502. Nothing is broken; YouTube answered.
+- Excluded from Home and up-next (`explainOne`), still reachable through search and the channel page.
+- The player names the reason and offers no retry; the comments section is not mounted at all.
+
+Applying `services/ingest/migrations/0004_unavailable_sources.sql` and `services/catalog/migrations/0010_media_state_unavailable.sql` is **required before running the new code**: the catalog `media_state` CHECK constraint rejects `UNAVAILABLE` until the second one runs.
 
 ### Phase 2 upgrade
 

@@ -3,6 +3,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -233,9 +234,16 @@ func (i *Ingest) Preview(ctx context.Context, url string) (domain.ExternalVideo,
 //
 // Cached, because the resolve is the entire startup delay and the answer stays
 // good for hours.
-func (i *Ingest) ResolveStream(ctx context.Context, videoID string) (domain.StreamLocation, error) {
+func (i *Ingest) ResolveStream(ctx context.Context, videoID string, refresh bool) (domain.StreamLocation, error) {
 	if videoID == "" {
 		return domain.StreamLocation{}, fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+
+	// The caller met a refusal on the URL this cache holds, so it is worthless
+	// however long it has left to live. Drop it before reading, or the retry
+	// gets handed back the very URL it just failed on.
+	if refresh {
+		i.resolved.forget(videoID)
 	}
 
 	if cached, ok := i.resolved.get(videoID); ok {
@@ -250,19 +258,20 @@ func (i *Ingest) ResolveStream(ctx context.Context, videoID string) (domain.Stre
 		return domain.StreamLocation{}, fmt.Errorf("video %s has no source url: %w", videoID, domain.ErrNotFound)
 	}
 
+	// Already refused: answer from the record rather than asking again. The
+	// player resolves a stream on every open, so this is the request that would
+	// keep asking upstream a question already answered.
+	if refusal, found, checkErr := i.store.UnavailableSourceFor(ctx, sourceURL); checkErr == nil && found {
+		return domain.StreamLocation{}, domain.NewUnavailable(refusal.Reason, refusal.Detail)
+	}
+
 	location, err := i.downloader.ResolveStream(ctx, sourceURL)
 	if err != nil {
-		return domain.StreamLocation{}, err
+		i.recordUnavailable(ctx, sourceURL, videoID, err)
+		return domain.StreamLocation{}, domain.AsUnavailable(err)
 	}
 	i.resolved.put(videoID, location)
 	return location, nil
-}
-
-// ForgetResolvedStream drops a cached URL the player could not load. Signed
-// URLs are occasionally revoked before they expire, and without this the cache
-// would keep handing out the dead one until its stated expiry.
-func (i *Ingest) ForgetResolvedStream(videoID string) {
-	i.resolved.forget(videoID)
 }
 
 // Submit resolves metadata immediately so the video appears in the library
@@ -275,6 +284,20 @@ func (i *Ingest) Submit(ctx context.Context, url, requestedBy string, preferredH
 	}
 	if preferredHeight <= 0 {
 		preferredHeight = i.defaultHeight
+	}
+
+	// Refused already, permanently. Every route into the library goes through
+	// here — pressing play, prefetching, repairing a missing file, the scanner
+	// — which is why the check is here and not at any one of them: thirteen
+	// jobs for one members-only video were not thirteen presses of a button.
+	if refusal, found, err := i.store.UnavailableSourceFor(ctx, url); err != nil {
+		// The check failing is not a reason to refuse work. Losing it costs a
+		// wasted extract; refusing on it would stop the library on a database
+		// hiccup.
+		i.logger.Warn("check unavailable source", "url", url, "error", err)
+	} else if found {
+		return domain.Job{}, fmt.Errorf("%w: %s",
+			domain.NewUnavailable(refusal.Reason, refusal.Detail), url)
 	}
 
 	job, err := i.store.Enqueue(ctx, domain.Job{
@@ -362,6 +385,14 @@ func (i *Ingest) RetryJob(ctx context.Context, jobID, requestedBy string) (domai
 		requestedBy = previous.RequestedBy
 	}
 
+	// A person pressing Retry is the evidence that overturns a permanent
+	// refusal. Members-only videos do get opened to everyone later, and the
+	// alternative to this line is a judgement with no way back — so the block
+	// is lifted here rather than given a clock of its own to be wrong about.
+	if err := i.store.ClearUnavailable(ctx, previous.SourceURL); err != nil {
+		i.logger.Warn("clear unavailable source", "url", previous.SourceURL, "error", err)
+	}
+
 	job, err := i.Submit(ctx, previous.SourceURL, requestedBy, previous.PreferredHeight)
 	if err != nil {
 		return domain.Job{}, err
@@ -406,7 +437,20 @@ func (i *Ingest) FetchComments(ctx context.Context, videoID string) ([]domain.Yo
 		return nil, fmt.Errorf("video %s has no source url: %w", videoID, domain.ErrNotFound)
 	}
 
-	return i.downloader.FetchComments(ctx, sourceURL)
+	// Refused already: answer from the record rather than asking upstream the
+	// question it has already refused.
+	if refusal, found, err := i.store.UnavailableSourceFor(ctx, sourceURL); err == nil && found {
+		return nil, domain.NewUnavailable(refusal.Reason, refusal.Detail)
+	}
+
+	comments, err := i.downloader.FetchComments(ctx, sourceURL)
+	if err != nil {
+		// Comments are how this was found: the video had never been downloaded,
+		// so nothing else had ever asked upstream about it.
+		i.recordUnavailable(ctx, sourceURL, videoID, err)
+		return nil, domain.AsUnavailable(err)
+	}
+	return comments, nil
 }
 
 // CancelVideoDownload stops any transfer running for a video.
@@ -441,4 +485,107 @@ func categoryTopics(v domain.ExternalVideo) []string {
 		return v.Topics
 	}
 	return []string{v.Category}
+}
+
+// recordUnavailable notes a permanent refusal and tells the catalogue, so the
+// video stops being offered as something that could still arrive.
+//
+// Called from every path that talks to upstream — the transfer, comments,
+// remux resolution — because any of them may be the first to be told, and the
+// one that hears it is the one that knows. Comments and remux are how this was
+// discovered in the first place: the video had never been downloaded at all.
+//
+// Anything that is not a permanent refusal passes straight through. That is the
+// safe direction: a temporary failure recorded here would take a video out of
+// the library until somebody pressed Retry by hand.
+func (i *Ingest) recordUnavailable(ctx context.Context, sourceURL, videoID string, cause error) {
+	wrapped := domain.AsUnavailable(cause)
+	reason, permanent := domain.ReasonOf(wrapped)
+	if !permanent {
+		return
+	}
+	detail := ""
+	var u *domain.Unavailable
+	if errors.As(wrapped, &u) {
+		detail = u.Detail
+	}
+
+	if err := i.store.MarkUnavailable(ctx, domain.UnavailableSource{
+		SourceURL: sourceURL,
+		VideoID:   videoID,
+		Reason:    reason,
+		Detail:    detail,
+	}); err != nil {
+		i.logger.Error("record unavailable source", "url", sourceURL, "error", err)
+		return
+	}
+	i.logger.Info("upstream refused permanently",
+		"url", sourceURL, "video", videoID, "reason", string(reason))
+
+	i.reportUnavailable(ctx, sourceURL, videoID)
+}
+
+// reportUnavailable tells the catalogue, and remembers whether it heard.
+//
+// Two writes rather than one because they are in two services and only one of
+// them can be trusted to be up. The row is written first; the catalogue is a
+// report about it, and a report that did not arrive is retried at the next
+// start rather than lost.
+func (i *Ingest) reportUnavailable(ctx context.Context, sourceURL, videoID string) {
+	if videoID == "" {
+		// Nothing to mark. The refusal is still recorded, and the block on
+		// queueing works from the URL alone.
+		return
+	}
+	if err := i.library.SetMediaState(ctx, videoID, "UNAVAILABLE", "", 0, nil); err != nil {
+		i.logger.Warn("mark video unavailable", "video", videoID, "error", err)
+		return
+	}
+	if err := i.store.MarkUnavailableReported(ctx, sourceURL); err != nil {
+		i.logger.Warn("record unavailable reported", "url", sourceURL, "error", err)
+	}
+}
+
+// ReconcileUnavailable finishes reports the catalogue never received.
+//
+// Runs once at start. The refusal is recorded by whichever request met it,
+// which may be at a moment when catalog is restarting — and a video left
+// looking merely "queued" is one the feed goes on offering. Bounded and
+// idempotent: rows that have been reported are not read at all.
+func (i *Ingest) ReconcileUnavailable(ctx context.Context) {
+	pending, err := i.store.UnreportedUnavailable(ctx, 200)
+	if err != nil {
+		i.logger.Warn("list unreported unavailable sources", "error", err)
+		return
+	}
+	for _, u := range pending {
+		videoID := u.VideoID
+		if videoID == "" {
+			videoID = videoIDFromURL(u.SourceURL)
+		}
+		i.reportUnavailable(ctx, u.SourceURL, videoID)
+	}
+	if len(pending) > 0 {
+		i.logger.Info("reconciled unavailable videos", "count", len(pending))
+	}
+}
+
+// NoteUpstreamFailure records a refusal met outside the job queue.
+//
+// The media handler serves bytes over plain HTTP rather than through the queue,
+// so it meets upstream on its own — and a members-only video is met there
+// first, because nothing ever downloaded it. Exported for that one caller;
+// everything inside this package uses recordUnavailable directly.
+func (i *Ingest) NoteUpstreamFailure(ctx context.Context, sourceURL, videoID string, cause error) {
+	i.recordUnavailable(ctx, sourceURL, videoID, cause)
+}
+
+// Refusal reports whether a URL has already been refused permanently.
+func (i *Ingest) Refusal(ctx context.Context, sourceURL string) (domain.UnavailableSource, bool) {
+	u, found, err := i.store.UnavailableSourceFor(ctx, sourceURL)
+	if err != nil {
+		i.logger.Warn("check unavailable source", "url", sourceURL, "error", err)
+		return domain.UnavailableSource{}, false
+	}
+	return u, found
 }

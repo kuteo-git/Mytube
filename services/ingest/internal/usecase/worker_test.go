@@ -65,6 +65,7 @@ func (f *fakeDownloader) FetchChannelFeed(context.Context, string) ([]domain.RSS
 type fakeLibrary struct {
 	states    []string
 	subtitles [][]domain.SubtitleTrack
+	sourceURL string
 }
 
 func (f *fakeLibrary) FindBySourceURL(context.Context, string) (string, bool, error) {
@@ -74,7 +75,9 @@ func (f *fakeLibrary) UpsertChannel(context.Context, domain.ExternalVideo) error
 func (f *fakeLibrary) UpsertVideo(context.Context, domain.ExternalVideo, string) error {
 	return nil
 }
-func (f *fakeLibrary) SourceURLFor(context.Context, string) (string, error) { return "", nil }
+func (f *fakeLibrary) SourceURLFor(context.Context, string) (string, error) {
+	return f.sourceURL, nil
+}
 func (f *fakeLibrary) UpsertChannelArtwork(context.Context, domain.ChannelMetadata, string, string) error {
 	return nil
 }
@@ -112,6 +115,18 @@ func (fakeStore) Finish(context.Context, string, domain.JobState, string) error 
 	return nil
 }
 func (fakeStore) ReleaseExpired(context.Context) (int, error) { return 0, nil }
+
+// Refusals. The zero behaviour is "nothing has ever been refused", which is
+// what every test that does not care about this wants.
+func (fakeStore) MarkUnavailable(context.Context, domain.UnavailableSource) error { return nil }
+func (fakeStore) UnavailableSourceFor(context.Context, string) (domain.UnavailableSource, bool, error) {
+	return domain.UnavailableSource{}, false, nil
+}
+func (fakeStore) ClearUnavailable(context.Context, string) error { return nil }
+func (fakeStore) UnreportedUnavailable(context.Context, int32) ([]domain.UnavailableSource, error) {
+	return nil, nil
+}
+func (fakeStore) MarkUnavailableReported(context.Context, string) error { return nil }
 
 func TestProcessPublishesSubtitlesBeforeMedia(t *testing.T) {
 	downloader := &fakeDownloader{}

@@ -1300,8 +1300,16 @@ func (x *ScanStatus) GetRunning() bool {
 }
 
 type ResolveStreamRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	VideoId       string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	VideoId string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
+	// Discards any cached URL for this video and asks upstream again.
+	//
+	// A signed URL is occasionally handed over already dead: it redirects, and
+	// the host it redirects to answers 403 every single time, for as long as the
+	// URL lives. Resolving again almost always yields a working one, so the
+	// caller that met the refusal is the only party that can tell the cache its
+	// entry is worthless — nothing about the URL itself says so.
+	Refresh       bool `protobuf:"varint,2,opt,name=refresh,proto3" json:"refresh,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1341,6 +1349,13 @@ func (x *ResolveStreamRequest) GetVideoId() string {
 		return x.VideoId
 	}
 	return ""
+}
+
+func (x *ResolveStreamRequest) GetRefresh() bool {
+	if x != nil {
+		return x.Refresh
+	}
+	return false
 }
 
 type ResolveStreamResponse struct {
@@ -2747,9 +2762,10 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"videosSeen\x12!\n" +
 	"\fvideos_added\x18\x06 \x01(\x05R\vvideosAdded\x12\x16\n" +
 	"\x06errors\x18\a \x03(\tR\x06errors\x12\x18\n" +
-	"\arunning\x18\b \x01(\bR\arunning\"1\n" +
+	"\arunning\x18\b \x01(\bR\arunning\"K\n" +
 	"\x14ResolveStreamRequest\x12\x19\n" +
-	"\bvideo_id\x18\x01 \x01(\tR\avideoId\"\x99\x01\n" +
+	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x18\n" +
+	"\arefresh\x18\x02 \x01(\bR\arefresh\"\x99\x01\n" +
 	"\x15ResolveStreamResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
 	"\x06height\x18\x02 \x01(\x05R\x06height\x129\n" +

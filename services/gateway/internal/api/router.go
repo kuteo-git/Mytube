@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -127,6 +128,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 
 	mux.HandleFunc("GET /api/videos/{id}/stream", g.handleStream)
+	mux.HandleFunc("GET /api/videos/{id}/instant", g.handleInstantStream)
 	mux.HandleFunc("GET /api/videos/{id}/remux", g.handleRemuxStream)
 	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
 
@@ -180,11 +182,29 @@ func (g *Gateway) writeErr(w http.ResponseWriter, r *http.Request, err error) {
 			status = http.StatusUnauthorized
 		case connect.CodePermissionDenied:
 			status = http.StatusForbidden
+		case connect.CodeAborted:
+			// Upstream refused for good — members-only, private, removed. A
+			// conflict, not a fault: the request was well formed and the system
+			// worked, and the answer is that this video cannot be fetched. It
+			// was a 500, which reads as "try again" to every layer above it.
+			status = http.StatusConflict
 		}
 	}
 
 	if status >= 500 {
 		g.logger.Error("request failed", "path", r.URL.Path, "error", err)
+	}
+	if status == http.StatusConflict {
+		// A machine-readable answer, because the browser has to decide what to
+		// draw from it: no retry button, no comments section, and a sentence
+		// naming the reason. Parsing English out of an error message would be
+		// the alternative.
+		writeJSON(w, status, map[string]string{
+			"error":  err.Error(),
+			"code":   "video_unavailable",
+			"reason": unavailableReason(err.Error()),
+		})
+		return
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
@@ -909,4 +929,20 @@ func (g *Gateway) handleExplainFeed(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
+}
+
+// unavailableReason reads the reason back out of the error the ingest service
+// sent.
+//
+// The reason is a word from a closed set, and it travels at the front of that
+// service's message (see domain.Unavailable.Error). Read here rather than added
+// to the proto: the alternative is a new field on every RPC that can meet
+// upstream, to carry one word that already crosses in the error.
+func unavailableReason(message string) string {
+	for _, reason := range []string{"members_only", "private", "removed", "unavailable"} {
+		if strings.Contains(message, reason) {
+			return reason
+		}
+	}
+	return "unavailable"
 }

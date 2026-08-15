@@ -36,6 +36,7 @@ var mediaStates = map[string]catalogv1.MediaState{
 	"READY":       catalogv1.MediaState_MEDIA_STATE_READY,
 	"EVICTED":     catalogv1.MediaState_MEDIA_STATE_EVICTED,
 	"FAILED":      catalogv1.MediaState_MEDIA_STATE_FAILED,
+	"UNAVAILABLE": catalogv1.MediaState_MEDIA_STATE_UNAVAILABLE,
 }
 
 func (l *Library) FindBySourceURL(ctx context.Context, sourceURL string) (string, bool, error) {

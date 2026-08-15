@@ -145,6 +145,13 @@ func toConnectErr(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, domain.ErrInvalid):
 		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, domain.ErrUnavailable):
+		// Nothing here is broken. YouTube gave a clear answer — this video is
+		// not ours to fetch — and reporting it as an internal error is what
+		// made the browser show a 500 for a members-only video and try again.
+		// Aborted rather than FailedPrecondition so the gateway can tell the
+		// two apart: one means "wait", this one means "never".
+		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, domain.ErrNoProgressiveFormat):
 		// Not a failure of this service: upstream simply has nothing a bare
 		// video element can play, so the client should wait for the download.
@@ -183,7 +190,7 @@ func jobToProto(j domain.Job) *ingestv1.Job {
 }
 
 func (s *Server) ResolveStream(ctx context.Context, req *connect.Request[ingestv1.ResolveStreamRequest]) (*connect.Response[ingestv1.ResolveStreamResponse], error) {
-	location, err := s.ingest.ResolveStream(ctx, req.Msg.GetVideoId())
+	location, err := s.ingest.ResolveStream(ctx, req.Msg.GetVideoId(), req.Msg.GetRefresh())
 	if err != nil {
 		return nil, toConnectErr(err)
 	}

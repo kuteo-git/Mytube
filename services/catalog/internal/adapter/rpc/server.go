@@ -66,6 +66,7 @@ var mediaStates = map[domain.MediaState]catalogv1.MediaState{
 	domain.MediaReady:       catalogv1.MediaState_MEDIA_STATE_READY,
 	domain.MediaEvicted:     catalogv1.MediaState_MEDIA_STATE_EVICTED,
 	domain.MediaFailed:      catalogv1.MediaState_MEDIA_STATE_FAILED,
+	domain.MediaUnavailable: catalogv1.MediaState_MEDIA_STATE_UNAVAILABLE,
 }
 
 var reactionsToProto = map[domain.Reaction]catalogv1.Reaction{
@@ -313,6 +314,7 @@ var mediaStatesFromProto = map[catalogv1.MediaState]domain.MediaState{
 	catalogv1.MediaState_MEDIA_STATE_READY:       domain.MediaReady,
 	catalogv1.MediaState_MEDIA_STATE_EVICTED:     domain.MediaEvicted,
 	catalogv1.MediaState_MEDIA_STATE_FAILED:      domain.MediaFailed,
+	catalogv1.MediaState_MEDIA_STATE_UNAVAILABLE: domain.MediaUnavailable,
 }
 
 func (s *Server) UpsertChannel(ctx context.Context, req *connect.Request[catalogv1.UpsertChannelRequest]) (*connect.Response[catalogv1.UpsertChannelResponse], error) {

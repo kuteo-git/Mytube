@@ -21,6 +21,10 @@ const (
 	MediaReady       MediaState = "READY"
 	MediaEvicted     MediaState = "EVICTED"
 	MediaFailed      MediaState = "FAILED"
+	// MediaUnavailable is upstream's final answer: members-only, private or
+	// removed. Kept apart from MediaFailed because the next action differs —
+	// there is nothing to retry, and the UI must stop offering it.
+	MediaUnavailable MediaState = "UNAVAILABLE"
 )
 
 type Reaction string

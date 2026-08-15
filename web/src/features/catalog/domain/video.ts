@@ -18,7 +18,16 @@ export interface Channel {
 }
 
 /** State of the media file on disk. Tied to the LRU eviction policy. */
-export type MediaState = 'QUEUED' | 'DOWNLOADING' | 'READY' | 'EVICTED' | 'FAILED'
+export type MediaState =
+  | 'QUEUED'
+  | 'DOWNLOADING'
+  | 'READY'
+  | 'EVICTED'
+  | 'FAILED'
+  // Upstream will not hand it over: members-only, private, removed. Apart from
+  // FAILED because there is nothing to retry — an offer to try again is what
+  // turned one members-only video into thirteen download jobs in two minutes.
+  | 'UNAVAILABLE'
 
 export type ReactionState = 'NONE' | 'LIKE' | 'DISLIKE'
 

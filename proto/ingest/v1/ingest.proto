@@ -243,6 +243,14 @@ message ScanStatus {
 
 message ResolveStreamRequest {
   string video_id = 1;
+  // Discards any cached URL for this video and asks upstream again.
+  //
+  // A signed URL is occasionally handed over already dead: it redirects, and
+  // the host it redirects to answers 403 every single time, for as long as the
+  // URL lives. Resolving again almost always yields a working one, so the
+  // caller that met the refusal is the only party that can tell the cache its
+  // entry is worthless — nothing about the URL itself says so.
+  bool refresh = 2;
 }
 
 message ResolveStreamResponse {

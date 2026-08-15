@@ -75,6 +75,20 @@ func (c *cachedRemuxURLs) ResolveRemuxURLs(
 	return urls, nil
 }
 
+// forget drops URLs that turned out to be dead.
+//
+// YouTube occasionally signs a URL that is refused for its whole life: it
+// redirects, and the host it redirects to answers 403 to every request.
+// Nothing about the URL says so, so the only party that can tell this cache
+// its entry is worthless is the one that tried to open it — and without this
+// the same dead URL is handed back for the next 90 minutes, which is how long
+// one video stays unplayable while every other video plays.
+func (c *cachedRemuxURLs) forget(videoURL string, height int32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.entries, videoURL+"|"+strconv.Itoa(int(height)))
+}
+
 // OpenRemux passes straight through; only resolution is worth caching.
 func (c *cachedRemuxURLs) OpenRemux(
 	ctx context.Context, urls []string, startSeconds, audioStartSeconds float64,

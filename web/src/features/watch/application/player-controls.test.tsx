@@ -103,7 +103,7 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
           }
         : stream,
     ),
-    listUpNext: vi.fn(async () => []),
+    listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
     listPopular: vi.fn(async () => []),
     listComments: vi.fn(async () => ({ comments: [], nextPageToken: '' })),
     listTopics: vi.fn(async () => topicList),
@@ -823,6 +823,57 @@ describe('the subtitle preference and the two layers', () => {
 
     // Captions default to off, and both layers have to say so.
     expect(back[0].mode).toBe('disabled')
+  })
+
+  /**
+   * As `trackable`, but the list can be listened to and fired at — which is
+   * what a browser does when it selects a track by itself.
+   */
+  function liveTrackable(video: HTMLVideoElement, languages: string[]) {
+    const listeners: Record<string, Array<() => void>> = {}
+    const tracks = languages.map((language) => ({ language, mode: 'disabled', cues: null }))
+    Object.defineProperty(video, 'textTracks', {
+      configurable: true,
+      value: Object.assign(tracks, {
+        length: tracks.length,
+        addEventListener(type: string, fn: () => void) {
+          ;(listeners[type] ??= []).push(fn)
+        },
+        removeEventListener(type: string, fn: () => void) {
+          listeners[type] = (listeners[type] ?? []).filter((f) => f !== fn)
+        },
+      }),
+    })
+    return {
+      tracks,
+      fire: (type: string) => {
+        for (const fn of listeners[type] ?? []) fn()
+      },
+    }
+  }
+
+  it('puts back a track the browser switched on by itself', async () => {
+    // The reported fault: open a new video, wait for the file to land, and
+    // English subtitles appear while the setting still reads Off. Nothing in
+    // this app asks for that — a browser may select a track on its own when one
+    // is attached, which for a video being downloaded is long after the effect
+    // that applies the preference last ran. So the preference is enforced, not
+    // applied once.
+    await ready()
+    const [a, b] = Array.from(document.querySelectorAll('video'))
+    liveTrackable(b, ['en'])
+    const front = liveTrackable(a, ['en'])
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60))
+    })
+
+    await act(async () => {
+      front.tracks[0].mode = 'showing'
+      front.fire('change')
+    })
+
+    expect(front.tracks[0].mode).toBe('disabled')
   })
 })
 

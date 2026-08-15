@@ -33,6 +33,12 @@ const (
 	MediaState_MEDIA_STATE_READY       MediaState = 3
 	MediaState_MEDIA_STATE_EVICTED     MediaState = 4
 	MediaState_MEDIA_STATE_FAILED      MediaState = 5
+	// Upstream will not hand this video over, and asking again will not change
+	// that: members-only, private, or removed. Distinct from FAILED, which means
+	// "the attempt did not work" and carries an offer to try again — an offer
+	// that, made here, is how one members-only video collected thirteen jobs in
+	// two minutes.
+	MediaState_MEDIA_STATE_UNAVAILABLE MediaState = 6
 )
 
 // Enum value maps for MediaState.
@@ -44,6 +50,7 @@ var (
 		3: "MEDIA_STATE_READY",
 		4: "MEDIA_STATE_EVICTED",
 		5: "MEDIA_STATE_FAILED",
+		6: "MEDIA_STATE_UNAVAILABLE",
 	}
 	MediaState_value = map[string]int32{
 		"MEDIA_STATE_UNSPECIFIED": 0,
@@ -52,6 +59,7 @@ var (
 		"MEDIA_STATE_READY":       3,
 		"MEDIA_STATE_EVICTED":     4,
 		"MEDIA_STATE_FAILED":      5,
+		"MEDIA_STATE_UNAVAILABLE": 6,
 	}
 )
 
@@ -3849,7 +3857,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"m\n" +
 	"\x18ListPinnedVideosResponse\x12)\n" +
 	"\x06videos\x18\x01 \x03(\v2\x11.catalog.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xa6\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xc3\x01\n" +
 	"\n" +
 	"MediaState\x12\x1b\n" +
 	"\x17MEDIA_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -3857,7 +3865,8 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x17MEDIA_STATE_DOWNLOADING\x10\x02\x12\x15\n" +
 	"\x11MEDIA_STATE_READY\x10\x03\x12\x17\n" +
 	"\x13MEDIA_STATE_EVICTED\x10\x04\x12\x16\n" +
-	"\x12MEDIA_STATE_FAILED\x10\x05*`\n" +
+	"\x12MEDIA_STATE_FAILED\x10\x05\x12\x1b\n" +
+	"\x17MEDIA_STATE_UNAVAILABLE\x10\x06*`\n" +
 	"\bReaction\x12\x18\n" +
 	"\x14REACTION_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rREACTION_NONE\x10\x01\x12\x11\n" +

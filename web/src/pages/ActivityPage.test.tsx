@@ -48,6 +48,9 @@ function scan(startedAt: string): ScanStatus {
     videosSeen: 400,
     videosAdded: 4,
     errors: [],
+    // Every scan built here is one that has already finished — the list this
+    // page shows is history.
+    running: false,
   }
 }
 

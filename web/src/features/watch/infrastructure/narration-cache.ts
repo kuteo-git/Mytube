@@ -44,25 +44,43 @@ export async function hashCue(text: string): Promise<string> {
  * there.
  */
 let _partition = ''
-let _partitionWaiters: Array<() => void> = []
+/**
+ * Whether the answer has arrived at all, told apart from what it said.
+ *
+ * A configured model and no model configured are different answers, and both
+ * are answers. Reading "no model" off an empty partition would make them the
+ * same thing, which is how "the settings have not loaded yet" and "there is
+ * nothing to load" came to be reported with one silent, endless wait.
+ */
+let _partitionKnown = false
+let _hasModel = false
+let _partitionWaiters: Array<(hasModel: boolean) => void> = []
 
 export function setCachePartition(model: string) {
   _partition = model ? `omniroute:${model}` : 'omniroute'
+  _partitionKnown = true
+  _hasModel = Boolean(model)
   const waiters = _partitionWaiters
   _partitionWaiters = []
-  waiters.forEach((w) => w())
+  waiters.forEach((w) => w(_hasModel))
 }
 
 /**
- * Resolves once the configured model is known.
+ * Resolves once the configured model is known, with whether there is one.
  *
  * The pass has to wait for it. Starting before the answer arrives would mean
  * reading and writing a partition named after the wrong model — worse than a
  * cold cache, because the translations land somewhere they will be read back as
  * another model's work.
+ *
+ * It resolves `false` when the settings say no model is configured, and the
+ * pass stops there rather than translating into a partition named after
+ * nothing. Left as a bare wait this was the worst state the feature had: no
+ * model meant no resolution, so the status line sat on "Loading subtitles…"
+ * for ever against a subtitle file that had loaded long before.
  */
-export function whenPartitionReady(): Promise<void> {
-  if (_partition) return Promise.resolve()
+export function whenPartitionReady(): Promise<boolean> {
+  if (_partitionKnown) return Promise.resolve(_hasModel)
   return new Promise((resolve) => _partitionWaiters.push(resolve))
 }
 
