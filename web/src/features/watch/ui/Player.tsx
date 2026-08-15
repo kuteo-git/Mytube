@@ -2955,13 +2955,9 @@ export function Player({
               onOpenChange={trackMenu}
               icon={<SlidersVertical size={22} />}
               label="Audio"
+              wide
             >
-              <EqualizerSetting
-                audio={audio}
-                onChange={setAudio}
-                element={front()}
-                tall={coarse}
-              />
+              <EqualizerSetting audio={audio} onChange={setAudio} element={front()} />
             </SettingsMenu>
           )}
 
@@ -3189,6 +3185,7 @@ function SettingsMenu({
   sheet,
   icon,
   label = 'Settings',
+  wide,
 }: {
   buttonClassName?: string
   children?: React.ReactNode
@@ -3200,6 +3197,14 @@ function SettingsMenu({
   icon?: React.ReactNode
   /** Names the button for a screen reader, and says which panel this is. */
   label?: string
+  /**
+   * A wider dropdown, for a panel that is a row of controls rather than a list.
+   *
+   * The default 18rem was measured for menu rows, where the width is set by the
+   * longest label. Ten equaliser bands across it leave 25px each — narrower on
+   * a desktop than the same ten get on a phone, which is the wrong way round.
+   */
+  wide?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -3281,7 +3286,10 @@ function SettingsMenu({
               // twentieth of what is behind comes through, which is the point
               // for a permanent bar and the opposite of it for a panel opened
               // over video. See index.css for why the alpha stops at 82%.
-              className="panel-blur fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg py-1 text-sm shadow-lg"
+              className={clsx(
+                'panel-blur fixed z-[60] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg py-1 text-sm shadow-lg',
+                wide ? 'w-96' : 'w-72',
+              )}
               style={{
                 bottom: `${menuPos.bottom}px`,
                 right: `${menuPos.right}px`,

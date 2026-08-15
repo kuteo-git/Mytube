@@ -32,14 +32,11 @@ export function EqualizerSetting({
   audio,
   onChange,
   element,
-  tall,
 }: {
   audio: AudioSettings
   onChange: (next: AudioSettings) => void
   /** The video in front, watched only to know whether it went full screen. */
   element: HTMLVideoElement | null
-  /** Touch targets need 44px; a mouse is happy with less. */
-  tall?: boolean
 }) {
   const bypassed = useNativeFullscreen(element)
   const settings = audio.eq
@@ -120,10 +117,7 @@ export function EqualizerSetting({
                   aria-checked={on}
                   onClick={() => pickPreset(p.name)}
                   className={clsx(
-                    'rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
-                    // 44px on touch. These wrap, so unlike the band sliders
-                    // there is no ten-across ceiling standing in the way.
-                    tall ? 'min-h-11' : 'py-1.5',
+                    'min-h-11 rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
                     on
                       ? 'bg-invert-bg text-invert-text'
                       : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
@@ -176,10 +170,15 @@ export function EqualizerSetting({
                     44px per slider is unreachable here and saying so is more
                     use than pretending: ten columns across a 360px phone leaves
                     about 33px each whatever is done to them. This takes all 33.
-                    Taller on touch for the same reason, where there is no such
-                    ceiling.
+
+                    One size, not one per pointer. The touch version was simply
+                    the better control — taller is easier to place a value in
+                    with a mouse too, and 12dB spread over 96px asked for a
+                    steadier hand than anyone has. What a mouse saves is the
+                    *width* the hit box needs, and that is spent on the panel
+                    being wider rather than on the sliders being shorter.
                   */
-                  className={clsx('accent-brand', tall ? 'h-32 w-full' : 'h-24 w-full')}
+                  className="h-32 w-full accent-brand"
                   style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
                 />
                 <span className="text-[10px] text-text-2">{band.label}</span>
@@ -198,10 +197,9 @@ export function EqualizerSetting({
               value={settings.preamp}
               onChange={(e) => setPreamp(Number(e.target.value))}
               // A horizontal range is only as tall as it is drawn, and what is
-              // drawn is a few pixels of track. On touch the element is given
-              // the full 44 to be grabbed by; the track inside it does not
-              // change.
-              className={clsx('min-w-0 flex-1 accent-brand', tall && 'h-11')}
+              // drawn is a few pixels of track. The element is given the full
+              // 44 to be grabbed by; the track inside it does not change.
+              className="h-11 min-w-0 flex-1 accent-brand"
             />
             <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
               {formatDb(settings.preamp)}
@@ -244,8 +242,7 @@ export function EqualizerSetting({
                 aria-checked={on}
                 onClick={() => pickRoom(p.name)}
                 className={clsx(
-                  'rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
-                  tall ? 'min-h-11' : 'py-1.5',
+                  'min-h-11 rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
                   on
                     ? 'bg-invert-bg text-invert-text'
                     : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
@@ -267,7 +264,7 @@ export function EqualizerSetting({
             step={1}
             value={Math.round(reverb.wet * 100)}
             onChange={(e) => setReverb({ ...reverb, wet: Number(e.target.value) / 100 })}
-            className={clsx('min-w-0 flex-1 accent-brand', tall && 'h-11')}
+            className="h-11 min-w-0 flex-1 accent-brand"
           />
           <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
             {Math.round(reverb.wet * 100)}%
