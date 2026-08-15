@@ -21,13 +21,12 @@ import {
 import type { AudioSettings } from '@/features/watch/application/audio-prefs'
 
 /**
- * The equaliser, as it appears inside the player's gear menu.
+ * The equaliser and the room, as they appear behind the player's Audio button.
  *
  * A group of `<li>`s rather than a component of its own, because the menu is a
- * list and this has to sit in it beside subtitles and quality. It renders in the
- * player rather than on a settings screen for one reason: an equaliser is
- * adjusted by ear against something playing, and a curve chosen in silence on
- * another page is a curve chosen blind.
+ * list. It renders in the player rather than on a settings screen for one
+ * reason: this is adjusted by ear against something playing, and a curve chosen
+ * in silence on another page is a curve chosen blind.
  */
 export function EqualizerSetting({
   audio,
@@ -121,8 +120,10 @@ export function EqualizerSetting({
                   aria-checked={on}
                   onClick={() => pickPreset(p.name)}
                   className={clsx(
-                    'rounded-md px-2 text-xs font-medium transition-colors duration-150 ease-out',
-                    tall ? 'py-2' : 'py-1.5',
+                    'rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
+                    // 44px on touch. These wrap, so unlike the band sliders
+                    // there is no ten-across ceiling standing in the way.
+                    tall ? 'min-h-11' : 'py-1.5',
                     on
                       ? 'bg-invert-bg text-invert-text'
                       : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
@@ -166,7 +167,19 @@ export function EqualizerSetting({
                   value={settings.gains[i]}
                   onChange={(e) => setGain(i, Number(e.target.value))}
                   onDoubleClick={() => setGain(i, 0)}
-                  className="h-24 w-4 accent-brand"
+                  /*
+                    The input fills its column rather than sitting 16px wide in
+                    the middle of it, because a range input's hit box is the
+                    element and nothing around it — so the gap between two
+                    sliders was dead space that swallowed a thumb.
+
+                    44px per slider is unreachable here and saying so is more
+                    use than pretending: ten columns across a 360px phone leaves
+                    about 33px each whatever is done to them. This takes all 33.
+                    Taller on touch for the same reason, where there is no such
+                    ceiling.
+                  */
+                  className={clsx('accent-brand', tall ? 'h-32 w-full' : 'h-24 w-full')}
                   style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
                 />
                 <span className="text-[10px] text-text-2">{band.label}</span>
@@ -184,7 +197,11 @@ export function EqualizerSetting({
               step={1}
               value={settings.preamp}
               onChange={(e) => setPreamp(Number(e.target.value))}
-              className="min-w-0 flex-1 accent-brand"
+              // A horizontal range is only as tall as it is drawn, and what is
+              // drawn is a few pixels of track. On touch the element is given
+              // the full 44 to be grabbed by; the track inside it does not
+              // change.
+              className={clsx('min-w-0 flex-1 accent-brand', tall && 'h-11')}
             />
             <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
               {formatDb(settings.preamp)}
@@ -227,8 +244,8 @@ export function EqualizerSetting({
                 aria-checked={on}
                 onClick={() => pickRoom(p.name)}
                 className={clsx(
-                  'rounded-md px-2 text-xs font-medium transition-colors duration-150 ease-out',
-                  tall ? 'py-2' : 'py-1.5',
+                  'rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
+                  tall ? 'min-h-11' : 'py-1.5',
                   on
                     ? 'bg-invert-bg text-invert-text'
                     : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
@@ -250,7 +267,7 @@ export function EqualizerSetting({
             step={1}
             value={Math.round(reverb.wet * 100)}
             onChange={(e) => setReverb({ ...reverb, wet: Number(e.target.value) / 100 })}
-            className="min-w-0 flex-1 accent-brand"
+            className={clsx('min-w-0 flex-1 accent-brand', tall && 'h-11')}
           />
           <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
             {Math.round(reverb.wet * 100)}%

@@ -3276,7 +3276,12 @@ function SettingsMenu({
             // Desktop: dropdown anchored to the button, opening upwards.
             <ul
               ref={listRef}
-              className="fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg"
+              // `chrome-blur` rather than `bg-surface`: this panel sits over
+              // playing video, which is the case that class exists for. Its
+              // alpha is deliberately high — a suggestion that something moves
+              // behind the chrome, not a window onto it — and it is shared with
+              // the top bar, so it is retuned there or not at all.
+              className="chrome-blur fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg py-1 text-sm shadow-lg"
               style={{
                 bottom: `${menuPos.bottom}px`,
                 right: `${menuPos.right}px`,
@@ -3294,7 +3299,7 @@ function SettingsMenu({
               />
               <ul
                 ref={listRef}
-                className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl bg-surface pt-2 text-sm shadow-2xl"
+                className="chrome-blur fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl pt-2 text-sm shadow-2xl"
                 style={{ paddingBottom: 'calc(0.5rem + var(--safe-bottom))' }}
               >
                 {children}
