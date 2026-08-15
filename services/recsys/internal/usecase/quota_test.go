@@ -386,3 +386,20 @@ func assertSameSet(t *testing.T, got, want []domain.RankedVideo) {
 		}
 	}
 }
+
+// The gateway keeps its own copy of this default, deliberately: it does not
+// link the ranker, and a REST layer reaching into another service's use cases
+// for a constant is the dependency this architecture exists to prevent.
+//
+// Duplication is the price of that boundary, and drift is the bill. The two
+// stood at 60/20/20 and 25/60/15 for a release — so "the default mix" had two
+// answers, and which one a viewer got depended on whether the gateway happened
+// to name a mix in the request. The value is asserted here so that changing one
+// side without the other fails a test rather than a Saturday.
+func TestTheDefaultMixMatchesTheOneTheGatewayPublishes(t *testing.T) {
+	// services/gateway/internal/api/feed_mix.go — defaultFeedMix
+	want := FeedMix{Subscribed: 60, Affinity: 20, Discovery: 20}
+	if DefaultFeedMix != want {
+		t.Fatalf("DefaultFeedMix = %+v, want %+v — update the gateway's copy too", DefaultFeedMix, want)
+	}
+}

@@ -86,15 +86,20 @@ type FeedMix struct {
 	Discovery  int
 }
 
-// DefaultFeedMix reproduces the fixed quota this replaced.
+// DefaultFeedMix is what a request that names no mix is ranked by.
 //
-// The old buckets were NeverWatched 30, Subscribed 20, RecentlyAdded 15,
-// Discovery 12 — and the first and third are both "not subscribed, matches what
-// they watch", which is the affinity share. Normalised over the 82% left after
-// the two fixed shares, that is 25/60/15. Chosen so that installing this
-// changes nothing until somebody moves a slider: if the feed shifted on upgrade
-// there would be no way to tell a setting working from a default changing.
-var DefaultFeedMix = FeedMix{Subscribed: 25, Affinity: 60, Discovery: 15}
+// It matches the gateway's `defaultFeedMix`, which is the one a viewer meets:
+// the gateway stores the setting and publishes the default to the UI, so the
+// button marked "Reset to default" is answered there. This is the fallback for
+// a request that arrived without one, and two different answers to "what is the
+// default mix" is a difference nobody would think to look for.
+//
+// It was 25/60/15, reproducing the fixed quota the sliders replaced, so that
+// installing them changed nothing until somebody moved one. That was the right
+// choice for one release and the wrong number to keep: on this library the
+// affinity bucket holds tens of videos against thousands of subscribed ones, so
+// a 60% affinity share spends half the page scraping that bucket's floor.
+var DefaultFeedMix = FeedMix{Subscribed: 60, Affinity: 20, Discovery: 20}
 
 // normalised turns whatever the caller sent into shares of the adjustable part.
 //

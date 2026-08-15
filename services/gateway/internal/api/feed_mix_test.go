@@ -67,3 +67,17 @@ func TestASavedMixOfNothingIsIgnoredOnLoad(t *testing.T) {
 		t.Fatalf("an empty mix on disk gave %+v, want the defaults", got)
 	}
 }
+
+// Recsys keeps its own copy of this default, deliberately: the gateway does not
+// link the ranker. See the note beside defaultFeedMix.
+//
+// Duplication is the price of that boundary, and drift is the bill: the two
+// stood at 60/20/20 and 25/60/15 for a release, so which answer a viewer got
+// depended on whether the gateway named a mix in the request.
+func TestTheDefaultMixMatchesTheOneRecsysFallsBackTo(t *testing.T) {
+	// services/recsys/internal/usecase/quota.go — DefaultFeedMix
+	want := feedMix{Subscribed: 60, Affinity: 20, Discovery: 20}
+	if defaultFeedMix != want {
+		t.Fatalf("defaultFeedMix = %+v, want %+v — update recsys's copy too", defaultFeedMix, want)
+	}
+}
