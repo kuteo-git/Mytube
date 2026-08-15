@@ -101,3 +101,79 @@ func TestCancellingAJobStopsTheTransfer(t *testing.T) {
 		t.Fatalf("media states = %v, want the last to be EVICTED", library.states)
 	}
 }
+
+// refusingThenWorkingDownloader refuses the first transfer the way googlevideo
+// does and completes the second, as a fresh yt-dlp process would.
+type refusingThenWorkingDownloader struct {
+	*fakeDownloader
+	attempts int
+}
+
+func (d *refusingThenWorkingDownloader) Download(
+	context.Context, string, string, int32, func(domain.Progress),
+) (domain.DownloadResult, error) {
+	d.attempts++
+	if d.attempts == 1 {
+		return domain.DownloadResult{}, errors.New(
+			"exit code 1: ERROR: unable to download video data: HTTP Error 403: Forbidden")
+	}
+	return domain.DownloadResult{MediaPath: "vid1/1080p.mp4", SizeBytes: 99}, nil
+}
+
+// A signed URL is sometimes handed over already dead, and every request to it
+// is refused for as long as it lives — 20 of 20, measured on the instant tier.
+// yt-dlp resolves once when it starts, so --retries throws the same dead URL at
+// the same host and fails identically: three attempts, none reaching a byte,
+// three seconds each. Only a new process, with a new resolve, gets through.
+//
+// Until this, the queue called that permanent. The video arrived only because
+// somebody pressed play four times, which is the shape that once turned one
+// video into thirteen jobs in two minutes.
+func TestARefusedTransferIsRetriedInAFreshProcess(t *testing.T) {
+	downloader := &refusingThenWorkingDownloader{fakeDownloader: &fakeDownloader{}}
+	library := &fakeLibrary{}
+	ingest := New(downloader, nil, fakeStore{}, library, 1080, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	worker := NewWorker(ingest, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	err := worker.process(context.Background(), domain.Job{ID: "job1", SourceURL: "https://example.test/v"})
+
+	if err != nil {
+		t.Fatalf("process: %v — the second attempt should have carried it", err)
+	}
+	if downloader.attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", downloader.attempts)
+	}
+	if len(library.states) == 0 || library.states[len(library.states)-1] != "READY" {
+		t.Fatalf("media states = %v, want the last to be READY", library.states)
+	}
+}
+
+// unavailableDownloader refuses the way a members-only video does.
+type unavailableDownloader struct {
+	*fakeDownloader
+	attempts int
+}
+
+func (d *unavailableDownloader) Download(
+	context.Context, string, string, int32, func(domain.Progress),
+) (domain.DownloadResult, error) {
+	d.attempts++
+	return domain.DownloadResult{}, errors.New(
+		"ERROR: [youtube] abc: Join this channel to get access to members-only content")
+}
+
+// A permanent refusal must not be asked twice. Retrying one is what collected
+// thirteen jobs in two minutes against an upstream that had already answered,
+// and 83 failed jobs over ten URLs.
+func TestAPermanentRefusalIsNotRetried(t *testing.T) {
+	downloader := &unavailableDownloader{fakeDownloader: &fakeDownloader{}}
+	ingest := New(downloader, nil, fakeStore{}, &fakeLibrary{}, 1080, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	worker := NewWorker(ingest, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	if err := worker.process(context.Background(), domain.Job{ID: "job1", SourceURL: "https://example.test/v"}); err == nil {
+		t.Fatal("a members-only video reported success")
+	}
+	if downloader.attempts != 1 {
+		t.Fatalf("attempts = %d, want 1 — upstream had already answered", downloader.attempts)
+	}
+}

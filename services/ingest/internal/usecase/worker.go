@@ -173,17 +173,44 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 	defer stopTransfer()
 
 	var cancelled bool
-	result, err := i.downloader.Download(transfer, job.SourceURL, meta.ID, job.PreferredHeight,
-		func(p domain.Progress) {
-			switch err := i.store.Heartbeat(transfer, job.ID, jobLease, p); {
-			case errors.Is(err, domain.ErrJobNotRunning):
-				cancelled = true
-				w.logger.Info("transfer cancelled, stopping", "job", job.ID, "video", meta.ID)
-				stopTransfer()
-			case err != nil:
-				w.logger.Warn("heartbeat", "job", job.ID, "error", err)
-			}
-		})
+	onProgress := func(p domain.Progress) {
+		switch err := i.store.Heartbeat(transfer, job.ID, jobLease, p); {
+		case errors.Is(err, domain.ErrJobNotRunning):
+			cancelled = true
+			w.logger.Info("transfer cancelled, stopping", "job", job.ID, "video", meta.ID)
+			stopTransfer()
+		case err != nil:
+			w.logger.Warn("heartbeat", "job", job.ID, "error", err)
+		}
+	}
+
+	result, err := i.downloader.Download(transfer, job.SourceURL, meta.ID, job.PreferredHeight, onProgress)
+
+	// A refused transfer is worth one more process, because the refusal usually
+	// belongs to the URL rather than to the video.
+	//
+	// YouTube sometimes signs a URL that is dead on arrival: every request to it
+	// answers 403 for as long as it lives — 20 of 20, measured on the instant
+	// tier. yt-dlp resolves once when it starts, so --retries throws the same
+	// dead URL at the same host and fails the same way, which is why three
+	// attempts on `cT_ZlNvkW60` each died in three seconds without reaching a
+	// byte. A new process resolves again, and the fourth carried 70MB.
+	//
+	// Until this, the queue called that permanent, and the video arrived only
+	// because somebody pressed play four times — the shape that once turned one
+	// video into thirteen jobs in two minutes.
+	//
+	// Once, not twice: a second refusal is upstream's answer rather than a bad
+	// URL. And never for a permanent refusal — asking a members-only video again
+	// is exactly what must not happen.
+	if err != nil && !cancelled && ctx.Err() == nil {
+		if _, permanent := domain.ReasonOf(domain.AsUnavailable(err)); !permanent {
+			w.logger.Warn("transfer refused, resolving again",
+				"job", job.ID, "video", meta.ID, "error", err)
+			result, err = i.downloader.Download(transfer, job.SourceURL, meta.ID, job.PreferredHeight, onProgress)
+		}
+	}
+
 	if cancelled {
 		// Not a failure: it was asked for. EVICTED is what the catalogue calls a
 		// video with no copy that can be fetched again — the UI already says

@@ -497,17 +497,16 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		// partial data lives in `.part` files — resumable, but also litter that
 		// nothing in the eviction sweep knows how to collect.
 		NoContinue().
-		// A single refused request must not lose the whole transfer.
+		// A dropped request must not lose the whole transfer. A DASH transfer is
+		// hundreds of requests, so over a long video the chance of meeting one
+		// bad one approaches certainty.
 		//
-		// googlevideo answers 403 intermittently — see CLAUDE.md §4 on the same
-		// refusal met by the instant tier — and without retries one of those
-		// arriving partway through ended the job outright. Measured on
-		// `3xKjuGk4eJU`: "unable to download video data: HTTP Error 403" at 36%,
-		// after ten megabytes had already landed.
-		//
-		// Fragment retries matter as much: a DASH transfer is made of hundreds of
-		// requests, so the chance of meeting one refusal approaches certainty
-		// over a long video.
+		// These cover a request that fails on its own. They do **not** cover the
+		// 403 this library meets most: that refusal belongs to the signed URL,
+		// which yt-dlp resolves once at start-up, so a retry throws the same
+		// dead URL at the same host and is refused identically. Only a new
+		// process resolves again, and the worker is what starts one — see the
+		// note beside the retry in usecase/worker.go.
 		Retries("5").
 		FragmentRetries("5").
 		Output(target)
