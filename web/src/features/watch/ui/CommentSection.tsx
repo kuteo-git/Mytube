@@ -75,10 +75,22 @@ export function CommentSection({ videoId }: { videoId: string }) {
         </div>
       )}
 
-      {/* Error state with retry */}
-      {fetchComments.isError && (
+      {/*
+        Nothing came back, and the two reasons read the same to a viewer.
+
+        `isError` is the request itself going wrong; `unavailable` is YouTube
+        declining to answer, which arrives under a 200 because nothing here is
+        broken — it used to be a 500, and a page where the video played
+        perfectly well reported an internal server error. Both offer the same
+        Retry, because both are usually over by the next press.
+      */}
+      {(fetchComments.isError || fetchComments.data?.unavailable) && (
         <div className="mt-6 flex flex-col items-start gap-3 rounded-lg bg-surface p-4">
-          <p className="text-sm text-text-2">Could not load YouTube comments.</p>
+          <p className="text-sm text-text-2">
+            {fetchComments.data?.unavailable
+              ? 'YouTube did not return comments for this video.'
+              : 'Could not load YouTube comments.'}
+          </p>
           <button
             type="button"
             onClick={() => fetchComments.mutate()}

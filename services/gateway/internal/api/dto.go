@@ -89,6 +89,9 @@ type commentsResponse struct {
 type fetchCommentsResponse struct {
 	Imported int32 `json:"imported"`
 	Skipped  bool  `json:"skipped,omitempty"`
+	// Set when YouTube would not hand the comments over this time. Not an error
+	// and not a permanent state: see handleFetchComments.
+	Unavailable bool `json:"unavailable,omitempty"`
 }
 
 type suggestionDTO struct {

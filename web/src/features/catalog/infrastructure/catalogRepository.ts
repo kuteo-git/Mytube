@@ -108,6 +108,14 @@ export interface CatalogRepository {
 export interface FetchCommentsResult {
   imported: number
   skipped?: boolean
+  /**
+   * YouTube would not hand the comments over this time.
+   *
+   * A refusal rather than a failure, and temporary: the same video usually
+   * answers on the next press. It arrives under a 200 for that reason — the
+   * request did what it could, and nothing on the page depends on the answer.
+   */
+  unavailable?: boolean
 }
 export interface ChannelPage {
   channel: Channel

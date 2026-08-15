@@ -655,7 +655,22 @@ func (g *Gateway) handleFetchComments(w http.ResponseWriter, r *http.Request) {
 		VideoId: videoID,
 	}))
 	if err != nil {
-		g.writeErr(w, r, err)
+		// Comments are the one thing on this page nothing depends on: the video
+		// plays, the description is there, up-next is there. So a refusal is
+		// reported as a refusal and not as a fault.
+		//
+		// It used to be a 500, which is a claim that this system is broken —
+		// and what upstream actually said was "HTTP Error 403", a temporary no
+		// to a request nobody needed. The console went red on a page where
+		// everything worked.
+		//
+		// 200 rather than the 409 a dead *video* gets (CLAUDE.md §4): that 409
+		// means "permanent, do not retry, name the reason", and this is the
+		// opposite — the same video answers on the next press. Recording a
+		// temporary refusal as a permanent one is the mistake the charter
+		// already learnt once, at the cost of 83 failed jobs.
+		g.logger.Warn("fetch comments refused", "video", videoID, "error", err)
+		writeJSON(w, http.StatusOK, fetchCommentsResponse{Imported: 0, Unavailable: true})
 		return
 	}
 
