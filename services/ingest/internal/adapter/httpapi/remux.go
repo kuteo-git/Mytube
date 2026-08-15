@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -276,6 +277,14 @@ func (h *Handler) openRemuxWithHead(
 	_ = stream.Close()
 	if err == nil {
 		err = io.ErrUnexpectedEOF
+	}
+	// "EOF" describes the pipe, not the fault. ffmpeg has just written the real
+	// reason — a 403, a dead URL, a codec it will not copy — to its stderr, and
+	// without this the log carried only the word EOF for every one of them.
+	if reporter, ok := stream.(interface{ Stderr() string }); ok {
+		if said := reporter.Stderr(); said != "" {
+			return nil, nil, fmt.Errorf("%w: %s", err, said)
+		}
 	}
 	return nil, nil, err
 }

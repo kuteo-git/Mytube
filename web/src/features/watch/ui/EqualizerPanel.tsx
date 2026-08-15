@@ -152,34 +152,10 @@ export function EqualizerSetting({
                 <span className="text-[10px] tabular-nums text-text-2">
                   {formatDb(settings.gains[i])}
                 </span>
-                <input
-                  type="range"
-                  aria-label={`${band.label} hertz`}
-                  min={-MAX_BAND_DB}
-                  max={MAX_BAND_DB}
-                  step={1}
+                <BandSlider
+                  label={band.label}
                   value={settings.gains[i]}
-                  onChange={(e) => setGain(i, Number(e.target.value))}
-                  onDoubleClick={() => setGain(i, 0)}
-                  /*
-                    The input fills its column rather than sitting 16px wide in
-                    the middle of it, because a range input's hit box is the
-                    element and nothing around it — so the gap between two
-                    sliders was dead space that swallowed a thumb.
-
-                    44px per slider is unreachable here and saying so is more
-                    use than pretending: ten columns across a 360px phone leaves
-                    about 33px each whatever is done to them. This takes all 33.
-
-                    One size, not one per pointer. The touch version was simply
-                    the better control — taller is easier to place a value in
-                    with a mouse too, and 12dB spread over 96px asked for a
-                    steadier hand than anyone has. What a mouse saves is the
-                    *width* the hit box needs, and that is spent on the panel
-                    being wider rather than on the sliders being shorter.
-                  */
-                  className="h-32 w-full accent-brand"
-                  style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+                  onChange={(db) => setGain(i, db)}
                 />
                 <span className="text-[10px] text-text-2">{band.label}</span>
               </div>
@@ -283,6 +259,89 @@ export function EqualizerSetting({
 
 function formatDb(db: number): string {
   return `${db > 0 ? '+' : ''}${db}`
+}
+
+/**
+ * One band of the equaliser: a thin track, and a wide invisible input over it.
+ *
+ * The native control was doing both jobs and could only do one of them well. A
+ * range input's hit box is the element itself and nothing around it, so making
+ * it thin enough to look like a fader left 4px of grabbable width with dead
+ * space either side, and making it wide enough to grab painted the *track* 31px
+ * across — a grey slab, ten of them in a row.
+ *
+ * So the input keeps the whole column, and gives up drawing. It is still the
+ * real control: it carries the value, the keyboard (arrows, Home/End), the
+ * label, and the focus ring, all of which would have to be rebuilt by hand
+ * otherwise, badly. Only its appearance is ours.
+ *
+ * That also softens the one risk this panel has. The vertical axis comes from
+ * `writing-mode`, which older Safari ignores — and where it is ignored, the
+ * fader still looks exactly right and only the drag runs along the wrong axis.
+ * Before, the whole row would have collapsed into ten horizontal sliders.
+ *
+ * The fill grows from the centre rather than from the bottom, because zero is
+ * in the middle of ±12dB and the thing worth seeing at a glance is which way a
+ * band was pushed and how far. Filling from the bottom would draw a flat
+ * equaliser as ten half-full bars — a shape, and the wrong one.
+ */
+function BandSlider({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (db: number) => void
+}) {
+  // 0 at the top of the box, 1 at the bottom — the direction the fader reads.
+  const position = (MAX_BAND_DB - value) / (MAX_BAND_DB * 2)
+  const centre = 0.5
+  const top = Math.min(position, centre)
+  const height = Math.abs(position - centre)
+
+  // The focus ring is drawn on the box below, not on the input.
+  //
+  // Hiding the input hid its outline with it, and a keyboard user tabbing
+  // through ten identical faders with nothing to show which one has the keys is
+  // worse than the slab this replaced. `has-[:focus-visible]` puts it back on
+  // the box the viewer actually sees, and only for the keyboard — a mouse press
+  // does not light it up.
+  return (
+    <div className="relative h-32 w-full rounded has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand">
+      {/* The track, and the only part that is 4px wide. */}
+      <div className="absolute left-1/2 top-0 h-full w-1 -translate-x-1/2 rounded-full bg-white/15" />
+
+      {/* Zero, marked. Without it the centre is a place you have to count to. */}
+      <div className="absolute left-1/2 top-1/2 h-px w-2.5 -translate-x-1/2 -translate-y-1/2 bg-white/30" />
+
+      {value !== 0 && (
+        <div
+          className="absolute left-1/2 w-1 -translate-x-1/2 rounded-full bg-brand"
+          style={{ top: `${top * 100}%`, height: `${height * 100}%` }}
+        />
+      )}
+
+      <div
+        className="absolute left-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-md ring-1 ring-black/20"
+        style={{ top: `${position * 100}%` }}
+      />
+
+      <input
+        type="range"
+        aria-label={`${label} hertz`}
+        min={-MAX_BAND_DB}
+        max={MAX_BAND_DB}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        // Back to flat, without hunting for the centre by hand.
+        onDoubleClick={() => onChange(0)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+      />
+    </div>
+  )
 }
 
 /**

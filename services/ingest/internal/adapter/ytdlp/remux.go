@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lrstanley/go-ytdlp"
 )
@@ -31,6 +32,43 @@ import (
 type RemuxStream struct {
 	cmd    *exec.Cmd
 	stdout io.ReadCloser
+	stderr *tailBuffer
+}
+
+// Stderr reports what ffmpeg complained about, or "" when it said nothing.
+//
+// It exists because a mux that fails does so by writing no bytes, and the
+// caller then reports `EOF` — a word that describes the pipe rather than the
+// fault. Every remux failure in the log read `open remux ... error=EOF` while
+// ffmpeg was, a few kilobytes away, saying "Server returned 403 Forbidden".
+func (s *RemuxStream) Stderr() string { return s.stderr.String() }
+
+// tailBuffer keeps the last few kilobytes written to it and drops the rest.
+//
+// ffmpeg is asked for `-loglevel error`, so this is normally a line or two —
+// but a stream that fails mid-play can repeat one every second for an hour, and
+// this is held for as long as the process lives.
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+const stderrTailBytes = 4096
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > stderrTailBytes {
+		t.buf = t.buf[len(t.buf)-stderrTailBytes:]
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return strings.TrimSpace(string(t.buf))
 }
 
 // h264 is requested ahead of newer codecs on purpose. AV1 and VP9 give smaller
@@ -38,6 +76,38 @@ type RemuxStream struct {
 // this has to play on a TV that may be years old.
 const remuxFormat = "bestvideo[height<=%d][vcodec^=avc1]+bestaudio[ext=m4a]/" +
 	"bestvideo[height<=%d]+bestaudio/best[height<=%d]"
+
+// How much of a media file ffmpeg and ffprobe may ask for in one request.
+//
+// **Never let either of them read open-ended.** CLAUDE.md §4 records this for
+// the instant tier, where the gateway does its own fetching and could obey it;
+// ffmpeg does its own HTTP and, left alone, asks for the rest of the file. That
+// request is answered with a redirect to a host that then refuses — measured on
+// a real 1080p URL:
+//
+//	curl -r 0-1048575  → 206
+//	curl -r 0-         → 302, and the host it points at → 403
+//	ffprobe, no option → 403 Forbidden, exit 1
+//	ffprobe -request_size 2M → the answer, in 0.14s
+//
+// It is the whole of `probe keyframe: exit status 1` followed by `open remux:
+// EOF` followed by a 502, which the ingest log carried for **every video** —
+// the mux only ever opened when the retry happened to be let through.
+//
+// 2 MiB matches the instant tier's `instantChunkBytes` and the same warning
+// applies: 8 MiB tracked the open-ended request exactly, failing with it. Do not
+// raise it without measuring again.
+const httpRequestSizeBytes = "2097152"
+
+// bufferedHTTP is the option pair that bounds every request ffmpeg makes.
+// `initial_request_size` covers probing and header parsing, which happens before
+// the first one and would otherwise be the request that gets refused.
+func bufferedHTTP() []string {
+	return []string{
+		"-request_size", httpRequestSizeBytes,
+		"-initial_request_size", httpRequestSizeBytes,
+	}
+}
 
 // ResolveRemuxURLs asks yt-dlp for the direct media URLs without downloading
 // anything. Two URLs mean adaptive streams to be muxed; one means the source
@@ -80,20 +150,30 @@ func (d *Downloader) ProbeKeyframe(ctx context.Context, videoURL string, at floa
 	// `%+#1` reads one packet from the interval and stops, so this fetches a few
 	// hundred kilobytes rather than walking the file.
 	interval := strconv.FormatFloat(at, 'f', 3, 64) + "%+#1"
-	cmd := exec.CommandContext(ctx, "ffprobe",
-		"-v", "error",
+	args := append([]string{"-v", "error"}, bufferedHTTP()...)
+	args = append(args,
 		"-read_intervals", interval,
 		"-select_streams", "v:0",
 		"-show_entries", "packet=pts_time",
 		"-of", "csv=p=0",
 		videoURL)
+	cmd := exec.CommandContext(ctx, "ffprobe", args...)
 	cmd.Stdin = nil
 
-	out, err := cmd.Output()
-	if err != nil {
-		return 0, fmt.Errorf("probe keyframe %.3f: %w", at, err)
+	// Kept, because "exit status 1" says only that ffprobe was unhappy. What it
+	// writes here is the difference between a URL upstream refused and a video
+	// with no keyframe where one was asked for, and those want opposite answers.
+	// Run rather than Output: the latter refuses to run at all once Stderr is
+	// set, and stderr is the whole point.
+	var stdout strings.Builder
+	var stderr tailBuffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return 0, fmt.Errorf("probe keyframe %.3f: %w: %s", at, err, stderr.String())
 	}
-	line := strings.TrimSpace(string(out))
+	line := strings.TrimSpace(stdout.String())
 	line = strings.TrimSuffix(strings.TrimSpace(strings.Split(line, "\n")[0]), ",")
 	pts, err := strconv.ParseFloat(line, 64)
 	if err != nil {
@@ -122,6 +202,11 @@ func remuxArgs(urls []string, startSeconds, audioStartSeconds float64) []string 
 			// on an hour-long video is minutes of work for a viewer waiting.
 			args = append(args, "-ss", strconv.FormatFloat(seekTo, 'f', 3, 64))
 		}
+		// Every request bounded — see httpRequestSizeBytes. Per input and before
+		// -i, like every other input option: after -i they would be output
+		// options and silently do nothing, which is exactly the shape of failure
+		// this is here to fix.
+		args = append(args, bufferedHTTP()...)
 		// Reconnect flags matter more here than for a file: these are signed
 		// CDN URLs being read for the length of a whole video.
 		args = append(args,
@@ -195,10 +280,14 @@ func (d *Downloader) OpenRemux(
 	if err != nil {
 		return nil, err
 	}
+	// Collected rather than discarded: a mux that fails produces no bytes, and
+	// the caller can only report that as EOF. The reason is here.
+	stderr := &tailBuffer{}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return &RemuxStream{cmd: cmd, stdout: stdout}, nil
+	return &RemuxStream{cmd: cmd, stdout: stdout, stderr: stderr}, nil
 }
 
 func (s *RemuxStream) Read(p []byte) (int, error) { return s.stdout.Read(p) }
