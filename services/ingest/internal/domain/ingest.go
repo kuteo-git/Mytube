@@ -227,6 +227,15 @@ type JobStore interface {
 	// ReleaseExpired returns jobs whose worker died back to the queue.
 	ReleaseExpired(ctx context.Context) (int, error)
 
+	// LastFailureFor reports when the most recent failed transfer of a URL
+	// finished. Found is false when none ever has.
+	//
+	// It answers "was this just tried?", which is a different question from
+	// "has this been refused for good" (UnavailableSourceFor) and needs a
+	// different answer: a 403 that lasts ten minutes is not a members-only
+	// video, and must not be recorded as one.
+	LastFailureFor(ctx context.Context, sourceURL string) (time.Time, bool, error)
+
 	// MarkUnavailable records that upstream has permanently refused a URL.
 	// Idempotent: the first refusal is the one kept, because the first is when
 	// it started being true.

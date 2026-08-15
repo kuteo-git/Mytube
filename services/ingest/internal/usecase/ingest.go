@@ -292,6 +292,33 @@ func (i *Ingest) ResolveStream(ctx context.Context, videoID string, refresh bool
 // straight away — marked as downloading rather than absent — and only then
 // queues the transfer.
 func (i *Ingest) Submit(ctx context.Context, url, requestedBy string, preferredHeight int32) (domain.Job, error) {
+	return i.submit(ctx, url, requestedBy, preferredHeight, true)
+}
+
+// How long a URL is left alone after a transfer of it failed.
+//
+// Nothing here decides *why* it failed, and that is the point. A temporary 403
+// is not recorded as a refusal — CLAUDE.md is emphatic that it must not be —
+// so nothing stopped the next request queueing the same doomed transfer again.
+// Measured on 53KMZ_uRJOc: three jobs in twenty-six seconds, each dying on the
+// same 403, because the player polls the stream answer every five seconds and
+// every poll schedules a download.
+//
+// Two minutes because the failures worth waiting out last minutes, and because
+// a viewer who does not want to wait has a button that says Retry.
+const failureCooldown = 2 * time.Minute
+
+// submit carries the one distinction that matters here: whether a person asked
+// for this.
+//
+// Automatic means the player, the prefetch, the repair, the scanner — anything
+// that will come round again on its own and would otherwise come round again
+// every five seconds. Deliberate means somebody pressed Retry, and a person
+// pressing Retry is the evidence that overturns a wait, exactly as it already
+// overturns a permanent refusal.
+func (i *Ingest) submit(
+	ctx context.Context, url, requestedBy string, preferredHeight int32, automatic bool,
+) (domain.Job, error) {
 	url = strings.TrimSpace(url)
 	if url == "" {
 		return domain.Job{}, fmt.Errorf("%w: url is required", domain.ErrInvalid)
@@ -312,6 +339,23 @@ func (i *Ingest) Submit(ctx context.Context, url, requestedBy string, preferredH
 	} else if found {
 		return domain.Job{}, fmt.Errorf("%w: %s",
 			domain.NewUnavailable(refusal.Reason, refusal.Detail), url)
+	}
+
+	// Tried a moment ago and it did not work. Enqueue is idempotent only while
+	// a job is still QUEUED or RUNNING, so a failure leaves nothing for the
+	// next request to attach to and it starts another one.
+	if automatic {
+		if failedAt, found, err := i.store.LastFailureFor(ctx, url); err != nil {
+			// The same reasoning as the refusal check above: losing this costs
+			// one wasted transfer, refusing on it would stop the library on a
+			// database hiccup.
+			i.logger.Warn("check last failure", "url", url, "error", err)
+		} else if since := time.Since(failedAt); found && since < failureCooldown {
+			// time.Now rather than an injected clock: the failure time comes
+			// from the store, so a test controls this by choosing that.
+			return domain.Job{}, fmt.Errorf("%w: %s failed %s ago",
+				domain.ErrInvalid, url, since.Truncate(time.Second))
+		}
 	}
 
 	job, err := i.store.Enqueue(ctx, domain.Job{
@@ -407,7 +451,7 @@ func (i *Ingest) RetryJob(ctx context.Context, jobID, requestedBy string) (domai
 		i.logger.Warn("clear unavailable source", "url", previous.SourceURL, "error", err)
 	}
 
-	job, err := i.Submit(ctx, previous.SourceURL, requestedBy, previous.PreferredHeight)
+	job, err := i.submit(ctx, previous.SourceURL, requestedBy, previous.PreferredHeight, false)
 	if err != nil {
 		return domain.Job{}, err
 	}

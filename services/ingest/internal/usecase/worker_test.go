@@ -97,6 +97,11 @@ func (f *fakeLibrary) SetMediaState(_ context.Context, _, state, _ string, _ int
 type fakeStore struct{}
 
 func (fakeStore) Enqueue(_ context.Context, j domain.Job) (domain.Job, error) { return j, nil }
+
+// No transfer of anything has ever failed, unless a test says otherwise.
+func (fakeStore) LastFailureFor(context.Context, string) (time.Time, bool, error) {
+	return time.Time{}, false, nil
+}
 func (fakeStore) Get(context.Context, string) (domain.Job, error)             { return domain.Job{}, nil }
 func (fakeStore) List(context.Context, bool, bool, int32) ([]domain.Job, error) {
 	return nil, nil

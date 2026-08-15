@@ -359,3 +359,28 @@ func (s *Store) MarkUnavailableReported(ctx context.Context, sourceURL string) e
 		`UPDATE unavailable_sources SET reported_at = now() WHERE source_url = $1`, sourceURL)
 	return err
 }
+
+// LastFailureFor reports when the most recent failed transfer of a URL
+// finished.
+//
+// Read rather than remembered in the process: the queue is in the database
+// precisely so that a restart does not lose it, and a cooldown held in memory
+// would forget the failure it exists to remember every time ingest restarts —
+// which, during a bad afternoon, is exactly when somebody restarts it.
+func (s *Store) LastFailureFor(ctx context.Context, sourceURL string) (time.Time, bool, error) {
+	var finishedAt *time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT finished_at FROM jobs
+		WHERE source_url = $1 AND state = 'FAILED' AND finished_at IS NOT NULL
+		ORDER BY finished_at DESC LIMIT 1`, sourceURL).Scan(&finishedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if finishedAt == nil {
+		return time.Time{}, false, nil
+	}
+	return *finishedAt, true, nil
+}

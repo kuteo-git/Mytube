@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -73,5 +74,36 @@ func TestCommentsRefusedUpstreamIsNotAServerError(t *testing.T) {
 	}
 	if body.Imported != 0 {
 		t.Errorf("imported = %d, want 0", body.Imported)
+	}
+}
+
+// The player asks for the stream answer every five seconds while there is no
+// local copy, and every ask used to schedule a download.
+//
+// While things worked this was invisible: Enqueue is idempotent for as long as
+// a job is QUEUED or RUNNING. The moment one failed there was nothing left to
+// attach to, and the next poll started another — three jobs in twenty-six
+// seconds, measured on 53KMZ_uRJOc against a 403 that had nothing to do with
+// how many times it was asked.
+func TestTheSameDownloadIsNotScheduledOnEveryPoll(t *testing.T) {
+	var g Gateway
+	now := time.Now()
+
+	if !g.downloadsAsked.claim("https://youtu.be/abc", now) {
+		t.Fatal("the first ask was refused")
+	}
+	for _, after := range []time.Duration{time.Second, 5 * time.Second, 59 * time.Second} {
+		if g.downloadsAsked.claim("https://youtu.be/abc", now.Add(after)) {
+			t.Errorf("asked again after %s", after)
+		}
+	}
+	// A different video is a different question.
+	if !g.downloadsAsked.claim("https://youtu.be/other", now.Add(time.Second)) {
+		t.Error("another video was refused")
+	}
+	// And the wait does end: nothing here may make a video permanently
+	// unfetchable, which is what a cooldown with no exit would be.
+	if !g.downloadsAsked.claim("https://youtu.be/abc", now.Add(submitCooldown+time.Second)) {
+		t.Error("still refused after the cooldown")
 	}
 }

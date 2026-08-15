@@ -46,6 +46,9 @@ type Gateway struct {
 	// external drive which may not be mounted (CLAUDE.md §8.1), and a setting
 	// nobody can save because a disk is unplugged would be its own bug.
 	configDir string
+	// downloadsAsked keeps the player's five-second poll from asking ingest to
+	// schedule the same download twelve times a minute. See ensureDownload.
+	downloadsAsked askedRecently
 }
 
 func NewGateway(

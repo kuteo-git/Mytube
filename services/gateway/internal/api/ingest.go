@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -404,7 +405,57 @@ func (g *Gateway) handleListJobs(w http.ResponseWriter, r *http.Request) {
 // ensureDownload schedules a cached copy. Failures are logged and dropped: the
 // user is already watching from upstream, so a queueing problem must not
 // surface as a playback error.
+// How long one asking is enough for.
+//
+// The player re-asks the stream answer every five seconds while there is no
+// local copy, and every ask used to schedule a download. Enqueue is idempotent
+// while a job is QUEUED or RUNNING, so this was invisible for as long as things
+// worked — and the moment one failed, the next poll started another. Three jobs
+// in twenty-six seconds, measured.
+//
+// Ingest refuses a URL that has just failed regardless of who asks (see
+// failureCooldown), which is the rule; this is the manners. There is no reason
+// to send twelve requests a minute across a service boundary to be told no
+// eleven times.
+const submitCooldown = time.Minute
+
+// asked remembers which URLs have been sent to ingest recently.
+//
+// In memory and not persisted: a gateway restart forgetting this costs one
+// extra Submit, and ingest's own rule is what actually protects the queue.
+type askedRecently struct {
+	mu   sync.Mutex
+	when map[string]time.Time
+}
+
+func (a *askedRecently) claim(url string, now time.Time) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.when == nil {
+		a.when = map[string]time.Time{}
+	}
+	if last, found := a.when[url]; found && now.Sub(last) < submitCooldown {
+		return false
+	}
+	// Swept here rather than on a timer: a household watches a handful of
+	// videos at a time, and a map that only grows while the process lives is a
+	// leak however slow.
+	if len(a.when) > 256 {
+		for k, t := range a.when {
+			if now.Sub(t) >= submitCooldown {
+				delete(a.when, k)
+			}
+		}
+	}
+	a.when[url] = now
+	return true
+}
+
 func (g *Gateway) ensureDownload(sourceURL, userID string) {
+	if !g.downloadsAsked.claim(sourceURL, time.Now()) {
+		return
+	}
+
 	ctx, cancel := contextWithTimeout(10 * time.Second)
 	defer cancel()
 
