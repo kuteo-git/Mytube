@@ -177,11 +177,18 @@ export function EqualizerSetting({
               neither edge lined up with the fader bank above running the full
               width. Stacking gives every row in this panel the same two edges,
               and gives the slider back the 100px it was spending on text. */}
-          <div className="flex items-baseline justify-between pt-3 text-xs text-text-2">
+          <div className="flex items-baseline justify-between pt-5 text-xs text-text-2">
             <span>Preamp</span>
             <span className="tabular-nums">{formatDb(settings.preamp)}</span>
           </div>
-          <div className="flex">
+          {/* Pulled up against its own title.
+
+              The slider's box is 44px so it can be grabbed, but the track it
+              draws is 4px in the middle of that — so 20px of the gap under the
+              title is the hit area and not space anyone chose. The negative
+              margin spends that, and only that: the box keeps its full height,
+              and what closes up is the emptiness above the track. */}
+          <div className="-mt-2 flex">
             <LinearSlider
               label="Preamp"
               min={MIN_PREAMP_DB}
@@ -240,11 +247,11 @@ export function EqualizerSetting({
           })}
         </div>
 
-        <div className="flex items-baseline justify-between pt-2 text-xs text-text-2">
+        <div className="flex items-baseline justify-between pt-5 text-xs text-text-2">
           <span>Dry/Wet</span>
           <span className="tabular-nums">{Math.round(reverb.wet * 100)}%</span>
         </div>
-        <div className="flex">
+        <div className="-mt-2 flex">
           <LinearSlider
             label="Dry wet mix"
             min={0}
