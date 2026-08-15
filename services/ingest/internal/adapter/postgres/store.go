@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -383,4 +384,60 @@ func (s *Store) LastFailureFor(ctx context.Context, sourceURL string) (time.Time
 		return time.Time{}, false, nil
 	}
 	return *finishedAt, true, nil
+}
+
+// RequeueFailed puts one failed transfer back on the queue, if any is due.
+//
+// One per call on purpose. There is a single worker slot, so requeueing ten at
+// once makes nothing arrive sooner; what it does make is a burst of requests to
+// an address that has just been refusing them, which is the behaviour §8 risk 6
+// is about. A bad afternoon leaves the failures spread over the sweeps that
+// follow rather than fired off together.
+//
+// The backoff grows with attempts, and attempts is the same column the lease
+// sweep already counts on — Claim increments it, so a job's third attempt is
+// waiting out the third interval. Beyond the last one there is nothing more to
+// try: `attempts >= len(backoff)` is where a job stays FAILED for good, with
+// the Retry button under it that was always there.
+//
+// Skips what has been dismissed (somebody has dealt with it) and what upstream
+// has refused for good (asking again is the thing unavailable_sources exists to
+// stop).
+func (s *Store) RequeueFailed(ctx context.Context, backoff []time.Duration) (domain.Job, bool, error) {
+	if len(backoff) == 0 {
+		return domain.Job{}, false, nil
+	}
+	// One CASE per step, so the wait is chosen by how many attempts a row has
+	// already had rather than by a single interval applied to all of them.
+	waits := make([]string, 0, len(backoff))
+	args := make([]any, 0, len(backoff))
+	for i, d := range backoff {
+		waits = append(waits, fmt.Sprintf("WHEN attempts <= %d THEN $%d::interval", i+1, i+1))
+		args = append(args, d.String())
+	}
+
+	j, err := scanJob(s.pool.QueryRow(ctx, `
+		UPDATE jobs SET state = 'QUEUED', finished_at = NULL, lease_expires_at = NULL
+		WHERE id = (
+			SELECT j.id FROM jobs j
+			WHERE j.state = 'FAILED'
+			  AND j.dismissed_at IS NULL
+			  AND j.attempts <= `+strconv.Itoa(len(backoff))+`
+			  AND j.finished_at IS NOT NULL
+			  AND j.finished_at < now() - (CASE `+strings.Join(waits, " ")+` END)
+			  AND NOT EXISTS (
+			      SELECT 1 FROM unavailable_sources u WHERE u.source_url = j.source_url
+			  )
+			ORDER BY j.finished_at
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1
+		)
+		RETURNING `+jobColumns, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Job{}, false, nil
+	}
+	if err != nil {
+		return domain.Job{}, false, err
+	}
+	return j, true, nil
 }

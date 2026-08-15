@@ -102,6 +102,11 @@ func (fakeStore) Enqueue(_ context.Context, j domain.Job) (domain.Job, error) { 
 func (fakeStore) LastFailureFor(context.Context, string) (time.Time, bool, error) {
 	return time.Time{}, false, nil
 }
+
+// Nothing is ever due for another go, unless a test says otherwise.
+func (fakeStore) RequeueFailed(context.Context, []time.Duration) (domain.Job, bool, error) {
+	return domain.Job{}, false, nil
+}
 func (fakeStore) Get(context.Context, string) (domain.Job, error)             { return domain.Job{}, nil }
 func (fakeStore) List(context.Context, bool, bool, int32) ([]domain.Job, error) {
 	return nil, nil

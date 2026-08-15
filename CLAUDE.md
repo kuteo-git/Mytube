@@ -99,6 +99,19 @@ Every call into yt-dlp goes through **one builder** (`ytdlp/session.go`, `newCom
 - `YTDLP_PLAYER_CLIENT` sets `youtube:player_client`. **Unmeasured and off by default**, said plainly: the refusals it exists for come in waves — the same URL answered 206, then 403, then 206 again inside an hour — so on the day it was written there was no way to tell one client from another. It is a lever for the next wave.
 - Cookies were considered and *not* switched on: they tie a real YouTube account to every media request, and yt-dlp's own warning about accounts is about traffic that looks like this.
 
+### A transfer that failed
+
+Two rules, answering different questions, both reached through `Submit`:
+
+- **Do not try again immediately.** A URL whose transfer failed under `failureCooldown` (2 min) ago is refused. Measured on `53KMZ_uRJOc`: **three jobs in twenty-six seconds**, each dying on the same 403, because the player re-asks `/stream` every 5s, every ask schedules a download, and `Enqueue` is idempotent only while a job is QUEUED or RUNNING — a failure left nothing to attach to. This is §4's "thirteen jobs in two minutes" reached through the door that must stay open: a temporary 403 is deliberately never recorded as a permanent refusal. The gateway also stops asking (`askedRecently`, 1 min) — ingest's rule is the rule, the gateway's is the manners.
+- **Do try again later.** `RequeueFailed` puts **one** failed job back per sweep (1 min), waiting `retryBackoff` = **2 min → 10 min → 30 min** by `attempts`, then leaving it FAILED for good. One at a time because there is a single worker slot, so requeueing ten only produces a burst at an address that has just been refusing them. Skips dismissed jobs and anything in `unavailable_sources` — that question already has exactly one place that answers it.
+- **A person pressing Retry is held by neither** (`submit(..., automatic: false)`), the same reasoning that already lets Retry clear a permanent refusal.
+- No new job state. A job waiting for its next go stays `FAILED` with the Retry button it always had; `RETRYING` would change the proto, the UI, and the meaning of `FAILED` everywhere, to tell the viewer something they only need to know if it is not working.
+
+**What the retries are for**: googlevideo refuses this address in waves lasting a few minutes, and inside a wave everything is refused — `/instant`, the mux, and yt-dlp's own transfer alike. Three hypotheses for a narrower cause were tested and **all failed to reproduce** outside a wave: the audio track being special (206/206 on both tracks, ×3), two requests close together (3 concurrent pairs, all 206), and the mux competing with the download of the same video (a real download running alongside, all 206). The 6-of-6 log correlation between a mux failure and a download claim is an artefact — pressing play starts both, so they always coincide.
+
+**The remux tier cannot be retried this way.** It already re-resolves once, 1.5s later, which is inside the same wave; waiting minutes is not something a viewer waiting for a picture can do. The answer there is the tier machinery: stay on the low rendition and climb to the local file when it lands.
+
 ### Eviction
 
 Every video has `last_accessed_at` + `pinned`. Above the high-water mark, the **media file** of the least-recently-used unpinned video is deleted, keeping metadata + thumbnail + history. The UI shows "Removed — press to fetch again". Thresholds are set by `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.

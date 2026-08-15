@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"time"
 
@@ -31,6 +32,12 @@ type Worker struct {
 }
 
 func NewWorker(ingest *Ingest, logger *slog.Logger) *Worker {
+	// Guarded the same way New guards it. Every path through this type logs,
+	// so a nil logger is not a quiet worker, it is a panic on the first thing
+	// that happens to go wrong.
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	return &Worker{ingest: ingest, logger: logger}
 }
 
@@ -74,8 +81,48 @@ func (w *Worker) sweep(ctx context.Context) {
 			if released > 0 {
 				w.logger.Info("released expired jobs", "count", released)
 			}
+
+			w.retryFailed(ctx)
 		}
 	}
+}
+
+// How long a failed transfer waits before being tried again, per attempt.
+//
+// Growing, because the failure this is written for is upstream refusing this
+// address for a few minutes at a time — measured repeatedly, and it takes
+// yt-dlp's own downloads with it — and by the third try there is no reason to
+// be in a hurry. Every attempt is also a request counted against this address
+// (CLAUDE.md §8, risk 6), so being patient is not merely polite.
+//
+// Three of them, ending after about forty minutes. Past that, waiting longer
+// stops being a retry and becomes a promise nobody is watching for; the job
+// stays FAILED with the Retry button it always had.
+var retryBackoff = []time.Duration{2 * time.Minute, 10 * time.Minute, 30 * time.Minute}
+
+// retryFailed gives one failed transfer another go.
+//
+// A failed job used to wait for a person, and most of what fails here is not
+// something a person can help with: a 403 that lasts two minutes needs nothing
+// but two minutes. yt-dlp already recovers this way within a single transfer —
+// "transfer refused, resolving again" and then a job that succeeds — and this
+// is the same idea one level up, for the refusals that outlast a process.
+//
+// What it is deliberately not: a second opinion about whether a video can be
+// fetched. Anything upstream has refused for good is recorded in
+// unavailable_sources and skipped here, because that question already has one
+// place that answers it.
+func (w *Worker) retryFailed(ctx context.Context) {
+	job, requeued, err := w.ingest.store.RequeueFailed(ctx, retryBackoff)
+	if err != nil {
+		w.logger.Warn("requeue failed jobs", "error", err)
+		return
+	}
+	if !requeued {
+		return
+	}
+	w.logger.Info("failed transfer queued again",
+		"job", job.ID, "url", job.SourceURL, "attempt", job.Attempts+1)
 }
 
 func (w *Worker) runOnce(ctx context.Context) (bool, error) {

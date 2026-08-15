@@ -226,6 +226,13 @@ type JobStore interface {
 	Finish(ctx context.Context, jobID string, state JobState, errorMessage string) error
 	// ReleaseExpired returns jobs whose worker died back to the queue.
 	ReleaseExpired(ctx context.Context) (int, error)
+	// RequeueFailed puts one failed transfer back on the queue if any is due,
+	// waiting backoff[attempts] since it failed. False means none was.
+	//
+	// One at a time: there is a single worker slot, so requeueing several at
+	// once only produces a burst of requests to an address that has just been
+	// refusing them.
+	RequeueFailed(ctx context.Context, backoff []time.Duration) (Job, bool, error)
 
 	// LastFailureFor reports when the most recent failed transfer of a URL
 	// finished. Found is false when none ever has.
