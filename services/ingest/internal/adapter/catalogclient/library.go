@@ -157,6 +157,7 @@ func (l *Library) ListVideosNeedingBackfill(ctx context.Context, limit int32) ([
 		refs  []domain.VideoRef
 		token string
 	)
+	var all []*catalogv1.VideoFeatures
 	for {
 		resp, err := l.client.ListVideoFeatures(ctx, connect.NewRequest(&catalogv1.ListVideoFeaturesRequest{
 			PageSize:  pageSize,
@@ -165,28 +166,61 @@ func (l *Library) ListVideosNeedingBackfill(ctx context.Context, limit int32) ([
 		if err != nil {
 			return nil, err
 		}
-
-		for _, v := range resp.Msg.GetVideos() {
-			hasTopics := len(v.GetTopics()) > 0
-			hasPub := v.GetPublishedAt() != nil
-			if hasTopics && hasPub {
-				continue
-			}
-			ref := domain.VideoRef{VideoID: v.GetVideoId()}
-			if hasTopics {
-				ref.MissingPublishedAt = true
-			}
-			refs = append(refs, ref)
-			if limit > 0 && int32(len(refs)) >= limit {
-				return refs, nil
-			}
-		}
+		all = append(all, resp.Msg.GetVideos()...)
 
 		token = resp.Msg.GetNextPageToken()
 		if token == "" {
-			return refs, nil
+			break
 		}
 	}
+
+	refs = selectBackfillRefs(all, limit)
+	return refs, nil
+}
+
+// selectBackfillRefs picks which videos a pass should spend itself on, worst
+// gap first.
+//
+// The walk no longer stops at the limit, because what to take can only be
+// decided once everything on offer has been seen. That costs about seventeen
+// calls to catalog on this library — local, and not one of them reaches
+// YouTube, which is the only budget that matters here. The number of full
+// metadata fetches is unchanged, and it is still the limit that sets it.
+//
+// The order is the point. A missing date takes the video out of the feed
+// altogether; a missing duration leaves the card reading 0:00; a missing topic
+// only ranks it more weakly, and it is still there to be found. Topic-only gaps
+// outnumbered the rest 4798 to 1123, so taking whichever came first spent a
+// 200-video pass on the cheapest problem — 43 videos updated and 4 dates
+// filled, at which rate the dates would never have been finished.
+func selectBackfillRefs(videos []*catalogv1.VideoFeatures, limit int32) []domain.VideoRef {
+	var urgent, rest []domain.VideoRef
+
+	for _, v := range videos {
+		hasTopics := len(v.GetTopics()) > 0
+		hasPub := v.GetPublishedAt() != nil
+		hasDuration := v.GetDurationSeconds() > 0
+		if hasTopics && hasPub && hasDuration {
+			continue
+		}
+
+		ref := domain.VideoRef{
+			VideoID:            v.GetVideoId(),
+			MissingPublishedAt: hasTopics && !hasPub,
+			MissingDuration:    !hasDuration,
+		}
+		if !hasPub || !hasDuration {
+			urgent = append(urgent, ref)
+		} else {
+			rest = append(rest, ref)
+		}
+	}
+
+	out := append(urgent, rest...)
+	if limit > 0 && int32(len(out)) > limit {
+		out = out[:limit]
+	}
+	return out
 }
 
 func (l *Library) ListSubscribedChannels(ctx context.Context) ([]domain.SubscribedChannel, error) {

@@ -291,17 +291,18 @@ func (i *Ingest) backfillOne(ctx context.Context, ref domain.VideoRef) bool {
 
 	preview.ID = ref.VideoID
 
-	if ref.MissingPublishedAt {
-		// Video has topics — we only need published_at. Even with no category
-		// from YouTube, the preview already gave us the date and UpsertVideo
-		// writes it via COALESCE.
-	} else {
-		if preview.Category == "" {
-			// Fetched fine, but YouTube publishes no category for it. Writing an
-			// empty topic list would be indistinguishable from not having tried.
-			return false
-		}
+	// A date and a duration come back with every preview, so those refs are
+	// finished by the upsert whatever else YouTube says. A topic needs a
+	// category to exist upstream, and writing an empty topic list would be
+	// indistinguishable from not having tried.
+	switch {
+	case preview.Category != "":
 		preview.Topics = categoryTopics(preview)
+	case ref.MissingPublishedAt || ref.MissingDuration:
+		// Nothing to file it under, but the metadata this ref was picked for is
+		// already in hand.
+	default:
+		return false
 	}
 
 	// Upsert preserves media_state, media_path and added_at, and unions topics

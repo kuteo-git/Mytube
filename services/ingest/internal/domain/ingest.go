@@ -274,7 +274,15 @@ type Library interface {
 type VideoRef struct {
 	VideoID           string
 	SourceURL         string
-	MissingPublishedAt bool // true when the video has topics but no published_at
+	// True when the video has topics but no published_at. Set separately from
+	// MissingDuration because it changes what the backfill may conclude: a video
+	// that only lacks metadata is finished by whatever Preview returns, while
+	// one that lacks a topic needs a category to exist upstream.
+	MissingPublishedAt bool
+	// True when the stored duration is zero, which is what a card showing 0:00
+	// is reading. RSS carries no duration, and for a while the upsert let it
+	// write that absence over a real one.
+	MissingDuration bool
 }
 
 // SubscribedChannel is a channel a user chose to follow. Subscriptions are a

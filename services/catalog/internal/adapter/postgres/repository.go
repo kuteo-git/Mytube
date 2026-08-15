@@ -398,14 +398,27 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		ON CONFLICT (id) DO UPDATE
 		SET title = EXCLUDED.title,
 		    channel_id = EXCLUDED.channel_id,
-		    duration_seconds = EXCLUDED.duration_seconds,
 		    -- A later scan that knows less must not erase what an earlier full
 		    -- metadata fetch established.
+		    --
+		    -- duration, description and hashtags were the exception, and this is
+		    -- the comment they sat under: the RSS pass over subscribed channels
+		    -- runs every five minutes and carries none of the three, so it wrote
+		    -- a zero duration and an empty description over every upload of the
+		    -- last 48 hours. 37% of videos published inside that window had no
+		    -- duration against 6.5% outside it, and 609 of 617 had no
+		    -- description at all.
+		    --
+		    -- A video whose description is genuinely emptied upstream keeps the
+		    -- old text here. That is the same trade thumbnail_path makes on the
+		    -- line below, and the same way round.
+		    duration_seconds = COALESCE(NULLIF(EXCLUDED.duration_seconds, 0), videos.duration_seconds),
 		    view_count = COALESCE(EXCLUDED.view_count, videos.view_count),
 		    published_at = COALESCE(EXCLUDED.published_at, videos.published_at),
 		    thumbnail_path = COALESCE(NULLIF(EXCLUDED.thumbnail_path, ''), videos.thumbnail_path),
-		    description = EXCLUDED.description,
-		    hashtags = EXCLUDED.hashtags,
+		    description = COALESCE(NULLIF(EXCLUDED.description, ''), videos.description),
+		    hashtags = CASE WHEN cardinality(EXCLUDED.hashtags) = 0
+		                    THEN videos.hashtags ELSE EXCLUDED.hashtags END,
 		    -- Topics accumulate: a video discovered under a second topic keeps
 		    -- the first one instead of being reassigned.
 		    topics = ARRAY(SELECT DISTINCT unnest(videos.topics || EXCLUDED.topics)),
