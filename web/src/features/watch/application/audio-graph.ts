@@ -42,12 +42,25 @@ import {
   dbToGain,
   type EqSettings,
 } from './eq-presets'
+import {
+  buildImpulseResponse,
+  clampWet,
+  reverbPresetByName,
+  type ReverbPreset,
+  type ReverbPresetName,
+  type ReverbSettings,
+} from './reverb-presets'
 
 interface Graph {
   ctx: AudioContext
   /** Where every element's gain lands, ahead of the filters. */
   eqInput: GainNode
   filters: BiquadFilterNode[]
+  /** The signal as it left the equaliser, untouched by the room. */
+  dry: GainNode
+  convolver: ConvolverNode
+  /** The room's output, and the whole of the Dry/Wet control. */
+  wet: GainNode
   preamp: GainNode
 }
 
@@ -113,11 +126,38 @@ function buildGraph(): Graph | null {
     tail.connect(filter)
     tail = filter
   }
-  tail.connect(preamp)
+
+  /*
+   * The room splits off here, after the equaliser and before the preamp.
+   *
+   * After the equaliser because the room should answer the sound the viewer
+   * chose, not the one before it. Before the preamp because reverb *adds*
+   * energy — a wet signal is the dry one plus a tail — and the preamp is the
+   * trim that pays for clipping. Behind it, the one control meant to stop
+   * distortion would have no authority over a thing that causes it.
+   *
+   * Both paths exist permanently, for the reason the filters do: with the wet
+   * gain at zero and no impulse response loaded, the convolver emits silence and
+   * costs nothing, so "no reverb" is the same graph rather than a different one.
+   */
+  const dry = ctx.createGain()
+  dry.gain.value = 1
+  const convolver = ctx.createConvolver()
+  // Left at its default `normalize = true`: the synthesised responses are not
+  // level-matched to each other, and without it choosing Cathedral would be a
+  // change of volume as much as a change of space.
+  const wet = ctx.createGain()
+  wet.gain.value = 0
+
+  tail.connect(dry)
+  tail.connect(convolver)
+  convolver.connect(wet)
+  dry.connect(preamp)
+  wet.connect(preamp)
   preamp.connect(ctx.destination)
 
   armResume(ctx)
-  return { ctx, eqInput, filters, preamp }
+  return { ctx, eqInput, filters, dry, convolver, wet, preamp }
 }
 
 /**
@@ -291,4 +331,62 @@ export function applyEq(settings: EqSettings): void {
     now,
     0.02,
   )
+}
+
+/**
+ * Impulse responses already built, one per preset.
+ *
+ * Built on demand rather than at start-up, and kept afterwards. Each one is
+ * seconds of stereo audio filled a sample at a time — a couple of megabytes and
+ * a loop of a few hundred thousand iterations — which is affordable once when
+ * somebody picks a room and not affordable on every change of the wet slider.
+ */
+const impulses = new Map<ReverbPresetName, AudioBuffer>()
+
+function impulseFor(ctx: BaseAudioContext, preset: ReverbPreset): AudioBuffer {
+  const cached = impulses.get(preset.name)
+  if (cached) return cached
+  const built = buildImpulseResponse(ctx, preset)
+  impulses.set(preset.name, built)
+  return built
+}
+
+/**
+ * Apply the room.
+ *
+ * Dry and wet are a plain crossfade summing to one, which is what "Dry/Wet Mix"
+ * means everywhere it appears: at zero the room is silent and the signal is
+ * exactly what the equaliser produced.
+ *
+ * Ramped over 60 ms rather than the 20 ms the equaliser uses. A filter's gain
+ * moving quickly is inaudible; a reverb tail appearing quickly is a swell, and
+ * the slider is dragged rather than set.
+ */
+export function applyReverb(settings: ReverbSettings): void {
+  const g = graph
+  if (!g) return
+  const now = g.ctx.currentTime
+  const preset = settings.enabled ? reverbPresetByName(settings.preset) : undefined
+
+  if (preset) {
+    // Only ever assigned when a room is actually wanted. A convolver holding a
+    // buffer convolves whatever reaches it even at zero wet gain, and that is
+    // the one cost in this whole graph worth avoiding on a television.
+    const buffer = impulseFor(g.ctx, preset)
+    if (g.convolver.buffer !== buffer) g.convolver.buffer = buffer
+  }
+
+  const wet = preset ? clampWet(settings.wet) : 0
+  g.wet.gain.setTargetAtTime(wet, now, 0.06)
+  g.dry.gain.setTargetAtTime(1 - wet, now, 0.06)
+
+  if (!preset) {
+    // Let the tail finish before the buffer goes, or the room is cut off
+    // mid-decay — which is heard as a click rather than as switching something
+    // off. Nothing depends on this having happened, so a missed timer is
+    // harmless: the wet gain is already zero.
+    window.setTimeout(() => {
+      if (graph === g && g.wet.gain.value === 0) g.convolver.buffer = null
+    }, 400)
+  }
 }

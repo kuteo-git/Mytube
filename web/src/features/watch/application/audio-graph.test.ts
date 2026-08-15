@@ -43,13 +43,21 @@ class FakeFilter extends FakeNode {
   gain = new FakeParam()
 }
 
+class FakeConvolver extends FakeNode {
+  buffer: unknown = null
+  normalize = true
+}
+
 class FakeContext {
   static sources = new Set<unknown>()
   static gains: FakeGain[] = []
   static filters: FakeFilter[] = []
+  static convolvers: FakeConvolver[] = []
+  static buffersBuilt = 0
 
   state: AudioContextState = 'suspended'
   currentTime = 0
+  sampleRate = 48000
   destination = new FakeNode()
   resume = vi.fn(async () => {
     this.state = 'running'
@@ -60,6 +68,22 @@ class FakeContext {
     const g = new FakeGain()
     FakeContext.gains.push(g)
     return g
+  }
+  createConvolver() {
+    const c = new FakeConvolver()
+    FakeContext.convolvers.push(c)
+    return c
+  }
+  createBuffer(channels: number, length: number, rate: number) {
+    FakeContext.buffersBuilt++
+    const data = Array.from({ length: channels }, () => new Float32Array(length))
+    return {
+      numberOfChannels: channels,
+      length,
+      sampleRate: rate,
+      duration: length / rate,
+      getChannelData: (i: number) => data[i],
+    }
   }
   createBiquadFilter() {
     const f = new FakeFilter()
@@ -80,6 +104,8 @@ async function loadModule() {
   FakeContext.sources = new Set()
   FakeContext.gains = []
   FakeContext.filters = []
+  FakeContext.convolvers = []
+  FakeContext.buffersBuilt = 0
   vi.stubGlobal('AudioContext', FakeContext)
   return import('./audio-graph')
 }
@@ -229,7 +255,9 @@ describe('applyEq', () => {
   it('turns the preamp into a linear multiplier', async () => {
     const { getAudioContext, applyEq } = await loadModule()
     getAudioContext()
-    const preamp = FakeContext.gains[FakeContext.gains.length - 1]
+    // Second gain the graph builds, after eqInput. It used to be the last one,
+    // until the reverb added dry and wet behind it.
+    const preamp = FakeContext.gains[1]
     applyEq({ enabled: true, gains: BANDS.map(() => 0), preamp: -6, preset: 'custom' })
     expect(preamp.gain.value).toBeCloseTo(0.501, 3)
   })
@@ -262,5 +290,80 @@ describe('resumeAudio', () => {
   it('is safe before anything built a context', async () => {
     const { resumeAudio } = await loadModule()
     expect(() => resumeAudio()).not.toThrow()
+  })
+})
+
+describe('applyReverb', () => {
+  const room = { enabled: true, preset: 'hall' as const, wet: 0.4 }
+
+  /**
+   * The dry and wet gains, by the order the graph builds them in:
+   * eqInput, preamp, dry, wet — element gains are appended after those.
+   */
+  const mixGains = () => ({ dry: FakeContext.gains[2], wet: FakeContext.gains[3] })
+
+  it('crossfades dry against wet so the two always sum to one', async () => {
+    const { getAudioContext, applyReverb } = await loadModule()
+    getAudioContext()
+    const convolver = FakeContext.convolvers[0]
+    applyReverb(room)
+    expect(convolver.buffer).not.toBeNull()
+    const { dry, wet } = mixGains()
+    expect(wet.gain.value).toBeCloseTo(0.4)
+    expect(dry.gain.value).toBeCloseTo(0.6)
+  })
+
+  it('goes fully dry when switched off', async () => {
+    const { getAudioContext, applyReverb } = await loadModule()
+    getAudioContext()
+    applyReverb(room)
+    applyReverb({ ...room, enabled: false })
+    const { dry, wet } = mixGains()
+    expect(wet.gain.value).toBe(0)
+    expect(dry.gain.value).toBe(1)
+  })
+
+  it('builds each impulse response once and keeps it', async () => {
+    // Seconds of stereo audio filled a sample at a time. Affordable when
+    // somebody picks a room; not affordable on every drag of the wet slider.
+    const { getAudioContext, applyReverb } = await loadModule()
+    getAudioContext()
+    applyReverb(room)
+    const afterFirst = FakeContext.buffersBuilt
+    applyReverb({ ...room, wet: 0.5 })
+    applyReverb({ ...room, wet: 0.6 })
+    expect(FakeContext.buffersBuilt).toBe(afterFirst)
+  })
+
+  it('builds a second response for a second room', async () => {
+    const { getAudioContext, applyReverb } = await loadModule()
+    getAudioContext()
+    applyReverb(room)
+    const afterFirst = FakeContext.buffersBuilt
+    applyReverb({ ...room, preset: 'cathedral' })
+    expect(FakeContext.buffersBuilt).toBeGreaterThan(afterFirst)
+  })
+
+  it('loads no response at all until a room is chosen', async () => {
+    // A convolver holding a buffer convolves whatever reaches it even at zero
+    // wet gain, which is the one cost in this graph worth avoiding on a TV.
+    const { getAudioContext, applyReverb } = await loadModule()
+    getAudioContext()
+    applyReverb({ enabled: false, preset: 'room', wet: 0.25 })
+    expect(FakeContext.convolvers[0].buffer).toBeNull()
+    expect(FakeContext.buffersBuilt).toBe(0)
+  })
+
+  it('ignores a room that no longer exists rather than throwing', async () => {
+    const { getAudioContext, applyReverb } = await loadModule()
+    getAudioContext()
+    applyReverb({ enabled: true, preset: 'cavern' as never, wet: 0.5 })
+    expect(FakeContext.convolvers[0].buffer).toBeNull()
+  })
+
+  it('does nothing at all before a graph exists', async () => {
+    const { applyReverb } = await loadModule()
+    expect(() => applyReverb(room)).not.toThrow()
+    expect(FakeContext.convolvers).toHaveLength(0)
   })
 })

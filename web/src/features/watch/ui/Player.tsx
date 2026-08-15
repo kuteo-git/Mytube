@@ -51,10 +51,14 @@ import {
   resumeAudio,
   setElementGain,
   applyEq,
+  applyReverb,
 } from '@/features/watch/application/audio-graph'
-import { loadEqSettings, saveEqSettings } from '@/features/watch/application/eq-prefs'
+import {
+  loadAudioSettings,
+  saveAudioSettings,
+  type AudioSettings,
+} from '@/features/watch/application/audio-prefs'
 import { EqualizerSetting } from '@/features/watch/ui/EqualizerPanel'
-import type { EqSettings } from '@/features/watch/application/eq-presets'
 import { formatDuration as formatEta } from '@/features/watch/application/narration-eta'
 import {
   loadNarrationPrefs,
@@ -836,18 +840,23 @@ export function Player({
   }, [])
 
   /**
-   * The equaliser curve, on this device.
+   * How this device sounds: the equaliser curve and the room.
    *
    * Held here rather than in the panel so it survives the panel being closed,
    * and pushed into the graph by an effect so that the only way to change the
    * sound is to change this state — there is no second path that writes filters
    * directly.
+   *
+   * Two effects rather than one, keyed on the two halves. Rebuilding an impulse
+   * response is a loop over hundreds of thousands of samples, and moving an
+   * equaliser slider has nothing to say to it.
    */
-  const [eq, setEqState] = useState(loadEqSettings)
-  useEffect(() => { applyEq(eq) }, [eq])
-  const setEq = useCallback((next: EqSettings) => {
-    saveEqSettings(next)
-    setEqState(next)
+  const [audio, setAudioState] = useState(loadAudioSettings)
+  useEffect(() => { applyEq(audio.eq) }, [audio.eq])
+  useEffect(() => { applyReverb(audio.reverb) }, [audio.reverb])
+  const setAudio = useCallback((next: AudioSettings) => {
+    saveAudioSettings(next)
+    setAudioState(next)
   }, [])
 
   // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
@@ -2947,8 +2956,8 @@ export function Player({
               {subtitleRows}
               {narrationRows}
               <EqualizerSetting
-                settings={eq}
-                onChange={setEq}
+                audio={audio}
+                onChange={setAudio}
                 element={front()}
                 tall={coarse}
               />

@@ -12,6 +12,13 @@ import {
   type EqSettings,
   type PresetName,
 } from '@/features/watch/application/eq-presets'
+import {
+  DEFAULT_WET,
+  REVERB_PRESETS,
+  type ReverbPresetName,
+  type ReverbSettings,
+} from '@/features/watch/application/reverb-presets'
+import type { AudioSettings } from '@/features/watch/application/audio-prefs'
 
 /**
  * The equaliser, as it appears inside the player's gear menu.
@@ -23,19 +30,23 @@ import {
  * another page is a curve chosen blind.
  */
 export function EqualizerSetting({
-  settings,
+  audio,
   onChange,
   element,
   tall,
 }: {
-  settings: EqSettings
-  onChange: (next: EqSettings) => void
+  audio: AudioSettings
+  onChange: (next: AudioSettings) => void
   /** The video in front, watched only to know whether it went full screen. */
   element: HTMLVideoElement | null
   /** Touch targets need 44px; a mouse is happy with less. */
   tall?: boolean
 }) {
   const bypassed = useNativeFullscreen(element)
+  const settings = audio.eq
+  const reverb = audio.reverb
+  const setEq = (next: EqSettings) => onChange({ ...audio, eq: next })
+  const setReverb = (next: ReverbSettings) => onChange({ ...audio, reverb: next })
 
   const setGain = (index: number, db: number) => {
     const gains = settings.gains.map((g, i) => (i === index ? db : g))
@@ -44,17 +55,32 @@ export function EqualizerSetting({
     // and a control that does nothing until a second control is found is the
     // dead button the charter forbids.
     const next: EqSettings = { ...settings, gains, enabled: true, preset: 'custom' }
-    onChange({ ...next, preset: identifyPreset(next) })
+    setEq({ ...next, preset: identifyPreset(next) })
   }
 
   const setPreamp = (db: number) => {
     const next: EqSettings = { ...settings, preamp: db, enabled: true, preset: 'custom' }
-    onChange({ ...next, preset: identifyPreset(next) })
+    setEq({ ...next, preset: identifyPreset(next) })
   }
 
   const pickPreset = (name: PresetName) => {
     if (name === 'custom') return
-    onChange(settingsForPreset(name))
+    setEq(settingsForPreset(name))
+  }
+
+  /**
+   * Choosing a room switches the reverb on and starts it at a quarter wet.
+   *
+   * Pressing the same one again switches it off, which is what makes this a row
+   * of rooms rather than a row of rooms plus an Off button that means the same
+   * thing as whichever one is currently lit.
+   */
+  const pickRoom = (name: ReverbPresetName) => {
+    if (reverb.enabled && reverb.preset === name) {
+      setReverb({ ...reverb, enabled: false })
+      return
+    }
+    setReverb({ enabled: true, preset: name, wet: reverb.wet || DEFAULT_WET })
   }
 
   return (
@@ -62,7 +88,7 @@ export function EqualizerSetting({
       <SettingRowLike
         label="Equalizer"
         on={settings.enabled}
-        onToggle={() => onChange({ ...settings, enabled: !settings.enabled })}
+        onToggle={() => setEq({ ...settings, enabled: !settings.enabled })}
       />
 
       {settings.enabled && (
@@ -177,6 +203,65 @@ export function EqualizerSetting({
           </p>
         </li>
       )}
+
+      {/*
+        The room. Named "Environment" after the control it imitates, and offering
+        four spaces rather than the dozen macOS has: these are synthesised rather
+        than recorded, and two labels over one sound would be a control that
+        cannot do what its name says.
+      */}
+      <li className="px-4 pb-3 pt-1">
+        <div className="pb-1.5 text-xs text-text-2">Environment</div>
+        <div role="radiogroup" aria-label="Environment" className="flex flex-wrap gap-1">
+          {REVERB_PRESETS.map((p) => {
+            const on = reverb.enabled && reverb.preset === p.name
+            return (
+              <button
+                key={p.name}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => pickRoom(p.name)}
+                className={clsx(
+                  'rounded-md px-2 text-xs font-medium transition-colors duration-150 ease-out',
+                  tall ? 'py-2' : 'py-1.5',
+                  on
+                    ? 'bg-invert-bg text-invert-text'
+                    : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
+                )}
+              >
+                {p.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {reverb.enabled && (
+          <>
+            <div className="flex items-center gap-2 pt-2">
+              <span className="w-14 shrink-0 text-xs text-text-2">Dry/Wet</span>
+              <input
+                type="range"
+                aria-label="Dry wet mix"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(reverb.wet * 100)}
+                onChange={(e) => setReverb({ ...reverb, wet: Number(e.target.value) / 100 })}
+                className="min-w-0 flex-1 accent-brand"
+              />
+              <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
+                {Math.round(reverb.wet * 100)}%
+              </span>
+            </div>
+            {bypassed && (
+              <p className="pt-1 text-[10px] text-brand" role="status">
+                Also off in fullscreen
+              </p>
+            )}
+          </>
+        )}
+      </li>
     </>
   )
 }

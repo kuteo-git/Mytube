@@ -112,6 +112,10 @@ class FakeFilter extends FakeNode {
   Q = new FakeParam()
   gain = new FakeParam()
 }
+class FakeConvolver extends FakeNode {
+  buffer: unknown = null
+  normalize = true
+}
 class FakeContext {
   state: AudioContextState = 'running'
   currentTime = 0
@@ -124,6 +128,18 @@ class FakeContext {
   }
   createBiquadFilter() {
     return new FakeFilter()
+  }
+  createConvolver() {
+    return new FakeConvolver()
+  }
+  createBuffer(channels: number, length: number, rate: number) {
+    const data = Array.from({ length: channels }, () => new Float32Array(length))
+    return {
+      numberOfChannels: channels,
+      length,
+      sampleRate: rate,
+      getChannelData: (i: number) => data[i],
+    }
   }
   createMediaElementSource(el: object) {
     if (this.sources.has(el)) throw new Error('already connected')

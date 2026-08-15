@@ -175,9 +175,9 @@ Every element either does something real or is dropped.
 Both `<video>` layers are routed through **one shared `AudioContext`** (`application/audio-graph.ts`), which also hosts the 10-band equaliser. Narration keeps its own branch — `masterGain → limiter → destination` — and deliberately does **not** pass through the filters: the EQ shapes music, and a TTS voice read through a bass boost is a fault.
 
 ```
-video A → gainA ─┐
-                 ├→ eqInput → [10 biquads] → preamp → destination
-video B → gainB ─┘
+video A → gainA ─┐                          ┌→ dry ──────────────┐
+                 ├→ eqInput → [10 biquads] ─┤                    ├→ preamp → destination
+video B → gainB ─┘                          └→ convolver → wet ──┘
 ```
 
 - **`createMediaElementSource` is once per element and cannot be undone.** So both layers are attached, always, for everyone — not lazily when the EQ is switched on. Two signal paths for on and off would be two paths that must both be right, and switching mid-playback cuts the sound for a beat on iOS.
@@ -187,11 +187,23 @@ video B → gainB ─┘
 - **Volume, mute and narration ducking are gain nodes**, not `el.volume`. `levelsFor` (`narration-levels.ts`) is unchanged and still decides the number; only where it lands moved. Whether an element's own `volume` still attenuates a signal already routed into Web Audio is not answered the same way by every browser, and that is not a thing to discover on a television.
 - **`volumechange` follows `muted` only.** The element's `volume` now sits at 1 for the life of the page, so following it would have set the player to full volume the first time anything fired the event.
 - **No Web Audio at all → attach nothing and fall back to `el.volume`.** `isAttached` is what the player asks. Without the fallback an older TV browser gets a volume slider that does nothing and a video stuck at full.
-- EQ settings live in `localStorage` (`yt-equalizer-v1`), **per device** — an equaliser corrects for the speakers, so the phone and the TV want different curves. Unlike the feed mix, this is not one setting for the household.
+- EQ and reverb live in `localStorage` (`yt-equalizer-v1`), **per device** — an equaliser corrects for the speakers, so the phone and the TV want different curves. Unlike the feed mix, this is not one setting for the household. The key keeps the equaliser's name after reverb was added, and `audio-prefs.ts` reads both shapes: renaming it would have been tidier and would have thrown away every curve already saved.
 - Bands are `lowshelf` 32 Hz, `peaking` 64 Hz–8 kHz at `Q = √2`, `highshelf` 16 kHz. Peaking at the extremes would leave the floor and ceiling unmoved. Preamp only ever **cuts** (−12…0 dB): it is the headroom the boosts are paid for, and every preset ships with its own.
 - "Off" is every filter at 0 dB, **not** a disconnected chain — a biquad at unity is transparent, so on and off cannot fail differently.
 - **On iOS, native fullscreen bypasses Web Audio entirely** and the EQ silently stops applying. The panel says "EQ off in fullscreen" while `webkitPresentationMode === 'fullscreen'` — a state-driven label, because this is a question that only occurs to someone at the moment the sound stops changing.
 - The gear menu is now unconditional in the full player: the EQ is the first setting there that belongs to the listener rather than to the video.
+
+#### Environment (reverb)
+
+eqMac's "Environment" is macOS's `AVAudioUnitReverb` with a preset and its `wetDryMix`; the preset names (Small Room, Large Hall v2, Cathedral) are Apple's `AVAudioUnitReverbPreset` enum verbatim. **A browser has no such unit**, so this is an imitation and not a port: `ConvolverNode` fed an impulse response *synthesised* from decaying stereo noise (`reverb-presets.ts`), never a recording.
+
+- **Four rooms — Room · Plate · Hall · Cathedral — not Apple's dozen.** From synthesised noise, "Large Room" and "Large Room v2" would be two labels over one sound. A control that cannot do what its name says is the dead button §5 forbids, heard rather than seen.
+- Impulse responses are **capped at 2.5s** and built **lazily, once per preset, then cached**. Convolution scales with the tail, this is headed for a TV browser, and each build is a loop over hundreds of thousands of samples. No auto-disable on weak hardware: that would be guessing about a device nobody has plugged in yet.
+- **The convolver holds no buffer until a room is chosen** — a loaded convolver convolves even at zero wet gain, which is the one avoidable cost in this graph.
+- **The room splits off after the EQ and before the preamp.** After, so it answers the sound the viewer chose; before, because reverb *adds* energy, and the preamp is the trim that pays for clipping.
+- Dry/wet is a plain crossfade summing to 1, ramped over 60 ms rather than the EQ's 20 ms — a filter moving fast is inaudible, a reverb tail appearing fast is a swell. Default **off**; choosing a room starts it at **25% wet**. Pressing the lit room again switches it off.
+- The two halves are pushed by **separate effects** keyed on each: moving an EQ slider has nothing to say to an impulse response.
+- **"Spatial Audio" is a different eqMac feature** (stereo widening / HRTF), not reverb. Deliberately not built.
 
 ### Mobile navigation
 

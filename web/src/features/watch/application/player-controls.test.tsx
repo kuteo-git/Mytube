@@ -658,9 +658,13 @@ describe('a bar sized for a thumb', () => {
   })
 
   it('puts the settings groups in a fixed order', async () => {
-    // Resolution, subtitles, read aloud, autoplay, then translation behind a
-    // rule. Translation is last because it is the only one describing work
-    // being done rather than a preference.
+    // Resolution, subtitles, read aloud, sound, autoplay, then translation
+    // behind a rule. Translation is last because it is the only one describing
+    // work being done rather than a preference.
+    //
+    // Environment is a radiogroup and the equaliser's presets are not, because
+    // the equaliser starts switched off and its sliders are not rendered until
+    // it is on. The room is always offered: choosing one is what switches it on.
     await ready()
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Settings'))
@@ -669,7 +673,7 @@ describe('a bar sized for a thumb', () => {
     const groups = screen
       .getAllByRole('radiogroup')
       .map((g) => g.getAttribute('aria-label'))
-    expect(groups).toEqual(['Resolution', 'Subtitles'])
+    expect(groups).toEqual(['Resolution', 'Subtitles', 'Environment'])
 
     const switches = screen.getAllByRole('switch').map((b) => b.textContent)
     expect(switches[0]).toContain('Vietnamese narration')
