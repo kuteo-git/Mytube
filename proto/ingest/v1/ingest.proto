@@ -185,9 +185,12 @@ message EnsureVideoResponse {
 }
 
 message BackfillTopicsRequest {
-  // Most videos to process in this pass. Zero means every video that needs it.
-  // The pass selects on "has no topic", so a bounded run is resumable simply by
-  // running it again.
+  // Most videos to process in this pass. **Zero means the default of 200**, not
+  // "all" — every pass is bounded, because each video costs a full metadata
+  // fetch and this library has already been blocked once for making too many.
+  //
+  // The pass selects on "still missing the data", so a bounded run is resumable
+  // simply by running it again, and the scheduled pass does exactly that.
   int32 limit = 1;
 }
 

@@ -162,6 +162,19 @@ func main() {
 	// from an hour to five minutes.
 	go scanner.RunSubscribed(ctx, envDuration("SUBSCRIBED_SCAN_INTERVAL", 5*time.Minute))
 
+	// Fill in what the listings could not. A flat listing carries no publish
+	// date, so videos arrive undated and the feed excludes them outright — 1127
+	// of 8056 had accumulated that way, because the only thing that filled the
+	// gap was a button on the Activity page.
+	//
+	// Slow on purpose. Each video costs a full metadata fetch, the expensive
+	// request this library has already been blocked for making too many of, so a
+	// pass is bounded at 200 and six hours apart is enough to clear a backlog
+	// this size in a couple of days without ever looking like a crawl.
+	go ingest.RunBackfill(ctx,
+		envDuration("BACKFILL_START_DELAY", 10*time.Minute),
+		envDuration("BACKFILL_INTERVAL", 6*time.Hour))
+
 	store := jobStore
 	expander := usecase.NewExpander(
 		downloader,

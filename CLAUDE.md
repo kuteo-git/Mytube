@@ -307,7 +307,7 @@ Auto-follow channels · `/tv` UI driven by D-pad · mobile app · *(optional)* f
 3. **HTTPS on a Smart TV is unproven.** Try it early against a real TV.
 4. **Background playback on iOS is impossible from the web.** Media Session + PiP are the web limits; a native app is the only path for background iOS playback.
 5. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures gracefully and allow retry.
-6. **YouTube blocks by IP if too many full-metadata fetches are made.** A full metadata fetch is expensive and counted; flat listing is not. Backfill runs one thread, 4s apart, 200 videos/pass, and stops after 15 consecutive failures.
+6. **YouTube blocks by IP if too many full-metadata fetches are made.** A full metadata fetch is expensive and counted; flat listing is not. Backfill runs one thread, 4s apart, 200 videos/pass, and stops after 15 consecutive failures. A pass is **always** bounded — `limit: 0` means 200, not "all".
 
 ### Build status
 
@@ -316,7 +316,8 @@ Auto-follow channels · `/tv` UI driven by D-pad · mobile app · *(optional)* f
 - `scripts/dev.sh` runs the stack; `scripts/stop.sh` stops by port. `make check` = buf lint + tsc + go build.
 - `dev.sh` refuses to start on a held port and prints `up`/`DOWN` per service.
 - `topics.yaml` is the feed's primary source; the scanner runs hourly.
-- ~4,400 videos in catalog. RSS backfills missing `published_at`; remaining older gaps need manual backfill or a YouTube Data API key.
+- ~8,000 videos in catalog. RSS backfills missing `published_at` for recent uploads; older gaps are filled by the metadata backfill.
+- **The backfill runs on a timer** (`BACKFILL_INTERVAL`, default 6h, after `BACKFILL_START_DELAY` of 10 min; zero disables it). It handled a missing `published_at` from the day it was written and then waited for a button nobody pressed: 1127 of 8056 videos reached the catalogue undated, and the feed excludes an undated video outright. A pass that only runs when someone remembers it does not run.
 
 ## 9. Open questions
 

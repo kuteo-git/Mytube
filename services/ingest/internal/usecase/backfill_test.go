@@ -247,3 +247,60 @@ func TestBackfillSuccessResetsTheFailureRun(t *testing.T) {
 			result.Updated+result.Failed, len(refs))
 	}
 }
+
+// Nothing ever called the backfill.
+//
+// It handled a missing published_at correctly from the day it was written, and
+// then waited for a button nobody pressed: 1127 of 8056 videos reached the
+// catalogue with no date, and the feed excludes an undated video outright. A
+// pass that only runs when someone remembers it is a pass that does not run.
+//
+// The loop is deliberately plain. Everything that keeps this affordable — one
+// pass at a time, 200 a pass, four seconds apart, stopping after a run of
+// failures — already lives in BackfillTopics, and scheduling must not become a
+// second place where that is decided.
+func TestTheBackfillRunsOnAScheduleWithoutBeingAsked(t *testing.T) {
+	previews := &previewDownloader{byURL: map[string]domain.ExternalVideo{
+		"https://www.youtube.com/watch?v=dated": {ID: "dated", Category: "Music"},
+	}}
+	ingest, _ := newBackfillIngest(t, []domain.VideoRef{{VideoID: "dated"}}, previews)
+	ingest.backfillDelay = time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go ingest.RunBackfill(ctx, time.Millisecond, time.Hour)
+
+	deadline := time.After(2 * time.Second)
+	for {
+		if ingest.BackfillStatus().Examined > 0 {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("the scheduled pass never started")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}
+
+// An interval of zero turns it off, the same as every other scheduled pass in
+// this service. A machine on a metered connection is a real reason to want it
+// off, and commenting out a goroutine is not a setting.
+func TestABackfillIntervalOfZeroDisablesIt(t *testing.T) {
+	previews := &previewDownloader{byURL: map[string]domain.ExternalVideo{}}
+	ingest, _ := newBackfillIngest(t, []domain.VideoRef{{VideoID: "dated"}}, previews)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { ingest.RunBackfill(ctx, time.Millisecond, 0); close(done) }()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("a zero interval should return at once, not schedule anything")
+	}
+	if ingest.BackfillStatus().Examined != 0 {
+		t.Fatal("a disabled backfill ran anyway")
+	}
+}

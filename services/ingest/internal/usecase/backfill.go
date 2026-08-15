@@ -144,6 +144,45 @@ func (i *Ingest) BackfillTopics(_ context.Context, limit int32) (BackfillResult,
 	return i.backfill.snapshot(), nil
 }
 
+// RunBackfill starts a pass on a timer, and keeps starting them.
+//
+// The work was already here and correct; nothing called it. It filled a missing
+// published_at from the day it was written and then waited for a button nobody
+// pressed, while 1127 of 8056 videos reached the catalogue with no date — and
+// the feed excludes an undated video outright, so they were simply not there.
+//
+// initialDelay keeps it off the start-up rush, when the scanner is already
+// asking upstream for a great deal. An interval of zero turns it off, as it
+// does for every other scheduled pass here: a metered connection is a real
+// reason to want it off, and commenting out a goroutine is not a setting.
+//
+// Deliberately plain. Everything that keeps this affordable — one pass at a
+// time, a bounded pass, four seconds apart, stopping after a run of failures —
+// belongs to BackfillTopics, and a scheduler must not become a second place
+// where any of it is decided.
+func (i *Ingest) RunBackfill(ctx context.Context, initialDelay, interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(initialDelay):
+	}
+
+	for {
+		if _, err := i.BackfillTopics(ctx, 0); err != nil {
+			i.logger.Warn("scheduled backfill", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(interval):
+		}
+	}
+}
+
 // backfillPause is the gap between fetches, overridable so tests do not have to
 // wait out a rate limit that only exists for YouTube's benefit.
 func (i *Ingest) backfillPause() time.Duration {

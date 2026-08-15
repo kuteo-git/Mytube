@@ -778,9 +778,12 @@ func (x *EnsureVideoResponse) GetVideoId() string {
 
 type BackfillTopicsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Most videos to process in this pass. Zero means every video that needs it.
-	// The pass selects on "has no topic", so a bounded run is resumable simply by
-	// running it again.
+	// Most videos to process in this pass. **Zero means the default of 200**, not
+	// "all" — every pass is bounded, because each video costs a full metadata
+	// fetch and this library has already been blocked once for making too many.
+	//
+	// The pass selects on "still missing the data", so a bounded run is resumable
+	// simply by running it again, and the scheduled pass does exactly that.
 	Limit         int32 `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
