@@ -3276,12 +3276,12 @@ function SettingsMenu({
             // Desktop: dropdown anchored to the button, opening upwards.
             <ul
               ref={listRef}
-              // `chrome-blur` rather than `bg-surface`: this panel sits over
-              // playing video, which is the case that class exists for. Its
-              // alpha is deliberately high — a suggestion that something moves
-              // behind the chrome, not a window onto it — and it is shared with
-              // the top bar, so it is retuned there or not at all.
-              className="chrome-blur fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg py-1 text-sm shadow-lg"
+              // `panel-blur`, not `chrome-blur`. The first attempt used the
+              // bar's class and the blur was invisible: at 95% only a
+              // twentieth of what is behind comes through, which is the point
+              // for a permanent bar and the opposite of it for a panel opened
+              // over video. See index.css for why the alpha stops at 82%.
+              className="panel-blur fixed z-[60] w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg py-1 text-sm shadow-lg"
               style={{
                 bottom: `${menuPos.bottom}px`,
                 right: `${menuPos.right}px`,
@@ -3292,14 +3292,23 @@ function SettingsMenu({
           ) : sheet ? (
             // Mobile: bottom sheet with a scrim.
             <>
+              {/* The scrim sits behind the sheet as well as beside it, so it
+                  is part of what the sheet blurs: at 50% it took half of what
+                  little the panel already lets through and the frosting stopped
+                  reading at all. 40% still separates the sheet from the video
+                  and still says "press here to dismiss".
+
+                  Lowering it cannot hurt the panel's contrast — a darker
+                  backdrop only ever helps, and the 82% alpha was chosen against
+                  no scrim at all. */}
               <div
-                className="fixed inset-0 z-[60] bg-black/50"
+                className="fixed inset-0 z-[60] bg-black/40"
                 onClick={() => setOpen(false)}
                 aria-hidden
               />
               <ul
                 ref={listRef}
-                className="chrome-blur fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl pt-2 text-sm shadow-2xl"
+                className="panel-blur fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-y-auto rounded-t-2xl pt-2 text-sm shadow-2xl"
                 style={{ paddingBottom: 'calc(0.5rem + var(--safe-bottom))' }}
               >
                 {children}

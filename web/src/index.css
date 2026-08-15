@@ -213,6 +213,34 @@
     backdrop-filter: blur(24px) saturate(150%);
     -webkit-backdrop-filter: blur(24px) saturate(150%);
   }
+
+  /* A panel the viewer opened, over video they are watching.
+
+     Its own class rather than a lower alpha on `chrome-blur`, because the two
+     answer different questions. The bar above is permanent and sits over a grid
+     of bright thumbnails being scrolled: it has to stay legible without being
+     looked at, which is why it is nearly opaque and its blur is only a hint. A
+     panel is opened deliberately, covers video rather than a page of text, and
+     is closed again — there the blur is the point, and a viewer who wants to see
+     what is behind it can shut it.
+
+     82% is not a taste. `--color-text-2` is #aaaaaa, and against the worst case
+     this can meet — a white frame filling the screen behind it — the alpha is
+     what decides whether that text still clears 4.5:1:
+
+       0.95 → 7.4:1    0.85 → 5.4:1    0.80 → 4.53:1    0.75 → 3.8:1 ✗
+
+     So the floor is 0.80 and this sits just above it. Anything more transparent
+     fails on a bright frame, which is exactly the frame nobody checks against.
+
+     The hairline is what keeps the panel's edge readable once the fill is no
+     longer solid enough to draw one by itself. */
+  .panel-blur {
+    background-color: color-mix(in srgb, var(--color-bg) 82%, transparent);
+    backdrop-filter: blur(32px) saturate(160%);
+    -webkit-backdrop-filter: blur(32px) saturate(160%);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
 }
 
 @layer utilities {
