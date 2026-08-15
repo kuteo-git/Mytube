@@ -445,17 +445,35 @@ func (r *Repository) SetShort(ctx context.Context, videoID string, isShort bool)
 	return err
 }
 
-// ListUncheckedShorts returns videos nobody has asked about, newest first.
+// ListUncheckedShorts returns videos nobody has asked about, likeliest first.
 //
-// Newest first because a Short that reaches the feed does so while it is new,
-// and the backlog is thousands of rows deep — working from the far end would
-// spend the whole first day on videos from years ago that nobody will be shown.
+// The order is the whole of how long the feed stays wrong. The backlog is
+// thousands of rows and one answer costs an HTTP request, so asking in an
+// arbitrary order means most of the Shorts are still unasked days later —
+// measured at 26 found in the first 113 with 8063 to go.
+//
+// So the ones that could be a Short go first. Every Short confirmed here ran
+// between 0 and 152 seconds, against YouTube's own three-minute cap, and 1357
+// of the unasked rows are inside that — a few hours of probing rather than a
+// day and a half. Unknown durations ride with them, because a confirmed Short
+// in this library has duration 0: a flat listing did not carry one.
+//
+// This orders the work, it does not answer the question. A video over three
+// minutes is asked too, just last, so a change to that cap costs a slow week
+// rather than a wrong column. Within each group, newest first: a Short reaches
+// the feed while it is new.
 func (r *Repository) ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id
 		FROM videos
 		WHERE is_short IS NULL
-		ORDER BY published_at DESC NULLS LAST
+		ORDER BY
+		  CASE
+		    WHEN duration_seconds BETWEEN 1 AND 180 THEN 0
+		    WHEN duration_seconds IS NULL OR duration_seconds = 0 THEN 1
+		    ELSE 2
+		  END,
+		  published_at DESC NULLS LAST
 		LIMIT $1`, limit)
 	if err != nil {
 		return nil, err

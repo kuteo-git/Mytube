@@ -18,7 +18,18 @@
 ALTER TABLE catalog.videos
   ADD COLUMN IF NOT EXISTS is_short boolean;
 
--- The backfill's working set: rows still unanswered, newest first.
+-- The pass's working set: rows still unanswered, likeliest first.
+--
+-- The leading column is the same CASE the query orders by. A partial index on
+-- published_at alone still made the planner sort every unanswered row, which is
+-- thousands of them on every pass.
 CREATE INDEX IF NOT EXISTS videos_is_short_unknown_idx
-  ON catalog.videos (published_at DESC NULLS LAST)
+  ON catalog.videos (
+    (CASE
+       WHEN duration_seconds BETWEEN 1 AND 180 THEN 0
+       WHEN duration_seconds IS NULL OR duration_seconds = 0 THEN 1
+       ELSE 2
+     END),
+    published_at DESC NULLS LAST
+  )
   WHERE is_short IS NULL;

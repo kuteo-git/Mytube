@@ -180,13 +180,16 @@ func main() {
 	// is an ordinary /watch link, and not the length — so each is asked about
 	// once and the answer kept, since a video does not stop being a Short.
 	//
-	// Faster than the metadata backfill because the request is a page load
-	// rather than a full metadata fetch, and slower than it feels like it could
-	// be because §8's block is on the address, not on the endpoint.
+	// The interval is the gap *between* passes, not the request rate — that
+	// stays at one every four seconds inside a pass, which is what §8's block is
+	// about. Five minutes rather than thirty because the idle time was most of
+	// the wall clock: a 200-video pass takes thirteen minutes, so waiting half
+	// an hour after each one more than doubled how long the feed stays wrong for
+	// no reduction in how often YouTube is asked anything.
 	ingest.WithShortChecker(youtube.NewShortChecker(15 * time.Second))
 	go ingest.RunShortProbe(ctx,
 		envDuration("SHORT_PROBE_START_DELAY", 2*time.Minute),
-		envDuration("SHORT_PROBE_INTERVAL", 30*time.Minute))
+		envDuration("SHORT_PROBE_INTERVAL", 5*time.Minute))
 
 	store := jobStore
 	expander := usecase.NewExpander(
