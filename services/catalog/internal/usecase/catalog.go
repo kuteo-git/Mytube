@@ -156,7 +156,7 @@ func (c *Catalog) SetMediaState(ctx context.Context, videoID string, state domai
 	}
 	switch state {
 	case domain.MediaQueued, domain.MediaDownloading, domain.MediaReady,
-		domain.MediaEvicted, domain.MediaFailed:
+		domain.MediaEvicted, domain.MediaFailed, domain.MediaUnavailable:
 	default:
 		return fmt.Errorf("%w: unknown media state %q", domain.ErrInvalid, state)
 	}
