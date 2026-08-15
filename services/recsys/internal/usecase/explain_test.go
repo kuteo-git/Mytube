@@ -231,3 +231,89 @@ func TestPickingATopicLiftsTheAgeLimit(t *testing.T) {
 		t.Fatalf("on the open feed the old song was excluded as %q, want %q", noTopic[0].Excluded, excludedTooOld)
 	}
 }
+
+// Shorts are kept out of Home, and length has nothing to do with it.
+//
+// The flag comes from asking YouTube — /shorts/<id> serves a Short and
+// redirects anything else — because measurement showed length cannot stand in
+// for it: a 14-second video in this library is an ordinary clip and a
+// 40-second one is a Short. The third case here is the one that matters, since
+// a duration rule would have thrown it out.
+func TestShortsAreKeptOutOfTheFeedAndDurationIsNotTheTest(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{
+			VideoID:         "a_short",
+			ChannelID:       "ch_1",
+			AddedAt:         now,
+			PublishedAt:     now.Add(-time.Hour),
+			MediaState:      "MEDIA_STATE_READY",
+			DurationSeconds: 40,
+			IsShort:         true,
+		},
+		{
+			VideoID:         "long_video",
+			ChannelID:       "ch_2",
+			AddedAt:         now,
+			PublishedAt:     now.Add(-time.Hour),
+			MediaState:      "MEDIA_STATE_READY",
+			DurationSeconds: 828,
+		},
+		{
+			// Fourteen seconds and not a Short. Measured, not invented.
+			VideoID:         "short_clip",
+			ChannelID:       "ch_3",
+			AddedAt:         now,
+			PublishedAt:     now.Add(-time.Hour),
+			MediaState:      "MEDIA_STATE_READY",
+			DurationSeconds: 14,
+		},
+	}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+
+	explained, err := ranker.ExplainFeed(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("ExplainFeed: %v", err)
+	}
+
+	for _, e := range explained {
+		switch e.VideoID {
+		case "a_short":
+			if e.Excluded != excludedShort {
+				t.Fatalf("excluded as %q, want %q", e.Excluded, excludedShort)
+			}
+			if e.Position != -1 {
+				t.Fatalf("excluded but reports position %d", e.Position)
+			}
+		case "long_video", "short_clip":
+			if e.Excluded != "" {
+				t.Fatalf("%s was excluded as %q", e.VideoID, e.Excluded)
+			}
+		}
+	}
+}
+
+// A video nobody has asked about is shown.
+//
+// The probe works through thousands of rows a pass at a time, so at any moment
+// most of the library is unanswered. Treating unanswered as "probably a Short"
+// would empty Home while the backlog cleared.
+func TestUncheckedVideosAreStillOffered(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{{
+		VideoID:     "never_asked",
+		ChannelID:   "ch_1",
+		AddedAt:     now,
+		PublishedAt: now.Add(-time.Hour),
+		MediaState:  "MEDIA_STATE_READY",
+	}}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+
+	explained, err := ranker.ExplainFeed(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("ExplainFeed: %v", err)
+	}
+	if len(explained) != 1 || explained[0].Excluded != "" {
+		t.Fatalf("an unasked video was excluded as %q", explained[0].Excluded)
+	}
+}

@@ -102,18 +102,18 @@ type Comment struct {
 	Replies     []Comment
 }
 
-	// ImportComment is a YouTube comment ready to be batch-inserted into the
-	// catalog. Its own author is the source platform — not a local user — so the
-	// author is a handle rather than a user_id.
-	type ImportComment struct {
-		ID              string
-		ParentID        string
-		AuthorHandle    string
-		Text            string
-		PublishedAtUnix int64
-		LikeCount       int64
-		PinnedBy        *string
-	}
+// ImportComment is a YouTube comment ready to be batch-inserted into the
+// catalog. Its own author is the source platform — not a local user — so the
+// author is a handle rather than a user_id.
+type ImportComment struct {
+	ID              string
+	ParentID        string
+	AuthorHandle    string
+	Text            string
+	PublishedAtUnix int64
+	LikeCount       int64
+	PinnedBy        *string
+}
 
 type CommentSort string
 
@@ -154,6 +154,9 @@ type VideoFeatures struct {
 	MediaState      MediaState
 	Language        string
 	ViewCount       int64
+	// True only where YouTube has confirmed it. Unknown reads as false, so a
+	// video is never withheld from the feed over a question nobody has asked.
+	IsShort bool
 }
 
 type StorageUsage struct {
@@ -205,6 +208,11 @@ type Repository interface {
 	UpsertChannel(ctx context.Context, c Channel) (Channel, error)
 	UpsertVideo(ctx context.Context, v Video) (Video, error)
 	SetMediaState(ctx context.Context, videoID string, state MediaState, mediaPath string, sizeBytes int64, subtitles []SubtitleTrack) error
+	// SetShort records YouTube's answer about one video. Stored as a tri-state:
+	// unset means nobody has asked, which is what the checker looks for.
+	SetShort(ctx context.Context, videoID string, isShort bool) error
+	// ListUncheckedShorts returns videos with no answer yet, newest first.
+	ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error)
 	FindBySourceURL(ctx context.Context, sourceURL, userID string) (Video, error)
 
 	ListComments(ctx context.Context, videoID string, sort CommentSort, page Page) ([]Comment, int32, error)

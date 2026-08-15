@@ -89,6 +89,7 @@ func (f *FeatureSource) fetchAll(ctx context.Context) ([]domain.VideoFeatures, e
 				PublishedAt:     v.GetPublishedAt().AsTime(),
 				AddedAt:         v.GetAddedAt().AsTime(),
 				DurationSeconds: v.GetDurationSeconds(),
+				IsShort:         v.GetIsShort(),
 				MediaState:      v.GetMediaState().String(),
 				Language:        v.GetLanguage(),
 				ViewCount:       v.GetViewCount(),

@@ -28,6 +28,7 @@ const (
 	excludedLanguage         = "language filter"
 	excludedNoPublishDate    = "no publish date"
 	excludedTooOld           = "published over a year ago"
+	excludedShort            = "a Short"
 )
 
 // rankInputs is everything the per-video score depends on beyond the video.
@@ -156,6 +157,25 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 	}
 	if _, disliked := in.profile.Disliked[f.VideoID]; disliked {
 		out.Excluded = excludedDisliked
+		return out
+	}
+	// Shorts are not part of this library's idea of watching something, and the
+	// charter drops them from the interface. They arrive anyway: the topics.yaml
+	// sources all point at a channel's Videos tab, which excludes them, but
+	// ExpandLibrary reaches InnerTube related and search, and a subscribed
+	// channel's RSS feed carries them with nothing to mark them apart.
+	//
+	// Excluded here rather than kept out of the catalogue, so search and the
+	// channel page still find them — the same treatment a disliked video gets,
+	// and for the same reason: this is a statement about the feed, not about
+	// whether the video exists.
+	//
+	// Never inferred from duration. Measured against YouTube: 14- and 9-second
+	// videos answered /shorts/<id> with a redirect to /watch and are ordinary
+	// clips, while 40- and 59-second ones answered 200. Length is what a Short
+	// usually has, not what it is.
+	if f.IsShort {
+		out.Excluded = excludedShort
 		return out
 	}
 	if in.suppressed(f.ChannelID) {

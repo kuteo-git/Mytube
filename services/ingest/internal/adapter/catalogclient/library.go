@@ -87,6 +87,26 @@ func (l *Library) UpsertVideo(ctx context.Context, v domain.ExternalVideo, state
 	return err
 }
 
+// ListUncheckedShorts returns videos the catalogue has never asked about.
+func (l *Library) ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error) {
+	resp, err := l.client.ListUncheckedShorts(ctx, connect.NewRequest(&catalogv1.ListUncheckedShortsRequest{
+		Limit: limit,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.GetVideoIds(), nil
+}
+
+// SetShort records YouTube's answer for one video.
+func (l *Library) SetShort(ctx context.Context, videoID string, isShort bool) error {
+	_, err := l.client.SetShort(ctx, connect.NewRequest(&catalogv1.SetShortRequest{
+		VideoId: videoID,
+		IsShort: isShort,
+	}))
+	return err
+}
+
 func (l *Library) SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
 	tracks := make([]*catalogv1.SubtitleTrack, 0, len(subtitles))
 	for _, t := range subtitles {

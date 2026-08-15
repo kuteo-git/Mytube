@@ -17,6 +17,12 @@ const (
 	defaultPageSize = 24
 	maxPageSize     = 100
 	maxBatchSize    = 200
+	// How many videos one Short-check pass may ask about.
+	//
+	// Matches the metadata backfill's 200. Each answer is an HTTP request to
+	// YouTube, and §8 of the charter is about exactly this: a pass is always
+	// bounded, and a zero limit means this number rather than "all of them".
+	maxShortCheckBatch = 200
 )
 
 type Catalog struct {
@@ -161,6 +167,27 @@ func (c *Catalog) SetMediaState(ctx context.Context, videoID string, state domai
 		return fmt.Errorf("%w: unknown media state %q", domain.ErrInvalid, state)
 	}
 	return c.repo.SetMediaState(ctx, videoID, state, mediaPath, sizeBytes, subtitles)
+}
+
+// SetShort records YouTube's answer about one video.
+func (c *Catalog) SetShort(ctx context.Context, videoID string, isShort bool) error {
+	if videoID == "" {
+		return fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+	return c.repo.SetShort(ctx, videoID, isShort)
+}
+
+// ListUncheckedShorts returns videos nobody has asked YouTube about yet.
+//
+// A zero limit means the server's own bound rather than "all of them", the same
+// rule the metadata backfill follows: each answer is an HTTP request to
+// YouTube, and an unbounded pass is how a caller accidentally asks for
+// thousands in a row.
+func (c *Catalog) ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error) {
+	if limit <= 0 || limit > maxShortCheckBatch {
+		limit = maxShortCheckBatch
+	}
+	return c.repo.ListUncheckedShorts(ctx, limit)
 }
 
 func (c *Catalog) FindBySourceURL(ctx context.Context, sourceURL, userID string) (domain.Video, error) {

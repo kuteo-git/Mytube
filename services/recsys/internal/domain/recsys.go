@@ -57,6 +57,8 @@ type VideoFeatures struct {
 	PublishedAt     time.Time
 	AddedAt         time.Time
 	DurationSeconds int32
+	// Confirmed by asking YouTube, never inferred from DurationSeconds.
+	IsShort bool
 	MediaState      string
 	Language        string
 	ViewCount       int64

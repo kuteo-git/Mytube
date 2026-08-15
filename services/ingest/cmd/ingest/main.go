@@ -29,6 +29,7 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/topicfile"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/youtube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/ytdlp"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/usecase"
 )
@@ -174,6 +175,18 @@ func main() {
 	go ingest.RunBackfill(ctx,
 		envDuration("BACKFILL_START_DELAY", 10*time.Minute),
 		envDuration("BACKFILL_INTERVAL", 6*time.Hour))
+
+	// Find the Shorts. Nothing in a listing marks one apart — not the URL, which
+	// is an ordinary /watch link, and not the length — so each is asked about
+	// once and the answer kept, since a video does not stop being a Short.
+	//
+	// Faster than the metadata backfill because the request is a page load
+	// rather than a full metadata fetch, and slower than it feels like it could
+	// be because §8's block is on the address, not on the endpoint.
+	ingest.WithShortChecker(youtube.NewShortChecker(15 * time.Second))
+	go ingest.RunShortProbe(ctx,
+		envDuration("SHORT_PROBE_START_DELAY", 2*time.Minute),
+		envDuration("SHORT_PROBE_INTERVAL", 30*time.Minute))
 
 	store := jobStore
 	expander := usecase.NewExpander(

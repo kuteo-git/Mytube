@@ -90,6 +90,15 @@ The player climbs tiers: `instant` starts immediately → a hidden `remux` eleme
 - **A live broadcast is refused as a download job.** It has no end to download to: yt-dlp follows it for as long as it lasts, and the single worker slot stayed occupied for hours while every later job sat queued at 0%. `is_live`/`is_upcoming` are refused; `was_live` and `post_live` are ordinary videos with a finite recording.
 - **A refused transfer is retried once in a fresh yt-dlp process.** The refusal usually belongs to the signed URL, not the video, and yt-dlp resolves once at start-up — so `Retries(5)`/`FragmentRetries(5)` throw the same dead URL at the same host and fail identically. Measured on `cT_ZlNvkW60`: three attempts, three seconds each, not one byte, then a fourth process carried 70MB. Never for a permanent refusal. The yt-dlp retries stay: they cover a request that drops on its own, which a DASH transfer of hundreds of requests will meet.
 
+### Asking YouTube as somebody
+
+Every call into yt-dlp goes through **one builder** (`ytdlp/session.go`, `newCommand(purpose)`), because there were nine bare `ytdlp.New()` calls and anything to be said to all of them had to be said nine times — during a refusal, which is not the moment to be editing nine call sites.
+
+- **`purposeMedia`** (resolve, download, subtitles, comments, remux URLs) carries credentials. **`purposeListing`** (search, flat playlists, channel info — the scanner and the backfill) carries none, ever. That traffic is the most bot-like thing here (93 sources an hour, 200 videos a pass) and the least often refused; attaching an account to it is the fastest way to lose the account, and §8 risk 6 is already about exactly that volume.
+- `YTDLP_COOKIES` is a path to a Netscape `cookies.txt`. **A file, not `--cookies-from-browser`**: this runs as a background service on a Mac whose browser a person is using at the same time, and reading Chrome's jar on macOS goes through the Keychain and fails while Chrome holds it. A missing file is dropped rather than passed on — yt-dlp fails the whole request over a jar it cannot find, so a typo would take down every download instead of doing without.
+- `YTDLP_PLAYER_CLIENT` sets `youtube:player_client`. **Unmeasured and off by default**, said plainly: the refusals it exists for come in waves — the same URL answered 206, then 403, then 206 again inside an hour — so on the day it was written there was no way to tell one client from another. It is a lever for the next wave.
+- Cookies were considered and *not* switched on: they tie a real YouTube account to every media request, and yt-dlp's own warning about accounts is about traffic that looks like this.
+
 ### Eviction
 
 Every video has `last_accessed_at` + `pinned`. Above the high-water mark, the **media file** of the least-recently-used unpinned video is deleted, keeping metadata + thumbnail + history. The UI shows "Removed — press to fetch again". Thresholds are set by `EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES`.
@@ -106,6 +115,19 @@ Every video has `last_accessed_at` + `pinned`. Above the high-water mark, the **
 
 Order matters: check the root first. A loose cable must not mark the whole library evicted.
 
+### Shorts
+
+**A Short is confirmed by asking YouTube, never inferred from duration.** `GET https://www.youtube.com/shorts/<id>` serves a Short with **200** and redirects anything else to `/watch` with **303**. Measured on this library: `CpvaxO7Ec30` (40s) and `AgkeJCAJl3Y` (59s) → 200; `tpjJeH1pPws` (**14s**) and `0i78zdYFQGI` (828s) → 303. That 14-second clip is why a length rule is wrong — any threshold catching a 40-second Short throws it out too.
+
+- The redirect **is** the answer, so `CheckRedirect` must refuse to follow it. Followed, the probe lands on `/watch` and reads its 200 — the same status a Short gives — and every video in the library classifies as a Short.
+- Stored on `catalog.videos.is_short` as a **tri-state**: `NULL` = never asked, and that is what the pass selects on. A probe that fails (404, 429) writes **nothing**; recording it as "not a Short" would close the question forever on an answer YouTube never gave.
+- **Unknown reads as "not a Short"** everywhere (`COALESCE(is_short,false)`). The backlog is thousands of rows, so treating unasked as suspect would empty Home while it cleared.
+- `ProbeShorts` runs on `SHORT_PROBE_INTERVAL` (30 min, after `SHORT_PROBE_START_DELAY` of 2 min; zero disables). Bounded at 200 a pass, 4s apart, stopping after 15 consecutive failures — the same discipline as the metadata backfill and for the same reason: §8's block is on the address, not the endpoint. Ordered by `published_at DESC` because a Short reaches the feed while it is new.
+- Recsys excludes them as a twelfth rule (`excludedShort`), **Home only** — search and the channel page still find them, exactly as a disliked video does. This is a statement about the feed, not about whether the video exists.
+- **They do not arrive through `topics.yaml`.** Every source there ends in `/videos`, and YouTube's Videos tab excludes Shorts — verified: IGN's shortest listed entries (9s, 30s, 31s) all answer 303. They come in through `ExpandLibrary` (InnerTube related + search) and through subscribed channels' RSS, neither of which can be closed without closing what it is for. Hence a per-video question rather than a filter on the way in.
+
+Applying `services/catalog/migrations/0011_is_short.sql` is required before running the new code.
+
 ### Videos upstream will not hand over
 
 `MEDIA_STATE_UNAVAILABLE` — members-only, private, removed. Separate from `FAILED`, which means "the attempt did not work" and carries an offer to retry; that offer is what turned one members-only video into **13 download jobs in two minutes** (83 failed jobs over 10 URLs in the library).
@@ -115,6 +137,7 @@ Order matters: check the root first. A loose cable must not mark the whole libra
 - Every path that meets upstream records it — Preview, comments, stream resolve, remux — because a video nobody has downloaded is met first by the player asking for a stream. Catalog is told through the service and marked `UNAVAILABLE`; a report the catalogue never received is finished by `ReconcileUnavailable` at start.
 - Never retried automatically. **Pressing Retry on `/activity` clears the record**, because a members-only video does sometimes open to everyone later.
 - HTTP: **409 + `{"code":"video_unavailable","reason":"members_only|private|removed|unavailable"}`**, never 500/502. Nothing is broken; YouTube answered.
+- **A refusal that is only for now gets neither.** `POST /comments/fetch` answers **200 + `{"imported":0,"unavailable":true}`** when upstream declines, logged at WARN. It used to be a 500 — a claim that this system had failed — over "HTTP Error 403" on the one thing on the watch page nothing depends on; the console went red while the video played perfectly. It is not the 409 either: that means permanent, offers no retry and names a reason, and this video answers on the next press. The comment section shows the same line and the same Retry it already had for a failed request.
 - Excluded from Home and up-next (`explainOne`), still reachable through search and the channel page.
 - The player names the reason and offers no retry; the comments section is not mounted at all.
 

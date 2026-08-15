@@ -434,6 +434,45 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 	return r.GetVideo(ctx, v.ID, "")
 }
 
+// SetShort records what YouTube answered for one video.
+//
+// A plain write with no read first: the answer does not change once given — a
+// video does not stop being a Short — so a second write can only be the same
+// answer arriving twice.
+func (r *Repository) SetShort(ctx context.Context, videoID string, isShort bool) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE videos SET is_short = $2 WHERE id = $1`, videoID, isShort)
+	return err
+}
+
+// ListUncheckedShorts returns videos nobody has asked about, newest first.
+//
+// Newest first because a Short that reaches the feed does so while it is new,
+// and the backlog is thousands of rows deep — working from the far end would
+// spend the whole first day on videos from years ago that nobody will be shown.
+func (r *Repository) ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id
+		FROM videos
+		WHERE is_short IS NULL
+		ORDER BY published_at DESC NULLS LAST
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -537,7 +576,10 @@ func (r *Repository) FindBySourceURL(ctx context.Context, sourceURL, userID stri
 func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([]domain.VideoFeatures, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, channel_id, topics, hashtags, published_at, added_at,
-		       duration_seconds, media_state, language, view_count
+		       duration_seconds, media_state, language, view_count,
+		       -- Unknown reads as "not a Short". Ranking must never withhold a
+		       -- video over a question the checker has not reached yet.
+		       COALESCE(is_short, false)
 		FROM videos
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, page.Size, page.Offset)
@@ -555,7 +597,8 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 		)
 		var viewCountFeature *int64
 		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Topics, &f.Hashtags,
-			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state, &f.Language, &viewCountFeature); err != nil {
+			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state, &f.Language, &viewCountFeature,
+			&f.IsShort); err != nil {
 			return nil, err
 		}
 		if publishedAt != nil {

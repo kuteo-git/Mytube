@@ -17,10 +17,10 @@ import (
 )
 
 type Ingest struct {
-	downloader    domain.Downloader
-	channels      domain.ChannelSource
-	store   domain.JobStore
-	library domain.Library
+	downloader domain.Downloader
+	channels   domain.ChannelSource
+	store      domain.JobStore
+	library    domain.Library
 	// Read-only here: the scanner writes passes, this only lists them for the
 	// Activity page. Optional, and set separately from New, because most of
 	// what this type does has nothing to do with scan history and every test
@@ -35,6 +35,20 @@ type Ingest struct {
 	// Gap between backfill fetches. Zero means the package default; tests set
 	// it so they do not wait out a rate limit meant for YouTube.
 	backfillDelay time.Duration
+	// Asks YouTube whether a video is a Short. Optional and set separately from
+	// New, like the scan store above: everything else this type does works
+	// without it, and every test would otherwise have to supply one.
+	shorts domain.ShortChecker
+	// Gap between Short probes. Zero means the package default.
+	shortDelay time.Duration
+}
+
+// WithShortChecker attaches the Short probe. Without one the pass does nothing,
+// which is the right behaviour for a deployment that has not configured it: a
+// video nobody has asked about is treated as not a Short and still shown.
+func (i *Ingest) WithShortChecker(c domain.ShortChecker) *Ingest {
+	i.shorts = c
+	return i
 }
 
 func New(

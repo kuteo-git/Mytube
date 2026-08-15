@@ -364,6 +364,21 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 	return connect.NewResponse(&catalogv1.UpsertVideoResponse{Video: videoToProto(saved)}), nil
 }
 
+func (s *Server) SetShort(ctx context.Context, req *connect.Request[catalogv1.SetShortRequest]) (*connect.Response[catalogv1.SetShortResponse], error) {
+	if err := s.catalog.SetShort(ctx, req.Msg.GetVideoId(), req.Msg.GetIsShort()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.SetShortResponse{}), nil
+}
+
+func (s *Server) ListUncheckedShorts(ctx context.Context, req *connect.Request[catalogv1.ListUncheckedShortsRequest]) (*connect.Response[catalogv1.ListUncheckedShortsResponse], error) {
+	ids, err := s.catalog.ListUncheckedShorts(ctx, req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ListUncheckedShortsResponse{VideoIds: ids}), nil
+}
+
 func (s *Server) SetMediaState(ctx context.Context, req *connect.Request[catalogv1.SetMediaStateRequest]) (*connect.Response[catalogv1.SetMediaStateResponse], error) {
 	tracks := make([]domain.SubtitleTrack, 0, len(req.Msg.GetSubtitles()))
 	for _, t := range req.Msg.GetSubtitles() {

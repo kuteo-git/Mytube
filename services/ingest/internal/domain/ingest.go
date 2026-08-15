@@ -144,21 +144,21 @@ type RSSEntry struct {
 	ChannelName  string
 	ThumbnailURL string
 }
-	// YouTubeComment is a single comment fetched from YouTube via yt-dlp's
-	// --write-comments. Every comment is returned at once — yt-dlp has no
-	// pagination — so the gateway batches them into catalog and the frontend
-	// paginates from there.
-	type YouTubeComment struct {
-		ID              string
-		ParentID        string
-		Author          string
-		AuthorID        string
-		Text            string
-		PublishedAtUnix int64
-		LikeCount       int64
-		PinnedBy        *string
-	}
 
+// YouTubeComment is a single comment fetched from YouTube via yt-dlp's
+// --write-comments. Every comment is returned at once — yt-dlp has no
+// pagination — so the gateway batches them into catalog and the frontend
+// paginates from there.
+type YouTubeComment struct {
+	ID              string
+	ParentID        string
+	Author          string
+	AuthorID        string
+	Text            string
+	PublishedAtUnix int64
+	LikeCount       int64
+	PinnedBy        *string
+}
 
 // Downloader is the port over the external tool. Keeping it an interface is
 // what lets the use cases be exercised without touching the network.
@@ -189,9 +189,9 @@ type Downloader interface {
 	// playlist listing carries. An error is a missed opportunity, not a failed
 	// scan: the feed is supplementary.
 	FetchChannelFeed(ctx context.Context, channelID string) ([]RSSEntry, error)
-		// FetchComments reads YouTube comments for a video via yt-dlp's
-		// --write-comments. Every comment is returned at once.
-		FetchComments(ctx context.Context, videoURL string) ([]YouTubeComment, error)
+	// FetchComments reads YouTube comments for a video via yt-dlp's
+	// --write-comments. Every comment is returned at once.
+	FetchComments(ctx context.Context, videoURL string) ([]YouTubeComment, error)
 }
 
 // JobStore is the ingest-owned persistence port.
@@ -263,17 +263,32 @@ type Library interface {
 	// UpsertChannelArtwork records artwork already downloaded to the media root.
 	UpsertChannelArtwork(ctx context.Context, m ChannelMetadata, avatarPath, bannerPath string) error
 	ListSubscribedChannels(ctx context.Context) ([]SubscribedChannel, error)
-// ListVideosNeedingBackfill returns videos the catalogue holds with either no
-// topic assigned or no published_at. A scan cannot supply either — flat listings
-// carry no category or date — so this is how the backfill finds its work.
+	// ListVideosNeedingBackfill returns videos the catalogue holds with either no
+	// topic assigned or no published_at. A scan cannot supply either — flat listings
+	// carry no category or date — so this is how the backfill finds its work.
 	ListVideosNeedingBackfill(ctx context.Context, limit int32) ([]VideoRef, error)
+	// ListUncheckedShorts returns videos nobody has asked YouTube about yet.
+	ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error)
+	// SetShort records the answer for one video.
+	SetShort(ctx context.Context, videoID string, isShort bool) error
+}
+
+// ShortChecker answers the one question duration cannot.
+//
+// Asked of YouTube directly, because nothing in a listing marks a Short apart —
+// not the URL a listing hands back, which is an ordinary /watch link, and not
+// the length. Measured: 14- and 9-second videos are ordinary clips and 40- and
+// 59-second ones are Shorts.
+type ShortChecker interface {
+	// IsShort reports whether YouTube serves this id as a Short.
+	IsShort(ctx context.Context, videoID string) (bool, error)
 }
 
 // VideoRef is the little a backfill needs to know about a video: which one,
 // where to fetch it from, and which field it is missing.
 type VideoRef struct {
-	VideoID           string
-	SourceURL         string
+	VideoID   string
+	SourceURL string
 	// True when the video has topics but no published_at. Set separately from
 	// MissingDuration because it changes what the backfill may conclude: a video
 	// that only lacks metadata is finished by whatever Preview returns, while

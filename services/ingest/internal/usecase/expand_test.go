@@ -21,7 +21,9 @@ type recordingLibrary struct {
 	// test can control exactly which videos a pass sees.
 	missingTopics []domain.VideoRef
 	// subscribed is what ListSubscribedChannels hands back.
-	subscribed []domain.SubscribedChannel
+	subscribed      []domain.SubscribedChannel
+	uncheckedShorts []string
+	shortAnswers    map[string]bool
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -221,4 +223,19 @@ func TestExpandFilesDeepenedVideosUnderTheCuratedTopic(t *testing.T) {
 	if got := library.topics["deep1"]; len(got) != 1 || got[0] != "Tech" {
 		t.Fatalf("topics = %v, want [Tech]", got)
 	}
+}
+
+// The Short probe reads and writes through the library like everything else;
+// these two keep the double satisfying the port. Recorded rather than ignored so
+// a test can assert what was written.
+func (l *recordingLibrary) ListUncheckedShorts(context.Context, int32) ([]string, error) {
+	return l.uncheckedShorts, nil
+}
+
+func (l *recordingLibrary) SetShort(_ context.Context, videoID string, isShort bool) error {
+	if l.shortAnswers == nil {
+		l.shortAnswers = map[string]bool{}
+	}
+	l.shortAnswers[videoID] = isShort
+	return nil
 }

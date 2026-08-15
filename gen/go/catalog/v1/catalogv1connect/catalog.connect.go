@@ -64,6 +64,11 @@ const (
 	// CatalogServiceSetMediaStateProcedure is the fully-qualified name of the CatalogService's
 	// SetMediaState RPC.
 	CatalogServiceSetMediaStateProcedure = "/catalog.v1.CatalogService/SetMediaState"
+	// CatalogServiceSetShortProcedure is the fully-qualified name of the CatalogService's SetShort RPC.
+	CatalogServiceSetShortProcedure = "/catalog.v1.CatalogService/SetShort"
+	// CatalogServiceListUncheckedShortsProcedure is the fully-qualified name of the CatalogService's
+	// ListUncheckedShorts RPC.
+	CatalogServiceListUncheckedShortsProcedure = "/catalog.v1.CatalogService/ListUncheckedShorts"
 	// CatalogServiceFindBySourceURLProcedure is the fully-qualified name of the CatalogService's
 	// FindBySourceURL RPC.
 	CatalogServiceFindBySourceURLProcedure = "/catalog.v1.CatalogService/FindBySourceURL"
@@ -124,6 +129,12 @@ type CatalogServiceClient interface {
 	UpsertChannel(context.Context, *connect.Request[v1.UpsertChannelRequest]) (*connect.Response[v1.UpsertChannelResponse], error)
 	UpsertVideo(context.Context, *connect.Request[v1.UpsertVideoRequest]) (*connect.Response[v1.UpsertVideoResponse], error)
 	SetMediaState(context.Context, *connect.Request[v1.SetMediaStateRequest]) (*connect.Response[v1.SetMediaStateResponse], error)
+	// Records whether a video is a Short. Ingest asks YouTube; catalog stores the
+	// answer, because "is this a Short" is a property of the video the library
+	// holds rather than of the fetch that found it.
+	SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error)
+	// The videos nobody has asked about yet, newest first.
+	ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
 	FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error)
@@ -226,6 +237,18 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("SetMediaState")),
 			connect.WithClientOptions(opts...),
 		),
+		setShort: connect.NewClient[v1.SetShortRequest, v1.SetShortResponse](
+			httpClient,
+			baseURL+CatalogServiceSetShortProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("SetShort")),
+			connect.WithClientOptions(opts...),
+		),
+		listUncheckedShorts: connect.NewClient[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse](
+			httpClient,
+			baseURL+CatalogServiceListUncheckedShortsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListUncheckedShorts")),
+			connect.WithClientOptions(opts...),
+		),
 		findBySourceURL: connect.NewClient[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse](
 			httpClient,
 			baseURL+CatalogServiceFindBySourceURLProcedure,
@@ -314,6 +337,8 @@ type catalogServiceClient struct {
 	upsertChannel       *connect.Client[v1.UpsertChannelRequest, v1.UpsertChannelResponse]
 	upsertVideo         *connect.Client[v1.UpsertVideoRequest, v1.UpsertVideoResponse]
 	setMediaState       *connect.Client[v1.SetMediaStateRequest, v1.SetMediaStateResponse]
+	setShort            *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
+	listUncheckedShorts *connect.Client[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse]
 	findBySourceURL     *connect.Client[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse]
 	listComments        *connect.Client[v1.ListCommentsRequest, v1.ListCommentsResponse]
 	createComment       *connect.Client[v1.CreateCommentRequest, v1.CreateCommentResponse]
@@ -381,6 +406,16 @@ func (c *catalogServiceClient) UpsertVideo(ctx context.Context, req *connect.Req
 // SetMediaState calls catalog.v1.CatalogService.SetMediaState.
 func (c *catalogServiceClient) SetMediaState(ctx context.Context, req *connect.Request[v1.SetMediaStateRequest]) (*connect.Response[v1.SetMediaStateResponse], error) {
 	return c.setMediaState.CallUnary(ctx, req)
+}
+
+// SetShort calls catalog.v1.CatalogService.SetShort.
+func (c *catalogServiceClient) SetShort(ctx context.Context, req *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error) {
+	return c.setShort.CallUnary(ctx, req)
+}
+
+// ListUncheckedShorts calls catalog.v1.CatalogService.ListUncheckedShorts.
+func (c *catalogServiceClient) ListUncheckedShorts(ctx context.Context, req *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error) {
+	return c.listUncheckedShorts.CallUnary(ctx, req)
 }
 
 // FindBySourceURL calls catalog.v1.CatalogService.FindBySourceURL.
@@ -465,6 +500,12 @@ type CatalogServiceHandler interface {
 	UpsertChannel(context.Context, *connect.Request[v1.UpsertChannelRequest]) (*connect.Response[v1.UpsertChannelResponse], error)
 	UpsertVideo(context.Context, *connect.Request[v1.UpsertVideoRequest]) (*connect.Response[v1.UpsertVideoResponse], error)
 	SetMediaState(context.Context, *connect.Request[v1.SetMediaStateRequest]) (*connect.Response[v1.SetMediaStateResponse], error)
+	// Records whether a video is a Short. Ingest asks YouTube; catalog stores the
+	// answer, because "is this a Short" is a property of the video the library
+	// holds rather than of the fetch that found it.
+	SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error)
+	// The videos nobody has asked about yet, newest first.
+	ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
 	FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error)
@@ -563,6 +604,18 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("SetMediaState")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceSetShortHandler := connect.NewUnaryHandler(
+		CatalogServiceSetShortProcedure,
+		svc.SetShort,
+		connect.WithSchema(catalogServiceMethods.ByName("SetShort")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceListUncheckedShortsHandler := connect.NewUnaryHandler(
+		CatalogServiceListUncheckedShortsProcedure,
+		svc.ListUncheckedShorts,
+		connect.WithSchema(catalogServiceMethods.ByName("ListUncheckedShorts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceFindBySourceURLHandler := connect.NewUnaryHandler(
 		CatalogServiceFindBySourceURLProcedure,
 		svc.FindBySourceURL,
@@ -659,6 +712,10 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceUpsertVideoHandler.ServeHTTP(w, r)
 		case CatalogServiceSetMediaStateProcedure:
 			catalogServiceSetMediaStateHandler.ServeHTTP(w, r)
+		case CatalogServiceSetShortProcedure:
+			catalogServiceSetShortHandler.ServeHTTP(w, r)
+		case CatalogServiceListUncheckedShortsProcedure:
+			catalogServiceListUncheckedShortsHandler.ServeHTTP(w, r)
 		case CatalogServiceFindBySourceURLProcedure:
 			catalogServiceFindBySourceURLHandler.ServeHTTP(w, r)
 		case CatalogServiceListCommentsProcedure:
@@ -734,6 +791,14 @@ func (UnimplementedCatalogServiceHandler) UpsertVideo(context.Context, *connect.
 
 func (UnimplementedCatalogServiceHandler) SetMediaState(context.Context, *connect.Request[v1.SetMediaStateRequest]) (*connect.Response[v1.SetMediaStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetMediaState is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetShort is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListUncheckedShorts is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error) {

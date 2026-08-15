@@ -35,6 +35,12 @@ service CatalogService {
   rpc UpsertChannel(UpsertChannelRequest) returns (UpsertChannelResponse);
   rpc UpsertVideo(UpsertVideoRequest) returns (UpsertVideoResponse);
   rpc SetMediaState(SetMediaStateRequest) returns (SetMediaStateResponse);
+  // Records whether a video is a Short. Ingest asks YouTube; catalog stores the
+  // answer, because "is this a Short" is a property of the video the library
+  // holds rather than of the fetch that found it.
+  rpc SetShort(SetShortRequest) returns (SetShortResponse);
+  // The videos nobody has asked about yet, newest first.
+  rpc ListUncheckedShorts(ListUncheckedShortsRequest) returns (ListUncheckedShortsResponse);
   // Resolves an external source URL to an existing library entry, so the same
   // video is never ingested twice.
   rpc FindBySourceURL(FindBySourceURLRequest) returns (FindBySourceURLResponse);
@@ -138,6 +144,13 @@ message Video {
   // Primary language of the video, e.g. "en", "vi". From yt-dlp on full fetch,
   // or detected from the title on flat listings. Empty when unknown.
   string language = 20;
+  // Whether this is a YouTube Short. Absent until it has been asked.
+  //
+  // Optional rather than a plain bool because "no" and "not yet asked" are
+  // different answers and the difference decides whether the checker visits it.
+  // Not derived from duration: a 14-second video measured as an ordinary clip
+  // and a 40-second one measured as a Short.
+  optional bool is_short = 21;
 }
 
 message SubtitleTrack {
@@ -301,6 +314,10 @@ message VideoFeatures {
   MediaState media_state = 8;
   string language = 9;
   int64 view_count = 10;
+  // True only where it has been confirmed. Ranking treats unknown as "not a
+  // Short", so a video is never withheld from the feed over a question the
+  // checker has not reached yet.
+  bool is_short = 11;
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +340,23 @@ message UpsertVideoRequest {
 
 message UpsertVideoResponse {
   Video video = 1;
+}
+
+message SetShortRequest {
+  string video_id = 1;
+  bool is_short = 2;
+}
+
+message SetShortResponse {}
+
+message ListUncheckedShortsRequest {
+  // Zero means the server's own bound rather than "all of them" — the same rule
+  // the metadata backfill follows, and for the same reason.
+  int32 limit = 1;
+}
+
+message ListUncheckedShortsResponse {
+  repeated string video_ids = 1;
 }
 
 message SetMediaStateRequest {
