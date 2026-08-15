@@ -3627,7 +3627,11 @@ function SettingRow({
         role="switch"
         aria-checked={on}
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+        // No hover fill. The switch beside the label is the feedback — it slides
+        // and changes colour on press — and a row that lit up under the pointer
+        // as well said the same thing twice. `transition-colors` goes with it:
+        // nothing on this row changes colour any more.
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
       >
         <span>{label}</span>
         <span

@@ -204,7 +204,12 @@ export function EqualizerSetting({
             than as loudness. The preamp is the room those boosts are paid for
             out of, so a positive setting would defeat the one thing it is for.
           */}
-          <p className="pt-1 text-[10px] text-text-2">
+          {/* Balanced against the title above the slider, which is 12px clear of
+              the track. This line was 24px clear of it — the slider's box hangs
+              20px below what it draws, exactly as it hangs above — so it takes
+              the same negative margin the title's gap did, for the same reason
+              and by the same amount. */}
+          <p className="-mt-2 text-[10px] text-text-2">
             Lower the preamp if boosted bands distort.
           </p>
         </li>
@@ -476,7 +481,11 @@ function SettingRowLike({
         role="switch"
         aria-checked={on}
         onClick={onToggle}
-        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+        // No hover fill. The switch beside the label is the feedback — it slides
+        // and changes colour on press — and a row that lit up under the pointer
+        // as well said the same thing twice. `transition-colors` goes with it:
+        // nothing on this row changes colour any more.
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
       >
         <span>{label}</span>
         <span
