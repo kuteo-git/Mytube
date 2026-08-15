@@ -44,6 +44,17 @@ import {
   narrationProgress,
   pregenProgress,
 } from '@/features/watch/application/narration'
+import {
+  attachElement,
+  getAudioContext,
+  isAttached,
+  resumeAudio,
+  setElementGain,
+  applyEq,
+} from '@/features/watch/application/audio-graph'
+import { loadEqSettings, saveEqSettings } from '@/features/watch/application/eq-prefs'
+import { EqualizerSetting } from '@/features/watch/ui/EqualizerPanel'
+import type { EqSettings } from '@/features/watch/application/eq-presets'
 import { formatDuration as formatEta } from '@/features/watch/application/narration-eta'
 import {
   loadNarrationPrefs,
@@ -531,6 +542,32 @@ export function Player({
   // callbacks below are stable, and would otherwise close over a stale value.
   const [frontIsA, setFrontIsA] = useState(true)
   const frontIsARef = useRef(true)
+  /**
+   * Hold the element, and put it into the audio graph the moment it exists.
+   *
+   * A ref callback rather than a mount effect, because the two layers are behind
+   * `playable` and are not in the tree on the first render. An effect with an
+   * empty dependency list therefore ran against two nulls, attached nothing, and
+   * never ran again — the graph was built and the filters were set, with no
+   * signal passing through them. The equaliser moved nothing at all, and since
+   * an unattached element plays perfectly well on its own there was no symptom
+   * beyond that.
+   *
+   * This cannot drift for the same reason: it fires off the node's own lifetime,
+   * so a layer that is unmounted and built again is attached again. Both
+   * callbacks are stable — an inline one would be a new function every render,
+   * which React answers by calling it with null and then with the element, over
+   * and over.
+   */
+  const holdVideo = (ref: React.RefObject<HTMLVideoElement | null>) =>
+    (el: HTMLVideoElement | null) => {
+      ref.current = el
+      // Idempotent, and it must be: this runs on every remount of the layer.
+      if (el) attachElement(el)
+    }
+  const setVideoA = useCallback(holdVideo(videoARef), [])
+  const setVideoB = useCallback(holdVideo(videoBRef), [])
+
   const front = useCallback(
     () => (frontIsARef.current ? videoARef.current : videoBRef.current),
     [],
@@ -587,7 +624,10 @@ export function Player({
   // language the video carries.
   const narrationOn = narrationSpeaks
   const narrationOnRef = useRef(false)
-  const audioCtxRef = useRef<AudioContext | null>(null)
+  // The AudioContext is no longer the player's to own — `audio-graph.ts` holds
+  // the single one that both narration and the equaliser feed. What used to be
+  // an `audioCtxRef` here became two features quietly assuming they were the
+  // only ones with a context.
   // Keep refs synchronised so callbacks that are intentionally stable (empty
   // dependency arrays) never read a stale closure value — particularly
   // handoverToBack, which copies text track modes across the swap.
@@ -704,10 +744,6 @@ export function Player({
   // taking position as a dependency and restarting on every tick.
   const positionRef = useRef(0)
   const handoverFrameRef = useRef(0)
-  // The volume we last set programmatically (for ducking).  When the browser
-  // fires onVolumeChange asynchronously, comparing against this value tells us
-  // whether the event came from our own effect or from a real user interaction.
-  const lastSetVolumeRef = useRef(-1)
   const justSwappedRef = useRef(false)
 
   // A fragmented stream declares no total length: its header says only how much
@@ -759,45 +795,60 @@ export function Player({
 
 
 
-  // Create AudioContext when narration activates.  Must happen here — not just
-  // in onClick — because narrationOn can be restored from localStorage on page
-  // load without any user gesture.
+  /**
+   * Put both video layers into the audio graph, once, for the life of the page.
+   *
+   * Not when the equaliser is switched on: `createMediaElementSource` may be
+   * called once per element and cannot be undone, so a lazy attachment would
+   * mean two different signal paths — one for viewers who opened the equaliser
+   * and one for everyone else — and a hole in the sound at the moment of
+   * switching. One path, always, is the only version that can be tested.
+   *
+   * Both layers, not just the one in front. The player swaps them, and an
+   * element that reached the front unattached would be inaudible.
+   *
+   * The context this creates is born suspended, which is safe: `audio-graph.ts`
+   * arms the gesture that starts it, and the effects below take two further
+   * chances at the same thing.
+   */
+  // Build the context early, before any element needs it. Attaching the layers
+  // is `setVideoA`/`setVideoB` above — they arrive later than this, and later
+  // than once.
   useEffect(() => {
-    if (narrationOn && !audioCtxRef.current) {
-      audioCtxRef.current = new AudioContext()
-    }
-  }, [narrationOn])
+    getAudioContext()
+  }, [])
 
-  // ...and start it at the first gesture, because one built that way is born
-  // suspended.
-  //
-  // Some browsers accept a resume from anywhere once the page has been touched
-  // at all, and for those the narration tick's own attempt is enough. Safari
-  // does not: it wants the call inside the handler for the gesture. So the
-  // handler is here, on the document, listening for whatever the viewer does
-  // first — pressing play being the likeliest.
-  //
-  // It removes itself the moment the context is running, so this is one listener
-  // for one gesture, not a permanent fixture.
+  /**
+   * Two more chances to get the context running.
+   *
+   * A suspended context is now silence rather than a missing equaliser, so this
+   * does not rely on the gesture listener alone. `play` covers the ordinary case
+   * — whatever the viewer pressed was a gesture — and `visibilitychange` covers
+   * iOS, which suspends the context when the app goes away and does not resume
+   * it on the way back.
+   */
   useEffect(() => {
-    if (!narrationOn) return
-    const start = () => {
-      const ctx = audioCtxRef.current
-      if (!ctx) return
-      if (ctx.state === 'running') {
-        detach()
-        return
-      }
-      void ctx.resume().then(detach, () => undefined)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') resumeAudio()
     }
-    const detach = () => {
-      document.removeEventListener('pointerdown', start)
-      document.removeEventListener('keydown', start)
-    }
-    document.addEventListener('pointerdown', start)
-    document.addEventListener('keydown', start)
-    return detach
-  }, [narrationOn])
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
+  /**
+   * The equaliser curve, on this device.
+   *
+   * Held here rather than in the panel so it survives the panel being closed,
+   * and pushed into the graph by an effect so that the only way to change the
+   * sound is to change this state — there is no second path that writes filters
+   * directly.
+   */
+  const [eq, setEqState] = useState(loadEqSettings)
+  useEffect(() => { applyEq(eq) }, [eq])
+  const setEq = useCallback((next: EqSettings) => {
+    saveEqSettings(next)
+    setEqState(next)
+  }, [])
 
   // Narration tick: runs every animation frame, reads VTT cues, pre-fetches
   // TTS audio and plays clips at their scheduled times through Web Audio API.
@@ -835,8 +886,9 @@ export function Player({
     const id = setInterval(() => {
       const el = front()
       bindTo(el)
-      if (!el || !audioCtxRef.current) return
-      tickNarration(el, audioCtxRef.current)
+      const ctx = getAudioContext()
+      if (!el || !ctx) return
+      tickNarration(el, ctx)
     }, 100)
 
     return () => {
@@ -845,7 +897,11 @@ export function Player({
       // Stop the voice, keep the cues: this tears down whenever the output mode
       // stops including a voice, which is not the same as leaving the video.
       stopNarrationPlayback()
-      audioCtxRef.current?.suspend()
+      // The context is deliberately left running. It used to be suspended here,
+      // on the reasoning that nothing else was using it — which stopped being
+      // true when the video started going through it. Suspending it now takes
+      // the sound out of the player entirely, and switching Read aloud off is
+      // not a request for silence.
     }
   }, [narrationSpeaks, front])
 
@@ -907,13 +963,43 @@ export function Player({
     setNarrationGain(levels.narration)
   }, [levels.narration])
 
+  /**
+   * Loudness, applied in the graph rather than on the element.
+   *
+   * `levelsFor` is unchanged and still decides the number — master volume, mute,
+   * and the duck while the voice speaks. What moved is where the number lands.
+   * Once an element is routed into Web Audio, whether its own `volume` still
+   * attenuates the signal is not something to discover per browser on a
+   * television, so a gain node does the arithmetic somewhere it plainly works.
+   *
+   * `el.muted` stays set as well. It costs nothing, it is the flag the mute
+   * button reads back, and if a layer ever escapes the graph it is the one thing
+   * that still holds.
+   *
+   * The back layer is pinned silent. It is loading — and, before a handover,
+   * playing — out of sight, and both layers feed the same filters.
+   */
   useEffect(() => {
     const el = front()
+    const hidden = back()
+    if (hidden) {
+      if (isAttached(hidden)) setElementGain(hidden, 0)
+      else hidden.volume = 0
+    }
     if (!el) return
-    lastSetVolumeRef.current = levels.video
     el.muted = muted
-    el.volume = levels.video
-  }, [levels.video, muted, front, frontSrc])
+    // The fallback is not decoration. A browser with no Web Audio — an older
+    // television, which is where this is headed — attaches nothing, and then a
+    // gain node nobody built would leave the volume slider inert and the video
+    // permanently at full. Whichever path this element is actually on is the one
+    // that gets the number.
+    if (isAttached(el)) setElementGain(el, levels.video)
+    else el.volume = levels.video
+    // `playable` is in here because it is what puts the two layers into the tree.
+    // A freshly attached element's gain starts at zero — so that a hidden layer
+    // is never heard on the way in — and if this did not run again after that,
+    // the fresh element would be the one in front and permanently silent.
+  }, [levels.video, muted, front, back, frontSrc, frontIsA, playable])
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
@@ -1276,8 +1362,12 @@ export function Player({
       if (!claimMatches()) return
 
       // Carry across everything the viewer set, or the swap would silently undo
-      // their volume, their mute and their subtitles.
-      next.volume = current.volume
+      // their mute and their subtitles.
+      //
+      // Volume is not among them any more: it belongs to the graph, not to the
+      // element, and the effect that owns it re-runs on the swap and gives the
+      // new front layer its gain. Copying `volume` here would only propagate the
+      // constant 1 both elements now hold.
       next.muted = current.muted
       for (let i = 0; i < next.textTracks.length; i++) {
         const track = next.textTracks[i]
@@ -1685,8 +1775,8 @@ export function Player({
     if (!narrationPrefs.speak) {
       // It has to be created and resumed inside the gesture, or the browser's
       // autoplay policy will not let it make a sound.
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
-      void audioCtxRef.current.resume()
+      getAudioContext()
+      resumeAudio()
     }
     const next = { ...narrationPrefs, speak: !narrationPrefs.speak }
     saveNarrationPrefs(next)
@@ -1879,11 +1969,15 @@ export function Player({
     window.localStorage.setItem('yt-player-volume', String(next))
     window.localStorage.setItem(MUTED_KEY, next === 0 ? '1' : '0')
     if (element) {
-      element.volume = next
+      // The level itself reaches the graph through `levelsFor` and the effect
+      // that follows it — `setVolume` above is the whole of it. Only mute is
+      // still the element's business.
       element.muted = next === 0
       setMuted(next === 0)
     }
-    // Touching the volume is a gesture, so audible playback is allowed again.
+    // Touching the volume is a gesture, so audible playback is allowed again,
+    // and it is the moment to take a suspended context up on it.
+    resumeAudio()
   }
 
   const toggleMute = () => {
@@ -2377,7 +2471,7 @@ export function Player({
             return (
               <video
                 key={isA ? 'a' : 'b'}
-                ref={isA ? videoARef : videoBRef}
+                ref={isA ? setVideoA : setVideoB}
                 src={src}
                 className={clsx(
                   'absolute top-0 left-0 h-full cursor-pointer',
@@ -2436,6 +2530,11 @@ export function Player({
                 // button, and holding the controls open, since they are pinned
                 // whenever nothing is playing.
                 onPlay={() => {
+                  // The element's sound reaches the speakers through the audio
+                  // graph, so a context that is not running is a video playing
+                  // in silence. Whatever started this was almost certainly a
+                  // gesture; take it.
+                  resumeAudio()
                   if (isA === frontIsARef.current) setPlaying(true)
                 }}
                 onPause={() => {
@@ -2463,24 +2562,20 @@ export function Player({
                 onVolumeChange={
                   isFront
                     ? (e) => {
-                        // Follow the element, but do not record what it says.
+                        // Follow the element's mute, and nothing else.
                         //
                         // This event fires for our own changes as much as for
-                        // the viewer's — ducking for narration, restoring after
-                        // it, and once upon a time the autoplay policy muting
-                        // the video on load. The guard below only compares
-                        // volume, so a change to `muted` alone got through, and
-                        // early in a page load `lastSetVolumeRef` is still -1
-                        // and even that guard does not hold. A mute nobody
-                        // asked for was therefore written down as a preference
-                        // and read back on every later visit, which is why the
-                        // sound stayed off long after the code that muted it
-                        // had gone.
+                        // the viewer's, and preferences are written where the
+                        // viewer expresses them: the mute button and the volume
+                        // slider. Writing them from here once recorded the
+                        // autoplay policy's own mute as a preference and handed
+                        // silence back on every later visit.
                         //
-                        // Preferences are written where the viewer expresses
-                        // them: the mute button and the volume slider.
-                        if (e.currentTarget.volume === lastSetVolumeRef.current) return
-                        setVolume(e.currentTarget.volume)
+                        // Volume is no longer read from the element at all.
+                        // Loudness lives in the audio graph now, so the
+                        // element's `volume` sits at 1 for the life of the page
+                        // — and following it would have set the player to full
+                        // volume the first time anything fired this event.
                         setMuted(e.currentTarget.muted)
                       }
                     : undefined
@@ -2837,20 +2932,30 @@ export function Player({
               cannot do anything — unless the gear is also carrying the
               narration settings, which it is whenever this video can be
               narrated, and those are reachable nowhere else. */}
-          {(qualityOptions.length > 1 || coarse || narrationAvailable) &&
-            variant === 'full' && (
-              <SettingsMenu
-                buttonClassName={controlButton}
-                sheet={coarse}
-                onOpenChange={trackMenu}
-              >
-                {resolutionRow}
-                {subtitleRows}
-                {narrationRows}
-                {autoplayRow}
-                {translateGroup}
-              </SettingsMenu>
-            )}
+          {/* The gear is now unconditional in the full player. It used to be
+              offered only when this video had something to configure — several
+              renditions, or subtitles to narrate — and the equaliser is the
+              first setting here that belongs to the listener rather than to the
+              video, so there is always something behind it. */}
+          {variant === 'full' && (
+            <SettingsMenu
+              buttonClassName={controlButton}
+              sheet={coarse}
+              onOpenChange={trackMenu}
+            >
+              {resolutionRow}
+              {subtitleRows}
+              {narrationRows}
+              <EqualizerSetting
+                settings={eq}
+                onChange={setEq}
+                element={front()}
+                tall={coarse}
+              />
+              {autoplayRow}
+              {translateGroup}
+            </SettingsMenu>
+          )}
 
           {/* Picture-in-picture, offered only where the browser has it.
               On iOS this is the *only* way playback survives leaving the page:
