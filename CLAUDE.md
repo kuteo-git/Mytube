@@ -386,9 +386,19 @@ Auto-follow channels · `/tv` UI driven by D-pad · mobile app · *(optional)* f
 5. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures gracefully and allow retry.
 6. **YouTube blocks by IP if too many full-metadata fetches are made.** A full metadata fetch is expensive and counted; flat listing is not. Backfill runs one thread, 4s apart, 200 videos/pass, and stops after 15 consecutive failures. A pass is **always** bounded — `limit: 0` means 200, not "all".
 
+### Logs
+
+`logview` on **:8184** serves every service's log as one page — timestamps, level, service, live tail over SSE, and filters for service / level / free text / errors only.
+
+- **Its own process, not an endpoint on the gateway.** Logs are wanted at the moment something has stopped working, and a viewer inside the gateway goes down with the thing it is there to explain. It also needs no Vite, so it is reachable from a phone while the web app is not running.
+- **It reads the files in `LOG_DIR`** and no service knows it exists. That is what makes it cover the two Python servers as well as the four Go ones, for nothing.
+- **Nothing is ever dropped.** slog's text format and Python `logging` are both parsed; a panic trace, an ffmpeg complaint, a line yt-dlp wrote to stderr are shown raw. A level is read, never guessed — half the interesting lines here mention a 403, and filing those under ERROR would make "errors only" show everything.
+- **Filtering is in the browser.** Every line is already being sent for the live view, so a second implementation on the server would only be a predicate that agrees with the first until one is fixed.
+- **`dev.sh` appends to logs rather than truncating them**, and writes `--- restart <time> ---` between runs, which logview draws as a divider. Truncating threw away the lines written immediately *before* somebody restarted the stack, which are reliably the ones being looked for. A log past `LOG_CEILING_BYTES` (50 MiB) is trimmed to its most recent half rather than rotated — the older half is the right one to lose, and no second file has to be gone looking in.
+
 ### Build status
 
-- 4 services (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + web 5173.
+- 4 services (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + `logview` 8184 + web 5173.
 - Postgres 17, one schema and one role per service.
 - `scripts/dev.sh` runs the stack; `scripts/stop.sh` stops by port. `make check` = buf lint + tsc + go build.
 - `dev.sh` refuses to start on a held port and prints `up`/`DOWN` per service.

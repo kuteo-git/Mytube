@@ -67,7 +67,7 @@ fi
 # the four services have already started and stopping them again is worse than
 # not starting.
 busy=""
-for port in 8180 8181 8182 8183 5173; do
+for port in 8180 8181 8182 8183 8184 5173; do
   if pid=$(lsof -ti:"$port" 2>/dev/null | head -1); then
     busy+=$'\n'"  :$port held by pid $pid ($(ps -o comm= -p "$pid" 2>/dev/null | xargs basename 2>/dev/null))"
   fi
@@ -88,11 +88,37 @@ go build -o "$LOG_DIR/catalog" ./services/catalog/cmd/catalog
 go build -o "$LOG_DIR/recsys" ./services/recsys/cmd/recsys
 go build -o "$LOG_DIR/ingest" ./services/ingest/cmd/ingest
 go build -o "$LOG_DIR/gateway" ./services/gateway/cmd/gateway
+go build -o "$LOG_DIR/logview" ./services/logview/cmd/logview
 
-"$LOG_DIR/catalog" >"$LOG_DIR/catalog.log" 2>&1 & pids+=($!)
-"$LOG_DIR/recsys"  >"$LOG_DIR/recsys.log"  2>&1 & pids+=($!)
-"$LOG_DIR/ingest"  >"$LOG_DIR/ingest.log"  2>&1 & pids+=($!)
-"$LOG_DIR/gateway" >"$LOG_DIR/gateway.log" 2>&1 & pids+=($!)
+# Logs are appended to, not overwritten.
+#
+# They used to be truncated on every start, which threw away the lines written
+# immediately before somebody restarted the stack — and those are reliably the
+# ones being looked for. A marker separates one run from the next; logview draws
+# it as a divider.
+#
+# Trimmed rather than rotated: a log past the ceiling keeps its most recent half
+# and loses its oldest, which is the right half to lose and needs no second file
+# to go looking in.
+LOG_CEILING_BYTES="${LOG_CEILING_BYTES:-52428800}"   # 50 MiB
+for name in catalog recsys ingest gateway logview translate tts; do
+  file="$LOG_DIR/$name.log"
+  [ -f "$file" ] || continue
+  size=$(wc -c <"$file" | tr -d ' ')
+  if [ "$size" -gt "$LOG_CEILING_BYTES" ]; then
+    tail -c "$((LOG_CEILING_BYTES / 2))" "$file" >"$file.trimmed" && mv "$file.trimmed" "$file"
+    echo "  trimmed $name.log ($((size / 1048576))MB)"
+  fi
+  echo "--- restart $(date +%Y-%m-%dT%H:%M:%S%z) ---" >>"$file"
+done
+
+"$LOG_DIR/catalog" >>"$LOG_DIR/catalog.log" 2>&1 & pids+=($!)
+"$LOG_DIR/recsys"  >>"$LOG_DIR/recsys.log"  2>&1 & pids+=($!)
+"$LOG_DIR/ingest"  >>"$LOG_DIR/ingest.log"  2>&1 & pids+=($!)
+"$LOG_DIR/gateway" >>"$LOG_DIR/gateway.log" 2>&1 & pids+=($!)
+# The log viewer, on a port of its own. Deliberately not part of the gateway:
+# the moment logs are wanted is the moment something has stopped working.
+"$LOG_DIR/logview" >>"$LOG_DIR/logview.log" 2>&1 & pids+=($!)
 
 # The gateway depends on the other two, so wait for it rather than for itself.
 for _ in $(seq 1 20); do
@@ -104,7 +130,7 @@ done
 NLLB_VENV="${NLLB_VENV:-$(pwd)/.venv-nllb}"
 if [ -x "$NLLB_VENV/bin/python" ] && [ -f services/translate_server.py ]; then
   echo "starting translation server (port 8005)..."
-  "$NLLB_VENV/bin/python" services/translate_server.py >"$LOG_DIR/translate.log" 2>&1 & pids+=($!)
+  "$NLLB_VENV/bin/python" services/translate_server.py >>"$LOG_DIR/translate.log" 2>&1 & pids+=($!)
 else
   echo "no translation server: narration will not translate" >&2
 fi
@@ -122,7 +148,7 @@ if lsof -ti:8002 >/dev/null 2>&1; then
   echo "speech already running on :8002, leaving it alone"
 elif [ -f "$TTS_SERVER" ]; then
   echo "starting speech server (port 8002)..."
-  python3 "$TTS_SERVER" >"$LOG_DIR/tts.log" 2>&1 & pids+=($!)
+  python3 "$TTS_SERVER" >>"$LOG_DIR/tts.log" 2>&1 & pids+=($!)
 else
   echo "no speech server at $TTS_SERVER: narration will be silent" >&2
 fi
@@ -134,7 +160,7 @@ fi
 # of ports as though they were all listening.
 sleep 1
 echo
-for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8005:translate" "8002:speech"; do
+for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8005:translate" "8002:speech"; do
   port="${entry%%:*}"
   name="${entry##*:}"
   if lsof -ti:"$port" >/dev/null 2>&1; then
@@ -144,6 +170,6 @@ for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8005:tra
   fi
 done
 echo
-echo "logs in $LOG_DIR"
+echo "logs in $LOG_DIR  —  and on http://localhost:8184"
 echo "starting web on :5173..."
 npm --prefix web run dev
