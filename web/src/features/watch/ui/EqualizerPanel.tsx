@@ -170,8 +170,18 @@ export function EqualizerSetting({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 pt-3">
-            <span className="w-14 shrink-0 text-xs text-text-2">Preamp</span>
+          {/* Name and value on their own line, slider beneath it.
+
+              Side by side, the slider sat between a 56px label and a 40px
+              number: 64px of inset on the left against 48px on the right, and
+              neither edge lined up with the fader bank above running the full
+              width. Stacking gives every row in this panel the same two edges,
+              and gives the slider back the 100px it was spending on text. */}
+          <div className="flex items-baseline justify-between pt-3 text-xs text-text-2">
+            <span>Preamp</span>
+            <span className="tabular-nums">{formatDb(settings.preamp)}</span>
+          </div>
+          <div className="flex">
             <LinearSlider
               label="Preamp"
               min={MIN_PREAMP_DB}
@@ -180,9 +190,6 @@ export function EqualizerSetting({
               value={settings.preamp}
               onChange={setPreamp}
             />
-            <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
-              {formatDb(settings.preamp)}
-            </span>
           </div>
           {/*
             Why it only cuts. Boosting bands adds gain to material already
@@ -233,8 +240,11 @@ export function EqualizerSetting({
           })}
         </div>
 
-        <div className="flex items-center gap-2 pt-2">
-          <span className="w-14 shrink-0 text-xs text-text-2">Dry/Wet</span>
+        <div className="flex items-baseline justify-between pt-2 text-xs text-text-2">
+          <span>Dry/Wet</span>
+          <span className="tabular-nums">{Math.round(reverb.wet * 100)}%</span>
+        </div>
+        <div className="flex">
           <LinearSlider
             label="Dry wet mix"
             min={0}
@@ -243,9 +253,6 @@ export function EqualizerSetting({
             value={Math.round(reverb.wet * 100)}
             onChange={(v) => setReverb({ ...reverb, wet: v / 100 })}
           />
-          <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
-            {Math.round(reverb.wet * 100)}%
-          </span>
         </div>
         {bypassed && (
           <p className="pt-1 text-[10px] text-brand" role="status">
