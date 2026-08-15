@@ -247,7 +247,8 @@ Key rules:
 - Likes add affinity on topic 1.0 / channel 0.8 / hashtag 0.5, accumulated.
 - Dislikes remove the video from feed and up-next; it remains reachable through search and channel pages.
 - Dislike affinity mirrors likes at −0.7 vs +2.0, with a 90-day half-life.
-- Channel suppression needs ≥3 disliked videos **and** ≥30% of that channel's videos, with a ceiling of ≥8. Subscribed channels are immune.
+- Channel suppression needs ≥3 disliked videos **and** ≥30% of that channel's videos, with a ceiling of ≥20. Subscribed channels are immune.
+- The ceiling was 8, and 8 is an ordinary rate of "not this one" on a channel with forty videos. It took Igor Presnyakov and Drumeo (both 8 of ~42), Tinh te and Vox Weather (9) out of the library altogether — 143 of the 402 videos in Music between them, which is most of why that feed held 27 videos. Twenty still catches NoCopyrightSounds at 26, the case the ceiling exists for.
 
 ### Up-next
 
@@ -273,7 +274,8 @@ In up-next, everything not a relationship to the video playing (channel affinity
 - **Up-next is deliberately not tuned.** It answers a different question, and a number moved on a settings screen must not silently reorder the rail beside a playing video.
 - The two dozen `weight*`/`penalty*` constants are **not** exposed. §6's value is that every score can be explained; twenty knobs nobody remembers setting is how that is lost.
 - When a snapshot falls below 48 videos, `ExpandLibrary` runs: deepen `topics.yaml` sources → InnerTube related → search by topic name. Only one expansion at a time.
-- Videos older than 365 days (PublishedAt, or AddedAt fallback) are filtered from Home.
+- Videos older than 365 days (PublishedAt, or AddedAt fallback) are filtered from Home — **but only when no topic chip is picked**. Choosing a chip is a stated intent, and the answer to "show me music" is not "music from this year": 170 of the library's music videos are over a year old against 148 under it, where an ordinary topic loses 7%.
+- **`EVICTED` videos are offered.** They were excluded for as long as "no local copy" meant "pressing this does nothing"; the instant tier plays an undownloaded video straight away while the copy is fetched behind it. Excluding them cost 359 videos across the library and 104 of the 402 in Music.
 
 ## 7. Scope
 

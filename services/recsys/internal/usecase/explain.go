@@ -173,10 +173,12 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 		// page is inviting a press on something that cannot open.
 		out.Excluded = excludedMediaUnavailable
 		return out
-	case "MEDIA_STATE_EVICTED":
-		out.Excluded = excludedMediaEvicted
-		return out
 	}
+	// MEDIA_STATE_EVICTED is deliberately not excluded. It was, for as long as
+	// "no local copy" meant "pressing this does nothing" — but the instant tier
+	// plays an undownloaded video straight away while the copy is fetched
+	// behind it, so an evicted card behaves like any other. Holding to the old
+	// rule cost 359 videos across the library, and 104 of the 402 in Music.
 
 	fraction, opened := in.profile.WatchedFraction[f.VideoID]
 	if opened && fraction >= watchedEnoughThreshold {
@@ -209,7 +211,15 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 		out.Excluded = excludedNoPublishDate
 		return out
 	}
-	if now.Sub(f.PublishedAt).Hours()/24 > in.tuning.maxPublishedAgeDays {
+	// The age limit belongs to the open feed only. It exists to stop old
+	// material drifting up a page nobody asked a question of — but picking a
+	// topic chip is a question, and the answer to "show me music" is not
+	// "music from this year".
+	//
+	// Music is where it showed: 170 of the library's music videos are over a
+	// year old against 148 under it, so the rule hid more than half of it, where
+	// an ordinary topic loses 7%.
+	if in.topic == "" && now.Sub(f.PublishedAt).Hours()/24 > in.tuning.maxPublishedAgeDays {
 		out.Excluded = excludedTooOld
 		return out
 	}

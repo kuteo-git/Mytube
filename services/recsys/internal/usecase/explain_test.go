@@ -164,3 +164,70 @@ func TestUnavailableVideosAreKeptOutOfTheFeed(t *testing.T) {
 		}
 	}
 }
+
+// A video whose file was swept off the disk is still a video worth offering.
+//
+// It was excluded for as long as "no local copy" meant "presses do nothing".
+// It does not any more: the instant tier plays an undownloaded video straight
+// away while the copy is fetched behind it, so the card behaves like any other.
+// Excluding it cost 359 videos across the library and 104 of the 402 in Music
+// alone — a quarter of the music, kept back for a reason that had expired.
+func TestEvictedVideosAreStillOffered(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{{
+		VideoID:     "swept",
+		ChannelID:   "ch_1",
+		MediaState:  "MEDIA_STATE_EVICTED",
+		AddedAt:     now,
+		PublishedAt: now.Add(-time.Hour),
+	}}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+
+	explained, err := ranker.ExplainFeed(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("ExplainFeed: %v", err)
+	}
+	if len(explained) != 1 {
+		t.Fatalf("explained %d videos, want 1", len(explained))
+	}
+	if explained[0].Excluded != "" {
+		t.Fatalf("an evicted video was excluded as %q", explained[0].Excluded)
+	}
+}
+
+// Picking a topic chip is a statement of intent, and the age rule is not about
+// intent — it is there to stop old material drifting up the open home page.
+//
+// Music is where the difference shows: 170 of the library's music videos are
+// over a year old against 148 under it, so the rule hid more than half the
+// music, while it costs an ordinary topic 7%. Asking for music and being shown
+// only this year's is not the request that was made.
+func TestPickingATopicLiftsTheAgeLimit(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{{
+		VideoID:     "old_song",
+		ChannelID:   "ch_1",
+		Topics:      []string{"Music"},
+		AddedAt:     now,
+		PublishedAt: now.Add(-400 * 24 * time.Hour),
+	}}
+	ranker := NewRanker(stubStore{profile: emptyProfile()}, stubFeatures{features: features})
+
+	withTopic, err := ranker.ExplainFeed(context.Background(), "viewer", "Music", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("ExplainFeed: %v", err)
+	}
+	if len(withTopic) != 1 || withTopic[0].Excluded != "" {
+		t.Fatalf("with the Music chip the old song was excluded as %q", withTopic[0].Excluded)
+	}
+
+	// Without a chip the rule still holds: that page has no stated intent to
+	// answer to.
+	noTopic, err := ranker.ExplainFeed(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("ExplainFeed: %v", err)
+	}
+	if len(noTopic) != 1 || noTopic[0].Excluded != excludedTooOld {
+		t.Fatalf("on the open feed the old song was excluded as %q, want %q", noTopic[0].Excluded, excludedTooOld)
+	}
+}

@@ -871,3 +871,41 @@ func TestLanguageFilterCaseInsensitive(t *testing.T) {
 		t.Fatal("EN (uppercase) did not match en (lowercase) filter")
 	}
 }
+
+// Eight rejections out of forty is an ordinary rate of "not this one", not a
+// verdict on the channel.
+//
+// The ceiling started at eight, and that is what it cost: Igor Presnyakov and
+// Drumeo, both at 8 of about 42, vanished from the library entirely — along
+// with Tinh te and Vox Weather at 9. Between them they took 143 of the 402
+// videos in Music, which is most of the reason that feed had 27 videos in it.
+//
+// The count still stands on its own, and still catches the channel turned down
+// again and again whatever share of it that is. It just has to be a number a
+// viewer could not reach by skipping songs.
+func TestSkippingSomeOfAChannelDoesNotSuppressIt(t *testing.T) {
+	now := time.Now()
+	var features []domain.VideoFeatures
+	for i := 0; i < 42; i++ {
+		features = append(features, domain.VideoFeatures{
+			VideoID:     fmt.Sprintf("g%d", i),
+			ChannelID:   "ch_guitarist",
+			Topics:      []string{"Music"},
+			AddedAt:     now,
+			PublishedAt: now,
+		})
+	}
+	profile := emptyProfile()
+	for i := 0; i < 8; i++ {
+		profile.Disliked[fmt.Sprintf("g%d", i)] = now
+	}
+
+	ranker := NewRanker(stubStore{profile: profile}, stubFeatures{features: features})
+	ranked, err := ranker.rankAll(context.Background(), "viewer", "", DefaultFeedMix, nil, Tuning{})
+	if err != nil {
+		t.Fatalf("rankAll: %v", err)
+	}
+	if !present(ranked, "g30") {
+		t.Fatal("eight of forty-two turned down must not take the whole channel")
+	}
+}

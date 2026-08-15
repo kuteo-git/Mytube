@@ -62,9 +62,20 @@ const (
 	// not be made to work by using it more, which is the one thing a viewer will
 	// try.
 	//
-	// Eight is above the floor by enough that it cannot be reached by idle
-	// tapping, and far below the point where somebody is still asking politely.
-	channelDislikeCeiling = 8
+	// Eight was too few. It is an ordinary rate of "not this one" on a channel
+	// with forty videos, and it took whole channels for it: Igor Presnyakov and
+	// Drumeo, both turned down 8 times out of about 42, disappeared from the
+	// library — as did Tinh te and Vox Weather at 9. Between them they held 143
+	// of the 402 videos in Music, which is most of why that feed came to 27
+	// videos and felt like the same page every time.
+	//
+	// Twenty still catches NoCopyrightSounds, the case this ceiling was written
+	// for, at 26 rejections. It is high enough that reaching it means going out
+	// of one's way, which is what a verdict on a channel should take.
+	//
+	// The share below is left alone: a small channel turned down three times out
+	// of five is a different statement, and 30% of it says so.
+	channelDislikeCeiling = 20
 	// Opening a video and leaving within the first few per cent is a judgement,
 	// not an absence of one. Before this existed such a video fell through to
 	// "never watched" and collected that bucket's boost, so the surest way to
