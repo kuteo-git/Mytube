@@ -29,6 +29,10 @@ var errJobCancelled = errors.New("job cancelled while running")
 type Worker struct {
 	ingest *Ingest
 	logger *slog.Logger
+	// Gap before the second attempt within one job. Zero means the package
+	// default; tests set it so they do not sit out a delay that exists for
+	// googlevideo rather than for them.
+	resolveDelay time.Duration
 }
 
 func NewWorker(ingest *Ingest, logger *slog.Logger) *Worker {
@@ -100,6 +104,19 @@ func (w *Worker) sweep(ctx context.Context) {
 // stays FAILED with the Retry button it always had.
 var retryBackoff = []time.Duration{2 * time.Minute, 10 * time.Minute, 30 * time.Minute}
 
+// How long the second attempt inside one job waits before resolving again.
+//
+// Short, because this is still the same job with a viewer possibly waiting on
+// it — the minutes-long waits above are for after it has given up. Long enough
+// to be somewhere else in time than the attempt that just failed, which is the
+// entire point: two tries six seconds apart are one try with extra steps.
+//
+// Ten seconds is a guess bounded by two measurements rather than a tuned
+// number: refusals here have been seen to clear well inside the two-minute
+// job-level backoff, and a transfer that is going to work loses ten seconds off
+// a download that takes minutes.
+const resolveAgainDelay = 10 * time.Second
+
 // retryFailed gives one failed transfer another go.
 //
 // A failed job used to wait for a person, and most of what fails here is not
@@ -112,6 +129,15 @@ var retryBackoff = []time.Duration{2 * time.Minute, 10 * time.Minute, 30 * time.
 // fetched. Anything upstream has refused for good is recorded in
 // unavailable_sources and skipped here, because that question already has one
 // place that answers it.
+// resolvePause is the gap before the second attempt, overridable so tests do
+// not sit out a delay that exists for googlevideo's benefit.
+func (w *Worker) resolvePause() time.Duration {
+	if w.resolveDelay > 0 {
+		return w.resolveDelay
+	}
+	return resolveAgainDelay
+}
+
 func (w *Worker) retryFailed(ctx context.Context) {
 	job, requeued, err := w.ingest.store.RequeueFailed(ctx, retryBackoff)
 	if err != nil {
@@ -253,8 +279,25 @@ func (w *Worker) process(ctx context.Context, job domain.Job) error {
 	if err != nil && !cancelled && ctx.Err() == nil {
 		if _, permanent := domain.ReasonOf(domain.AsUnavailable(err)); !permanent {
 			w.logger.Warn("transfer refused, resolving again",
-				"job", job.ID, "video", meta.ID, "error", err)
-			result, err = i.downloader.Download(transfer, job.SourceURL, meta.ID, job.PreferredHeight, onProgress)
+				"job", job.ID, "video", meta.ID, "error", err,
+				"after", w.resolvePause())
+			// Wait first. Resolving again gets a new URL, but a new URL is only
+			// worth having if the thing refusing it has moved on, and some of
+			// these refusals are the address being turned away for a stretch
+			// rather than one dead URL.
+			//
+			// Measured on g55XEx2oFaE, a three-hour mix: claimed at 18:06:17,
+			// refused at :21, retried immediately and refused again at :23 —
+			// two attempts inside six seconds, both landing in the same moment.
+			// The same URL shape answered 206 to a bounded range and 200 to no
+			// range at all a few minutes later, on the first ask. Nothing about
+			// the video or the request was wrong; the second attempt was simply
+			// standing in the same place as the first.
+			select {
+			case <-ctx.Done():
+			case <-time.After(w.resolvePause()):
+				result, err = i.downloader.Download(transfer, job.SourceURL, meta.ID, job.PreferredHeight, onProgress)
+			}
 		}
 	}
 
