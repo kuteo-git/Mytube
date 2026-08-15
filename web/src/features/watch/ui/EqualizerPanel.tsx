@@ -102,10 +102,17 @@ export function EqualizerSetting({
             </p>
           )}
 
+          {/* A grid, not a wrapping row.
+
+              Left-packed pills left a ragged gap on the right while the faders
+              below them ran the full width, so the two rows disagreed about
+              where the panel ends. Equal columns settle it: both edges line up
+              with the faders and with each other, and a preset does not change
+              width when it is renamed. */}
           <div
             role="radiogroup"
             aria-label="Equalizer preset"
-            className="flex flex-wrap gap-1 pb-3"
+            className="grid grid-cols-5 gap-1 pb-3"
           >
             {PRESETS.map((p) => {
               const on = settings.preset === p.name
@@ -117,7 +124,7 @@ export function EqualizerSetting({
                   aria-checked={on}
                   onClick={() => pickPreset(p.name)}
                   className={clsx(
-                    'min-h-11 rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
+                    'grid min-h-11 place-items-center rounded-md px-1 text-center text-xs font-medium leading-tight transition-colors duration-150 ease-out',
                     on
                       ? 'bg-invert-bg text-invert-text'
                       : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
@@ -127,14 +134,15 @@ export function EqualizerSetting({
                 </button>
               )
             })}
-            {/* Shown as a state, never as a choice: "Custom" is where the
-                sliders put you, and offering it as a button would raise the
-                question of what pressing it restores. */}
-            {settings.preset === 'custom' && (
-              <span className="rounded-md bg-invert-bg px-2 py-1.5 text-xs font-medium text-invert-text">
-                Custom
-              </span>
-            )}
+            {/* No "Custom" chip. Moving a fader lights nothing instead.
+
+                It was a sixth pill that looked exactly like the five real ones
+                and could not be pressed to any effect — the row grew and shrank
+                as the sliders moved, and the one thing it added was a word for
+                a state the faders were already showing. Nothing lit says the
+                same thing more quietly, and the state itself is unchanged:
+                `identifyPreset` still finds its way back to a preset when the
+                values match one again. */}
           </div>
 
           {/*
@@ -164,18 +172,13 @@ export function EqualizerSetting({
 
           <div className="flex items-center gap-2 pt-3">
             <span className="w-14 shrink-0 text-xs text-text-2">Preamp</span>
-            <input
-              type="range"
-              aria-label="Preamp"
+            <LinearSlider
+              label="Preamp"
               min={MIN_PREAMP_DB}
               max={MAX_PREAMP_DB}
               step={1}
               value={settings.preamp}
-              onChange={(e) => setPreamp(Number(e.target.value))}
-              // A horizontal range is only as tall as it is drawn, and what is
-              // drawn is a few pixels of track. The element is given the full
-              // 44 to be grabbed by; the track inside it does not change.
-              className="h-11 min-w-0 flex-1 accent-brand"
+              onChange={setPreamp}
             />
             <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
               {formatDb(settings.preamp)}
@@ -207,7 +210,7 @@ export function EqualizerSetting({
 
       {reverb.enabled && (
       <li className="px-4 pb-3">
-        <div role="radiogroup" aria-label="Environment" className="flex flex-wrap gap-1">
+        <div role="radiogroup" aria-label="Environment" className="grid grid-cols-4 gap-1">
           {REVERB_PRESETS.map((p) => {
             const on = reverb.preset === p.name
             return (
@@ -218,7 +221,7 @@ export function EqualizerSetting({
                 aria-checked={on}
                 onClick={() => pickRoom(p.name)}
                 className={clsx(
-                  'min-h-11 rounded-md px-3 text-xs font-medium transition-colors duration-150 ease-out',
+                  'grid min-h-11 place-items-center rounded-md px-1 text-center text-xs font-medium leading-tight transition-colors duration-150 ease-out',
                   on
                     ? 'bg-invert-bg text-invert-text'
                     : 'bg-white/10 text-text-2 hover:bg-white/20 hover:text-text',
@@ -232,15 +235,13 @@ export function EqualizerSetting({
 
         <div className="flex items-center gap-2 pt-2">
           <span className="w-14 shrink-0 text-xs text-text-2">Dry/Wet</span>
-          <input
-            type="range"
-            aria-label="Dry wet mix"
+          <LinearSlider
+            label="Dry wet mix"
             min={0}
             max={100}
             step={1}
             value={Math.round(reverb.wet * 100)}
-            onChange={(e) => setReverb({ ...reverb, wet: Number(e.target.value) / 100 })}
-            className="h-11 min-w-0 flex-1 accent-brand"
+            onChange={(v) => setReverb({ ...reverb, wet: v / 100 })}
           />
           <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-text-2">
             {Math.round(reverb.wet * 100)}%
@@ -259,6 +260,61 @@ export function EqualizerSetting({
 
 function formatDb(db: number): string {
   return `${db > 0 ? '+' : ''}${db}`
+}
+
+/**
+ * The preamp and the dry/wet mix, drawn the same way the faders are.
+ *
+ * Same problem, lying down: a native range wide enough to grab draws a track as
+ * thick as the box, and one thin enough to look right is 4px to aim at. And
+ * beyond that, three sliders in one panel drawn two different ways reads as two
+ * different kinds of control, when they are the same kind pointed differently.
+ *
+ * The fill runs from the left rather than from the centre, which is the one way
+ * this differs from a band. Neither of these has a meaningful middle: a preamp
+ * of 0 dB is the top of its range and full wet is the end of its, so the bar
+ * says "how much" and reads correctly full at one end and empty at the other.
+ */
+function LinearSlider({
+  label,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string
+  min: number
+  max: number
+  step: number
+  value: number
+  onChange: (value: number) => void
+}) {
+  const position = (value - min) / (max - min || 1)
+
+  return (
+    <div className="relative h-11 min-w-0 flex-1 rounded has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand">
+      <div className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-white/15" />
+      <div
+        className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-brand"
+        style={{ width: `${position * 100}%` }}
+      />
+      <div
+        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-md ring-1 ring-black/20"
+        style={{ left: `${position * 100}%` }}
+      />
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      />
+    </div>
+  )
 }
 
 /**

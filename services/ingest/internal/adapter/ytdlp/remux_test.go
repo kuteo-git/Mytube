@@ -118,3 +118,49 @@ func TestRemuxArgsWritesFragmentedMP4ThroughAPipe(t *testing.T) {
 		t.Errorf("expected output on stdout, got %q", args[len(args)-1])
 	}
 }
+
+// optionBeforeInput reports the value of the named option that applies to the
+// given input: the last one appearing before its -i, reset at each -i.
+//
+// Same shape as seekBeforeInput and for the same reason. -request_size after -i
+// is an output option, where it means nothing at all — and a command that reads
+// open-ended is one googlevideo answers with a redirect to a host that refuses.
+func optionBeforeInput(t *testing.T, args []string, option, u string) string {
+	t.Helper()
+	value := ""
+	for i := 0; i < len(args)-1; i++ {
+		switch args[i] {
+		case option:
+			value = args[i+1]
+		case "-i":
+			if args[i+1] == u {
+				return value
+			}
+			value = ""
+		}
+	}
+	t.Fatalf("input %q not found in %v", u, args)
+	return ""
+}
+
+// Every request to googlevideo must be bounded, on every input.
+//
+// Measured on a real 1080p URL: ffprobe without the option answered "403
+// Forbidden", and with it answered in 0.14s. Unbounded, the ingest log carried
+// `probe keyframe: exit status 1` then `open remux: EOF` then a 502 for every
+// video in the library — CLAUDE.md §4.
+func TestRemuxArgsBoundsEveryRequest(t *testing.T) {
+	args := remuxArgs([]string{videoURL, audioURL}, 20, 18)
+
+	for _, u := range []string{videoURL, audioURL} {
+		if got := optionBeforeInput(t, args, "-request_size", u); got != httpRequestSizeBytes {
+			t.Errorf("request_size for %q = %q, want %q", u, got, httpRequestSizeBytes)
+		}
+		// Probing and header parsing happen before the first ordinary request,
+		// so without this the refusal simply moves to the request that opens
+		// the stream.
+		if got := optionBeforeInput(t, args, "-initial_request_size", u); got != httpRequestSizeBytes {
+			t.Errorf("initial_request_size for %q = %q, want %q", u, got, httpRequestSizeBytes)
+		}
+	}
+}

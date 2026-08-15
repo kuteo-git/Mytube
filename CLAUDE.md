@@ -67,13 +67,17 @@ The player climbs tiers: `instant` starts immediately → a hidden `remux` eleme
 - **The remux tier waits for the first bytes before committing a status.** `OpenRemux` returns when ffmpeg *starts*, long before it has read anything, so a refusal used to arrive as `200` with an empty body — which the browser reports only as `DEMUXER_ERROR_COULD_NOT_OPEN`. Those first bytes are the fMP4's initialisation segment and are written ahead of the rest, never discarded.
 - **An upstream status ≥400 is logged.** It arrives as a *successful* round trip — `err` is nil, the status carries the bad news — so passing it through left no trace anywhere. A day was spent looking at the player for a fault that never logged a line.
 
+- **ffmpeg and ffprobe read open-ended unless told not to, and that is the same rule.** They do their own HTTP, so the gateway's chunking cannot cover them: `-request_size` **and** `-initial_request_size` (2 MiB, matching `instantChunkBytes`) go before every `-i`, per input. Without them, measured on a real 1080p URL — `ffprobe` → 403 Forbidden; `ffprobe -request_size 2M` → the answer in 0.14s; `curl -r 0-1048575` → 206; `curl -r 0-` → 302 to a host that then 403s. This was the whole of `probe keyframe: exit status 1` → `open remux: EOF` → **502**, which the ingest log carried for *every* video; the mux only ever opened when the retry happened to be let through.
+- **ffmpeg's stderr is kept** (`tailBuffer`, last 4 KiB). A mux that fails writes no bytes, and the caller can only call that `EOF` — a word about the pipe, not the fault. Every remux failure in the log read `error=EOF` while ffmpeg was saying "403 Forbidden" a few kilobytes away.
+
 ### Remux rules
 
 - ffmpeg flags for correct A/V alignment: `-avoid_negative_ts make_zero -muxdelay 0 -muxpreload 0 -frag_duration 1000000 -movflags frag_keyframe+empty_moov+default_base_moof`.
 - When opening at `T > 0`, `ProbeKeyframe` finds the actual video keyframe `K` (ffmpeg seeks to the nearest keyframe at or before the mark). The audio input is seeked to `K`, the video to `T`, so both tracks share the same content origin. The stream reports `audioAt = K`; the player uses `K` as the offset.
 - Do not seek both inputs to `K`; ffmpeg would step back to the previous keyframe.
 - fMP4 through a pipe has no index, so seeking means reopening the stream with `?t=<seconds>`. The seek bar is enabled on every tier.
-- A handover record carries the URL it was made for; the player rejects records that do not match the element's current `src`.
+- A handover record carries the URL it was made for; the player rejects records that do not match the element's current `src`. **A failure is tested the same way**: an `error` on the layer being prepared abandons the climb only when the element's `src` is still the claim's. The claim moves ahead of the element — the local file landing writes a new one, the `src` follows on the next commit — so a 502 travelling from the stream that was there a moment ago used to take the climb to the local file with it.
+- **Losing the climb to the local file is not final.** `useStream` stops polling once the answer carries a local file, and that poll was the only thing re-running the climb effect — so an abandoned climb was abandoned for good, and the viewer watched the rest at 360p with the whole file on disk beside them. Pressing 1080p or reloading "fixed" it only by starting the machinery over. Abandoning now bumps `climbAttempt` for the local tier too, capped at `MAX_LOCAL_ATTEMPTS = 3` — not for cost (there is none) but because a drive that has gone away fails identically forever.
 - If the remux cannot open within ~20s on Auto, the tier is abandoned for that video.
 - Pinning a tier is an order; it does not climb or drop on its own.
 

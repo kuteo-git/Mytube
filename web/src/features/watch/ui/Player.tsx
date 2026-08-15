@@ -229,6 +229,18 @@ const MUTED_KEY = 'yt-player-muted-v2'
 const MAX_REMUX_ATTEMPTS = 3
 
 /**
+ * How many times the climb to the local file may be lost before the player
+ * settles for what it already has.
+ *
+ * A retry is nearly free here — the file is on disk, there is no process and no
+ * request upstream — so the limit is not about cost. It is about the drive
+ * disappearing (CLAUDE.md §8, risk 1), where every attempt fails identically
+ * and forever, and a loop of a video that will not load is the worst possible
+ * way to find that out.
+ */
+const MAX_LOCAL_ATTEMPTS = 3
+
+/**
  * The height the full-quality tiers are labelled with when they do not say.
  *
  * The local file and the muxed stream are both produced at the configured
@@ -520,6 +532,11 @@ export function Player({
   // moves remuxAttempts, and it is that movement the effect watches.
   const [climbAttempt, setClimbAttempt] = useState(0)
   const remuxFailed = remuxAttempts >= MAX_REMUX_ATTEMPTS
+  // The same idea for the local file, kept apart from the muxed stream's count
+  // because the two fail for unrelated reasons: the mux fails on a connection
+  // that cannot carry it, the local file on a disk that is not there.
+  const [localAttempts, setLocalAttempts] = useState(0)
+  const localFailed = localAttempts >= MAX_LOCAL_ATTEMPTS
   // Which tier the front element is playing, and where in the video that
   // element's zero is. Only the muxed stream has a non-zero offset.
   const [tier, setTier] = useState<Tier | undefined>(undefined)
@@ -1203,6 +1220,7 @@ export function Player({
     offsetRef.current = 0
     positionRef.current = initialPositionRef.current
     setRemuxAttempts(0)
+    setLocalAttempts(0)
     setSeeking(false)
   }, [videoId])
 
@@ -1235,6 +1253,9 @@ export function Player({
 
     const wanted = targetTier(tiers, tier?.name, quality, remuxFailed)
     if (!wanted) return
+    // The file is there and will not load. Stay on what is playing rather than
+    // asking the same question of the same disk for the rest of the video.
+    if (wanted.name === 'local' && localFailed) return
 
     // The muxed stream has to be opened where the viewer already is, and a
     // little ahead of it: the mux takes a couple of seconds to produce its
@@ -1285,7 +1306,7 @@ export function Player({
       pendingTierRef.current = { tier: wanted, offset, url }
       setBackSrc(url)
     })
-  }, [tiers, tier, quality, remuxFailed, climbAttempt, frontSrc, setBackSrc, videoId])
+  }, [tiers, tier, quality, remuxFailed, localFailed, climbAttempt, frontSrc, setBackSrc, videoId])
 
   // Give up on an upgrade and keep playing what already works. Failing to
   // prepare a better source is not a playback failure — nothing on screen
@@ -1299,6 +1320,21 @@ export function Player({
     // Except after a seek, which is not evidence about the connection: the same
     // stream is being asked for from a different mark, and counting it would let
     // two turns of the scrub bar take 1080p away for the rest of the video.
+    // The local file is the end of the climb, and losing it used to be final.
+    //
+    // `useStream` stops polling the moment the answer carries a local file, and
+    // that poll was the only thing sending this effect round again — so a climb
+    // to the local file that was abandoned for any reason was abandoned for
+    // good, whatever the reason. The viewer stayed on 360p with the whole file
+    // sitting on disk beside them, and the only ways out were pressing 1080p or
+    // reloading, both of which work by starting the machinery over.
+    //
+    // Counted, because the drive going away (CLAUDE.md §8, risk 1) would
+    // otherwise be an endless loop of a video that cannot load, on a television.
+    if (pendingTierRef.current?.tier.name === 'local') {
+      setLocalAttempts((n) => n + 1)
+      setClimbAttempt((n) => n + 1)
+    }
     if (pendingTierRef.current?.tier.name === 'remux') {
       if (postSeekRef.current) {
         // One free attempt per seek, not an exemption that lasts. The mark is
@@ -2764,6 +2800,22 @@ export function Player({
                     e.currentTarget.src,
                   )
                   if (!isFront) {
+                    // Only the stream that failed may be abandoned.
+                    //
+                    // The claim moves on without waiting for the element: the
+                    // local file landing writes a new one and the `src` follows
+                    // on the next commit, so a refusal still travelling from the
+                    // stream that was there a moment ago arrives against a claim
+                    // it has nothing to do with. Measured: the gateway answered
+                    // the mux with a 502, the error landed after the download
+                    // had, and it took the climb to the local file with it —
+                    // after which nothing polls, nothing re-runs, and the viewer
+                    // watches the rest at 360p. The same identity test the
+                    // handover uses, for the same reason.
+                    const claim = pendingTierRef.current
+                    if (claim && e.currentTarget.src !== new URL(claim.url, window.location.href).href) {
+                      return
+                    }
                     // An upgrade that will not load is not a failure worth
                     // showing: what is on screen still works. Abandon it.
                     abandonUpgrade()
