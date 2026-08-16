@@ -127,9 +127,16 @@ func TestZeroMeansNoneOfThatOnThePage(t *testing.T) {
 	if n := countSlot(got[:24], slots, slotDiscovery); n != 0 {
 		t.Fatalf("discovery set to zero still put %d videos on the first page", n)
 	}
-	// Suppressed, not deleted: scrolling far enough must still reach them, or
-	// the quota has started dropping videos, which it never has.
-	assertSameSet(t, got, ranked)
+	// Dropped, not appended. They used to sit at the end so that nothing became
+	// unreachable by scrolling; a viewer whose chosen bucket runs out then meets
+	// them a page later, which is the whole of what a zero was meant to prevent.
+	// Search and the channel page still reach them. See TestZeroShareReallyMeansNone.
+	if n := countSlot(got, slots, slotDiscovery); n != 0 {
+		t.Fatalf("discovery set to zero left %d videos in the feed", n)
+	}
+	if len(got) != 30 {
+		t.Fatalf("kept %d videos, want the 30 subscribed ones", len(got))
+	}
 }
 
 func TestTheFixedSharesKeepTheirFloor(t *testing.T) {

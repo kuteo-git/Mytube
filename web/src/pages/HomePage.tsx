@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import {
   useDiscover,
   useFeed,
@@ -222,12 +222,32 @@ export function HomePage() {
             isLoading={isFetchingNextPage}
             onLoadMore={() => void fetchNextPage()}
           />
+
+          {/* The feed can now genuinely run out. A share set to 0% removes those
+              videos from Home entirely rather than parking them at the end, so a
+              viewer who follows a few channels reaches the bottom in a page or
+              two — and without a word here that reads as the page having broken.
+              It names the setting that decides it, because that is the only
+              thing that will change the answer. */}
+          {!isPending && !hasNextPage && videos.length > 0 && (
+            <p className="py-10 text-center text-sm text-text-2">
+              That is everything your Home feed is set to show.{' '}
+              <Link to="/settings/feed" className="underline hover:text-text">
+                Adjust the mix
+              </Link>{' '}
+              to widen it.
+            </p>
+          )}
         </>
       )}
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          Nothing here yet. Topics are scanned every 12 hours; use Refresh to scan now.
+          Nothing here yet. Topics are scanned every 12 hours; use Refresh to scan now.{' '}
+          <Link to="/settings/feed" className="underline hover:text-text">
+            Check your Home feed mix
+          </Link>{' '}
+          — a share set to 0% shows nothing at all.
         </p>
       )}
     </div>

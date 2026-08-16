@@ -195,19 +195,31 @@ func applyDiscoveryQuota(
 	}
 	sampleByScore(other, rng, t)
 
-	// A share of zero is an instruction, not a shortage: those videos are held
-	// back entirely rather than filling gaps later, which is the difference
-	// between "show me less of this" and "show me none of this".
-	var suppressed []domain.RankedVideo
+	// A share of zero is an instruction, not a shortage: those videos are
+	// dropped from the feed entirely rather than filling gaps later, which is
+	// the difference between "show me less of this" and "show me none of this".
+	//
+	// They used to be appended after everything else, so that nothing became
+	// unreachable by scrolling. That is the right rule for a bucket that ran out
+	// and the wrong one for a bucket somebody switched off: on a household
+	// member following nineteen channels, the subscribed pool was exhausted a
+	// page and a half in — sooner still, because applyChannelDiversity appends
+	// what it holds back and so lands it behind this tail — and the rest of Home
+	// was the discovery share that had been set to zero. Nothing is lost: those
+	// videos are still reachable through search and the channel page, the same
+	// place a disliked video stays reachable.
+	var kept int
 	for _, bucket := range buckets {
 		if bucket.share <= 0 && !bucket.floor {
-			suppressed = append(suppressed, bySlot[bucket.slot]...)
 			bySlot[bucket.slot] = nil
+			continue
 		}
+		kept += len(bySlot[bucket.slot])
 	}
+	kept += len(other)
 
-	out := make([]domain.RankedVideo, 0, len(ranked))
-	for len(out) < len(ranked)-len(suppressed) {
+	out := make([]domain.RankedVideo, 0, kept)
+	for len(out) < kept {
 		before := len(out)
 
 		for _, bucket := range buckets {
@@ -244,10 +256,7 @@ func applyDiscoveryQuota(
 	for _, bucket := range buckets {
 		out = append(out, bySlot[bucket.slot]...)
 	}
-	out = append(out, other...)
-	// Last, and only so nothing becomes unreachable by scrolling — the quota
-	// has never dropped a video and does not start here.
-	return append(out, suppressed...)
+	return append(out, other...)
 }
 
 // Most videos from one channel allowed in a single window of the feed.
