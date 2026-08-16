@@ -41,6 +41,23 @@ const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   [(p) => p === '/settings/translation', 'Translation'],
 ]
 
+/**
+ * Whether this path is the watch page.
+ *
+ * A prefix test on '/watch' is the obvious way to write this and is wrong:
+ * `'/watch-later'.startsWith('/watch')` is true, so the Watch later page was
+ * treated as a playing video — the tab bar went, and on a phone the whole page
+ * became a layer over the tab underneath, with the pull-to-dismiss gesture and
+ * the miniplayer's spacing to match. It reads as "the menu is hidden" and it is
+ * not a styling fault.
+ *
+ * Named here, beside the other route predicates, so nobody has to rediscover
+ * that the route below it starts with the same eight characters.
+ */
+export function isWatchScreen(pathname: string): boolean {
+  return pathname === '/watch' || pathname.startsWith('/watch/')
+}
+
 /** Whether this path is one of those screens. */
 export function isBareScreen(pathname: string): boolean {
   return TITLES.some(([test]) => test(pathname))

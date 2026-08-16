@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
-import { bareTitle } from '@/features/navigation/application/bare-screens'
+import { bareTitle, isWatchScreen } from '@/features/navigation/application/bare-screens'
 import { BackBar } from '@/features/catalog/ui/BackBar'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
@@ -18,7 +18,7 @@ import { ToastProvider } from '@/shared/ui/toast'
 
 export function AppShell() {
   const { pathname } = useLocation()
-  const isWatch = pathname.startsWith('/watch')
+  const isWatch = isWatchScreen(pathname)
 
   return (
     <PlayerProvider isWatch={isWatch}>
@@ -32,7 +32,7 @@ export function AppShell() {
 function AppShellInner() {
   const location = useLocation()
   const { pathname } = location
-  const isWatch = pathname.startsWith('/watch')
+  const isWatch = isWatchScreen(pathname)
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const {

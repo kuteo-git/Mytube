@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bareTitle, isBareScreen } from './bare-screens'
+import { bareTitle, isBareScreen, isWatchScreen } from './bare-screens'
 
 describe('which screens carry their own chrome', () => {
   it('counts everywhere you arrive on purpose', () => {
@@ -33,6 +33,16 @@ describe('which screens carry their own chrome', () => {
     for (const p of ['/watch-later', '/playlists', '/playlist/pl_1']) {
       expect(isBareScreen(p)).toBe(false)
     }
+  })
+
+  // '/watch-later'.startsWith('/watch') is true, and that one character of
+  // overlap turned the Watch later page into a playing video: no tab bar, and
+  // on a phone a layer over the tab underneath with a pull-to-dismiss gesture.
+  // Every route added under /watch-* from now on meets the same trap.
+  it('does not mistake Watch later for the watch page', () => {
+    expect(isWatchScreen('/watch/abc123')).toBe(true)
+    expect(isWatchScreen('/watch')).toBe(true)
+    expect(isWatchScreen('/watch-later')).toBe(false)
   })
 
   it('does not mistake Settings itself for one of its screens', () => {
