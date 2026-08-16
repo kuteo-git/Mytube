@@ -37,6 +37,9 @@ export interface CatalogRepository {
   /** Videos the viewer has pinned as worth keeping. */
   listPinned(pageToken?: string): Promise<Feed>
   setPinned(videoId: string, pinned: boolean): Promise<void>
+  /** Videos the viewer has put aside to watch next, most recently added first. */
+  listWatchLater(pageToken?: string): Promise<Feed>
+  setWatchLater(videoId: string, inWatchLater: boolean): Promise<void>
   /** Every video the viewer has watched, most recent first. */
   listHistory(pageToken?: string): Promise<Feed>
 
@@ -412,6 +415,17 @@ export const httpCatalogRepository: CatalogRepository = {
     await request<void>(`/videos/${encodeURIComponent(videoId)}/pinned`, {
       method: 'POST',
       body: JSON.stringify({ pinned }),
+    })
+  },
+
+  listWatchLater(pageToken) {
+    return request<Feed>(`/watch-later${query({ pageToken })}`)
+  },
+
+  async setWatchLater(videoId, inWatchLater) {
+    await request<void>(`/videos/${encodeURIComponent(videoId)}/watch-later`, {
+      method: 'POST',
+      body: JSON.stringify({ inWatchLater }),
     })
   },
 

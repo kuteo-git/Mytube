@@ -265,6 +265,20 @@ func (c *Catalog) SetReaction(ctx context.Context, userID, videoID string, react
 	return c.repo.SetReaction(ctx, userID, videoID, reaction)
 }
 
+func (c *Catalog) SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error {
+	if userID == "" || videoID == "" {
+		return fmt.Errorf("%w: user_id and video_id are required", domain.ErrInvalid)
+	}
+	return c.repo.SetWatchLater(ctx, userID, videoID, inWatchLater)
+}
+
+func (c *Catalog) ListWatchLater(ctx context.Context, userID string, size, offset int32) ([]domain.Video, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	return c.repo.ListWatchLater(ctx, userID, clampPage(size, offset))
+}
+
 func (c *Catalog) SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error {
 	if userID == "" || channelID == "" {
 		return fmt.Errorf("%w: user_id and channel_id are required", domain.ErrInvalid)

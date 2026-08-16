@@ -96,6 +96,12 @@ const (
 	// CatalogServiceListHistoryProcedure is the fully-qualified name of the CatalogService's
 	// ListHistory RPC.
 	CatalogServiceListHistoryProcedure = "/catalog.v1.CatalogService/ListHistory"
+	// CatalogServiceSetWatchLaterProcedure is the fully-qualified name of the CatalogService's
+	// SetWatchLater RPC.
+	CatalogServiceSetWatchLaterProcedure = "/catalog.v1.CatalogService/SetWatchLater"
+	// CatalogServiceListWatchLaterProcedure is the fully-qualified name of the CatalogService's
+	// ListWatchLater RPC.
+	CatalogServiceListWatchLaterProcedure = "/catalog.v1.CatalogService/ListWatchLater"
 	// CatalogServiceGetStorageUsageProcedure is the fully-qualified name of the CatalogService's
 	// GetStorageUsage RPC.
 	CatalogServiceGetStorageUsageProcedure = "/catalog.v1.CatalogService/GetStorageUsage"
@@ -152,6 +158,11 @@ type CatalogServiceClient interface {
 	SetSubscription(context.Context, *connect.Request[v1.SetSubscriptionRequest]) (*connect.Response[v1.SetSubscriptionResponse], error)
 	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	ListHistory(context.Context, *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error)
+	// Watch Later. The table and the read have existed since 0001_init — every
+	// video already reports user_state.in_watch_later — but nothing could ever
+	// write it, so it answered false for everybody, forever.
+	SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error)
+	ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error)
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error)
@@ -303,6 +314,18 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		setWatchLater: connect.NewClient[v1.SetWatchLaterRequest, v1.SetWatchLaterResponse](
+			httpClient,
+			baseURL+CatalogServiceSetWatchLaterProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("SetWatchLater")),
+			connect.WithClientOptions(opts...),
+		),
+		listWatchLater: connect.NewClient[v1.ListWatchLaterRequest, v1.ListWatchLaterResponse](
+			httpClient,
+			baseURL+CatalogServiceListWatchLaterProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListWatchLater")),
+			connect.WithClientOptions(opts...),
+		),
 		getStorageUsage: connect.NewClient[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse](
 			httpClient,
 			baseURL+CatalogServiceGetStorageUsageProcedure,
@@ -348,6 +371,8 @@ type catalogServiceClient struct {
 	setSubscription     *connect.Client[v1.SetSubscriptionRequest, v1.SetSubscriptionResponse]
 	listSubscriptions   *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
 	listHistory         *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
+	setWatchLater       *connect.Client[v1.SetWatchLaterRequest, v1.SetWatchLaterResponse]
+	listWatchLater      *connect.Client[v1.ListWatchLaterRequest, v1.ListWatchLaterResponse]
 	getStorageUsage     *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
 	setPinned           *connect.Client[v1.SetPinnedRequest, v1.SetPinnedResponse]
 	listPinnedVideos    *connect.Client[v1.ListPinnedVideosRequest, v1.ListPinnedVideosResponse]
@@ -463,6 +488,16 @@ func (c *catalogServiceClient) ListHistory(ctx context.Context, req *connect.Req
 	return c.listHistory.CallUnary(ctx, req)
 }
 
+// SetWatchLater calls catalog.v1.CatalogService.SetWatchLater.
+func (c *catalogServiceClient) SetWatchLater(ctx context.Context, req *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error) {
+	return c.setWatchLater.CallUnary(ctx, req)
+}
+
+// ListWatchLater calls catalog.v1.CatalogService.ListWatchLater.
+func (c *catalogServiceClient) ListWatchLater(ctx context.Context, req *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error) {
+	return c.listWatchLater.CallUnary(ctx, req)
+}
+
 // GetStorageUsage calls catalog.v1.CatalogService.GetStorageUsage.
 func (c *catalogServiceClient) GetStorageUsage(ctx context.Context, req *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error) {
 	return c.getStorageUsage.CallUnary(ctx, req)
@@ -523,6 +558,11 @@ type CatalogServiceHandler interface {
 	SetSubscription(context.Context, *connect.Request[v1.SetSubscriptionRequest]) (*connect.Response[v1.SetSubscriptionResponse], error)
 	ListSubscriptions(context.Context, *connect.Request[v1.ListSubscriptionsRequest]) (*connect.Response[v1.ListSubscriptionsResponse], error)
 	ListHistory(context.Context, *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error)
+	// Watch Later. The table and the read have existed since 0001_init — every
+	// video already reports user_state.in_watch_later — but nothing could ever
+	// write it, so it answered false for everybody, forever.
+	SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error)
+	ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error)
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error)
@@ -670,6 +710,18 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceSetWatchLaterHandler := connect.NewUnaryHandler(
+		CatalogServiceSetWatchLaterProcedure,
+		svc.SetWatchLater,
+		connect.WithSchema(catalogServiceMethods.ByName("SetWatchLater")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceListWatchLaterHandler := connect.NewUnaryHandler(
+		CatalogServiceListWatchLaterProcedure,
+		svc.ListWatchLater,
+		connect.WithSchema(catalogServiceMethods.ByName("ListWatchLater")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceGetStorageUsageHandler := connect.NewUnaryHandler(
 		CatalogServiceGetStorageUsageProcedure,
 		svc.GetStorageUsage,
@@ -734,6 +786,10 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListSubscriptionsHandler.ServeHTTP(w, r)
 		case CatalogServiceListHistoryProcedure:
 			catalogServiceListHistoryHandler.ServeHTTP(w, r)
+		case CatalogServiceSetWatchLaterProcedure:
+			catalogServiceSetWatchLaterHandler.ServeHTTP(w, r)
+		case CatalogServiceListWatchLaterProcedure:
+			catalogServiceListWatchLaterHandler.ServeHTTP(w, r)
 		case CatalogServiceGetStorageUsageProcedure:
 			catalogServiceGetStorageUsageHandler.ServeHTTP(w, r)
 		case CatalogServiceSetPinnedProcedure:
@@ -835,6 +891,14 @@ func (UnimplementedCatalogServiceHandler) ListSubscriptions(context.Context, *co
 
 func (UnimplementedCatalogServiceHandler) ListHistory(context.Context, *connect.Request[v1.ListHistoryRequest]) (*connect.Response[v1.ListHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListHistory is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetWatchLater is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListWatchLater is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error) {

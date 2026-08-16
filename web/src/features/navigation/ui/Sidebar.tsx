@@ -18,13 +18,18 @@ interface Item {
 /**
  * Fixed entries plus the topics from topics.yaml.
  *
- * Compared to youtube.com this drops Playlists, Watch later, Liked videos,
- * Your videos, Subscriptions, YouTube Music, YouTube Kids, Shorts, Live and the
- * legal footer. None of them had anything behind them: content is organised by
- * topic, and the only personal collection is what you Keep — see CLAUDE.md §5.
+ * Compared to youtube.com this drops Playlists, Liked videos, Your videos,
+ * YouTube Music, YouTube Kids, Shorts, Live and the legal footer. None of them
+ * has anything behind it — see CLAUDE.md §5.
+ *
+ * Watch later was in that list until it stopped being empty. The table had
+ * existed since 0001_init and every video already reported in_watch_later, but
+ * nothing could write it, so the entry would have led to a page that was blank
+ * for everybody.
  */
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
+  { icon: Clock, label: 'Watch later', to: '/watch-later' },
   { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: Clock, label: 'History', to: '/history' },
   { icon: HardDrive, label: 'Storage', to: '/storage' },

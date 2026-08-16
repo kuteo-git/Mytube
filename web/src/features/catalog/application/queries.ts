@@ -407,6 +407,30 @@ export function useSaved() {
   })
 }
 
+export function useWatchLater() {
+  const me = useProfileScope()
+  return useInfiniteQuery({
+    queryKey: ['watch-later', me],
+    queryFn: ({ pageParam }) => repo.listWatchLater(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+  })
+}
+
+export function useSetWatchLater() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ videoId, inWatchLater }: { videoId: string; inWatchLater: boolean }) =>
+      repo.setWatchLater(videoId, inWatchLater),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['watch-later'] })
+      // The watch page reads in_watch_later off the video itself, so the button
+      // there would go on showing the state it had before the press.
+      void queryClient.invalidateQueries({ queryKey: ['video'] })
+    },
+  })
+}
+
 export function useSetPinned() {
   const queryClient = useQueryClient()
   return useMutation({

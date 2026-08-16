@@ -191,4 +191,5 @@ func (f *fakeLibrary) SetShort(context.Context, string, bool) error { return nil
 
 func (f *fakeLibrary) SetSubscription(context.Context, string, string, bool) error { return nil }
 
-func (f *fakeLibrary) SetLiked(context.Context, string, string) error { return nil }
+func (f *fakeLibrary) SetLiked(context.Context, string, string) error      { return nil }
+func (f *fakeLibrary) SetWatchLater(context.Context, string, string) error { return nil }

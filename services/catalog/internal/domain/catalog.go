@@ -230,6 +230,8 @@ type Repository interface {
 
 	RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)
+	SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error
+	ListWatchLater(ctx context.Context, userID string, page Page) ([]Video, error)
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	ListSubscriptions(ctx context.Context, userID string) ([]Channel, error)
 	// ListAllSubscribedChannels is every member's subscriptions, deduplicated.

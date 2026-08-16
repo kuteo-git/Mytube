@@ -837,6 +837,36 @@ func (r *Repository) RecordWatchProgress(ctx context.Context, userID, videoID st
 	return tx.Commit(ctx)
 }
 
+// SetWatchLater puts a video on the viewer's Watch Later list, or takes it off.
+//
+// The table has existed since 0001_init and videoSelect has always read it into
+// user_state.in_watch_later — there was simply never a way to write it, so the
+// field answered false for everybody. Nothing here is new but the writing.
+func (r *Repository) SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error {
+	var err error
+	if inWatchLater {
+		_, err = r.pool.Exec(ctx, `
+			INSERT INTO watch_later (user_id, video_id) VALUES ($1, $2)
+			ON CONFLICT DO NOTHING`, userID, videoID)
+	} else {
+		_, err = r.pool.Exec(ctx,
+			`DELETE FROM watch_later WHERE user_id = $1 AND video_id = $2`, userID, videoID)
+	}
+	return err
+}
+
+// ListWatchLater is one viewer's list, oldest addition last.
+//
+// Newest first, like the Saved shelf: a list read to decide what to watch next
+// is read from the top, and the top is what was just put there.
+func (r *Repository) ListWatchLater(ctx context.Context, userID string, page domain.Page) ([]domain.Video, error) {
+	return r.queryVideos(ctx, videoSelect+`
+		WHERE wl.user_id IS NOT NULL
+		ORDER BY wl.created_at DESC
+		LIMIT $2 OFFSET $3`,
+		userID, page.Size, page.Offset)
+}
+
 func (r *Repository) SetReaction(ctx context.Context, userID, videoID string, reaction domain.Reaction) (int64, error) {
 	var err error
 	if reaction == domain.ReactionNone {

@@ -197,7 +197,13 @@ Every element either does something real or is dropped.
 | Notifications + badge | → ingest events |
 | Downloads | → Storage |
 | Explore / chip filter | → driven by real tags and categories in the catalog |
-| Your videos, YT Music, YT Kids, footer, Shorts, Live | **DROPPED** |
+| Watch later | Real. Its own list, per member, and its own page |
+| Playlists, Your videos, YT Music, YT Kids, footer, Shorts, Live | **DROPPED** |
+
+**Watch later and Save are two different intentions and two different controls.** Watch later is a note about what to do next and clears itself once the video has been watched; Save keeps the file on the disk against the eviction sweep and never clears itself. One control could not mean both.
+
+- `catalog.watch_later` and `videoSelect`'s read of it have existed since `0001_init`, so every video has always reported `user_state.in_watch_later` — **nothing could write it**, so it answered false for everybody, forever. The account import read `:ytwatchlater` and stored its videos as ordinary ones, so a list somebody had built deliberately arrived as an anonymous handful of new videos. Nothing here is new but the writing and the page.
+- **Not told to the ranker.** Putting something aside is not a statement about taste, and unlike a like it is meant to be undone.
 | Subscribe | Real in P1: adds the channel as a live ingest source |
 | Share | → the YouTube link (`video.sourceUrl` or `https://www.youtube.com/watch?v=<id>`) |
 

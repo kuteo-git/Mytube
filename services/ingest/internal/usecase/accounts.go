@@ -135,11 +135,14 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 		via string
 		// like records the video as liked by this member.
 		like bool
+		// watchLater puts the video on this member's Watch Later list.
+		//
+		// The feed was read from the day this was written and its videos were
+		// added to the library as ordinary ones, so a list somebody had built
+		// deliberately arrived as an anonymous handful of new videos.
+		watchLater bool
 	}
 
-	// Order is deliberate: what the member chose first, what YouTube guessed
-	// last. If a session dies partway through, the passes that mattered have
-	// already run.
 	// Who the member follows, from the list itself rather than inferred from
 	// whoever happened to post lately. See domain.FeedChannels: the uploads feed
 	// named 19 channels for a member who follows 152.
@@ -151,10 +154,13 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 		return out, true
 	}
 
+	// Order is deliberate: what the member chose first, what YouTube guessed
+	// last. If a session dies partway through, the passes that mattered have
+	// already run.
 	feeds := []feedSpec{
 		{name: domain.FeedSubscriptions, via: "SOURCE"},
 		{name: domain.FeedLiked, via: "SOURCE", like: true},
-		{name: domain.FeedWatchLater, via: "SOURCE"},
+		{name: domain.FeedWatchLater, via: "SOURCE", watchLater: true},
 		{name: domain.FeedRecommended, via: "YOUTUBE_REC"},
 	}
 
@@ -202,6 +208,14 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 					continue
 				}
 				s.tellRanker(ctx, userID, v.ID, false)
+			}
+			// Not told to the ranker. Watch Later is a note to oneself about
+			// what to do next, not a statement about taste — and unlike a like,
+			// it is cleared as soon as the video is watched.
+			if feed.watchLater {
+				if err := s.library.SetWatchLater(ctx, userID, v.ID); err != nil {
+					s.logger.Warn("watch later", "user", userID, "video", v.ID, "error", err)
+				}
 			}
 		}
 	}

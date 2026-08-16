@@ -514,6 +514,26 @@ func (s *Server) ListSubscriptions(ctx context.Context, req *connect.Request[cat
 	return connect.NewResponse(&catalogv1.ListSubscriptionsResponse{Channels: out}), nil
 }
 
+func (s *Server) SetWatchLater(ctx context.Context, req *connect.Request[catalogv1.SetWatchLaterRequest]) (*connect.Response[catalogv1.SetWatchLaterResponse], error) {
+	if err := s.catalog.SetWatchLater(ctx,
+		req.Msg.GetUserId(), req.Msg.GetVideoId(), req.Msg.GetInWatchLater()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.SetWatchLaterResponse{}), nil
+}
+
+func (s *Server) ListWatchLater(ctx context.Context, req *connect.Request[catalogv1.ListWatchLaterRequest]) (*connect.Response[catalogv1.ListWatchLaterResponse], error) {
+	offset := decodePageToken(req.Msg.GetPageToken())
+	vs, err := s.catalog.ListWatchLater(ctx, req.Msg.GetUserId(), req.Msg.GetPageSize(), offset)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ListWatchLaterResponse{
+		Videos:        videosToProto(vs),
+		NextPageToken: nextPageToken(offset, req.Msg.GetPageSize(), len(vs)),
+	}), nil
+}
+
 func (s *Server) ListHistory(ctx context.Context, req *connect.Request[catalogv1.ListHistoryRequest]) (*connect.Response[catalogv1.ListHistoryResponse], error) {
 	offset := decodePageToken(req.Msg.GetPageToken())
 	vs, err := s.catalog.ListHistory(ctx, req.Msg.GetUserId(), req.Msg.GetPageSize(), offset)

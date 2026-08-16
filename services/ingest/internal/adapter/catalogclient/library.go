@@ -119,6 +119,15 @@ func (l *Library) SetLiked(ctx context.Context, userID, videoID string) error {
 	return err
 }
 
+func (l *Library) SetWatchLater(ctx context.Context, userID, videoID string) error {
+	_, err := l.client.SetWatchLater(ctx, connect.NewRequest(&catalogv1.SetWatchLaterRequest{
+		UserId:       userID,
+		VideoId:      videoID,
+		InWatchLater: true,
+	}))
+	return err
+}
+
 // SetShort records YouTube's answer for one video.
 func (l *Library) SetShort(ctx context.Context, videoID string, isShort bool) error {
 	_, err := l.client.SetShort(ctx, connect.NewRequest(&catalogv1.SetShortRequest{

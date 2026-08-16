@@ -1,6 +1,14 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
-import {Bookmark, BookmarkMinus, CheckCircle, EyeOff, MoreVertical} from 'lucide-react'
+import {
+  Bookmark,
+  BookmarkMinus,
+  CheckCircle,
+  Clock,
+  ClockFading,
+  EyeOff,
+  MoreVertical,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
@@ -9,6 +17,7 @@ import {
   useMarkWatched,
   useNotInterested,
   useSetPinned,
+  useSetWatchLater,
   useStreamPrefetch,
 } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
@@ -18,7 +27,13 @@ import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
 
-export type VideoCardVariant = 'continueWatching' | 'feed' | 'saved' | 'history' | 'storage'
+export type VideoCardVariant =
+  | 'continueWatching'
+  | 'feed'
+  | 'saved'
+  | 'watchLater'
+  | 'history'
+  | 'storage'
 
 /** Card. Hover comes from videoItemHover, shared with every other item. */
 export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?: VideoCardVariant }) {
@@ -190,6 +205,7 @@ function CardMenu({
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
   const setPinned = useSetPinned()
+  const setWatchLater = useSetWatchLater()
   const toast = useToast()
 
   const items: React.ReactNode[] = []
@@ -265,18 +281,58 @@ function CardMenu({
     </li>
   )
 
+  // Putting a video aside and keeping its bytes are two different intentions,
+  // so they are two entries. Watch later is a note about this evening; Save is
+  // an instruction to the eviction sweep.
+  const watchLaterItem = (
+    <li key="watch-later">
+      <button
+        type="button"
+        onClick={() => {
+          setWatchLater.mutate({ videoId: video.id, inWatchLater: true })
+          toast('Added to Watch later')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <Clock size={16} />
+        Watch later
+      </button>
+    </li>
+  )
+
+  const removeWatchLaterItem = (
+    <li key="remove-watch-later">
+      <button
+        type="button"
+        onClick={() => {
+          setWatchLater.mutate({ videoId: video.id, inWatchLater: false })
+          toast('Removed from Watch later')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <ClockFading size={16} />
+        Remove from Watch later
+      </button>
+    </li>
+  )
+
   switch (variant) {
     case 'continueWatching':
       items.push(watchedItem, notInterestedItem)
       break
     case 'feed':
-      items.push(watchedItem, saveItem, notInterestedItem)
+      items.push(watchedItem, watchLaterItem, saveItem, notInterestedItem)
       break
     case 'saved':
-      items.push(unsaveItem)
+      items.push(watchLaterItem, unsaveItem)
+      break
+    case 'watchLater':
+      items.push(watchedItem, removeWatchLaterItem, saveItem)
       break
     case 'history':
-      items.push(saveItem)
+      items.push(watchLaterItem, saveItem)
       break
     case 'storage':
       items.push(saveItem)

@@ -4,6 +4,7 @@ import { ChannelPage } from '@/pages/ChannelPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { HomePage } from '@/pages/HomePage'
 import { SavedPage } from '@/pages/SavedPage'
+import { WatchLaterPage } from '@/pages/WatchLaterPage'
 import { SearchResultsPage } from '@/pages/SearchResultsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import {
@@ -40,6 +41,7 @@ export const pageRoutes = (
     <Route path="/activity" element={<ActivityPage />} />
     <Route path="/history" element={<HistoryPage />} />
     <Route path="/saved" element={<SavedPage />} />
+    <Route path="/watch-later" element={<WatchLaterPage />} />
     <Route path="/subscriptions" element={<SubscriptionsPage />} />
     <Route path="/storage" element={<StoragePage />} />
     <Route path="/settings" element={<SettingsPage />} />

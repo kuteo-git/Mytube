@@ -116,6 +116,23 @@ describe('card menu by variant', () => {
     expect(screen.queryByText('Not interested')).not.toBeInTheDocument()
   })
 
+  // Putting a video aside and keeping its bytes are two intentions, so a card
+  // offers both and never conflates them.
+  it('feed offers Watch later alongside Save', () => {
+    renderCard('feed')
+    openMenu()
+    expect(screen.getByText('Watch later')).toBeInTheDocument()
+    expect(screen.getByText('Save')).toBeInTheDocument()
+  })
+
+  it('watchLater shows Remove from Watch later, and still offers Save', () => {
+    renderCard('watchLater')
+    openMenu()
+    expect(screen.getByText('Remove from Watch later')).toBeInTheDocument()
+    expect(screen.queryByText('Watch later')).not.toBeInTheDocument()
+    expect(screen.getByText('Save')).toBeInTheDocument()
+  })
+
   it('storage shows Save', () => {
     renderCard('storage')
     openMenu()

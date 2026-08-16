@@ -456,3 +456,34 @@ func TestAnEmptyListUnsubscribesNobody(t *testing.T) {
 		t.Errorf("an empty list wrote %d subscription changes", len(lib.subscribedBy))
 	}
 }
+
+// A Watch Later video lands on the member's Watch Later list, not merely in the
+// library.
+//
+// The feed was read from the day the importer was written, but its videos were
+// stored as ordinary ones — so a list somebody had built deliberately arrived as
+// an anonymous handful of new videos, and catalog.watch_later stayed empty for
+// everybody while every video read reported in_watch_later: false.
+func TestWatchLaterLandsOnTheList(t *testing.T) {
+	accounts := newMemAccounts("u_lm")
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{
+		domain.FeedWatchLater: {video("later", "ch_1")},
+		domain.FeedLiked:      {video("loved", "ch_2")},
+	}}
+	lib := &recordingLibrary{known: map[string]bool{}}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background()); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	if len(lib.watchLater) != 1 ||
+		lib.watchLater[0].userID != "u_lm" || lib.watchLater[0].videoID != "later" {
+		t.Errorf("watch later: %+v", lib.watchLater)
+	}
+	// And only that feed's. A liked video is not a note about what to watch next.
+	for _, w := range lib.watchLater {
+		if w.videoID == "loved" {
+			t.Error("a liked video was put on Watch Later")
+		}
+	}
+}

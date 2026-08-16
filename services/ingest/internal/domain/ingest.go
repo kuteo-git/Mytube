@@ -298,6 +298,9 @@ type Library interface {
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	// SetLiked records a like a member already gave the video on YouTube.
 	SetLiked(ctx context.Context, userID, videoID string) error
+	// SetWatchLater records that the video is on the member's Watch Later list
+	// on YouTube. Per user for the same reason SetSubscription is.
+	SetWatchLater(ctx context.Context, userID, videoID string) error
 }
 
 // ShortChecker answers the one question duration cannot.

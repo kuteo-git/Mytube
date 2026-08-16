@@ -60,6 +60,11 @@ service CatalogService {
   rpc SetSubscription(SetSubscriptionRequest) returns (SetSubscriptionResponse);
   rpc ListSubscriptions(ListSubscriptionsRequest) returns (ListSubscriptionsResponse);
   rpc ListHistory(ListHistoryRequest) returns (ListHistoryResponse);
+  // Watch Later. The table and the read have existed since 0001_init — every
+  // video already reports user_state.in_watch_later — but nothing could ever
+  // write it, so it answered false for everybody, forever.
+  rpc SetWatchLater(SetWatchLaterRequest) returns (SetWatchLaterResponse);
+  rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
 
   // Storage. Backs the Storage page and the eviction banner.
   rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse);
@@ -540,6 +545,27 @@ message SetPinnedRequest {
 }
 
 message SetPinnedResponse {}
+
+message SetWatchLaterRequest {
+  string user_id = 1;
+  string video_id = 2;
+  // False removes it. A toggle rather than an add/remove pair, because the
+  // caller always knows which way the button is facing.
+  bool in_watch_later = 3;
+}
+
+message SetWatchLaterResponse {}
+
+message ListWatchLaterRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListWatchLaterResponse {
+  repeated Video videos = 1;
+  string next_page_token = 2;
+}
 
 message ListPinnedVideosRequest {
   string user_id = 1;

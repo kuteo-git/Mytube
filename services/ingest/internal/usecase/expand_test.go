@@ -29,6 +29,7 @@ type recordingLibrary struct {
 	// What the account pass wrote on each member's behalf.
 	subscribedBy []struct{ userID, channelID string }
 	liked        []struct{ userID, videoID string }
+	watchLater   []struct{ userID, videoID string }
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -321,5 +322,10 @@ func (r *recordingLibrary) SetSubscription(_ context.Context, userID, channelID 
 
 func (r *recordingLibrary) SetLiked(_ context.Context, userID, videoID string) error {
 	r.liked = append(r.liked, struct{ userID, videoID string }{userID, videoID})
+	return nil
+}
+
+func (r *recordingLibrary) SetWatchLater(_ context.Context, userID, videoID string) error {
+	r.watchLater = append(r.watchLater, struct{ userID, videoID string }{userID, videoID})
 	return nil
 }

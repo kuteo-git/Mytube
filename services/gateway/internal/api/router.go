@@ -117,6 +117,8 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/pinned", g.handlePinned)
+	mux.HandleFunc("GET /api/watch-later", g.handleWatchLater)
+	mux.HandleFunc("POST /api/videos/{id}/watch-later", g.handleSetWatchLater)
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
 	mux.HandleFunc("POST /api/videos/{id}/not-interested", g.handleNotInterested)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
@@ -547,6 +549,44 @@ func (g *Gateway) handleHistory(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toVideoDTO(v))
 	}
 	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+}
+
+func (g *Gateway) handleWatchLater(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListWatchLater(r.Context(), connect.NewRequest(&catalogv1.ListWatchLaterRequest{
+		UserId:    g.userID(r),
+		PageSize:  intParam(r, "pageSize", 24),
+		PageToken: r.URL.Query().Get("pageToken"),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]videoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		out = append(out, toVideoDTO(v))
+	}
+	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+}
+
+func (g *Gateway) handleSetWatchLater(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		InWatchLater bool `json:"inWatchLater"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	if _, err := g.catalog.SetWatchLater(r.Context(), connect.NewRequest(&catalogv1.SetWatchLaterRequest{
+		UserId:       g.userID(r),
+		VideoId:      r.PathValue("id"),
+		InWatchLater: body.InWatchLater,
+	})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (g *Gateway) handlePinned(w http.ResponseWriter, r *http.Request) {
