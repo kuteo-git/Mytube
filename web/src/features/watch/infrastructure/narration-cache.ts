@@ -1,3 +1,4 @@
+import { apiFetch } from '@/shared/api/http'
 /**
  * Translations, kept beside the video they belong to.
  *
@@ -88,7 +89,7 @@ export async function loadNarrationCache(
   videoId: string,
 ): Promise<Map<string, string>> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/videos/${videoId}/narration-cache?engine=${_partition}`,
     )
     if (!resp.ok) return new Map()
@@ -106,7 +107,7 @@ export async function saveNarrationCache(
 ): Promise<void> {
   if (entries.size === 0) return
   try {
-    await fetch(`/api/videos/${videoId}/narration-cache`, {
+    await apiFetch(`/api/videos/${videoId}/narration-cache`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ engine: _partition, entries: Object.fromEntries(entries) }),
@@ -131,7 +132,7 @@ export async function saveNarrationCues(
 ): Promise<void> {
   if (!videoId || cues.length === 0) return
   try {
-    await fetch(`/api/videos/${videoId}/narration-cues`, {
+    await apiFetch(`/api/videos/${videoId}/narration-cues`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cues),
@@ -148,7 +149,7 @@ export async function saveNarrationVtt(
 ): Promise<boolean> {
   if (!videoId || !vtt) return false
   try {
-    const resp = await fetch(`/api/videos/${videoId}/narration-vtt`, {
+    const resp = await apiFetch(`/api/videos/${videoId}/narration-vtt`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/vtt' },
       body: vtt,
@@ -175,7 +176,7 @@ export async function saveNarrationVtt(
 export async function deleteNarrationVtt(videoId: string): Promise<void> {
   if (!videoId) return
   try {
-    await fetch(`/api/videos/${videoId}/narration-vtt`, { method: 'DELETE' })
+    await apiFetch(`/api/videos/${videoId}/narration-vtt`, { method: 'DELETE' })
   } catch {
     // Best effort. A file left on disk is untidy, not broken.
   }
@@ -199,7 +200,7 @@ export async function deleteNarrationVtt(videoId: string): Promise<void> {
 export async function deleteNarrationClips(videoId: string): Promise<void> {
   if (!videoId) return
   try {
-    await fetch(`/api/videos/${videoId}/narration-tts`, { method: 'DELETE' })
+    await apiFetch(`/api/videos/${videoId}/narration-tts`, { method: 'DELETE' })
   } catch {
     // Best effort. Clips left behind cost disk, not correctness — the new
     // voice's clips are keyed separately and will be made regardless.

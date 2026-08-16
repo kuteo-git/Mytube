@@ -1,3 +1,4 @@
+import { apiFetch } from '@/shared/api/http'
 import type {
   Channel,
   Topic,
@@ -289,7 +290,7 @@ class HttpError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
+  const response = await apiFetch(`${BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

@@ -91,9 +91,13 @@ describe('deleteNarrationClips', () => {
     // The URL is the whole contract. A wrong path answers 404, the catch below
     // swallows it, and the disk quietly fills with readings in voices nobody
     // chose — a failure with no symptom until the drive is full.
-    expect(fetchMock).toHaveBeenCalledWith('/api/videos/vid1/narration-tts', {
-      method: 'DELETE',
-    })
+    // Asserted on the path and the method rather than on the whole init: every
+    // request now goes through apiFetch, which adds the headers saying who is
+    // asking, and this test is about the address rather than about that.
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/videos/vid1/narration-tts',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
   })
 
   it('leaves the translations alone', async () => {

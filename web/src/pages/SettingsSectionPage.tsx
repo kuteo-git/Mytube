@@ -1,4 +1,5 @@
 import { AdvancedSettings } from '@/features/settings/ui/AdvancedSettings'
+import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { NarrationSettings, TranslationSettings } from './SettingsPage'
 
@@ -43,6 +44,14 @@ export function AdvancedSettingsPage() {
   return (
     <div className="px-4 pb-16">
       <AdvancedSettings headless />
+    </div>
+  )
+}
+
+export function ProfileSettingsPage() {
+  return (
+    <div className="px-4 pb-16">
+      <ProfileSettings headless />
     </div>
   )
 }

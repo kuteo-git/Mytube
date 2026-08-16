@@ -79,6 +79,8 @@ describe('Settings on a phone', () => {
       '/saved',
       '/storage',
       '/activity',
+      // Profile leads Preferences: it decides whose every other setting here is.
+      '/settings/profile',
       '/settings/feed',
       '/settings/narration',
       '/settings/translation',

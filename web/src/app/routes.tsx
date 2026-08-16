@@ -10,6 +10,7 @@ import {
   AdvancedSettingsPage,
   FeedSettingsPage,
   NarrationSettingsPage,
+  ProfileSettingsPage,
   TranslationSettingsPage,
 } from '@/pages/SettingsSectionPage'
 import { SubscriptionsPage } from '@/pages/SubscriptionsPage'
@@ -43,6 +44,7 @@ export const pageRoutes = (
     <Route path="/settings" element={<SettingsPage />} />
     {/* One panel each, for the phone's Settings menu. The desktop page still
         shows all three together; only the arrangement differs. */}
+    <Route path="/settings/profile" element={<ProfileSettingsPage />} />
     <Route path="/settings/feed" element={<FeedSettingsPage />} />
     <Route path="/settings/advanced" element={<AdvancedSettingsPage />} />
     <Route path="/settings/narration" element={<NarrationSettingsPage />} />

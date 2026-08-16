@@ -9,6 +9,7 @@ import {
   Languages,
   LayoutGrid,
   SlidersHorizontal,
+  UserRound,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -31,6 +32,8 @@ import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { usePlayer } from '@/features/watch/application/player-context'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
 import { ActionBar } from '@/features/settings/ui/ActionBar'
+import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
+
 import {
   SettingRow,
   SettingsSection,
@@ -61,6 +64,8 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">Settings</h1>
+      {/* First, because it decides whose every other setting on this page is. */}
+      <ProfileSettings />
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
@@ -93,6 +98,7 @@ const PHONE_LIBRARY = [
 ]
 
 const PHONE_PREFS = [
+  { to: '/settings/profile', icon: UserRound, label: 'Profile' },
   { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
   { to: '/settings/narration', icon: Headphones, label: 'Narration' },
   { to: '/settings/translation', icon: Languages, label: 'Translation' },

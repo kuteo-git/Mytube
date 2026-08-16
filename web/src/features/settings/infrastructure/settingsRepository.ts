@@ -1,3 +1,4 @@
+import { apiFetch } from '@/shared/api/http'
 /**
  * The settings page's calls to the gateway.
  *
@@ -56,22 +57,22 @@ async function json<T>(resp: Response): Promise<T> {
 
 export const settingsRepository = {
   async listVoices(): Promise<string[]> {
-    const r = await fetch('/api/tts/voices')
+    const r = await apiFetch('/api/tts/voices')
     return (await json<{ voices: string[] }>(r)).voices ?? []
   },
 
   async getBucketSizes(): Promise<BucketSizes> {
-    const r = await fetch('/api/settings/feed-mix/buckets')
+    const r = await apiFetch('/api/settings/feed-mix/buckets')
     return (await json<{ buckets: BucketSizes }>(r)).buckets ?? {}
   },
 
   async getRanking(): Promise<RankingSettings> {
-    const r = await fetch('/api/settings/ranking')
+    const r = await apiFetch('/api/settings/ranking')
     return (await json<{ settings: RankingSettings }>(r)).settings ?? {}
   },
 
   async saveRanking(settings: RankingSettings): Promise<RankingSettings> {
-    const r = await fetch('/api/settings/ranking', {
+    const r = await apiFetch('/api/settings/ranking', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -80,7 +81,7 @@ export const settingsRepository = {
   },
 
   async getTranslateConfig(): Promise<TranslateConfig> {
-    return json<TranslateConfig>(await fetch('/api/translate/config'))
+    return json<TranslateConfig>(await apiFetch('/api/translate/config'))
   },
 
   async saveTranslateConfig(input: {
@@ -89,7 +90,7 @@ export const settingsRepository = {
     /** Empty means "keep the stored one" — the page cannot see it to resend. */
     apiKey: string
   }): Promise<TranslateConfig> {
-    const r = await fetch('/api/translate/config', {
+    const r = await apiFetch('/api/translate/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -101,7 +102,7 @@ export const settingsRepository = {
     const q = new URLSearchParams()
     if (baseUrl) q.set('baseUrl', baseUrl)
     if (apiKey) q.set('apiKey', apiKey)
-    const r = await fetch(`/api/translate/models?${q}`)
+    const r = await apiFetch(`/api/translate/models?${q}`)
     return (await json<{ models: string[] }>(r)).models ?? []
   },
 
@@ -110,7 +111,7 @@ export const settingsRepository = {
     model: string
     apiKey: string
   }): Promise<TranslateTestResult> {
-    const r = await fetch('/api/translate/test', {
+    const r = await apiFetch('/api/translate/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -119,11 +120,11 @@ export const settingsRepository = {
   },
 
   async getFeedMix(): Promise<StoredFeedMix> {
-    return json<StoredFeedMix>(await fetch('/api/settings/feed-mix'))
+    return json<StoredFeedMix>(await apiFetch('/api/settings/feed-mix'))
   },
 
   async saveFeedMix(mix: FeedMix): Promise<FeedMix> {
-    const r = await fetch('/api/settings/feed-mix', {
+    const r = await apiFetch('/api/settings/feed-mix', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(mix),

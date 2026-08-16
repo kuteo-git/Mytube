@@ -79,6 +79,8 @@ func (g *Gateway) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/feed", g.handleFeed)
 	mux.HandleFunc("GET /api/feed/explain", g.handleExplainFeed)
+	mux.HandleFunc("GET /api/profiles", g.handleProfiles)
+	mux.HandleFunc("POST /api/profiles", g.handleProfiles)
 	mux.HandleFunc("GET /api/settings/feed-mix/buckets", g.handleFeedMixBuckets)
 	mux.HandleFunc("GET /api/settings/ranking", g.handleGetRanking)
 	mux.HandleFunc("POST /api/settings/ranking", g.handleSaveRanking)
