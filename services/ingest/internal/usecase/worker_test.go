@@ -193,3 +193,12 @@ func (f *fakeLibrary) SetSubscription(context.Context, string, string, bool) err
 
 func (f *fakeLibrary) SetLiked(context.Context, string, string) error      { return nil }
 func (f *fakeLibrary) SetWatchLater(context.Context, string, string) error { return nil }
+func (f *fakeLibrary) UpsertPlaylist(context.Context, string, string, string) (string, error) {
+	return "", nil
+}
+func (f *fakeLibrary) ImportPlaylistItems(context.Context, string, string, []string) error {
+	return nil
+}
+func (f *fakeLibrary) ListStalePlaylists(context.Context, int32) ([]domain.StalePlaylist, error) {
+	return nil, nil
+}

@@ -23,6 +23,11 @@ const (
 	// YouTube, and §8 of the charter is about exactly this: a pass is always
 	// bounded, and a zero limit means this number rather than "all of them".
 	maxShortCheckBatch = 200
+	// How many playlists one importer pass may be handed. Each is a request to
+	// YouTube on a credentialed session, and there are 30 on this installation:
+	// a pass that walked them all would put thirty named requests an hour
+	// against the address §8's risk 6 is about.
+	maxStalePlaylists = 25
 )
 
 type Catalog struct {
@@ -394,4 +399,24 @@ func (c *Catalog) SetPlaylistItem(ctx context.Context, playlistID, userID, video
 		return fmt.Errorf("%w: playlist_id, user_id and video_id are required", domain.ErrInvalid)
 	}
 	return c.repo.SetPlaylistItem(ctx, playlistID, userID, videoID, included)
+}
+
+func (c *Catalog) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) (int32, error) {
+	if playlistID == "" || userID == "" {
+		return 0, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
+	}
+	if len(videoIDs) == 0 {
+		return 0, nil
+	}
+	return c.repo.ImportPlaylistItems(ctx, playlistID, userID, videoIDs)
+}
+
+// ListStalePlaylists is bounded for the same reason the metadata backfill is:
+// each answer costs a request to YouTube, on the one session that carries a
+// name. A zero limit means the bound rather than "all of them".
+func (c *Catalog) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	if limit <= 0 || limit > maxStalePlaylists {
+		limit = maxStalePlaylists
+	}
+	return c.repo.ListStalePlaylists(ctx, limit)
 }

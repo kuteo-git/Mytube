@@ -61,7 +61,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
       // here has ever brought in — there is no playlist anywhere in this system.
       // §5's rule against a button that does nothing holds for a sentence that
       // promises something too.
-      description="Brings your own subscriptions and liked videos into the library. Your account, on this machine only."
+      description="Brings your own subscriptions, playlists and liked videos into the library. Your account, on this machine only."
       headless={headless}
     >
       <div className="pt-2">
@@ -153,7 +153,8 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
 
       {scan.data && (
         <p className="pt-2 text-xs text-text-2">
-          {scan.data.subscriptions} subscriptions, {scan.data.videos} videos.
+          {scan.data.subscriptions} subscriptions, {scan.data.playlists} playlists,{' '}
+          {scan.data.videos} videos.
         </p>
       )}
     </SettingsSection>

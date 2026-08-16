@@ -169,10 +169,12 @@ func (g *Gateway) handleScanAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"accounts":      resp.Msg.GetAccounts(),
-		"subscriptions": resp.Msg.GetSubscriptions(),
-		"videos":        resp.Msg.GetVideos(),
-		"expired":       resp.Msg.GetExpired(),
+		"accounts":       resp.Msg.GetAccounts(),
+		"subscriptions":  resp.Msg.GetSubscriptions(),
+		"videos":         resp.Msg.GetVideos(),
+		"expired":        resp.Msg.GetExpired(),
+		"playlists":      resp.Msg.GetPlaylists(),
+		"playlistVideos": resp.Msg.GetPlaylistVideos(),
 	})
 }
 

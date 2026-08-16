@@ -27,9 +27,16 @@ type recordingLibrary struct {
 	uncheckedShorts []string
 	shortAnswers    map[string]bool
 	// What the account pass wrote on each member's behalf.
-	subscribedBy []struct{ userID, channelID string }
-	liked        []struct{ userID, videoID string }
-	watchLater   []struct{ userID, videoID string }
+	subscribedBy   []struct{ userID, channelID string }
+	liked          []struct{ userID, videoID string }
+	watchLater     []struct{ userID, videoID string }
+	playlists      map[string]string
+	stalePlaylists []domain.StalePlaylist
+	staleLimit     int32
+	playlistItems  []struct {
+		playlistID, userID string
+		videoIDs           []string
+	}
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -323,6 +330,34 @@ func (r *recordingLibrary) SetSubscription(_ context.Context, userID, channelID 
 func (r *recordingLibrary) SetLiked(_ context.Context, userID, videoID string) error {
 	r.liked = append(r.liked, struct{ userID, videoID string }{userID, videoID})
 	return nil
+}
+
+func (r *recordingLibrary) UpsertPlaylist(_ context.Context, userID, sourceURL, title string) (string, error) {
+	if r.playlists == nil {
+		r.playlists = map[string]string{}
+	}
+	id := "pl_" + userID + "_" + sourceURL
+	r.playlists[id] = title
+	return id, nil
+}
+
+func (r *recordingLibrary) ImportPlaylistItems(_ context.Context, playlistID, userID string, videoIDs []string) error {
+	r.playlistItems = append(r.playlistItems, struct {
+		playlistID, userID string
+		videoIDs           []string
+	}{playlistID, userID, videoIDs})
+	return nil
+}
+
+// Honours the limit, as the real server does: catalog clamps it and returns at
+// most that many. A fake that ignored it would let a test pass while the caller
+// asked for everything.
+func (r *recordingLibrary) ListStalePlaylists(_ context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	r.staleLimit = limit
+	if limit > 0 && int(limit) < len(r.stalePlaylists) {
+		return r.stalePlaylists[:limit], nil
+	}
+	return r.stalePlaylists, nil
 }
 
 func (r *recordingLibrary) SetWatchLater(_ context.Context, userID, videoID string) error {

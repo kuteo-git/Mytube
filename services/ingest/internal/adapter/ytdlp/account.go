@@ -136,6 +136,63 @@ func derefString(s *string) string {
 	return *s
 }
 
+// ListAccountPlaylists reads the member's playlist list.
+//
+// The lists, not their contents: one request whatever the number, the same
+// shape as ListAccountChannels. Reserved ids — Watch Later and Liked videos —
+// are dropped here rather than by the caller, because they are an artefact of
+// how YouTube reports this page and nothing above should have to know that.
+func (d *Downloader) ListAccountPlaylists(
+	ctx context.Context, cookiesFile string,
+) ([]domain.AccountPlaylist, error) {
+	if cookiesFile == "" {
+		return nil, domain.ErrNoAccount
+	}
+
+	result, err := newAccountCommand(cookiesFile).
+		FlatPlaylist().
+		DumpJSON().
+		NoWarnings().
+		Run(ctx, domain.FeedPlaylists)
+	if err != nil {
+		// Same reading as the channel list: the URL is a constant here, so a URL
+		// that will not resolve is a session that has ended.
+		if isAuthFailure(err) || strings.Contains(err.Error(), "Failed to resolve url") {
+			return nil, fmt.Errorf("playlist list: %w", domain.ErrAccountAuth)
+		}
+		return nil, fmt.Errorf("playlist list: %w", err)
+	}
+
+	infos, err := result.GetExtractedInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	var out []domain.AccountPlaylist
+	add := func(id string, title *string) {
+		if !domain.IsImportablePlaylist(id) {
+			return
+		}
+		name := derefString(title)
+		if name == "" {
+			// A playlist with no name cannot be told from another on the page,
+			// and there is nowhere else its identity could come from.
+			return
+		}
+		out = append(out, domain.AccountPlaylist{ID: id, Title: name})
+	}
+	for _, info := range infos {
+		if len(info.Entries) > 0 {
+			for _, entry := range info.Entries {
+				add(entry.ID, entry.Title)
+			}
+			continue
+		}
+		add(info.ID, info.Title)
+	}
+	return out, nil
+}
+
 // isAuthFailure tells a dead session apart from an ordinary refusal.
 //
 // The difference decides whether the account is retired, so it is drawn

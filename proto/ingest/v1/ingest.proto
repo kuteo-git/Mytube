@@ -169,6 +169,11 @@ message ScanAccountsResponse {
   int32 subscriptions = 2;
   int32 videos = 3;
   int32 expired = 4;
+  // Playlists named this pass — all of them — and the videos contributed by the
+  // few whose contents were read. The two differ on purpose: naming is one
+  // request, reading is one request each.
+  int32 playlists = 5;
+  int32 playlist_videos = 6;
 }
 
 message ExpandLibraryRequest {

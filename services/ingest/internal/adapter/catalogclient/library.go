@@ -295,3 +295,40 @@ func (l *Library) ListSubscribedChannels(ctx context.Context) ([]domain.Subscrib
 	}
 	return out, nil
 }
+
+func (l *Library) UpsertPlaylist(ctx context.Context, userID, sourceURL, title string) (string, error) {
+	resp, err := l.client.CreatePlaylist(ctx, connect.NewRequest(&catalogv1.CreatePlaylistRequest{
+		UserId:    userID,
+		Title:     title,
+		SourceUrl: sourceURL,
+	}))
+	if err != nil {
+		return "", err
+	}
+	return resp.Msg.GetPlaylist().GetId(), nil
+}
+
+func (l *Library) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) error {
+	_, err := l.client.ImportPlaylistItems(ctx, connect.NewRequest(&catalogv1.ImportPlaylistItemsRequest{
+		PlaylistId: playlistID,
+		UserId:     userID,
+		VideoIds:   videoIDs,
+	}))
+	return err
+}
+
+func (l *Library) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	resp, err := l.client.ListStalePlaylists(ctx, connect.NewRequest(&catalogv1.ListStalePlaylistsRequest{
+		Limit: limit,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.StalePlaylist, 0, len(resp.Msg.GetPlaylists()))
+	for _, p := range resp.Msg.GetPlaylists() {
+		out = append(out, domain.StalePlaylist{
+			ID: p.GetId(), UserID: p.GetUserId(), SourceURL: p.GetSourceUrl(),
+		})
+	}
+	return out, nil
+}

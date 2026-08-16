@@ -301,6 +301,22 @@ type Library interface {
 	// SetWatchLater records that the video is on the member's Watch Later list
 	// on YouTube. Per user for the same reason SetSubscription is.
 	SetWatchLater(ctx context.Context, userID, videoID string) error
+	// UpsertPlaylist records one of the member's YouTube playlists by name, and
+	// returns the local playlist it maps to. Idempotent on (user, source).
+	UpsertPlaylist(ctx context.Context, userID, sourceURL, title string) (string, error)
+	// ImportPlaylistItems appends the videos to a playlist, in order. Never
+	// removes: see the subscription import for why.
+	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) error
+	// ListStalePlaylists returns imported playlists whose contents were read
+	// longest ago, never-synced first.
+	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+}
+
+// StalePlaylist is a playlist whose contents are due to be read again.
+type StalePlaylist struct {
+	ID        string
+	UserID    string
+	SourceURL string
 }
 
 // ShortChecker answers the one question duration cannot.

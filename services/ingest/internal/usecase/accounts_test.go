@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -75,6 +76,19 @@ type memFeeds struct {
 	// The subscription list, which is a list of channels rather than of the
 	// uploads of those channels. See domain.FeedChannels.
 	channels []domain.AccountChannel
+	// The member's own playlists, by name. Their contents come from byFeed,
+	// keyed by the playlist URL, because that is how they are really read.
+	playlists []domain.AccountPlaylist
+}
+
+func (m *memFeeds) ListAccountPlaylists(
+	_ context.Context, cookiesFile string,
+) ([]domain.AccountPlaylist, error) {
+	m.asked = append(m.asked, struct{ cookies, feed string }{cookiesFile, domain.FeedPlaylists})
+	if m.authOn[domain.FeedPlaylists] {
+		return nil, domain.ErrAccountAuth
+	}
+	return m.playlists, nil
 }
 
 func (m *memFeeds) ListAccountChannels(
@@ -293,6 +307,12 @@ func (f *failingFeeds) ListAccountFeed(
 	return nil, f.err
 }
 
+func (f *failingFeeds) ListAccountPlaylists(
+	context.Context, string,
+) ([]domain.AccountPlaylist, error) {
+	return nil, f.err
+}
+
 func (f *failingFeeds) ListAccountChannels(
 	context.Context, string,
 ) ([]domain.AccountChannel, error) {
@@ -485,5 +505,64 @@ func TestWatchLaterLandsOnTheList(t *testing.T) {
 		if w.videoID == "loved" {
 			t.Error("a liked video was put on Watch Later")
 		}
+	}
+}
+
+// Watch Later and Liked videos appear in YouTube's playlist list, and neither is
+// a playlist here.
+//
+// Both already arrive through their own feeds, and Watch Later is deliberately
+// not a playlist at all — it has no name, cannot be created and cannot be
+// deleted. Importing them would put two rows on the playlists page that mean the
+// same as two pages already in the sidebar.
+func TestWatchLaterAndLikedAreNotImportedAsPlaylists(t *testing.T) {
+	for _, id := range []string{"WL", "LL"} {
+		if domain.IsImportablePlaylist(id) {
+			t.Errorf("%s would be imported as a playlist", id)
+		}
+	}
+	if !domain.IsImportablePlaylist("PLM8mlc5hM62hfq9WsRCfkiCyFFSHVdLbp") {
+		t.Error("an ordinary playlist was refused")
+	}
+}
+
+// The playlist list is named for every playlist each pass; the contents of only
+// a few are read.
+//
+// This is the whole of what keeps it affordable. The member measured here has
+// thirty playlists, and reading them all hourly would put thirty requests an
+// hour on the one session that carries a name — the traffic §8's risk 6 is
+// about, against an account rather than an address.
+func TestEveryPlaylistIsNamedButFewAreRead(t *testing.T) {
+	accounts := newMemAccounts("u_luc")
+	lists := make([]domain.AccountPlaylist, 0, 30)
+	stale := make([]domain.StalePlaylist, 0, 30)
+	for i := 0; i < 30; i++ {
+		id := fmt.Sprintf("PL%d", i)
+		lists = append(lists, domain.AccountPlaylist{ID: id, Title: id})
+		stale = append(stale, domain.StalePlaylist{
+			ID: id, UserID: "u_luc", SourceURL: domain.PlaylistURL(id),
+		})
+	}
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}, playlists: lists}
+	lib := &recordingLibrary{known: map[string]bool{}, stalePlaylists: stale}
+
+	result, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	if err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	if result.Playlists != 30 {
+		t.Errorf("named %d playlists, want all 30", result.Playlists)
+	}
+	// The stalest handful only, and asked for as such rather than trimmed after
+	// the fact: the bound has to be in the request, or catalog hands over
+	// thirty and the pass reads them.
+	if lib.staleLimit != playlistsPerPass {
+		t.Errorf("asked for %d stale playlists, want %d", lib.staleLimit, playlistsPerPass)
+	}
+	if len(lib.playlistItems) != playlistsPerPass {
+		t.Errorf("read %d playlists in one pass, want %d",
+			len(lib.playlistItems), playlistsPerPass)
 	}
 }

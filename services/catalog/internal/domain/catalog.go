@@ -189,6 +189,15 @@ type Playlist struct {
 	ThumbnailPaths []string
 }
 
+// StalePlaylist is what the importer needs to go and read one again: which
+// playlist, whose, and where from. Carries user_id, which Playlist does not —
+// the importer acts for a member rather than answering one.
+type StalePlaylist struct {
+	ID        string
+	UserID    string
+	SourceURL string
+}
+
 type Page struct {
 	Size   int32
 	Offset int32
@@ -256,6 +265,12 @@ type Repository interface {
 	// SetPlaylistItem appends a video to the end of the playlist, or removes it.
 	// Appending rather than inserting is what keeps an imported order intact.
 	SetPlaylistItem(ctx context.Context, playlistID, userID, videoID string, included bool) error
+	// ImportPlaylistItems appends the given videos in order, skipping any the
+	// playlist already holds, and records that the contents were read now.
+	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) (int32, error)
+	// ListStalePlaylists returns imported playlists whose contents were read
+	// longest ago, never-synced first.
+	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
 	ListWatchLater(ctx context.Context, userID string, page Page) ([]Video, error)
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	ListSubscriptions(ctx context.Context, userID string) ([]Channel, error)

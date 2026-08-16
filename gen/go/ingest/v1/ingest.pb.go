@@ -648,8 +648,13 @@ type ScanAccountsResponse struct {
 	Subscriptions int32                  `protobuf:"varint,2,opt,name=subscriptions,proto3" json:"subscriptions,omitempty"`
 	Videos        int32                  `protobuf:"varint,3,opt,name=videos,proto3" json:"videos,omitempty"`
 	Expired       int32                  `protobuf:"varint,4,opt,name=expired,proto3" json:"expired,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Playlists named this pass — all of them — and the videos contributed by the
+	// few whose contents were read. The two differ on purpose: naming is one
+	// request, reading is one request each.
+	Playlists      int32 `protobuf:"varint,5,opt,name=playlists,proto3" json:"playlists,omitempty"`
+	PlaylistVideos int32 `protobuf:"varint,6,opt,name=playlist_videos,json=playlistVideos,proto3" json:"playlist_videos,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ScanAccountsResponse) Reset() {
@@ -706,6 +711,20 @@ func (x *ScanAccountsResponse) GetVideos() int32 {
 func (x *ScanAccountsResponse) GetExpired() int32 {
 	if x != nil {
 		return x.Expired
+	}
+	return 0
+}
+
+func (x *ScanAccountsResponse) GetPlaylists() int32 {
+	if x != nil {
+		return x.Playlists
+	}
+	return 0
+}
+
+func (x *ScanAccountsResponse) GetPlaylistVideos() int32 {
+	if x != nil {
+		return x.PlaylistVideos
 	}
 	return 0
 }
@@ -3164,12 +3183,14 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x14RemoveAccountRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x17\n" +
 	"\x15RemoveAccountResponse\"\x15\n" +
-	"\x13ScanAccountsRequest\"\x8a\x01\n" +
+	"\x13ScanAccountsRequest\"\xd1\x01\n" +
 	"\x14ScanAccountsResponse\x12\x1a\n" +
 	"\baccounts\x18\x01 \x01(\x05R\baccounts\x12$\n" +
 	"\rsubscriptions\x18\x02 \x01(\x05R\rsubscriptions\x12\x16\n" +
 	"\x06videos\x18\x03 \x01(\x05R\x06videos\x12\x18\n" +
-	"\aexpired\x18\x04 \x01(\x05R\aexpired\"R\n" +
+	"\aexpired\x18\x04 \x01(\x05R\aexpired\x12\x1c\n" +
+	"\tplaylists\x18\x05 \x01(\x05R\tplaylists\x12'\n" +
+	"\x0fplaylist_videos\x18\x06 \x01(\x05R\x0eplaylistVideos\"R\n" +
 	"\x14ExpandLibraryRequest\x12\x14\n" +
 	"\x05topic\x18\x01 \x01(\tR\x05topic\x12$\n" +
 	"\x0eseed_video_ids\x18\x02 \x03(\tR\fseedVideoIds\":\n" +

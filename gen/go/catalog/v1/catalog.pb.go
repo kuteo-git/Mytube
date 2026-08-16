@@ -4048,10 +4048,14 @@ func (x *GetPlaylistResponse) GetNextPageToken() string {
 }
 
 type CreatePlaylistRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	UserId      string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Title       string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Set by the account importer only. Idempotent on (user_id, source_url), so
+	// an hourly re-import updates the same playlist rather than making another.
+	// The gateway never sends it: a playlist made here belongs to nobody upstream.
+	SourceUrl     string `protobuf:"bytes,4,opt,name=source_url,json=sourceUrl,proto3" json:"source_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4103,6 +4107,13 @@ func (x *CreatePlaylistRequest) GetTitle() string {
 func (x *CreatePlaylistRequest) GetDescription() string {
 	if x != nil {
 		return x.Description
+	}
+	return ""
+}
+
+func (x *CreatePlaylistRequest) GetSourceUrl() string {
+	if x != nil {
+		return x.SourceUrl
 	}
 	return ""
 }
@@ -4456,6 +4467,262 @@ func (*SetPlaylistItemResponse) Descriptor() ([]byte, []int) {
 	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{70}
 }
 
+type ImportPlaylistItemsRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PlaylistId string                 `protobuf:"bytes,1,opt,name=playlist_id,json=playlistId,proto3" json:"playlist_id,omitempty"`
+	UserId     string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// In the order YouTube returned them. Ones already present keep the position
+	// they have; the rest are appended in this order.
+	VideoIds      []string `protobuf:"bytes,3,rep,name=video_ids,json=videoIds,proto3" json:"video_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportPlaylistItemsRequest) Reset() {
+	*x = ImportPlaylistItemsRequest{}
+	mi := &file_catalog_v1_catalog_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportPlaylistItemsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportPlaylistItemsRequest) ProtoMessage() {}
+
+func (x *ImportPlaylistItemsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_catalog_v1_catalog_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportPlaylistItemsRequest.ProtoReflect.Descriptor instead.
+func (*ImportPlaylistItemsRequest) Descriptor() ([]byte, []int) {
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *ImportPlaylistItemsRequest) GetPlaylistId() string {
+	if x != nil {
+		return x.PlaylistId
+	}
+	return ""
+}
+
+func (x *ImportPlaylistItemsRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ImportPlaylistItemsRequest) GetVideoIds() []string {
+	if x != nil {
+		return x.VideoIds
+	}
+	return nil
+}
+
+type ImportPlaylistItemsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Added         int32                  `protobuf:"varint,1,opt,name=added,proto3" json:"added,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportPlaylistItemsResponse) Reset() {
+	*x = ImportPlaylistItemsResponse{}
+	mi := &file_catalog_v1_catalog_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportPlaylistItemsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportPlaylistItemsResponse) ProtoMessage() {}
+
+func (x *ImportPlaylistItemsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_catalog_v1_catalog_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportPlaylistItemsResponse.ProtoReflect.Descriptor instead.
+func (*ImportPlaylistItemsResponse) Descriptor() ([]byte, []int) {
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{72}
+}
+
+func (x *ImportPlaylistItemsResponse) GetAdded() int32 {
+	if x != nil {
+		return x.Added
+	}
+	return 0
+}
+
+type ListStalePlaylistsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStalePlaylistsRequest) Reset() {
+	*x = ListStalePlaylistsRequest{}
+	mi := &file_catalog_v1_catalog_proto_msgTypes[73]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStalePlaylistsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStalePlaylistsRequest) ProtoMessage() {}
+
+func (x *ListStalePlaylistsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_catalog_v1_catalog_proto_msgTypes[73]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStalePlaylistsRequest.ProtoReflect.Descriptor instead.
+func (*ListStalePlaylistsRequest) Descriptor() ([]byte, []int) {
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{73}
+}
+
+func (x *ListStalePlaylistsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListStalePlaylistsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Carries user_id, which ListPlaylists' Playlist does not: the importer is
+	// acting for a member rather than answering one.
+	Playlists     []*StalePlaylist `protobuf:"bytes,1,rep,name=playlists,proto3" json:"playlists,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListStalePlaylistsResponse) Reset() {
+	*x = ListStalePlaylistsResponse{}
+	mi := &file_catalog_v1_catalog_proto_msgTypes[74]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListStalePlaylistsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListStalePlaylistsResponse) ProtoMessage() {}
+
+func (x *ListStalePlaylistsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_catalog_v1_catalog_proto_msgTypes[74]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListStalePlaylistsResponse.ProtoReflect.Descriptor instead.
+func (*ListStalePlaylistsResponse) Descriptor() ([]byte, []int) {
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{74}
+}
+
+func (x *ListStalePlaylistsResponse) GetPlaylists() []*StalePlaylist {
+	if x != nil {
+		return x.Playlists
+	}
+	return nil
+}
+
+type StalePlaylist struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	SourceUrl     string                 `protobuf:"bytes,3,opt,name=source_url,json=sourceUrl,proto3" json:"source_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StalePlaylist) Reset() {
+	*x = StalePlaylist{}
+	mi := &file_catalog_v1_catalog_proto_msgTypes[75]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StalePlaylist) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StalePlaylist) ProtoMessage() {}
+
+func (x *StalePlaylist) ProtoReflect() protoreflect.Message {
+	mi := &file_catalog_v1_catalog_proto_msgTypes[75]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StalePlaylist.ProtoReflect.Descriptor instead.
+func (*StalePlaylist) Descriptor() ([]byte, []int) {
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{75}
+}
+
+func (x *StalePlaylist) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *StalePlaylist) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *StalePlaylist) GetSourceUrl() string {
+	if x != nil {
+		return x.SourceUrl
+	}
+	return ""
+}
+
 type SetWatchLaterRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	UserId  string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -4469,7 +4736,7 @@ type SetWatchLaterRequest struct {
 
 func (x *SetWatchLaterRequest) Reset() {
 	*x = SetWatchLaterRequest{}
-	mi := &file_catalog_v1_catalog_proto_msgTypes[71]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4481,7 +4748,7 @@ func (x *SetWatchLaterRequest) String() string {
 func (*SetWatchLaterRequest) ProtoMessage() {}
 
 func (x *SetWatchLaterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_catalog_v1_catalog_proto_msgTypes[71]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4494,7 +4761,7 @@ func (x *SetWatchLaterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWatchLaterRequest.ProtoReflect.Descriptor instead.
 func (*SetWatchLaterRequest) Descriptor() ([]byte, []int) {
-	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{71}
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *SetWatchLaterRequest) GetUserId() string {
@@ -4526,7 +4793,7 @@ type SetWatchLaterResponse struct {
 
 func (x *SetWatchLaterResponse) Reset() {
 	*x = SetWatchLaterResponse{}
-	mi := &file_catalog_v1_catalog_proto_msgTypes[72]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4538,7 +4805,7 @@ func (x *SetWatchLaterResponse) String() string {
 func (*SetWatchLaterResponse) ProtoMessage() {}
 
 func (x *SetWatchLaterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_catalog_v1_catalog_proto_msgTypes[72]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4551,7 +4818,7 @@ func (x *SetWatchLaterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWatchLaterResponse.ProtoReflect.Descriptor instead.
 func (*SetWatchLaterResponse) Descriptor() ([]byte, []int) {
-	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{72}
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{77}
 }
 
 type ListWatchLaterRequest struct {
@@ -4565,7 +4832,7 @@ type ListWatchLaterRequest struct {
 
 func (x *ListWatchLaterRequest) Reset() {
 	*x = ListWatchLaterRequest{}
-	mi := &file_catalog_v1_catalog_proto_msgTypes[73]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4577,7 +4844,7 @@ func (x *ListWatchLaterRequest) String() string {
 func (*ListWatchLaterRequest) ProtoMessage() {}
 
 func (x *ListWatchLaterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_catalog_v1_catalog_proto_msgTypes[73]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4590,7 +4857,7 @@ func (x *ListWatchLaterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWatchLaterRequest.ProtoReflect.Descriptor instead.
 func (*ListWatchLaterRequest) Descriptor() ([]byte, []int) {
-	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{73}
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ListWatchLaterRequest) GetUserId() string {
@@ -4624,7 +4891,7 @@ type ListWatchLaterResponse struct {
 
 func (x *ListWatchLaterResponse) Reset() {
 	*x = ListWatchLaterResponse{}
-	mi := &file_catalog_v1_catalog_proto_msgTypes[74]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4636,7 +4903,7 @@ func (x *ListWatchLaterResponse) String() string {
 func (*ListWatchLaterResponse) ProtoMessage() {}
 
 func (x *ListWatchLaterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_catalog_v1_catalog_proto_msgTypes[74]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4649,7 +4916,7 @@ func (x *ListWatchLaterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWatchLaterResponse.ProtoReflect.Descriptor instead.
 func (*ListWatchLaterResponse) Descriptor() ([]byte, []int) {
-	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{74}
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ListWatchLaterResponse) GetVideos() []*Video {
@@ -4677,7 +4944,7 @@ type ListPinnedVideosRequest struct {
 
 func (x *ListPinnedVideosRequest) Reset() {
 	*x = ListPinnedVideosRequest{}
-	mi := &file_catalog_v1_catalog_proto_msgTypes[75]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4689,7 +4956,7 @@ func (x *ListPinnedVideosRequest) String() string {
 func (*ListPinnedVideosRequest) ProtoMessage() {}
 
 func (x *ListPinnedVideosRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_catalog_v1_catalog_proto_msgTypes[75]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4702,7 +4969,7 @@ func (x *ListPinnedVideosRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPinnedVideosRequest.ProtoReflect.Descriptor instead.
 func (*ListPinnedVideosRequest) Descriptor() ([]byte, []int) {
-	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{75}
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *ListPinnedVideosRequest) GetUserId() string {
@@ -4736,7 +5003,7 @@ type ListPinnedVideosResponse struct {
 
 func (x *ListPinnedVideosResponse) Reset() {
 	*x = ListPinnedVideosResponse{}
-	mi := &file_catalog_v1_catalog_proto_msgTypes[76]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4748,7 +5015,7 @@ func (x *ListPinnedVideosResponse) String() string {
 func (*ListPinnedVideosResponse) ProtoMessage() {}
 
 func (x *ListPinnedVideosResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_catalog_v1_catalog_proto_msgTypes[76]
+	mi := &file_catalog_v1_catalog_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4761,7 +5028,7 @@ func (x *ListPinnedVideosResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPinnedVideosResponse.ProtoReflect.Descriptor instead.
 func (*ListPinnedVideosResponse) Descriptor() ([]byte, []int) {
-	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{76}
+	return file_catalog_v1_catalog_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *ListPinnedVideosResponse) GetVideos() []*Video {
@@ -5087,11 +5354,13 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x13GetPlaylistResponse\x120\n" +
 	"\bplaylist\x18\x01 \x01(\v2\x14.catalog.v1.PlaylistR\bplaylist\x12)\n" +
 	"\x06videos\x18\x02 \x03(\v2\x11.catalog.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"h\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"\x87\x01\n" +
 	"\x15CreatePlaylistRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\"J\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1d\n" +
+	"\n" +
+	"source_url\x18\x04 \x01(\tR\tsourceUrl\"J\n" +
 	"\x16CreatePlaylistResponse\x120\n" +
 	"\bplaylist\x18\x01 \x01(\v2\x14.catalog.v1.PlaylistR\bplaylist\"\x89\x01\n" +
 	"\x15UpdatePlaylistRequest\x12\x1f\n" +
@@ -5113,7 +5382,23 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x19\n" +
 	"\bvideo_id\x18\x03 \x01(\tR\avideoId\x12\x1a\n" +
 	"\bincluded\x18\x04 \x01(\bR\bincluded\"\x19\n" +
-	"\x17SetPlaylistItemResponse\"p\n" +
+	"\x17SetPlaylistItemResponse\"s\n" +
+	"\x1aImportPlaylistItemsRequest\x12\x1f\n" +
+	"\vplaylist_id\x18\x01 \x01(\tR\n" +
+	"playlistId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1b\n" +
+	"\tvideo_ids\x18\x03 \x03(\tR\bvideoIds\"3\n" +
+	"\x1bImportPlaylistItemsResponse\x12\x14\n" +
+	"\x05added\x18\x01 \x01(\x05R\x05added\"1\n" +
+	"\x19ListStalePlaylistsRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\"U\n" +
+	"\x1aListStalePlaylistsResponse\x127\n" +
+	"\tplaylists\x18\x01 \x03(\v2\x19.catalog.v1.StalePlaylistR\tplaylists\"W\n" +
+	"\rStalePlaylist\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1d\n" +
+	"\n" +
+	"source_url\x18\x03 \x01(\tR\tsourceUrl\"p\n" +
 	"\x14SetWatchLaterRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x19\n" +
 	"\bvideo_id\x18\x02 \x01(\tR\avideoId\x12$\n" +
@@ -5157,7 +5442,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\vCommentSort\x12\x1c\n" +
 	"\x18COMMENT_SORT_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10COMMENT_SORT_TOP\x10\x01\x12\x17\n" +
-	"\x13COMMENT_SORT_NEWEST\x10\x022\xb5\x16\n" +
+	"\x13COMMENT_SORT_NEWEST\x10\x022\x82\x18\n" +
 	"\x0eCatalogService\x12E\n" +
 	"\bGetVideo\x12\x1b.catalog.v1.GetVideoRequest\x1a\x1c.catalog.v1.GetVideoResponse\x12W\n" +
 	"\x0eBatchGetVideos\x12!.catalog.v1.BatchGetVideosRequest\x1a\".catalog.v1.BatchGetVideosResponse\x12Q\n" +
@@ -5190,7 +5475,9 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x0eCreatePlaylist\x12!.catalog.v1.CreatePlaylistRequest\x1a\".catalog.v1.CreatePlaylistResponse\x12W\n" +
 	"\x0eUpdatePlaylist\x12!.catalog.v1.UpdatePlaylistRequest\x1a\".catalog.v1.UpdatePlaylistResponse\x12W\n" +
 	"\x0eDeletePlaylist\x12!.catalog.v1.DeletePlaylistRequest\x1a\".catalog.v1.DeletePlaylistResponse\x12Z\n" +
-	"\x0fSetPlaylistItem\x12\".catalog.v1.SetPlaylistItemRequest\x1a#.catalog.v1.SetPlaylistItemResponse\x12Z\n" +
+	"\x0fSetPlaylistItem\x12\".catalog.v1.SetPlaylistItemRequest\x1a#.catalog.v1.SetPlaylistItemResponse\x12f\n" +
+	"\x13ImportPlaylistItems\x12&.catalog.v1.ImportPlaylistItemsRequest\x1a'.catalog.v1.ImportPlaylistItemsResponse\x12c\n" +
+	"\x12ListStalePlaylists\x12%.catalog.v1.ListStalePlaylistsRequest\x1a&.catalog.v1.ListStalePlaylistsResponse\x12Z\n" +
 	"\x0fGetStorageUsage\x12\".catalog.v1.GetStorageUsageRequest\x1a#.catalog.v1.GetStorageUsageResponse\x12H\n" +
 	"\tSetPinned\x12\x1c.catalog.v1.SetPinnedRequest\x1a\x1d.catalog.v1.SetPinnedResponse\x12]\n" +
 	"\x10ListPinnedVideos\x12#.catalog.v1.ListPinnedVideosRequest\x1a$.catalog.v1.ListPinnedVideosResponseB\xa7\x01\n" +
@@ -5211,7 +5498,7 @@ func file_catalog_v1_catalog_proto_rawDescGZIP() []byte {
 }
 
 var file_catalog_v1_catalog_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
+var file_catalog_v1_catalog_proto_msgTypes = make([]protoimpl.MessageInfo, 82)
 var file_catalog_v1_catalog_proto_goTypes = []any{
 	(MediaState)(0),                     // 0: catalog.v1.MediaState
 	(Reaction)(0),                       // 1: catalog.v1.Reaction
@@ -5288,25 +5575,30 @@ var file_catalog_v1_catalog_proto_goTypes = []any{
 	(*DeletePlaylistResponse)(nil),      // 72: catalog.v1.DeletePlaylistResponse
 	(*SetPlaylistItemRequest)(nil),      // 73: catalog.v1.SetPlaylistItemRequest
 	(*SetPlaylistItemResponse)(nil),     // 74: catalog.v1.SetPlaylistItemResponse
-	(*SetWatchLaterRequest)(nil),        // 75: catalog.v1.SetWatchLaterRequest
-	(*SetWatchLaterResponse)(nil),       // 76: catalog.v1.SetWatchLaterResponse
-	(*ListWatchLaterRequest)(nil),       // 77: catalog.v1.ListWatchLaterRequest
-	(*ListWatchLaterResponse)(nil),      // 78: catalog.v1.ListWatchLaterResponse
-	(*ListPinnedVideosRequest)(nil),     // 79: catalog.v1.ListPinnedVideosRequest
-	(*ListPinnedVideosResponse)(nil),    // 80: catalog.v1.ListPinnedVideosResponse
-	(*timestamppb.Timestamp)(nil),       // 81: google.protobuf.Timestamp
+	(*ImportPlaylistItemsRequest)(nil),  // 75: catalog.v1.ImportPlaylistItemsRequest
+	(*ImportPlaylistItemsResponse)(nil), // 76: catalog.v1.ImportPlaylistItemsResponse
+	(*ListStalePlaylistsRequest)(nil),   // 77: catalog.v1.ListStalePlaylistsRequest
+	(*ListStalePlaylistsResponse)(nil),  // 78: catalog.v1.ListStalePlaylistsResponse
+	(*StalePlaylist)(nil),               // 79: catalog.v1.StalePlaylist
+	(*SetWatchLaterRequest)(nil),        // 80: catalog.v1.SetWatchLaterRequest
+	(*SetWatchLaterResponse)(nil),       // 81: catalog.v1.SetWatchLaterResponse
+	(*ListWatchLaterRequest)(nil),       // 82: catalog.v1.ListWatchLaterRequest
+	(*ListWatchLaterResponse)(nil),      // 83: catalog.v1.ListWatchLaterResponse
+	(*ListPinnedVideosRequest)(nil),     // 84: catalog.v1.ListPinnedVideosRequest
+	(*ListPinnedVideosResponse)(nil),    // 85: catalog.v1.ListPinnedVideosResponse
+	(*timestamppb.Timestamp)(nil),       // 86: google.protobuf.Timestamp
 }
 var file_catalog_v1_catalog_proto_depIdxs = []int32{
 	4,  // 0: catalog.v1.Video.channel:type_name -> catalog.v1.Channel
-	81, // 1: catalog.v1.Video.published_at:type_name -> google.protobuf.Timestamp
-	81, // 2: catalog.v1.Video.added_at:type_name -> google.protobuf.Timestamp
+	86, // 1: catalog.v1.Video.published_at:type_name -> google.protobuf.Timestamp
+	86, // 2: catalog.v1.Video.added_at:type_name -> google.protobuf.Timestamp
 	0,  // 3: catalog.v1.Video.media_state:type_name -> catalog.v1.MediaState
 	7,  // 4: catalog.v1.Video.user_state:type_name -> catalog.v1.VideoUserState
 	6,  // 5: catalog.v1.Video.subtitles:type_name -> catalog.v1.SubtitleTrack
-	81, // 6: catalog.v1.VideoUserState.last_watched_at:type_name -> google.protobuf.Timestamp
+	86, // 6: catalog.v1.VideoUserState.last_watched_at:type_name -> google.protobuf.Timestamp
 	1,  // 7: catalog.v1.VideoUserState.reaction:type_name -> catalog.v1.Reaction
 	8,  // 8: catalog.v1.Comment.author:type_name -> catalog.v1.CommentAuthor
-	81, // 9: catalog.v1.Comment.published_at:type_name -> google.protobuf.Timestamp
+	86, // 9: catalog.v1.Comment.published_at:type_name -> google.protobuf.Timestamp
 	9,  // 10: catalog.v1.Comment.replies:type_name -> catalog.v1.Comment
 	5,  // 11: catalog.v1.GetVideoResponse.video:type_name -> catalog.v1.Video
 	5,  // 12: catalog.v1.BatchGetVideosResponse.videos:type_name -> catalog.v1.Video
@@ -5317,8 +5609,8 @@ var file_catalog_v1_catalog_proto_depIdxs = []int32{
 	4,  // 17: catalog.v1.GetChannelResponse.channel:type_name -> catalog.v1.Channel
 	25, // 18: catalog.v1.ListTopicsResponse.topics:type_name -> catalog.v1.Topic
 	28, // 19: catalog.v1.ListVideoFeaturesResponse.videos:type_name -> catalog.v1.VideoFeatures
-	81, // 20: catalog.v1.VideoFeatures.published_at:type_name -> google.protobuf.Timestamp
-	81, // 21: catalog.v1.VideoFeatures.added_at:type_name -> google.protobuf.Timestamp
+	86, // 20: catalog.v1.VideoFeatures.published_at:type_name -> google.protobuf.Timestamp
+	86, // 21: catalog.v1.VideoFeatures.added_at:type_name -> google.protobuf.Timestamp
 	0,  // 22: catalog.v1.VideoFeatures.media_state:type_name -> catalog.v1.MediaState
 	4,  // 23: catalog.v1.UpsertChannelRequest.channel:type_name -> catalog.v1.Channel
 	4,  // 24: catalog.v1.UpsertChannelResponse.channel:type_name -> catalog.v1.Channel
@@ -5335,85 +5627,90 @@ var file_catalog_v1_catalog_proto_depIdxs = []int32{
 	4,  // 35: catalog.v1.ListSubscriptionsResponse.channels:type_name -> catalog.v1.Channel
 	5,  // 36: catalog.v1.ListHistoryResponse.videos:type_name -> catalog.v1.Video
 	5,  // 37: catalog.v1.GetStorageUsageResponse.eviction_candidates:type_name -> catalog.v1.Video
-	81, // 38: catalog.v1.Playlist.updated_at:type_name -> google.protobuf.Timestamp
+	86, // 38: catalog.v1.Playlist.updated_at:type_name -> google.protobuf.Timestamp
 	62, // 39: catalog.v1.ListPlaylistsResponse.playlists:type_name -> catalog.v1.Playlist
 	62, // 40: catalog.v1.GetPlaylistResponse.playlist:type_name -> catalog.v1.Playlist
 	5,  // 41: catalog.v1.GetPlaylistResponse.videos:type_name -> catalog.v1.Video
 	62, // 42: catalog.v1.CreatePlaylistResponse.playlist:type_name -> catalog.v1.Playlist
 	62, // 43: catalog.v1.UpdatePlaylistResponse.playlist:type_name -> catalog.v1.Playlist
-	5,  // 44: catalog.v1.ListWatchLaterResponse.videos:type_name -> catalog.v1.Video
-	5,  // 45: catalog.v1.ListPinnedVideosResponse.videos:type_name -> catalog.v1.Video
-	10, // 46: catalog.v1.CatalogService.GetVideo:input_type -> catalog.v1.GetVideoRequest
-	12, // 47: catalog.v1.CatalogService.BatchGetVideos:input_type -> catalog.v1.BatchGetVideosRequest
-	14, // 48: catalog.v1.CatalogService.SearchVideos:input_type -> catalog.v1.SearchVideosRequest
-	16, // 49: catalog.v1.CatalogService.Suggest:input_type -> catalog.v1.SuggestRequest
-	19, // 50: catalog.v1.CatalogService.ListChannelVideos:input_type -> catalog.v1.ListChannelVideosRequest
-	21, // 51: catalog.v1.CatalogService.GetChannel:input_type -> catalog.v1.GetChannelRequest
-	23, // 52: catalog.v1.CatalogService.ListTopics:input_type -> catalog.v1.ListTopicsRequest
-	26, // 53: catalog.v1.CatalogService.ListVideoFeatures:input_type -> catalog.v1.ListVideoFeaturesRequest
-	29, // 54: catalog.v1.CatalogService.UpsertChannel:input_type -> catalog.v1.UpsertChannelRequest
-	31, // 55: catalog.v1.CatalogService.UpsertVideo:input_type -> catalog.v1.UpsertVideoRequest
-	37, // 56: catalog.v1.CatalogService.SetMediaState:input_type -> catalog.v1.SetMediaStateRequest
-	33, // 57: catalog.v1.CatalogService.SetShort:input_type -> catalog.v1.SetShortRequest
-	35, // 58: catalog.v1.CatalogService.ListUncheckedShorts:input_type -> catalog.v1.ListUncheckedShortsRequest
-	39, // 59: catalog.v1.CatalogService.FindBySourceURL:input_type -> catalog.v1.FindBySourceURLRequest
-	41, // 60: catalog.v1.CatalogService.ListComments:input_type -> catalog.v1.ListCommentsRequest
-	43, // 61: catalog.v1.CatalogService.CreateComment:input_type -> catalog.v1.CreateCommentRequest
-	46, // 62: catalog.v1.CatalogService.ImportComments:input_type -> catalog.v1.ImportCommentsRequest
-	48, // 63: catalog.v1.CatalogService.RecordWatchProgress:input_type -> catalog.v1.RecordWatchProgressRequest
-	50, // 64: catalog.v1.CatalogService.SetReaction:input_type -> catalog.v1.SetReactionRequest
-	52, // 65: catalog.v1.CatalogService.SetSubscription:input_type -> catalog.v1.SetSubscriptionRequest
-	54, // 66: catalog.v1.CatalogService.ListSubscriptions:input_type -> catalog.v1.ListSubscriptionsRequest
-	56, // 67: catalog.v1.CatalogService.ListHistory:input_type -> catalog.v1.ListHistoryRequest
-	75, // 68: catalog.v1.CatalogService.SetWatchLater:input_type -> catalog.v1.SetWatchLaterRequest
-	77, // 69: catalog.v1.CatalogService.ListWatchLater:input_type -> catalog.v1.ListWatchLaterRequest
-	63, // 70: catalog.v1.CatalogService.ListPlaylists:input_type -> catalog.v1.ListPlaylistsRequest
-	65, // 71: catalog.v1.CatalogService.GetPlaylist:input_type -> catalog.v1.GetPlaylistRequest
-	67, // 72: catalog.v1.CatalogService.CreatePlaylist:input_type -> catalog.v1.CreatePlaylistRequest
-	69, // 73: catalog.v1.CatalogService.UpdatePlaylist:input_type -> catalog.v1.UpdatePlaylistRequest
-	71, // 74: catalog.v1.CatalogService.DeletePlaylist:input_type -> catalog.v1.DeletePlaylistRequest
-	73, // 75: catalog.v1.CatalogService.SetPlaylistItem:input_type -> catalog.v1.SetPlaylistItemRequest
-	58, // 76: catalog.v1.CatalogService.GetStorageUsage:input_type -> catalog.v1.GetStorageUsageRequest
-	60, // 77: catalog.v1.CatalogService.SetPinned:input_type -> catalog.v1.SetPinnedRequest
-	79, // 78: catalog.v1.CatalogService.ListPinnedVideos:input_type -> catalog.v1.ListPinnedVideosRequest
-	11, // 79: catalog.v1.CatalogService.GetVideo:output_type -> catalog.v1.GetVideoResponse
-	13, // 80: catalog.v1.CatalogService.BatchGetVideos:output_type -> catalog.v1.BatchGetVideosResponse
-	15, // 81: catalog.v1.CatalogService.SearchVideos:output_type -> catalog.v1.SearchVideosResponse
-	17, // 82: catalog.v1.CatalogService.Suggest:output_type -> catalog.v1.SuggestResponse
-	20, // 83: catalog.v1.CatalogService.ListChannelVideos:output_type -> catalog.v1.ListChannelVideosResponse
-	22, // 84: catalog.v1.CatalogService.GetChannel:output_type -> catalog.v1.GetChannelResponse
-	24, // 85: catalog.v1.CatalogService.ListTopics:output_type -> catalog.v1.ListTopicsResponse
-	27, // 86: catalog.v1.CatalogService.ListVideoFeatures:output_type -> catalog.v1.ListVideoFeaturesResponse
-	30, // 87: catalog.v1.CatalogService.UpsertChannel:output_type -> catalog.v1.UpsertChannelResponse
-	32, // 88: catalog.v1.CatalogService.UpsertVideo:output_type -> catalog.v1.UpsertVideoResponse
-	38, // 89: catalog.v1.CatalogService.SetMediaState:output_type -> catalog.v1.SetMediaStateResponse
-	34, // 90: catalog.v1.CatalogService.SetShort:output_type -> catalog.v1.SetShortResponse
-	36, // 91: catalog.v1.CatalogService.ListUncheckedShorts:output_type -> catalog.v1.ListUncheckedShortsResponse
-	40, // 92: catalog.v1.CatalogService.FindBySourceURL:output_type -> catalog.v1.FindBySourceURLResponse
-	42, // 93: catalog.v1.CatalogService.ListComments:output_type -> catalog.v1.ListCommentsResponse
-	44, // 94: catalog.v1.CatalogService.CreateComment:output_type -> catalog.v1.CreateCommentResponse
-	47, // 95: catalog.v1.CatalogService.ImportComments:output_type -> catalog.v1.ImportCommentsResponse
-	49, // 96: catalog.v1.CatalogService.RecordWatchProgress:output_type -> catalog.v1.RecordWatchProgressResponse
-	51, // 97: catalog.v1.CatalogService.SetReaction:output_type -> catalog.v1.SetReactionResponse
-	53, // 98: catalog.v1.CatalogService.SetSubscription:output_type -> catalog.v1.SetSubscriptionResponse
-	55, // 99: catalog.v1.CatalogService.ListSubscriptions:output_type -> catalog.v1.ListSubscriptionsResponse
-	57, // 100: catalog.v1.CatalogService.ListHistory:output_type -> catalog.v1.ListHistoryResponse
-	76, // 101: catalog.v1.CatalogService.SetWatchLater:output_type -> catalog.v1.SetWatchLaterResponse
-	78, // 102: catalog.v1.CatalogService.ListWatchLater:output_type -> catalog.v1.ListWatchLaterResponse
-	64, // 103: catalog.v1.CatalogService.ListPlaylists:output_type -> catalog.v1.ListPlaylistsResponse
-	66, // 104: catalog.v1.CatalogService.GetPlaylist:output_type -> catalog.v1.GetPlaylistResponse
-	68, // 105: catalog.v1.CatalogService.CreatePlaylist:output_type -> catalog.v1.CreatePlaylistResponse
-	70, // 106: catalog.v1.CatalogService.UpdatePlaylist:output_type -> catalog.v1.UpdatePlaylistResponse
-	72, // 107: catalog.v1.CatalogService.DeletePlaylist:output_type -> catalog.v1.DeletePlaylistResponse
-	74, // 108: catalog.v1.CatalogService.SetPlaylistItem:output_type -> catalog.v1.SetPlaylistItemResponse
-	59, // 109: catalog.v1.CatalogService.GetStorageUsage:output_type -> catalog.v1.GetStorageUsageResponse
-	61, // 110: catalog.v1.CatalogService.SetPinned:output_type -> catalog.v1.SetPinnedResponse
-	80, // 111: catalog.v1.CatalogService.ListPinnedVideos:output_type -> catalog.v1.ListPinnedVideosResponse
-	79, // [79:112] is the sub-list for method output_type
-	46, // [46:79] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	79, // 44: catalog.v1.ListStalePlaylistsResponse.playlists:type_name -> catalog.v1.StalePlaylist
+	5,  // 45: catalog.v1.ListWatchLaterResponse.videos:type_name -> catalog.v1.Video
+	5,  // 46: catalog.v1.ListPinnedVideosResponse.videos:type_name -> catalog.v1.Video
+	10, // 47: catalog.v1.CatalogService.GetVideo:input_type -> catalog.v1.GetVideoRequest
+	12, // 48: catalog.v1.CatalogService.BatchGetVideos:input_type -> catalog.v1.BatchGetVideosRequest
+	14, // 49: catalog.v1.CatalogService.SearchVideos:input_type -> catalog.v1.SearchVideosRequest
+	16, // 50: catalog.v1.CatalogService.Suggest:input_type -> catalog.v1.SuggestRequest
+	19, // 51: catalog.v1.CatalogService.ListChannelVideos:input_type -> catalog.v1.ListChannelVideosRequest
+	21, // 52: catalog.v1.CatalogService.GetChannel:input_type -> catalog.v1.GetChannelRequest
+	23, // 53: catalog.v1.CatalogService.ListTopics:input_type -> catalog.v1.ListTopicsRequest
+	26, // 54: catalog.v1.CatalogService.ListVideoFeatures:input_type -> catalog.v1.ListVideoFeaturesRequest
+	29, // 55: catalog.v1.CatalogService.UpsertChannel:input_type -> catalog.v1.UpsertChannelRequest
+	31, // 56: catalog.v1.CatalogService.UpsertVideo:input_type -> catalog.v1.UpsertVideoRequest
+	37, // 57: catalog.v1.CatalogService.SetMediaState:input_type -> catalog.v1.SetMediaStateRequest
+	33, // 58: catalog.v1.CatalogService.SetShort:input_type -> catalog.v1.SetShortRequest
+	35, // 59: catalog.v1.CatalogService.ListUncheckedShorts:input_type -> catalog.v1.ListUncheckedShortsRequest
+	39, // 60: catalog.v1.CatalogService.FindBySourceURL:input_type -> catalog.v1.FindBySourceURLRequest
+	41, // 61: catalog.v1.CatalogService.ListComments:input_type -> catalog.v1.ListCommentsRequest
+	43, // 62: catalog.v1.CatalogService.CreateComment:input_type -> catalog.v1.CreateCommentRequest
+	46, // 63: catalog.v1.CatalogService.ImportComments:input_type -> catalog.v1.ImportCommentsRequest
+	48, // 64: catalog.v1.CatalogService.RecordWatchProgress:input_type -> catalog.v1.RecordWatchProgressRequest
+	50, // 65: catalog.v1.CatalogService.SetReaction:input_type -> catalog.v1.SetReactionRequest
+	52, // 66: catalog.v1.CatalogService.SetSubscription:input_type -> catalog.v1.SetSubscriptionRequest
+	54, // 67: catalog.v1.CatalogService.ListSubscriptions:input_type -> catalog.v1.ListSubscriptionsRequest
+	56, // 68: catalog.v1.CatalogService.ListHistory:input_type -> catalog.v1.ListHistoryRequest
+	80, // 69: catalog.v1.CatalogService.SetWatchLater:input_type -> catalog.v1.SetWatchLaterRequest
+	82, // 70: catalog.v1.CatalogService.ListWatchLater:input_type -> catalog.v1.ListWatchLaterRequest
+	63, // 71: catalog.v1.CatalogService.ListPlaylists:input_type -> catalog.v1.ListPlaylistsRequest
+	65, // 72: catalog.v1.CatalogService.GetPlaylist:input_type -> catalog.v1.GetPlaylistRequest
+	67, // 73: catalog.v1.CatalogService.CreatePlaylist:input_type -> catalog.v1.CreatePlaylistRequest
+	69, // 74: catalog.v1.CatalogService.UpdatePlaylist:input_type -> catalog.v1.UpdatePlaylistRequest
+	71, // 75: catalog.v1.CatalogService.DeletePlaylist:input_type -> catalog.v1.DeletePlaylistRequest
+	73, // 76: catalog.v1.CatalogService.SetPlaylistItem:input_type -> catalog.v1.SetPlaylistItemRequest
+	75, // 77: catalog.v1.CatalogService.ImportPlaylistItems:input_type -> catalog.v1.ImportPlaylistItemsRequest
+	77, // 78: catalog.v1.CatalogService.ListStalePlaylists:input_type -> catalog.v1.ListStalePlaylistsRequest
+	58, // 79: catalog.v1.CatalogService.GetStorageUsage:input_type -> catalog.v1.GetStorageUsageRequest
+	60, // 80: catalog.v1.CatalogService.SetPinned:input_type -> catalog.v1.SetPinnedRequest
+	84, // 81: catalog.v1.CatalogService.ListPinnedVideos:input_type -> catalog.v1.ListPinnedVideosRequest
+	11, // 82: catalog.v1.CatalogService.GetVideo:output_type -> catalog.v1.GetVideoResponse
+	13, // 83: catalog.v1.CatalogService.BatchGetVideos:output_type -> catalog.v1.BatchGetVideosResponse
+	15, // 84: catalog.v1.CatalogService.SearchVideos:output_type -> catalog.v1.SearchVideosResponse
+	17, // 85: catalog.v1.CatalogService.Suggest:output_type -> catalog.v1.SuggestResponse
+	20, // 86: catalog.v1.CatalogService.ListChannelVideos:output_type -> catalog.v1.ListChannelVideosResponse
+	22, // 87: catalog.v1.CatalogService.GetChannel:output_type -> catalog.v1.GetChannelResponse
+	24, // 88: catalog.v1.CatalogService.ListTopics:output_type -> catalog.v1.ListTopicsResponse
+	27, // 89: catalog.v1.CatalogService.ListVideoFeatures:output_type -> catalog.v1.ListVideoFeaturesResponse
+	30, // 90: catalog.v1.CatalogService.UpsertChannel:output_type -> catalog.v1.UpsertChannelResponse
+	32, // 91: catalog.v1.CatalogService.UpsertVideo:output_type -> catalog.v1.UpsertVideoResponse
+	38, // 92: catalog.v1.CatalogService.SetMediaState:output_type -> catalog.v1.SetMediaStateResponse
+	34, // 93: catalog.v1.CatalogService.SetShort:output_type -> catalog.v1.SetShortResponse
+	36, // 94: catalog.v1.CatalogService.ListUncheckedShorts:output_type -> catalog.v1.ListUncheckedShortsResponse
+	40, // 95: catalog.v1.CatalogService.FindBySourceURL:output_type -> catalog.v1.FindBySourceURLResponse
+	42, // 96: catalog.v1.CatalogService.ListComments:output_type -> catalog.v1.ListCommentsResponse
+	44, // 97: catalog.v1.CatalogService.CreateComment:output_type -> catalog.v1.CreateCommentResponse
+	47, // 98: catalog.v1.CatalogService.ImportComments:output_type -> catalog.v1.ImportCommentsResponse
+	49, // 99: catalog.v1.CatalogService.RecordWatchProgress:output_type -> catalog.v1.RecordWatchProgressResponse
+	51, // 100: catalog.v1.CatalogService.SetReaction:output_type -> catalog.v1.SetReactionResponse
+	53, // 101: catalog.v1.CatalogService.SetSubscription:output_type -> catalog.v1.SetSubscriptionResponse
+	55, // 102: catalog.v1.CatalogService.ListSubscriptions:output_type -> catalog.v1.ListSubscriptionsResponse
+	57, // 103: catalog.v1.CatalogService.ListHistory:output_type -> catalog.v1.ListHistoryResponse
+	81, // 104: catalog.v1.CatalogService.SetWatchLater:output_type -> catalog.v1.SetWatchLaterResponse
+	83, // 105: catalog.v1.CatalogService.ListWatchLater:output_type -> catalog.v1.ListWatchLaterResponse
+	64, // 106: catalog.v1.CatalogService.ListPlaylists:output_type -> catalog.v1.ListPlaylistsResponse
+	66, // 107: catalog.v1.CatalogService.GetPlaylist:output_type -> catalog.v1.GetPlaylistResponse
+	68, // 108: catalog.v1.CatalogService.CreatePlaylist:output_type -> catalog.v1.CreatePlaylistResponse
+	70, // 109: catalog.v1.CatalogService.UpdatePlaylist:output_type -> catalog.v1.UpdatePlaylistResponse
+	72, // 110: catalog.v1.CatalogService.DeletePlaylist:output_type -> catalog.v1.DeletePlaylistResponse
+	74, // 111: catalog.v1.CatalogService.SetPlaylistItem:output_type -> catalog.v1.SetPlaylistItemResponse
+	76, // 112: catalog.v1.CatalogService.ImportPlaylistItems:output_type -> catalog.v1.ImportPlaylistItemsResponse
+	78, // 113: catalog.v1.CatalogService.ListStalePlaylists:output_type -> catalog.v1.ListStalePlaylistsResponse
+	59, // 114: catalog.v1.CatalogService.GetStorageUsage:output_type -> catalog.v1.GetStorageUsageResponse
+	61, // 115: catalog.v1.CatalogService.SetPinned:output_type -> catalog.v1.SetPinnedResponse
+	85, // 116: catalog.v1.CatalogService.ListPinnedVideos:output_type -> catalog.v1.ListPinnedVideosResponse
+	82, // [82:117] is the sub-list for method output_type
+	47, // [47:82] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_catalog_v1_catalog_proto_init() }
@@ -5433,7 +5730,7 @@ func file_catalog_v1_catalog_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_catalog_v1_catalog_proto_rawDesc), len(file_catalog_v1_catalog_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   77,
+			NumMessages:   82,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

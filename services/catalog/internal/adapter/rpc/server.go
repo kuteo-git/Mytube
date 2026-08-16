@@ -651,7 +651,7 @@ func (s *Server) GetPlaylist(ctx context.Context, req *connect.Request[catalogv1
 
 func (s *Server) CreatePlaylist(ctx context.Context, req *connect.Request[catalogv1.CreatePlaylistRequest]) (*connect.Response[catalogv1.CreatePlaylistResponse], error) {
 	p, err := s.catalog.CreatePlaylist(ctx,
-		req.Msg.GetUserId(), req.Msg.GetTitle(), req.Msg.GetDescription(), "")
+		req.Msg.GetUserId(), req.Msg.GetTitle(), req.Msg.GetDescription(), req.Msg.GetSourceUrl())
 	if err != nil {
 		return nil, toConnectErr(err)
 	}
@@ -680,4 +680,27 @@ func (s *Server) SetPlaylistItem(ctx context.Context, req *connect.Request[catal
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.SetPlaylistItemResponse{}), nil
+}
+
+func (s *Server) ImportPlaylistItems(ctx context.Context, req *connect.Request[catalogv1.ImportPlaylistItemsRequest]) (*connect.Response[catalogv1.ImportPlaylistItemsResponse], error) {
+	added, err := s.catalog.ImportPlaylistItems(ctx,
+		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetVideoIds())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ImportPlaylistItemsResponse{Added: added}), nil
+}
+
+func (s *Server) ListStalePlaylists(ctx context.Context, req *connect.Request[catalogv1.ListStalePlaylistsRequest]) (*connect.Response[catalogv1.ListStalePlaylistsResponse], error) {
+	ps, err := s.catalog.ListStalePlaylists(ctx, req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*catalogv1.StalePlaylist, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, &catalogv1.StalePlaylist{
+			Id: p.ID, UserId: p.UserID, SourceUrl: p.SourceURL,
+		})
+	}
+	return connect.NewResponse(&catalogv1.ListStalePlaylistsResponse{Playlists: out}), nil
 }

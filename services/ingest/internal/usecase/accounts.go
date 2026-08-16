@@ -34,6 +34,17 @@ const accountFeedLimit = 50
 // Between one account's requests and the next.
 const accountRequestPause = 3 * time.Second
 
+// How many playlists' contents one pass reads, and how deep into each.
+//
+// Four an hour walks thirty playlists in under a day, at four requests a pass
+// on the one session that carries a name. The depth matches accountFeedLimit
+// for the same reason: this is read for what a playlist mostly is, not to mirror
+// a thousand-video list into the library.
+const (
+	playlistsPerPass  = 4
+	playlistItemLimit = 50
+)
+
 // AccountScanner reads household members' own feeds.
 type AccountScanner struct {
 	accounts domain.AccountStore
@@ -75,7 +86,11 @@ type AccountScanResult struct {
 	Accounts      int
 	Subscriptions int
 	Videos        int
-	Expired       int
+	// Playlists named this pass, which is every one of them; PlaylistVideos is
+	// what the few whose contents were read this pass contributed.
+	Playlists      int
+	PlaylistVideos int
+	Expired        int
 }
 
 // ScanAll reads every account that still has a working session.
@@ -109,13 +124,15 @@ func (s *AccountScanner) ScanAll(ctx context.Context) (AccountScanResult, error)
 		result, authFailed := s.scanOne(ctx, account.UserID, path)
 		out.Subscriptions += result.Subscriptions
 		out.Videos += result.Videos
+		out.Playlists += result.Playlists
 		if authFailed {
 			out.Expired++
 		}
 
 		// Never the account's own details in the note: this string is shown on
 		// a settings screen and written to a file beside the cookies.
-		note := fmt.Sprintf("%d subscriptions, %d videos", result.Subscriptions, result.Videos)
+		note := fmt.Sprintf("%d subscriptions, %d playlists, %d videos",
+			result.Subscriptions, result.Playlists, result.Videos)
 		if authFailed {
 			note = "signed out — paste your cookies again"
 		}
@@ -123,6 +140,10 @@ func (s *AccountScanner) ScanAll(ctx context.Context) (AccountScanResult, error)
 			s.logger.Warn("recording account scan", "user", account.UserID, "error", err)
 		}
 	}
+
+	// Last, and across everybody: the stalest playlists in the house, not the
+	// stalest of each member in turn.
+	s.syncPlaylistItems(ctx, &out)
 	return out, nil
 }
 
@@ -151,6 +172,12 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 	// the whole reason their Home feed has anything in it, and the video passes
 	// below still fill the library if this one is refused.
 	if !s.importSubscriptions(ctx, userID, cookiePath, &out) {
+		return out, true
+	}
+
+	// The member's playlists, by name. Their contents are read separately and a
+	// few at a time — see syncPlaylistItems.
+	if !s.importPlaylists(ctx, userID, cookiePath, &out) {
 		return out, true
 	}
 
@@ -273,6 +300,108 @@ func (s *AccountScanner) importSubscriptions(
 		out.Subscriptions++
 	}
 	return true
+}
+
+// importPlaylists records the member's playlist list by name, and reads the
+// contents of a few of them.
+//
+// The split is what keeps this affordable. The list is one request; each
+// playlist's contents is another, and this member has thirty. Reading them all
+// every hour would put thirty named requests an hour against the address §8's
+// risk 6 is about — so the list is refreshed every pass and the contents are
+// taken a few at a time, stalest first, which walks the whole set in a day and
+// costs four requests a pass.
+//
+// Returns false only when the session has died.
+func (s *AccountScanner) importPlaylists(
+	ctx context.Context, userID, cookiePath string, out *AccountScanResult,
+) bool {
+	lists, err := s.feeds.ListAccountPlaylists(ctx, cookiePath)
+	if err != nil {
+		if errors.Is(err, domain.ErrAccountAuth) {
+			s.logger.Warn("account session refused", "user", userID, "feed", "playlists")
+			return false
+		}
+		s.logger.Warn("account playlist list", "user", userID, "error", err)
+		return true
+	}
+
+	for _, list := range lists {
+		if _, err := s.library.UpsertPlaylist(
+			ctx, userID, domain.PlaylistURL(list.ID), list.Title); err != nil {
+			s.logger.Warn("upsert playlist", "user", userID, "playlist", list.ID, "error", err)
+			continue
+		}
+		out.Playlists++
+	}
+	return true
+}
+
+// syncPlaylistItems reads the contents of the playlists nobody has looked at in
+// longest, and appends what it finds.
+//
+// Deliberately outside the per-member loop: which playlists are stalest is a
+// question about all of them at once, and asking it per member would let a
+// household of four spend four times the requests on the same budget.
+func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScanResult) {
+	stale, err := s.library.ListStalePlaylists(ctx, playlistsPerPass)
+	if err != nil {
+		s.logger.Warn("list stale playlists", "error", err)
+		return
+	}
+
+	for _, p := range stale {
+		cookiePath, err := s.accounts.CookiePath(ctx, p.UserID)
+		if err != nil {
+			// The member whose playlist this is has no working session. Skipped
+			// rather than read anonymously: a playlist can be private, and asking
+			// for one without the account that owns it is a request that fails
+			// and teaches nothing.
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(s.requestPause()):
+		}
+
+		// Read as the member, not anonymously. A playlist can be private, and
+		// §6b's rule is narrow rather than absent: listings carry no credentials,
+		// except the ones that are a member reading their own account — which a
+		// private playlist plainly is. ListAccountFeed takes a URL as readily as
+		// an alias, so this is the same call the other feeds make.
+		videos, err := s.feeds.ListAccountFeed(ctx, cookiePath, p.SourceURL, playlistItemLimit)
+		if err != nil {
+			s.logger.Warn("read playlist", "user", p.UserID, "playlist", p.ID, "error", err)
+			continue
+		}
+
+		ids := make([]string, 0, len(videos))
+		for _, v := range videos {
+			if v.ID == "" || v.SourceURL == "" {
+				continue
+			}
+			// The video has to exist before the playlist can point at it, and a
+			// playlist is often the first place a video is seen.
+			if err := s.library.UpsertChannel(ctx, v); err != nil {
+				s.logger.Warn("upsert channel", "video", v.ID, "error", err)
+				continue
+			}
+			v.DiscoveredVia = "SOURCE"
+			if err := s.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
+				s.logger.Warn("upsert video", "video", v.ID, "error", err)
+				continue
+			}
+			ids = append(ids, v.ID)
+		}
+
+		if err := s.library.ImportPlaylistItems(ctx, p.ID, p.UserID, ids); err != nil {
+			s.logger.Warn("import playlist items", "playlist", p.ID, "error", err)
+			continue
+		}
+		out.PlaylistVideos += len(ids)
+	}
 }
 
 // Run scans on a timer. A zero interval disables it.

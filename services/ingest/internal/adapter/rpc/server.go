@@ -103,10 +103,12 @@ func (s *Server) ScanAccounts(
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&ingestv1.ScanAccountsResponse{
-		Accounts:      int32(result.Accounts),
-		Subscriptions: int32(result.Subscriptions),
-		Videos:        int32(result.Videos),
-		Expired:       int32(result.Expired),
+		Accounts:       int32(result.Accounts),
+		Subscriptions:  int32(result.Subscriptions),
+		Videos:         int32(result.Videos),
+		Playlists:      int32(result.Playlists),
+		PlaylistVideos: int32(result.PlaylistVideos),
+		Expired:        int32(result.Expired),
 	}), nil
 }
 

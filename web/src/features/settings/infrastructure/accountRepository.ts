@@ -23,6 +23,9 @@ export interface ScanResult {
   subscriptions: number
   videos: number
   expired: number
+  /** Every playlist is named each pass; only a few have their contents read. */
+  playlists: number
+  playlistVideos: number
 }
 
 export const accountRepository = {

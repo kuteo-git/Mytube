@@ -78,6 +78,13 @@ service CatalogService {
   // way the menu entry is facing, and two RPCs would be two places to get the
   // position rules wrong.
   rpc SetPlaylistItem(SetPlaylistItemRequest) returns (SetPlaylistItemResponse);
+  // The account importer's write. Appends, never removes: YouTube answering
+  // with a short list must not empty a playlist here, the same rule the
+  // subscription import follows.
+  rpc ImportPlaylistItems(ImportPlaylistItemsRequest) returns (ImportPlaylistItemsResponse);
+  // Imported playlists whose contents were read longest ago, never-synced
+  // first. Bounded: reading a playlist is a request on a credentialed session.
+  rpc ListStalePlaylists(ListStalePlaylistsRequest) returns (ListStalePlaylistsResponse);
 
   // Storage. Backs the Storage page and the eviction banner.
   rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse);
@@ -597,6 +604,10 @@ message CreatePlaylistRequest {
   string user_id = 1;
   string title = 2;
   string description = 3;
+  // Set by the account importer only. Idempotent on (user_id, source_url), so
+  // an hourly re-import updates the same playlist rather than making another.
+  // The gateway never sends it: a playlist made here belongs to nobody upstream.
+  string source_url = 4;
 }
 
 message CreatePlaylistResponse {
@@ -630,6 +641,34 @@ message SetPlaylistItemRequest {
 }
 
 message SetPlaylistItemResponse {}
+
+message ImportPlaylistItemsRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+  // In the order YouTube returned them. Ones already present keep the position
+  // they have; the rest are appended in this order.
+  repeated string video_ids = 3;
+}
+
+message ImportPlaylistItemsResponse {
+  int32 added = 1;
+}
+
+message ListStalePlaylistsRequest {
+  int32 limit = 1;
+}
+
+message ListStalePlaylistsResponse {
+  // Carries user_id, which ListPlaylists' Playlist does not: the importer is
+  // acting for a member rather than answering one.
+  repeated StalePlaylist playlists = 1;
+}
+
+message StalePlaylist {
+  string id = 1;
+  string user_id = 2;
+  string source_url = 3;
+}
 
 message SetWatchLaterRequest {
   string user_id = 1;

@@ -214,7 +214,11 @@ Every element either does something real or is dropped.
 - **`position` is carried, never derived.** Filled from the order an import returned, appended to at the end, and taken from the playlist's own `max(position)` rather than its length — removing the third of five leaves four rows whose positions still run to five, and counting would hand the next addition a position another row already holds. Drag-to-reorder has no column left to add: this is that column.
 - **Ownership is part of the lookup, not a check after it.** A playlist belonging to somebody else is indistinguishable from one that does not exist, and a check written separately from the query is one that can be forgotten at the next call site.
 - Opening a playlist queues **no downloads**. §2's budget is 300 GiB and there is one worker slot; a 200-video list fetching itself is the fault the live-broadcast rule already exists to prevent.
-- Requires `0015_playlists.sql`.
+- **Imported by name every pass, read a few at a time.** The playlist list is one request; each playlist's contents is another, and this household has 30. Reading them all hourly would be thirty named requests an hour against the address §8's risk 6 is about — so `playlistsPerPass` = 4, stalest first (`items_synced_at`, NULL first), which walks the set in under a day. `items_synced_at` is separate from `updated_at` because the latter moves whenever anybody edits the playlist here, and a list somebody added to this morning would look freshly synced.
+- **`WL` and `LL` are refused.** YouTube reports Watch Later and Liked videos in that list; both already arrive through their own feeds, and Watch later is not a playlist here at all.
+- **A playlist's contents are read *as the member*.** §6b's rule is narrow, not absent: listings carry no credentials except where the listing *is* a member reading their own account — and a private playlist plainly is one. `ListAccountFeed` takes a URL as readily as an alias, so it is the same call the other feeds make.
+- **The import appends and never removes**, the same rule as subscriptions. Verified against a live session: 30 playlists listed, 28 imported, 4 read on the first pass (Luke Music 50/50, random 15, sound 10, Home assistant 5).
+- Requires `0015_playlists.sql` and `0016_playlist_sync.sql`.
 
 ### Player behavior
 

@@ -1398,3 +1398,76 @@ func (r *Repository) SetPlaylistItem(
 		`UPDATE playlists SET updated_at = now() WHERE id = $1`, playlistID)
 	return err
 }
+
+// ImportPlaylistItems appends what the account import found, in the order it
+// found it, and stamps items_synced_at.
+//
+// Appends and never removes, the same rule the subscription import follows: a
+// short answer from YouTube, a page it did not finish, or a playlist made
+// private must not empty a list somebody assembled. Positions continue from the
+// playlist's own maximum, so anything added by hand keeps its place.
+func (r *Repository) ImportPlaylistItems(
+	ctx context.Context, playlistID, userID string, videoIDs []string,
+) (int32, error) {
+	if _, err := r.GetPlaylist(ctx, playlistID, userID); err != nil {
+		return 0, err
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// One statement per playlist rather than per video: the position has to be
+	// assigned in the order given, and unnest WITH ORDINALITY is what carries
+	// that order into SQL. Videos the library does not hold are skipped by the
+	// join rather than raising a foreign-key error — the import walks a whole
+	// playlist, and one unavailable video must not abandon the rest.
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO playlist_items (playlist_id, video_id, position)
+		SELECT $1, w.video_id,
+		       COALESCE((SELECT max(position) FROM playlist_items WHERE playlist_id = $1), 0)
+		         + row_number() OVER (ORDER BY w.ord)
+		FROM unnest($2::text[]) WITH ORDINALITY AS w(video_id, ord)
+		JOIN videos v ON v.id = w.video_id
+		WHERE NOT EXISTS (
+			SELECT 1 FROM playlist_items existing
+			WHERE existing.playlist_id = $1 AND existing.video_id = w.video_id
+		)
+		ON CONFLICT DO NOTHING`, playlistID, videoIDs)
+	if err != nil {
+		return 0, err
+	}
+
+	// Stamped whether or not anything was added: the question it answers is
+	// "when did I last look", and a pass that found nothing new still looked.
+	if _, err := tx.Exec(ctx,
+		`UPDATE playlists SET items_synced_at = now() WHERE id = $1`, playlistID); err != nil {
+		return 0, err
+	}
+	return int32(tag.RowsAffected()), tx.Commit(ctx)
+}
+
+func (r *Repository) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, user_id, source_url
+		FROM playlists
+		WHERE source_url IS NOT NULL
+		ORDER BY items_synced_at ASC NULLS FIRST
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.StalePlaylist
+	for rows.Next() {
+		var p domain.StalePlaylist
+		if err := rows.Scan(&p.ID, &p.UserID, &p.SourceURL); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}

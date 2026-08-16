@@ -101,6 +101,37 @@ const (
 // request.
 const FeedChannels = "https://www.youtube.com/feed/channels"
 
+// FeedPlaylists is the member's own playlist list.
+//
+// Like FeedChannels there is no yt-dlp alias for it, so it is the URL. Verified
+// against a live session: 30 entries, one request, each carrying the playlist id
+// as `id` and its name as `title`.
+const FeedPlaylists = "https://www.youtube.com/feed/playlists"
+
+// Playlist ids YouTube reports here that are not playlists in any sense this
+// system uses. WL is Watch Later and LL is Liked videos: both already arrive
+// through their own feeds, and Watch Later is deliberately not a playlist here
+// at all — it has no name, cannot be created and cannot be deleted.
+var reservedPlaylistIDs = map[string]bool{"WL": true, "LL": true}
+
+// IsImportablePlaylist says whether a playlist id from the list is one this
+// system should hold.
+func IsImportablePlaylist(id string) bool {
+	return id != "" && !reservedPlaylistIDs[id]
+}
+
+// AccountPlaylist is one playlist a member has.
+type AccountPlaylist struct {
+	ID    string
+	Title string
+}
+
+// PlaylistURL is where its contents are read from, and the identity a stored
+// playlist carries in source_url.
+func PlaylistURL(id string) string {
+	return "https://www.youtube.com/playlist?list=" + id
+}
+
 // AccountChannel is one channel a member follows.
 type AccountChannel struct {
 	ID   string
@@ -111,6 +142,9 @@ type AccountChannel struct {
 // are.
 type AccountFeedSource interface {
 	ListAccountFeed(ctx context.Context, cookiesFile, feed string, limit int32) ([]ExternalVideo, error)
+	// ListAccountPlaylists reads the member's playlist list — the lists
+	// themselves, not their contents.
+	ListAccountPlaylists(ctx context.Context, cookiesFile string) ([]AccountPlaylist, error)
 	// ListAccountChannels reads the whole subscription list, not a page of it.
 	// Unlike the video feeds it is not capped: it is one request whatever the
 	// length, and a partial list here is not "the newest few" but an arbitrary
