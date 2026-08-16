@@ -1,3 +1,11 @@
+-- Apply as catalog_svc, like every migration here:
+--   PGPASSWORD=catalog_dev psql -h localhost -U catalog_svc -d localyoutube -f <this file>
+--
+-- Applied as the superuser instead, the table is owned by that user and the
+-- service gets "permission denied for table saved" on every read that touches
+-- the projection — which is every read. db/bootstrap.sql grants each service its
+-- own schema and nothing else, and ownership is the whole of that grant.
+--
 -- Save becomes a personal shelf, and pinning stays a fact about the disk.
 --
 -- The two were one boolean on the video, so one member pressing Save put the
