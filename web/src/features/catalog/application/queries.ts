@@ -1,3 +1,4 @@
+import { useProfileScope } from '@/features/identity/application/use-profile-scope'
 import { useCallback, useEffect, useRef } from 'react'
 import {
   useInfiniteQuery,
@@ -21,8 +22,9 @@ import { httpCatalogRepository as repo } from '../infrastructure/catalogReposito
  * so the client never learns whether that is an offset or a cursor.
  */
 export function useFeed(topic: string) {
+  const me = useProfileScope()
   return useInfiniteQuery({
-    queryKey: ['feed', topic],
+    queryKey: ['feed', me, topic],
     queryFn: ({ pageParam }) => repo.listFeed(topic, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
@@ -108,8 +110,9 @@ export function useRefreshTopics() {
  * catalogue without every hop having to be ingested up front.
  */
 export function useVideo(id: string | undefined) {
+  const me = useProfileScope()
   return useQuery({
-    queryKey: ['video', id],
+    queryKey: ['video', me, id],
     queryFn: () => repo.getVideoEnsuring(id!),
     enabled: Boolean(id),
     retry: false,
@@ -123,8 +126,9 @@ export function useVideo(id: string | undefined) {
 const UP_NEXT_PAGE_SIZE = 20
 
 export function useUpNext(videoId: string | undefined, channelFilter?: string) {
+  const me = useProfileScope()
   return useInfiniteQuery({
-    queryKey: ['up-next', videoId, channelFilter ?? ''],
+    queryKey: ['up-next', me, videoId, channelFilter ?? ''],
     queryFn: ({ pageParam }) =>
       repo.listUpNext(videoId!, channelFilter, pageParam, UP_NEXT_PAGE_SIZE),
     initialPageParam: undefined as string | undefined,
@@ -170,7 +174,7 @@ export function useStream(videoId: string | undefined) {
       // that, and nothing else will refresh it: videoPollInterval stops once
       // the media state looks settled, and READY looks settled.
       if (stream.repaired && videoId) {
-        void queryClient.invalidateQueries({ queryKey: ['video', videoId] })
+        void queryClient.invalidateQueries({ queryKey: ['video'] })
       }
       return stream
     },
@@ -384,8 +388,9 @@ export function useStorage() {
 }
 
 export function useHistory() {
+  const me = useProfileScope()
   return useInfiniteQuery({
-    queryKey: ['history'],
+    queryKey: ['history', me],
     queryFn: ({ pageParam }) => repo.listHistory(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
@@ -393,8 +398,9 @@ export function useHistory() {
 }
 
 export function useSaved() {
+  const me = useProfileScope()
   return useInfiniteQuery({
-    queryKey: ['pinned'],
+    queryKey: ['pinned', me],
     queryFn: ({ pageParam }) => repo.listPinned(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
@@ -478,7 +484,7 @@ export function useSetReaction(videoId: string) {
   return useMutation({
     mutationFn: (reaction: ReactionState) => repo.setReaction(videoId, reaction),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['video', videoId] })
+      void queryClient.invalidateQueries({ queryKey: ['video'] })
       void queryClient.invalidateQueries({ queryKey: ['feed'] })
     },
   })
@@ -539,8 +545,9 @@ export function usePopular(limit?: number) {
 }
 
 export function useSubscriptions() {
+  const me = useProfileScope()
   return useQuery({
-    queryKey: ['subscriptions'],
+    queryKey: ['subscriptions', me],
     queryFn: () => repo.listSubscriptions(),
     staleTime: 60_000,
   })

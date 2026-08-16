@@ -45,7 +45,10 @@ describe('useStream', () => {
     const { result } = renderHook(() => useStream('abc'), { wrapper })
     await waitFor(() => expect(result.current.data).toBeTruthy())
 
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['video', 'abc'] })
+    // Broadened when the video key gained the profile: ['video', me, id] is not
+    // matched by a ['video', id] prefix, and a repair that silently stopped
+    // refetching would leave the watch page on the row it just replaced.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['video'] })
   })
 
   it('leaves the video alone on an ordinary answer', async () => {
@@ -55,6 +58,6 @@ describe('useStream', () => {
     const { result } = renderHook(() => useStream('abc'), { wrapper })
     await waitFor(() => expect(result.current.data).toBeTruthy())
 
-    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['video', 'abc'] })
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['video'] })
   })
 })
