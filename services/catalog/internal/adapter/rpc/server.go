@@ -497,7 +497,13 @@ func (s *Server) SetSubscription(ctx context.Context, req *connect.Request[catal
 }
 
 func (s *Server) ListSubscriptions(ctx context.Context, req *connect.Request[catalogv1.ListSubscriptionsRequest]) (*connect.Response[catalogv1.ListSubscriptionsResponse], error) {
-	channels, err := s.catalog.ListSubscriptions(ctx, req.Msg.GetUserId())
+	list := func() ([]domain.Channel, error) {
+		if req.Msg.GetAllMembers() {
+			return s.catalog.ListAllSubscribedChannels(ctx)
+		}
+		return s.catalog.ListSubscriptions(ctx, req.Msg.GetUserId())
+	}
+	channels, err := list()
 	if err != nil {
 		return nil, toConnectErr(err)
 	}

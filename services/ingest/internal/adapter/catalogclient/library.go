@@ -265,8 +265,12 @@ func selectBackfillRefs(videos []*catalogv1.VideoFeatures, limit int32) []domain
 }
 
 func (l *Library) ListSubscribedChannels(ctx context.Context) ([]domain.SubscribedChannel, error) {
+	// Everybody's, not this one client's user. A channel is worth reading for
+	// new uploads because somebody in the house follows it — asking as one
+	// member left every channel only the others follow unscanned, which on this
+	// installation was the whole of one member's 152 subscriptions.
 	resp, err := l.client.ListSubscriptions(ctx, connect.NewRequest(&catalogv1.ListSubscriptionsRequest{
-		UserId: l.userID,
+		AllMembers: true,
 	}))
 	if err != nil {
 		return nil, err

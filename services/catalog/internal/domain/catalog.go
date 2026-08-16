@@ -232,6 +232,10 @@ type Repository interface {
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	ListSubscriptions(ctx context.Context, userID string) ([]Channel, error)
+	// ListAllSubscribedChannels is every member's subscriptions, deduplicated.
+	// The scanner's question: a channel is worth following because somebody
+	// follows it, not because a particular member does.
+	ListAllSubscribedChannels(ctx context.Context) ([]Channel, error)
 	ListHistory(ctx context.Context, userID string, page Page) ([]Video, error)
 
 	GetStorageUsage(ctx context.Context, budgetBytes int64) (StorageUsage, error)

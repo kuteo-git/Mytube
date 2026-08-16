@@ -3288,8 +3288,16 @@ func (*SetSubscriptionResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListSubscriptionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Every member's channels, deduplicated, ignoring user_id.
+	//
+	// For the scanner, which follows subscribed channels as a content source: a
+	// channel is worth scanning because *somebody* follows it, and reading one
+	// member's list left the other members' channels unscanned. A separate flag
+	// rather than an empty user_id, which is refused — the guard is what stops a
+	// browser being handed the whole household's subscriptions by omission.
+	AllMembers    bool `protobuf:"varint,2,opt,name=all_members,json=allMembers,proto3" json:"all_members,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3329,6 +3337,13 @@ func (x *ListSubscriptionsRequest) GetUserId() string {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *ListSubscriptionsRequest) GetAllMembers() bool {
+	if x != nil {
+		return x.AllMembers
+	}
+	return false
 }
 
 type ListSubscriptionsResponse struct {
@@ -4085,9 +4100,11 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"subscribed\x18\x03 \x01(\bR\n" +
 	"subscribed\"\x19\n" +
-	"\x17SetSubscriptionResponse\"3\n" +
+	"\x17SetSubscriptionResponse\"T\n" +
 	"\x18ListSubscriptionsRequest\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\tR\x06userId\"L\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1f\n" +
+	"\vall_members\x18\x02 \x01(\bR\n" +
+	"allMembers\"L\n" +
 	"\x19ListSubscriptionsResponse\x12/\n" +
 	"\bchannels\x18\x01 \x03(\v2\x13.catalog.v1.ChannelR\bchannels\"i\n" +
 	"\x12ListHistoryRequest\x12\x17\n" +

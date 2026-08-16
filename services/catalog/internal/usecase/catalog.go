@@ -279,6 +279,10 @@ func (c *Catalog) ListSubscriptions(ctx context.Context, userID string) ([]domai
 	return c.repo.ListSubscriptions(ctx, userID)
 }
 
+func (c *Catalog) ListAllSubscribedChannels(ctx context.Context) ([]domain.Channel, error) {
+	return c.repo.ListAllSubscribedChannels(ctx)
+}
+
 func (c *Catalog) ListHistory(ctx context.Context, userID string, size, offset int32) ([]domain.Video, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)

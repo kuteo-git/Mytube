@@ -482,6 +482,14 @@ message SetSubscriptionResponse {}
 
 message ListSubscriptionsRequest {
   string user_id = 1;
+  // Every member's channels, deduplicated, ignoring user_id.
+  //
+  // For the scanner, which follows subscribed channels as a content source: a
+  // channel is worth scanning because *somebody* follows it, and reading one
+  // member's list left the other members' channels unscanned. A separate flag
+  // rather than an empty user_id, which is refused — the guard is what stops a
+  // browser being handed the whole household's subscriptions by omission.
+  bool all_members = 2;
 }
 
 message ListSubscriptionsResponse {

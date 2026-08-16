@@ -361,14 +361,36 @@ func (r *Repository) UpsertChannel(ctx context.Context, c domain.Channel) (domai
 
 // ListSubscriptions returns the channels a user follows, most recently
 // subscribed first — the order the sidebar shows them in.
+// ListAllSubscribedChannels is every member's subscriptions with the duplicates
+// removed — one row per channel, however many people follow it.
+//
+// The scanner's question, and a different one from ListSubscriptions': a channel
+// is worth reading for new uploads because somebody in the house follows it.
+// Asking as one member left every channel only the others follow unscanned.
+func (r *Repository) ListAllSubscribedChannels(ctx context.Context) ([]domain.Channel, error) {
+	return r.queryChannels(ctx, `
+		SELECT DISTINCT ON (c.id)
+		       c.id, c.name, c.handle, c.avatar_path, c.banner_path,
+		       c.subscriber_count, c.verified
+		FROM subscriptions s
+		JOIN channels c ON c.id = s.channel_id
+		ORDER BY c.id`)
+}
+
 func (r *Repository) ListSubscriptions(ctx context.Context, userID string) ([]domain.Channel, error) {
-	rows, err := r.pool.Query(ctx, `
+	return r.queryChannels(ctx, `
 		SELECT c.id, c.name, c.handle, c.avatar_path, c.banner_path,
 		       c.subscriber_count, c.verified
 		FROM subscriptions s
 		JOIN channels c ON c.id = s.channel_id
 		WHERE s.user_id = $1
 		ORDER BY s.created_at DESC`, userID)
+}
+
+// queryChannels runs any query returning the seven channel columns, in that
+// order. Every row it yields came out of subscriptions, so Subscribed is true.
+func (r *Repository) queryChannels(ctx context.Context, query string, args ...any) ([]domain.Channel, error) {
+	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
