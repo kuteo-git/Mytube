@@ -1,9 +1,17 @@
-# The only content source in the system.
+# The curated content source. Almost everything here came from this file.
 #
-# Every video in the library got here because it appeared in one of the sources
-# below. There is no in-app way to add a video: to change what the feed can show
-# you, edit this file. That is deliberate — it keeps the library something you
-# curate rather than something you accumulate by browsing.
+# To change what the feed can show you, edit this file. That is deliberate — it
+# keeps the library something you curate rather than something you accumulate by
+# browsing.
+#
+# One other door exists and it is deliberately narrow. When the feed runs low,
+# `ExpandLibrary` reads further down these same sources and, failing that, pulls
+# related videos for things already in the library — at most three per channel
+# per pass. It used to also search YouTube for the name of whatever topic chip
+# you were looking at and store the results, which is how this file's opening
+# line stopped being true: 708 channels in the library against 87 subscribed and
+# the 6 sources below, with a third of Home coming from channels nobody chose.
+# That layer is gone.
 #
 # A source is a YouTube playlist or channel URL. Scanning uses --flat-playlist,
 # which fetches listing metadata only: no media is downloaded until you press

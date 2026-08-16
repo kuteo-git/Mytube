@@ -3,8 +3,10 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
@@ -80,13 +82,15 @@ type deepenDownloader struct {
 	offsetsAsked []int32
 	previewByURL map[string]domain.ExternalVideo
 	previewCalls []string
+	// Set if anything asks this downloader to search upstream. Expansion no
+	// longer may; the field is here so a test can say so rather than assume it.
+	searched bool
 }
 
-// Search returns nothing: this fake exists to isolate the deepen path, and a
-// non-empty Search result would make Expand fall through to the search layer
-// whenever deepen's yield is below expandTarget, contaminating what these
-// tests are actually asserting about deepen and its cursor.
+// Search still exists on the port — the viewer's own search box uses it — but
+// expansion must never reach it.
 func (d *deepenDownloader) Search(context.Context, string, int32) ([]domain.ExternalVideo, error) {
+	d.searched = true
 	return nil, nil
 }
 func (d *deepenDownloader) Preview(_ context.Context, url string) (domain.ExternalVideo, error) {
@@ -238,4 +242,71 @@ func (l *recordingLibrary) SetShort(_ context.Context, videoID string, isShort b
 	}
 	l.shortAnswers[videoID] = isShort
 	return nil
+}
+
+// floodingRelated returns a great many videos from one channel.
+type floodingRelated struct{ n int }
+
+func (f floodingRelated) Related(context.Context, string) ([]domain.ExternalVideo, error) {
+	var out []domain.ExternalVideo
+	for i := 0; i < f.n; i++ {
+		id := fmt.Sprintf("flood%d", i)
+		out = append(out, domain.ExternalVideo{
+			ID:        id,
+			ChannelID: "ch_flood",
+			SourceURL: "https://youtube.test/watch?v=" + id,
+		})
+	}
+	return out, nil
+}
+
+// Expansion may widen the library; it may not adopt a channel.
+//
+// Measured before the cap: one uninvited channel holding 60 videos here,
+// another 31, another 25 — none subscribed, none in a language this household
+// watches. A pass that finds a rich seam took forty from one place and the next
+// pass took the next forty.
+func TestExpandWillNotImportAWholeChannel(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}}
+	expander := newExpander(&deepenDownloader{}, floodingRelated{n: 40}, library,
+		&stubCursors{offsets: map[string]int32{}})
+
+	if _, err := expander.Expand(context.Background(), "", []string{"seed1"}); err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+
+	fromFlood := 0
+	for _, id := range library.added {
+		if strings.HasPrefix(id, "flood") {
+			fromFlood++
+		}
+	}
+	if fromFlood > maxExpandPerChannel {
+		t.Errorf("took %d videos from one channel in a single pass, want at most %d",
+			fromFlood, maxExpandPerChannel)
+	}
+	if fromFlood == 0 {
+		t.Error("the cap swallowed the channel entirely; expansion is meant to widen the library")
+	}
+}
+
+// The search layer is gone, and nothing may quietly bring it back.
+//
+// topics.yaml opens by calling itself the only content source in the system,
+// and by the time this was measured the library held 708 channels against 87
+// subscribed and 6 curated sources. Expansion fires with the topic chip the
+// viewer is looking at, so a thinly-stocked topic sent its own name to YouTube
+// search and stored whatever came back.
+func TestExpandNeverSearchesUpstream(t *testing.T) {
+	downloader := &deepenDownloader{}
+	library := &recordingLibrary{known: map[string]bool{}}
+	expander := newExpander(downloader, failingRelated{}, library,
+		&stubCursors{offsets: map[string]int32{}})
+
+	if _, err := expander.Expand(context.Background(), "Music", nil); err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+	if downloader.searched {
+		t.Error("expansion searched YouTube for a topic name")
+	}
 }

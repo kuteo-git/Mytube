@@ -12,21 +12,48 @@ import (
 // quick, large enough to stay ahead of someone scrolling.
 const expandTarget = 40
 
+// The most one expansion pass may take from any single channel.
+//
+// Expansion is allowed to widen the library and not to adopt a channel. Without
+// a bound, a pass that finds a rich seam takes forty videos from one place, and
+// the next pass takes the next forty — measured here as one uninvited channel
+// holding 60 videos, another 31, another 25.
+const maxExpandPerChannel = 3
+
 // Expander brings new material into the library when the feed runs low.
 //
-// Three layers, tried in order of decreasing trust:
+// Two layers, tried in order of decreasing trust:
 //
 //  1. Deeper into the sources in topics.yaml. These are channels the user chose;
 //     a channel with a thousand uploads has been read forty deep. Nothing here
 //     can fail in a way that surprises anyone.
-//  2. Related videos from InnerTube. Genuinely new channels, at the cost of an
-//     undocumented API — so its failure is logged and stepped over, never
-//     returned.
-//  3. Upstream search on the topic name. The last resort, because search results
-//     are the least curated material available.
+//  2. Related videos from InnerTube, seeded by videos already in the library.
+//     Genuinely new channels, at the cost of an undocumented API — so its
+//     failure is logged and stepped over, never returned.
 //
 // The ordering is the design. If layer 2 breaks permanently, the feed still
 // refills from layer 1; it is only less varied.
+//
+// There used to be a third: upstream search on the topic name, described here
+// as a last resort because search results are the least curated material
+// available. It was, and it was also the thing quietly rewriting what the
+// library is. topics.yaml opens by calling itself "the only content source in
+// the system... it keeps the library something you curate rather than something
+// you accumulate by browsing" — and by the time this was measured the library
+// held 708 channels against 87 subscribed and 6 curated sources, with a third of
+// Home coming from channels nobody had asked for.
+//
+// The mechanism was ordinary and hard to see. Expansion fires with the topic
+// chip the viewer is looking at, so picking a thinly-stocked topic sent its
+// *name* to YouTube search and stored whatever came back. Nothing filtered the
+// results, and `store` skips videos already present — so asking again brought
+// back the same channels and imported the next forty of their uploads. One
+// channel reached 60 videos that way, another 31, another 25, none of them
+// subscribed and none in any language this household watches.
+//
+// Related is kept because it is anchored: it starts from videos the library
+// already has, so its worst case is a neighbour of something chosen rather than
+// an arbitrary search result.
 type Expander struct {
 	downloader domain.Downloader
 	related    domain.RelatedSource
@@ -63,11 +90,6 @@ func (e *Expander) Expand(ctx context.Context, topic string, seedVideoIDs []stri
 	}
 
 	added += e.fromRelated(ctx, seedVideoIDs)
-	if added >= expandTarget {
-		return added, nil
-	}
-
-	added += e.fromSearch(ctx, topic)
 	return added, nil
 }
 
@@ -135,18 +157,6 @@ func (e *Expander) fromRelated(ctx context.Context, seedVideoIDs []string) int {
 	return added
 }
 
-func (e *Expander) fromSearch(ctx context.Context, topic string) int {
-	if topic == "" {
-		return 0
-	}
-	videos, err := e.downloader.Search(ctx, topic, expandTarget)
-	if err != nil {
-		e.logger.Warn("expand by search", "topic", topic, "error", err)
-		return 0
-	}
-	return e.store(ctx, videos)
-}
-
 // store writes metadata only. Nothing is downloaded here: a video becomes a row
 // the feed can rank, and bytes are fetched later, if and when someone presses
 // play. That is what keeps an expansion cheap enough to run mid-scroll.
@@ -160,9 +170,22 @@ func (e *Expander) fromSearch(ctx context.Context, topic string) int {
 // video — see CLAUDE.md §7.
 func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo) int {
 	added := 0
+	// How many this pass has taken from each channel.
+	//
+	// A pass may broaden the library; it may not adopt a channel. Forty videos
+	// from one place is not expansion, it is a subscription nobody pressed —
+	// and repeated over enough passes it is how a channel reaches sixty videos
+	// here without ever being chosen. Three leaves room for a genuinely apt
+	// neighbour without letting one result become a section of the library.
+	perChannel := map[string]int{}
 	for _, v := range videos {
 		if v.ID == "" || v.SourceURL == "" {
 			continue
+		}
+		if v.ChannelID != "" {
+			if perChannel[v.ChannelID] >= maxExpandPerChannel {
+				continue
+			}
 		}
 		if _, found, err := e.library.FindBySourceURL(ctx, v.SourceURL); err == nil && found {
 			continue
@@ -176,6 +199,7 @@ func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo) int
 			e.logger.Warn("upsert video", "video", v.ID, "error", err)
 			continue
 		}
+		perChannel[v.ChannelID]++
 		added++
 	}
 	return added
