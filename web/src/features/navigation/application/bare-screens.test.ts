@@ -25,6 +25,16 @@ describe('which screens carry their own chrome', () => {
     }
   })
 
+  // A list and the pages under it have to agree, and they did not: Watch later
+  // and Playlists dropped the tab bar while a playlist's own page kept it, so
+  // the parent lost the navigation and the child had it. Whichever way that is
+  // argued, it cannot be argued both ways at once.
+  it('keeps the navigation on the lists and on a list', () => {
+    for (const p of ['/watch-later', '/playlists', '/playlist/pl_1']) {
+      expect(isBareScreen(p)).toBe(false)
+    }
+  })
+
   it('does not mistake Settings itself for one of its screens', () => {
     // `/settings` is a tab; `/settings/feed` is a screen it leads to. A prefix
     // match would have taken the tab bar away from the tab.

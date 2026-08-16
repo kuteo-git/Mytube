@@ -26,8 +26,13 @@
 const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   [(p) => p.startsWith('/channel/'), null],
   [(p) => p === '/saved', 'Saved'],
-  [(p) => p === '/watch-later', 'Watch later'],
-  [(p) => p === '/playlists', 'Playlists'],
+  // Watch later and Playlists are deliberately *not* here.
+  //
+  // A bare screen drops the tab bar for a back arrow, and a playlist's own page
+  // never did — so the parent lost the navigation while the child kept it,
+  // which is the wrong way round however you argue it. They are lists you
+  // browse, like Home, not a detour you back out of; each draws its own heading
+  // already, so there is nothing a back bar would add.
   [(p) => p === '/storage', 'Storage'],
   [(p) => p === '/activity', 'Activity'],
   [(p) => p === '/settings/feed', 'Home feed'],
