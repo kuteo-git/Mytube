@@ -63,7 +63,6 @@ service CatalogService {
   // Watch Later. The table and the read have existed since 0001_init — every
   // video already reports user_state.in_watch_later — but nothing could ever
   // write it, so it answered false for everybody, forever.
-  rpc SetWatchLater(SetWatchLaterRequest) returns (SetWatchLaterResponse);
   rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
   // The account importer's write. Watch later is a mirror of the member's
   // YouTube list, so this replaces it — see ImportWatchLaterRequest.complete.
@@ -75,12 +74,6 @@ service CatalogService {
   rpc ListPlaylists(ListPlaylistsRequest) returns (ListPlaylistsResponse);
   rpc GetPlaylist(GetPlaylistRequest) returns (GetPlaylistResponse);
   rpc CreatePlaylist(CreatePlaylistRequest) returns (CreatePlaylistResponse);
-  rpc UpdatePlaylist(UpdatePlaylistRequest) returns (UpdatePlaylistResponse);
-  rpc DeletePlaylist(DeletePlaylistRequest) returns (DeletePlaylistResponse);
-  // One toggle rather than an add/remove pair: the caller always knows which
-  // way the menu entry is facing, and two RPCs would be two places to get the
-  // position rules wrong.
-  rpc SetPlaylistItem(SetPlaylistItemRequest) returns (SetPlaylistItemResponse);
   // The account importer's write. Appends, never removes: YouTube answering
   // with a short list must not empty a playlist here, the same rule the
   // subscription import follows.
@@ -88,6 +81,10 @@ service CatalogService {
   // Imported playlists whose contents were read longest ago, never-synced
   // first. Bounded: reading a playlist is a request on a credentialed session.
   rpc ListStalePlaylists(ListStalePlaylistsRequest) returns (ListStalePlaylistsResponse);
+  // Drops imported playlists the member no longer has upstream. The other half
+  // of the mirror: without it a playlist deleted on YouTube stays here for ever,
+  // and nothing in this app can remove it.
+  rpc PruneImportedPlaylists(PruneImportedPlaylistsRequest) returns (PruneImportedPlaylistsResponse);
 
   // Storage. Backs the Storage page and the eviction banner.
   rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse);
@@ -580,6 +577,12 @@ message Playlist {
   // First few thumbnails, for the card on the playlists page. Sent with the
   // list so the page is one call rather than one call per playlist.
   repeated string thumbnail_paths = 7;
+  // Whether this playlist's contents have been read yet.
+  //
+  // They are read a few playlists per account scan, so a freshly imported one
+  // is empty for a while — and an empty playlist looks broken rather than
+  // pending. The page says which it is.
+  bool items_synced = 8;
 }
 
 message ListPlaylistsRequest {
@@ -617,34 +620,6 @@ message CreatePlaylistResponse {
   Playlist playlist = 1;
 }
 
-message UpdatePlaylistRequest {
-  string playlist_id = 1;
-  string user_id = 2;
-  string title = 3;
-  string description = 4;
-}
-
-message UpdatePlaylistResponse {
-  Playlist playlist = 1;
-}
-
-message DeletePlaylistRequest {
-  string playlist_id = 1;
-  string user_id = 2;
-}
-
-message DeletePlaylistResponse {}
-
-message SetPlaylistItemRequest {
-  string playlist_id = 1;
-  string user_id = 2;
-  string video_id = 3;
-  // False removes it.
-  bool included = 4;
-}
-
-message SetPlaylistItemResponse {}
-
 message ImportPlaylistItemsRequest {
   string playlist_id = 1;
   string user_id = 2;
@@ -661,6 +636,18 @@ message ImportPlaylistItemsRequest {
 
 message ImportPlaylistItemsResponse {
   int32 added = 1;
+}
+
+message PruneImportedPlaylistsRequest {
+  string user_id = 1;
+  // The source URLs the member still has. Empty is refused rather than obeyed:
+  // a list that answers with nothing is far likelier to be a refusal than an
+  // account with no playlists left.
+  repeated string keep_source_urls = 2;
+}
+
+message PruneImportedPlaylistsResponse {
+  int32 removed = 1;
 }
 
 message ListStalePlaylistsRequest {
@@ -687,16 +674,6 @@ message ImportWatchLaterRequest {
 }
 
 message ImportWatchLaterResponse {}
-
-message SetWatchLaterRequest {
-  string user_id = 1;
-  string video_id = 2;
-  // False removes it. A toggle rather than an add/remove pair, because the
-  // caller always knows which way the button is facing.
-  bool in_watch_later = 3;
-}
-
-message SetWatchLaterResponse {}
 
 message ListWatchLaterRequest {
   string user_id = 1;

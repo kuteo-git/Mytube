@@ -199,6 +199,7 @@ func (f *fakeLibrary) ImportPlaylistItems(context.Context, string, string, []str
 	return nil
 }
 func (f *fakeLibrary) ImportWatchLater(context.Context, string, []string, bool) error { return nil }
+func (f *fakeLibrary) PruneImportedPlaylists(context.Context, string, []string) error { return nil }
 func (f *fakeLibrary) ListStalePlaylists(context.Context, int32) ([]domain.StalePlaylist, error) {
 	return nil, nil
 }

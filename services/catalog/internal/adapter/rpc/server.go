@@ -514,14 +514,6 @@ func (s *Server) ListSubscriptions(ctx context.Context, req *connect.Request[cat
 	return connect.NewResponse(&catalogv1.ListSubscriptionsResponse{Channels: out}), nil
 }
 
-func (s *Server) SetWatchLater(ctx context.Context, req *connect.Request[catalogv1.SetWatchLaterRequest]) (*connect.Response[catalogv1.SetWatchLaterResponse], error) {
-	if err := s.catalog.SetWatchLater(ctx,
-		req.Msg.GetUserId(), req.Msg.GetVideoId(), req.Msg.GetInWatchLater()); err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&catalogv1.SetWatchLaterResponse{}), nil
-}
-
 func (s *Server) ListWatchLater(ctx context.Context, req *connect.Request[catalogv1.ListWatchLaterRequest]) (*connect.Response[catalogv1.ListWatchLaterResponse], error) {
 	offset := decodePageToken(req.Msg.GetPageToken())
 	vs, err := s.catalog.ListWatchLater(ctx, req.Msg.GetUserId(), req.Msg.GetPageSize(), offset)
@@ -620,6 +612,7 @@ func playlistToProto(p domain.Playlist) *catalogv1.Playlist {
 		SourceUrl:      p.SourceURL,
 		UpdatedAt:      timestamppb.New(p.UpdatedAt),
 		ThumbnailPaths: p.ThumbnailPaths,
+		ItemsSynced:    p.ItemsSynced,
 	}
 }
 
@@ -658,30 +651,6 @@ func (s *Server) CreatePlaylist(ctx context.Context, req *connect.Request[catalo
 	return connect.NewResponse(&catalogv1.CreatePlaylistResponse{Playlist: playlistToProto(p)}), nil
 }
 
-func (s *Server) UpdatePlaylist(ctx context.Context, req *connect.Request[catalogv1.UpdatePlaylistRequest]) (*connect.Response[catalogv1.UpdatePlaylistResponse], error) {
-	p, err := s.catalog.UpdatePlaylist(ctx,
-		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetTitle(), req.Msg.GetDescription())
-	if err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&catalogv1.UpdatePlaylistResponse{Playlist: playlistToProto(p)}), nil
-}
-
-func (s *Server) DeletePlaylist(ctx context.Context, req *connect.Request[catalogv1.DeletePlaylistRequest]) (*connect.Response[catalogv1.DeletePlaylistResponse], error) {
-	if err := s.catalog.DeletePlaylist(ctx, req.Msg.GetPlaylistId(), req.Msg.GetUserId()); err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&catalogv1.DeletePlaylistResponse{}), nil
-}
-
-func (s *Server) SetPlaylistItem(ctx context.Context, req *connect.Request[catalogv1.SetPlaylistItemRequest]) (*connect.Response[catalogv1.SetPlaylistItemResponse], error) {
-	if err := s.catalog.SetPlaylistItem(ctx, req.Msg.GetPlaylistId(),
-		req.Msg.GetUserId(), req.Msg.GetVideoId(), req.Msg.GetIncluded()); err != nil {
-		return nil, toConnectErr(err)
-	}
-	return connect.NewResponse(&catalogv1.SetPlaylistItemResponse{}), nil
-}
-
 func (s *Server) ImportPlaylistItems(ctx context.Context, req *connect.Request[catalogv1.ImportPlaylistItemsRequest]) (*connect.Response[catalogv1.ImportPlaylistItemsResponse], error) {
 	added, err := s.catalog.ImportPlaylistItems(ctx,
 		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetVideoIds(), req.Msg.GetComplete())
@@ -711,4 +680,13 @@ func (s *Server) ImportWatchLater(ctx context.Context, req *connect.Request[cata
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.ImportWatchLaterResponse{}), nil
+}
+
+func (s *Server) PruneImportedPlaylists(ctx context.Context, req *connect.Request[catalogv1.PruneImportedPlaylistsRequest]) (*connect.Response[catalogv1.PruneImportedPlaylistsResponse], error) {
+	removed, err := s.catalog.PruneImportedPlaylists(ctx,
+		req.Msg.GetUserId(), req.Msg.GetKeepSourceUrls())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.PruneImportedPlaylistsResponse{Removed: removed}), nil
 }

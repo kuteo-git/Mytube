@@ -347,13 +347,25 @@ func (s *AccountScanner) importPlaylists(
 		return true
 	}
 
+	keep := make([]string, 0, len(lists))
 	for _, list := range lists {
-		if _, err := s.library.UpsertPlaylist(
-			ctx, userID, domain.PlaylistURL(list.ID), list.Title); err != nil {
+		url := domain.PlaylistURL(list.ID)
+		if _, err := s.library.UpsertPlaylist(ctx, userID, url, list.Title); err != nil {
 			s.logger.Warn("upsert playlist", "user", userID, "playlist", list.ID, "error", err)
 			continue
 		}
+		keep = append(keep, url)
 		out.Playlists++
+	}
+
+	// The other half of the mirror. Without it a playlist deleted on YouTube
+	// stays here for ever, because nothing in this app can delete one — the trap
+	// a read-only mirror sets for itself. An empty answer prunes nothing: it is
+	// far likelier to be a refusal than an account with no playlists left.
+	if len(keep) > 0 {
+		if err := s.library.PruneImportedPlaylists(ctx, userID, keep); err != nil {
+			s.logger.Warn("prune playlists", "user", userID, "error", err)
+		}
 	}
 	return true
 }

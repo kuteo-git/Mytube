@@ -23,7 +23,9 @@ export function PlaylistPage() {
       <h1 className="py-4 text-2xl font-bold">{playlist?.title ?? 'Playlist'}</h1>
       {playlist && (
         <p className="-mt-2 pb-4 text-sm text-text-2">
-          {playlist.itemCount} {playlist.itemCount === 1 ? 'video' : 'videos'}
+          {playlist.itemsSynced
+            ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
+            : 'Not read yet'}
         </p>
       )}
 
@@ -52,7 +54,9 @@ export function PlaylistPage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          Nothing in this playlist yet. Add videos from any video&rsquo;s menu.
+          {playlist && !playlist.itemsSynced
+            ? 'This playlist has not been read from YouTube yet. A few are read on each account scan, so it will fill in on one of the next passes.'
+            : 'This playlist is empty on YouTube.'}
         </p>
       )}
     </div>

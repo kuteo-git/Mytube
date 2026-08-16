@@ -119,7 +119,6 @@ func (l *Library) SetLiked(ctx context.Context, userID, videoID string) error {
 	return err
 }
 
-
 // SetShort records YouTube's answer for one video.
 func (l *Library) SetShort(ctx context.Context, videoID string, isShort bool) error {
 	_, err := l.client.SetShort(ctx, connect.NewRequest(&catalogv1.SetShortRequest{
@@ -333,4 +332,12 @@ func (l *Library) ListStalePlaylists(ctx context.Context, limit int32) ([]domain
 		})
 	}
 	return out, nil
+}
+
+func (l *Library) PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) error {
+	_, err := l.client.PruneImportedPlaylists(ctx, connect.NewRequest(&catalogv1.PruneImportedPlaylistsRequest{
+		UserId:         userID,
+		KeepSourceUrls: keepSourceURLs,
+	}))
+	return err
 }

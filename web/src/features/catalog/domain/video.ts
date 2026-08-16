@@ -111,6 +111,8 @@ export interface Playlist {
   /** The YouTube playlist it was imported from. Absent when made here. */
   sourceUrl?: string
   updatedAt: string
+  /** False until this playlist's contents have been read from YouTube. */
+  itemsSynced: boolean
   thumbnails: string[]
 }
 

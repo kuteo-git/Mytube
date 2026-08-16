@@ -65,7 +65,14 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
         {playlist.title}
       </h2>
       <p className="mt-0.5 text-xs text-text-2 min-[700px]:text-sm">
-        {playlist.itemCount} {playlist.itemCount === 1 ? 'video' : 'videos'}
+        {/* A playlist whose contents have not been read yet is empty, and an
+            empty playlist reads as broken rather than pending. Contents are
+            read a few per account scan — see CLAUDE.md §5 — so the wait is
+            hours, and saying so is the difference between "not yet" and
+            "something is wrong". */}
+        {playlist.itemsSynced
+          ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
+          : 'Not read yet'}
       </p>
     </Link>
   )

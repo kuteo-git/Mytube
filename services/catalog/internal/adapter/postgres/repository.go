@@ -837,24 +837,6 @@ func (r *Repository) RecordWatchProgress(ctx context.Context, userID, videoID st
 	return tx.Commit(ctx)
 }
 
-// SetWatchLater puts a video on the viewer's Watch Later list, or takes it off.
-//
-// The table has existed since 0001_init and videoSelect has always read it into
-// user_state.in_watch_later — there was simply never a way to write it, so the
-// field answered false for everybody. Nothing here is new but the writing.
-func (r *Repository) SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error {
-	var err error
-	if inWatchLater {
-		_, err = r.pool.Exec(ctx, `
-			INSERT INTO watch_later (user_id, video_id) VALUES ($1, $2)
-			ON CONFLICT DO NOTHING`, userID, videoID)
-	} else {
-		_, err = r.pool.Exec(ctx,
-			`DELETE FROM watch_later WHERE user_id = $1 AND video_id = $2`, userID, videoID)
-	}
-	return err
-}
-
 // ImportWatchLater makes the member's Watch later match what the import found.
 //
 // Same rule as ImportPlaylistItems, and for the same reason: the list cannot be
@@ -1152,42 +1134,42 @@ func (r *Repository) DownloadMissingThumbnails(ctx context.Context) {
 
 			downloaded := false
 			for _, url := range candidates(v.id, v.url) {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-			if err != nil {
-				continue
-			}
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				continue
-			}
-			if resp.StatusCode != http.StatusOK {
-				resp.Body.Close()
-				continue
-			}
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+				if err != nil {
+					continue
+				}
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					continue
+				}
+				if resp.StatusCode != http.StatusOK {
+					resp.Body.Close()
+					continue
+				}
 
-			dst := filepath.Join(thumbDir, v.id+".jpg")
-			file, err := os.Create(dst)
-			if err != nil {
-				resp.Body.Close()
-				continue
-			}
-			if _, err := io.Copy(file, resp.Body); err != nil {
+				dst := filepath.Join(thumbDir, v.id+".jpg")
+				file, err := os.Create(dst)
+				if err != nil {
+					resp.Body.Close()
+					continue
+				}
+				if _, err := io.Copy(file, resp.Body); err != nil {
+					file.Close()
+					resp.Body.Close()
+					continue
+				}
 				file.Close()
 				resp.Body.Close()
-				continue
+				downloaded = true
+				break
 			}
-			file.Close()
-			resp.Body.Close()
-			downloaded = true
-			break
-		}
 
-		if downloaded {
-			_, _ = r.pool.Exec(ctx, `
+			if downloaded {
+				_, _ = r.pool.Exec(ctx, `
 				UPDATE catalog.videos SET thumbnail_path = $1 WHERE id = $2
 			`, filepath.Join("thumbnails", v.id+".jpg"), v.id)
-		}
-	}(v)
+			}
+		}(v)
 	}
 	wg.Wait()
 }
@@ -1251,6 +1233,7 @@ func diskFreeBytes(path string) int64 {
 // so the playlists page is one query rather than one per playlist.
 const playlistSelect = `
 SELECT p.id, p.user_id, p.title, p.description, p.source_url, p.updated_at,
+       (p.items_synced_at IS NOT NULL),
        (SELECT count(*) FROM playlist_items i WHERE i.playlist_id = p.id)::int,
        COALESCE((
          SELECT array_agg(t.thumbnail_path ORDER BY t.position)
@@ -1272,7 +1255,7 @@ func scanPlaylist(row pgx.Row) (domain.Playlist, error) {
 		sourceURL *string
 	)
 	err := row.Scan(&p.ID, &p.UserID, &p.Title, &p.Description, &sourceURL,
-		&p.UpdatedAt, &p.ItemCount, &p.ThumbnailPaths)
+		&p.UpdatedAt, &p.ItemsSynced, &p.ItemCount, &p.ThumbnailPaths)
 	if sourceURL != nil {
 		p.SourceURL = *sourceURL
 	}
@@ -1356,84 +1339,6 @@ func (r *Repository) playlistBySource(ctx context.Context, userID, sourceURL str
 	return p, err
 }
 
-func (r *Repository) UpdatePlaylist(ctx context.Context, p domain.Playlist) (domain.Playlist, error) {
-	// Each field keeps what it had when the incoming one says nothing, the same
-	// rule UpsertChannel follows: a rename must not blank the description.
-	tag, err := r.pool.Exec(ctx, `
-		UPDATE playlists
-		SET title = COALESCE(NULLIF($3, ''), title),
-		    description = COALESCE(NULLIF($4, ''), description),
-		    updated_at = now()
-		WHERE id = $1 AND user_id = $2`,
-		p.ID, p.UserID, p.Title, p.Description)
-	if err != nil {
-		return domain.Playlist{}, err
-	}
-	if tag.RowsAffected() == 0 {
-		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", p.ID, domain.ErrNotFound)
-	}
-	return r.GetPlaylist(ctx, p.ID, p.UserID)
-}
-
-func (r *Repository) DeletePlaylist(ctx context.Context, playlistID, userID string) error {
-	tag, err := r.pool.Exec(ctx,
-		`DELETE FROM playlists WHERE id = $1 AND user_id = $2`, playlistID, userID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
-	}
-	return nil
-}
-
-// SetPlaylistItem appends a video to the end of a playlist, or removes it.
-//
-// Appended rather than inserted, and the position is taken from the playlist's
-// own maximum rather than from its length: removing the third of five leaves
-// four items whose positions still run to five, and counting would then hand
-// the next addition a position another row already holds.
-func (r *Repository) SetPlaylistItem(
-	ctx context.Context, playlistID, userID, videoID string, included bool,
-) error {
-	// Ownership is asked first, so somebody else's playlist is a 404 rather than
-	// a silent no-op — and the write below can then be a plain statement.
-	if _, err := r.GetPlaylist(ctx, playlistID, userID); err != nil {
-		return err
-	}
-
-	var err error
-	if included {
-		// Asked before the insert so an unknown video is a 404. Left to the
-		// foreign key it arrives as a constraint violation, which the caller can
-		// only report as this service having failed — measured: adding an id the
-		// library does not hold answered 500.
-		var exists bool
-		if err := r.pool.QueryRow(ctx,
-			`SELECT true FROM videos WHERE id = $1`, videoID).Scan(&exists); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
-			}
-			return err
-		}
-		_, err = r.pool.Exec(ctx, `
-			INSERT INTO playlist_items (playlist_id, video_id, position)
-			SELECT $1, $2, COALESCE(max(position), 0) + 1
-			FROM playlist_items WHERE playlist_id = $1
-			ON CONFLICT DO NOTHING`, playlistID, videoID)
-	} else {
-		_, err = r.pool.Exec(ctx,
-			`DELETE FROM playlist_items WHERE playlist_id = $1 AND video_id = $2`,
-			playlistID, videoID)
-	}
-	if err != nil {
-		return err
-	}
-	_, err = r.pool.Exec(ctx,
-		`UPDATE playlists SET updated_at = now() WHERE id = $1`, playlistID)
-	return err
-}
-
 // ImportPlaylistItems makes the playlist match what the account import found,
 // and stamps items_synced_at.
 //
@@ -1512,6 +1417,33 @@ func (r *Repository) ImportPlaylistItems(
 		return 0, err
 	}
 	return int32(tag.RowsAffected()), tx.Commit(ctx)
+}
+
+// PruneImportedPlaylists removes imported playlists the member no longer has.
+//
+// The other half of the mirror. Without it a playlist deleted on YouTube stays
+// here for ever, because nothing in this app can delete one — which is the trap
+// a read-only mirror sets for itself.
+//
+// Refuses an empty list rather than obeying it, the same guard the item mirror
+// uses: an account that answers with no playlists is far likelier to be a
+// refusal than an account somebody emptied. Locally made playlists no longer
+// exist, but any that predate this are left alone: source_url IS NULL is not
+// something upstream can speak about.
+func (r *Repository) PruneImportedPlaylists(
+	ctx context.Context, userID string, keepSourceURLs []string,
+) (int32, error) {
+	if len(keepSourceURLs) == 0 {
+		return 0, nil
+	}
+	tag, err := r.pool.Exec(ctx, `
+		DELETE FROM playlists
+		WHERE user_id = $1 AND source_url IS NOT NULL
+		  AND source_url <> ALL($2::text[])`, userID, keepSourceURLs)
+	if err != nil {
+		return 0, err
+	}
+	return int32(tag.RowsAffected()), nil
 }
 
 func (r *Repository) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {

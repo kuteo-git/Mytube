@@ -226,6 +226,7 @@ type playlistDTO struct {
 	ItemCount   int32    `json:"itemCount"`
 	SourceURL   string   `json:"sourceUrl,omitempty"`
 	UpdatedAt   string   `json:"updatedAt"`
+	ItemsSynced bool     `json:"itemsSynced"`
 	Thumbnails  []string `json:"thumbnails"`
 }
 
@@ -251,6 +252,7 @@ func toPlaylistDTO(p *catalogv1.Playlist) playlistDTO {
 		ItemCount:   p.GetItemCount(),
 		SourceURL:   p.GetSourceUrl(),
 		UpdatedAt:   p.GetUpdatedAt().AsTime().Format(time.RFC3339),
+		ItemsSynced: p.GetItemsSynced(),
 		Thumbnails:  thumbnails,
 	}
 }

@@ -187,6 +187,8 @@ type Playlist struct {
 	UpdatedAt time.Time
 	// A few thumbnails for the card on the playlists page, in playlist order.
 	ThumbnailPaths []string
+	// Whether the contents have been read from upstream yet.
+	ItemsSynced bool
 }
 
 // StalePlaylist is what the importer needs to go and read one again: which
@@ -254,17 +256,13 @@ type Repository interface {
 
 	RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)
-	SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error
 
 	ListPlaylists(ctx context.Context, userID string) ([]Playlist, error)
 	GetPlaylist(ctx context.Context, playlistID, userID string) (Playlist, error)
 	ListPlaylistVideos(ctx context.Context, playlistID, userID string, page Page) ([]Video, error)
 	CreatePlaylist(ctx context.Context, p Playlist) (Playlist, error)
-	UpdatePlaylist(ctx context.Context, p Playlist) (Playlist, error)
-	DeletePlaylist(ctx context.Context, playlistID, userID string) error
 	// SetPlaylistItem appends a video to the end of the playlist, or removes it.
 	// Appending rather than inserting is what keeps an imported order intact.
-	SetPlaylistItem(ctx context.Context, playlistID, userID, videoID string, included bool) error
 	// ImportPlaylistItems appends the given videos in order, skipping any the
 	// playlist already holds, and records that the contents were read now.
 	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) (int32, error)
@@ -272,6 +270,9 @@ type Repository interface {
 	// ListStalePlaylists returns imported playlists whose contents were read
 	// longest ago, never-synced first.
 	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+	// PruneImportedPlaylists drops imported playlists the member no longer has
+	// upstream. An empty keep-list is refused rather than obeyed.
+	PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) (int32, error)
 	ListWatchLater(ctx context.Context, userID string, page Page) ([]Video, error)
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	ListSubscriptions(ctx context.Context, userID string) ([]Channel, error)

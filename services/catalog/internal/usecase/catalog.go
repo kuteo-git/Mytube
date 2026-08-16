@@ -270,13 +270,6 @@ func (c *Catalog) SetReaction(ctx context.Context, userID, videoID string, react
 	return c.repo.SetReaction(ctx, userID, videoID, reaction)
 }
 
-func (c *Catalog) SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error {
-	if userID == "" || videoID == "" {
-		return fmt.Errorf("%w: user_id and video_id are required", domain.ErrInvalid)
-	}
-	return c.repo.SetWatchLater(ctx, userID, videoID, inWatchLater)
-}
-
 func (c *Catalog) ListWatchLater(ctx context.Context, userID string, size, offset int32) ([]domain.Video, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
@@ -375,32 +368,6 @@ func (c *Catalog) CreatePlaylist(ctx context.Context, userID, title, description
 	})
 }
 
-func (c *Catalog) UpdatePlaylist(ctx context.Context, playlistID, userID, title, description string) (domain.Playlist, error) {
-	if playlistID == "" || userID == "" {
-		return domain.Playlist{}, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
-	}
-	return c.repo.UpdatePlaylist(ctx, domain.Playlist{
-		ID:          playlistID,
-		UserID:      userID,
-		Title:       strings.TrimSpace(title),
-		Description: strings.TrimSpace(description),
-	})
-}
-
-func (c *Catalog) DeletePlaylist(ctx context.Context, playlistID, userID string) error {
-	if playlistID == "" || userID == "" {
-		return fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
-	}
-	return c.repo.DeletePlaylist(ctx, playlistID, userID)
-}
-
-func (c *Catalog) SetPlaylistItem(ctx context.Context, playlistID, userID, videoID string, included bool) error {
-	if playlistID == "" || userID == "" || videoID == "" {
-		return fmt.Errorf("%w: playlist_id, user_id and video_id are required", domain.ErrInvalid)
-	}
-	return c.repo.SetPlaylistItem(ctx, playlistID, userID, videoID, included)
-}
-
 func (c *Catalog) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) (int32, error) {
 	if playlistID == "" || userID == "" {
 		return 0, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
@@ -429,4 +396,11 @@ func (c *Catalog) ListStalePlaylists(ctx context.Context, limit int32) ([]domain
 		limit = maxStalePlaylists
 	}
 	return c.repo.ListStalePlaylists(ctx, limit)
+}
+
+func (c *Catalog) PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) (int32, error) {
+	if userID == "" {
+		return 0, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	return c.repo.PruneImportedPlaylists(ctx, userID, keepSourceURLs)
 }

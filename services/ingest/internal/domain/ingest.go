@@ -311,6 +311,8 @@ type Library interface {
 	// ListStalePlaylists returns imported playlists whose contents were read
 	// longest ago, never-synced first.
 	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+	// PruneImportedPlaylists drops imported playlists the member no longer has.
+	PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) error
 }
 
 // StalePlaylist is a playlist whose contents are due to be read again.

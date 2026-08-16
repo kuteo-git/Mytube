@@ -37,7 +37,11 @@ type recordingLibrary struct {
 	playlists      map[string]string
 	stalePlaylists []domain.StalePlaylist
 	staleLimit     int32
-	playlistItems  []struct {
+	pruned         []struct {
+		userID string
+		keep   []string
+	}
+	playlistItems []struct {
 		playlistID, userID string
 		videoIDs           []string
 		complete           bool
@@ -367,6 +371,14 @@ func (r *recordingLibrary) ImportPlaylistItems(_ context.Context, playlistID, us
 // Honours the limit, as the real server does: catalog clamps it and returns at
 // most that many. A fake that ignored it would let a test pass while the caller
 // asked for everything.
+func (r *recordingLibrary) PruneImportedPlaylists(_ context.Context, userID string, keep []string) error {
+	r.pruned = append(r.pruned, struct {
+		userID string
+		keep   []string
+	}{userID, keep})
+	return nil
+}
+
 func (r *recordingLibrary) ListStalePlaylists(_ context.Context, limit int32) ([]domain.StalePlaylist, error) {
 	r.staleLimit = limit
 	if limit > 0 && int(limit) < len(r.stalePlaylists) {
