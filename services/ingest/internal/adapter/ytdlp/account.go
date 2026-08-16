@@ -85,7 +85,13 @@ func (d *Downloader) ListAccountChannels(
 		NoWarnings().
 		Run(ctx, domain.FeedChannels)
 	if err != nil {
-		if isAuthFailure(err) {
+		// "Failed to resolve url" counts as a dead session *here*, and only
+		// here: the URL is a constant in this package, so if it does not resolve
+		// the session is the only thing that can have changed. That is how a
+		// signed-out request to /feed/channels comes back — measured against a
+		// real expired cookies.txt — and reading it as an ordinary failure would
+		// leave the account being retried hourly with a cookie that cannot work.
+		if isAuthFailure(err) || strings.Contains(err.Error(), "Failed to resolve url") {
 			return nil, fmt.Errorf("subscription list: %w", domain.ErrAccountAuth)
 		}
 		return nil, fmt.Errorf("subscription list: %w", err)
@@ -146,6 +152,13 @@ func isAuthFailure(err error) bool {
 		"sign in to confirm",
 		"please sign in",
 		"login required",
+		// yt-dlp's actual wording for a signed-out request to a feed that needs
+		// a session — measured against a real expired cookies.txt on ":ytsubs"
+		// and ":ytfav". Without it a dead session was logged as an ordinary
+		// failure, the account never expired, and the same dead cookie was
+		// replayed every hour: §6b's rule about how a blocked address becomes a
+		// banned account, arrived at through the one door left open.
+		"login details are needed",
 		"requires authentication",
 		"cookies are no longer valid",
 		"account cookies are invalid",

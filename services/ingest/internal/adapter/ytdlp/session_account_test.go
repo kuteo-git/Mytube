@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -81,4 +82,26 @@ func containsAny(args []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// yt-dlp's wording for a request to a feed that needs a session, made without
+// one. Taken verbatim from a real expired cookies.txt on this installation.
+//
+// It was not recognised, so a dead session was logged as an ordinary failure:
+// the account never expired and the same dead cookie went back to YouTube every
+// hour, which is the one thing §6b's two-failure rule exists to prevent.
+func TestASignedOutFeedIsADeadSession(t *testing.T) {
+	err := errors.New("[youtube:subscriptions] Login details are needed to " +
+		"download this content. Use --cookies-from-browser or --cookies")
+	if !isAuthFailure(err) {
+		t.Error("a signed-out feed was not read as a dead session")
+	}
+}
+
+// And a 403 still is not one. googlevideo refuses in waves — the same URL has
+// answered 206, then 403, then 206 within an hour here.
+func TestARefusalIsStillNotADeadSession(t *testing.T) {
+	if isAuthFailure(errors.New("HTTP Error 403: Forbidden")) {
+		t.Error("a 403 retired the account")
+	}
 }
