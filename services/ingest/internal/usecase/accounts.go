@@ -133,8 +133,6 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 		name string
 		// via is the provenance written on anything this feed brings in.
 		via string
-		// subscribe records the channel as followed by this member.
-		subscribe bool
 		// like records the video as liked by this member.
 		like bool
 	}
@@ -142,8 +140,19 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 	// Order is deliberate: what the member chose first, what YouTube guessed
 	// last. If a session dies partway through, the passes that mattered have
 	// already run.
+	// Who the member follows, from the list itself rather than inferred from
+	// whoever happened to post lately. See domain.FeedChannels: the uploads feed
+	// named 19 channels for a member who follows 152.
+	//
+	// First, and its failure does not stop the rest: a member's subscriptions are
+	// the whole reason their Home feed has anything in it, and the video passes
+	// below still fill the library if this one is refused.
+	if !s.importSubscriptions(ctx, userID, cookiePath, &out) {
+		return out, true
+	}
+
 	feeds := []feedSpec{
-		{name: domain.FeedSubscriptions, via: "SOURCE", subscribe: true},
+		{name: domain.FeedSubscriptions, via: "SOURCE"},
 		{name: domain.FeedLiked, via: "SOURCE", like: true},
 		{name: domain.FeedWatchLater, via: "SOURCE"},
 		{name: domain.FeedRecommended, via: "YOUTUBE_REC"},
@@ -187,16 +196,6 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 			}
 			out.Videos++
 
-			if feed.subscribe && v.ChannelID != "" {
-				if err := s.library.SetSubscription(ctx, userID, v.ChannelID, true); err != nil {
-					s.logger.Warn("subscribe", "user", userID, "channel", v.ChannelID, "error", err)
-					continue
-				}
-				// And the ranker, which keeps its own record and would
-				// otherwise go on believing this member follows nobody.
-				s.tellRanker(ctx, userID, v.ChannelID, true)
-				out.Subscriptions++
-			}
 			if feed.like {
 				if err := s.library.SetLiked(ctx, userID, v.ID); err != nil {
 					s.logger.Warn("like", "user", userID, "video", v.ID, "error", err)
@@ -207,6 +206,59 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 		}
 	}
 	return out, false
+}
+
+// importSubscriptions records everyone this member follows, and returns false
+// only when the session itself has died — the one condition that must stop the
+// pass rather than be stepped over.
+//
+// Additive: a channel missing from the list is left subscribed here. YouTube
+// answering with a short list, a page it did not finish, or nothing at all would
+// otherwise unsubscribe a member from everything in one pass, and ranking reads
+// that record — a bad minute upstream would empty somebody's Home feed with no
+// trace of why. Unsubscribing stays a thing done in this app, on purpose.
+func (s *AccountScanner) importSubscriptions(
+	ctx context.Context, userID, cookiePath string, out *AccountScanResult,
+) bool {
+	channels, err := s.feeds.ListAccountChannels(ctx, cookiePath)
+	if err != nil {
+		if errors.Is(err, domain.ErrAccountAuth) {
+			s.logger.Warn("account session refused", "user", userID, "feed", "channels")
+			return false
+		}
+		s.logger.Warn("account subscription list", "user", userID, "error", err)
+		return true
+	}
+
+	// Counted once per channel. This used to be incremented per *video* in the
+	// uploads feed, so a scan that found 19 channels reported 49 subscriptions
+	// and read as though thirty had been lost.
+	seen := map[string]bool{}
+	for _, c := range channels {
+		if c.ID == "" || seen[c.ID] {
+			continue
+		}
+		seen[c.ID] = true
+
+		// The channel row has to exist before anything can point at it, and the
+		// list carries the name, which is all the Subscriptions page needs until
+		// a scan fills in the artwork.
+		if err := s.library.UpsertChannel(ctx, domain.ExternalVideo{
+			ChannelID: c.ID, ChannelName: c.Name,
+		}); err != nil {
+			s.logger.Warn("upsert channel", "user", userID, "channel", c.ID, "error", err)
+			continue
+		}
+		if err := s.library.SetSubscription(ctx, userID, c.ID, true); err != nil {
+			s.logger.Warn("subscribe", "user", userID, "channel", c.ID, "error", err)
+			continue
+		}
+		// And the ranker, which keeps its own record and would otherwise go on
+		// believing this member follows nobody.
+		s.tellRanker(ctx, userID, c.ID, true)
+		out.Subscriptions++
+	}
+	return true
 }
 
 // Run scans on a timer. A zero interval disables it.

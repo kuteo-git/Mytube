@@ -86,10 +86,36 @@ const (
 	FeedRecommended   = ":ytrec"
 )
 
+// FeedChannels is the member's subscription list itself, as opposed to
+// ":ytsubs", which is the *uploads* of everything they follow.
+//
+// The difference is the whole of why this exists. ":ytsubs" is read from the
+// top for what is new, so the channels it names are only those that have posted
+// recently — a household member with 152 subscriptions produced 19, because the
+// 50 most recent uploads came from 19 channels, and a channel that has not
+// posted in a fortnight could never be imported at all.
+//
+// Not a yt-dlp alias: there is none for this page, so it is the URL. Verified
+// against a real session — `yt-dlp --flat-playlist https://www.youtube.com/feed/channels`
+// returns one entry per channel with `channel_id` set, 152 of them, in a single
+// request.
+const FeedChannels = "https://www.youtube.com/feed/channels"
+
+// AccountChannel is one channel a member follows.
+type AccountChannel struct {
+	ID   string
+	Name string
+}
+
 // AccountFeedSource reads one of those feeds as the account whose cookies these
 // are.
 type AccountFeedSource interface {
 	ListAccountFeed(ctx context.Context, cookiesFile, feed string, limit int32) ([]ExternalVideo, error)
+	// ListAccountChannels reads the whole subscription list, not a page of it.
+	// Unlike the video feeds it is not capped: it is one request whatever the
+	// length, and a partial list here is not "the newest few" but an arbitrary
+	// subset of who somebody follows.
+	ListAccountChannels(ctx context.Context, cookiesFile string) ([]AccountChannel, error)
 }
 
 // SignalSink tells the ranker what a member's account says they like.

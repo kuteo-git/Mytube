@@ -72,6 +72,19 @@ type memFeeds struct {
 	byFeed map[string][]domain.ExternalVideo
 	authOn map[string]bool
 	asked  []struct{ cookies, feed string }
+	// The subscription list, which is a list of channels rather than of the
+	// uploads of those channels. See domain.FeedChannels.
+	channels []domain.AccountChannel
+}
+
+func (m *memFeeds) ListAccountChannels(
+	_ context.Context, cookiesFile string,
+) ([]domain.AccountChannel, error) {
+	m.asked = append(m.asked, struct{ cookies, feed string }{cookiesFile, domain.FeedChannels})
+	if m.authOn[domain.FeedChannels] {
+		return nil, domain.ErrAccountAuth
+	}
+	return m.channels, nil
 }
 
 func (m *memFeeds) ListAccountFeed(
@@ -125,9 +138,10 @@ func newAccountScannerWith(
 
 func TestSubscriptionsLandUnderTheMemberWhoseTheyAre(t *testing.T) {
 	accounts := newMemAccounts("u_luc", "u_vo")
-	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{
-		domain.FeedSubscriptions: {video("a", "ch_1")},
-	}}
+	feeds := &memFeeds{
+		byFeed:   map[string][]domain.ExternalVideo{},
+		channels: []domain.AccountChannel{{ID: "ch_1", Name: "One"}},
+	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
 	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background()); err != nil {
@@ -210,7 +224,7 @@ func TestADeadSessionStopsThatMembersPassImmediately(t *testing.T) {
 	accounts := newMemAccounts("u_luc")
 	feeds := &memFeeds{
 		byFeed: map[string][]domain.ExternalVideo{},
-		authOn: map[string]bool{domain.FeedSubscriptions: true},
+		authOn: map[string]bool{domain.FeedChannels: true},
 	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
@@ -279,6 +293,12 @@ func (f *failingFeeds) ListAccountFeed(
 	return nil, f.err
 }
 
+func (f *failingFeeds) ListAccountChannels(
+	context.Context, string,
+) ([]domain.AccountChannel, error) {
+	return nil, f.err
+}
+
 // Nothing about the session reaches the note shown on the settings screen.
 func TestTheRecordedNoteHoldsNoSession(t *testing.T) {
 	accounts := newMemAccounts("u_luc")
@@ -324,10 +344,10 @@ func indexOf(haystack, needle string) int {
 // page came back labelled DISCOVERY, 24 of 24.
 func TestAnImportedSubscriptionReachesTheRankerToo(t *testing.T) {
 	accounts := newMemAccounts("u_lm")
-	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{
-		domain.FeedSubscriptions: {video("a", "ch_1")},
-		domain.FeedLiked:         {video("b", "ch_2")},
-	}}
+	feeds := &memFeeds{
+		byFeed:   map[string][]domain.ExternalVideo{domain.FeedLiked: {video("b", "ch_2")}},
+		channels: []domain.AccountChannel{{ID: "ch_1"}},
+	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 	signals := &memSignals{}
 
@@ -350,9 +370,10 @@ func TestAnImportedSubscriptionReachesTheRankerToo(t *testing.T) {
 // written the authoritative row.
 func TestAFailingRankerDoesNotFailTheImport(t *testing.T) {
 	accounts := newMemAccounts("u_lm")
-	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{
-		domain.FeedSubscriptions: {video("a", "ch_1")},
-	}}
+	feeds := &memFeeds{
+		byFeed:   map[string][]domain.ExternalVideo{},
+		channels: []domain.AccountChannel{{ID: "ch_1"}},
+	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
 	result, err := newAccountScannerWith(t, accounts, feeds, lib, failingSignals{}).ScanAll(context.Background())
@@ -375,4 +396,63 @@ func (failingSignals) Subscribed(context.Context, string, string, time.Time) err
 
 func (failingSignals) Liked(context.Context, string, string, time.Time) error {
 	return errors.New("recsys is down")
+}
+
+// Who a member follows comes from the subscription list, not from whoever
+// happened to post lately.
+//
+// Measured on a real household member: 152 subscribed channels, of which the 50
+// most recent uploads named 19 — so 133 channels could not be imported at all,
+// and a channel that had gone quiet for a fortnight never could be.
+func TestSubscriptionsComeFromTheListAndNotTheUploads(t *testing.T) {
+	accounts := newMemAccounts("u_lm")
+	feeds := &memFeeds{
+		byFeed: map[string][]domain.ExternalVideo{
+			// The uploads feed carries one channel, busily.
+			domain.FeedSubscriptions: {video("a", "ch_busy"), video("b", "ch_busy")},
+		},
+		// The list carries that one and a channel that has posted nothing.
+		channels: []domain.AccountChannel{{ID: "ch_busy"}, {ID: "ch_quiet"}},
+	}
+	lib := &recordingLibrary{known: map[string]bool{}}
+
+	result, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	if err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, s := range lib.subscribedBy {
+		got[s.channelID] = true
+	}
+	if !got["ch_quiet"] {
+		t.Error("a channel that has not posted recently was not imported")
+	}
+	// Counted per channel, not per video. The count used to be incremented once
+	// per upload, so a scan finding 19 channels reported 49 subscriptions.
+	if result.Subscriptions != 2 {
+		t.Errorf("subscriptions = %d, want 2 channels", result.Subscriptions)
+	}
+}
+
+// A short list, or none at all, must not unsubscribe anybody.
+//
+// Ranking reads this record, so a bad minute upstream would otherwise empty a
+// member's Home feed with no trace of why. Unsubscribing stays something done
+// in this app.
+func TestAnEmptyListUnsubscribesNobody(t *testing.T) {
+	accounts := newMemAccounts("u_lm")
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}, channels: nil}
+	lib := &recordingLibrary{known: map[string]bool{}}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background()); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	// Nothing at all is written. The import only ever adds, so an empty answer
+	// is an empty answer rather than an instruction to clear the list — which is
+	// what reconciling against it would have made it.
+	if len(lib.subscribedBy) != 0 {
+		t.Errorf("an empty list wrote %d subscription changes", len(lib.subscribedBy))
+	}
 }

@@ -63,6 +63,73 @@ func (d *Downloader) ListAccountFeed(
 	return videos, nil
 }
 
+// ListAccountChannels reads the member's whole subscription list.
+//
+// Uncapped, unlike the video feeds: this is one request whatever the length, and
+// a page of it would not be "the newest few" but an arbitrary subset of who
+// somebody follows — which is the defect this replaces.
+//
+// The entries are channels rather than videos, so `id` is the channel id and
+// there is no `channel_id` of its own on some of them; both are read, with the
+// entry's own id as the fallback.
+func (d *Downloader) ListAccountChannels(
+	ctx context.Context, cookiesFile string,
+) ([]domain.AccountChannel, error) {
+	if cookiesFile == "" {
+		return nil, domain.ErrNoAccount
+	}
+
+	result, err := newAccountCommand(cookiesFile).
+		FlatPlaylist().
+		DumpJSON().
+		NoWarnings().
+		Run(ctx, domain.FeedChannels)
+	if err != nil {
+		if isAuthFailure(err) {
+			return nil, fmt.Errorf("subscription list: %w", domain.ErrAccountAuth)
+		}
+		return nil, fmt.Errorf("subscription list: %w", err)
+	}
+
+	infos, err := result.GetExtractedInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	var out []domain.AccountChannel
+	add := func(id, name string) {
+		if strings.HasPrefix(id, "UC") {
+			out = append(out, domain.AccountChannel{ID: id, Name: name})
+		}
+	}
+	for _, info := range infos {
+		if len(info.Entries) > 0 {
+			for _, entry := range info.Entries {
+				add(channelIDOf(entry.ChannelID, entry.ID), derefString(entry.Channel))
+			}
+			continue
+		}
+		add(channelIDOf(info.ChannelID, info.ID), derefString(info.Channel))
+	}
+	return out, nil
+}
+
+// The channel list names each channel by its own id; channel_id is set too, but
+// only the id is guaranteed on a flat listing.
+func channelIDOf(channelID *string, id string) string {
+	if channelID != nil && *channelID != "" {
+		return *channelID
+	}
+	return id
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // isAuthFailure tells a dead session apart from an ordinary refusal.
 //
 // The difference decides whether the account is retired, so it is drawn
