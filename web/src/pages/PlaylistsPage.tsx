@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { usePlaylists } from '@/features/catalog/application/queries'
+import { useAccountState } from '@/features/settings/application/account-state'
 import type { Playlist } from '@/features/catalog/domain/video'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { mediaURL } from '@/shared/lib/media'
@@ -17,6 +18,10 @@ import { mediaURL } from '@/shared/lib/media'
  */
 export function PlaylistsPage() {
   const { data: playlists, isPending, isError } = usePlaylists()
+  // "Not read yet" becomes a lie the moment the session dies: nothing is coming
+  // on the next pass, because there will not be one until somebody pastes a
+  // fresh session. This is the screen where that is noticed.
+  const { signedOut } = useAccountState()
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
@@ -38,7 +43,7 @@ export function PlaylistsPage() {
       ) : playlists && playlists.length > 0 ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-8 min-[700px]:grid-cols-3 min-[1000px]:grid-cols-4 min-[1600px]:grid-cols-5">
           {playlists.map((p) => (
-            <PlaylistCard key={p.id} playlist={p} />
+            <PlaylistCard key={p.id} playlist={p} signedOut={signedOut} />
           ))}
         </div>
       ) : (
@@ -51,7 +56,7 @@ export function PlaylistsPage() {
   )
 }
 
-function PlaylistCard({ playlist }: { playlist: Playlist }) {
+function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: boolean }) {
   const cover = playlist.thumbnails[0]
 
   return (
@@ -70,9 +75,13 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
             read a few per account scan — see CLAUDE.md §5 — so the wait is
             hours, and saying so is the difference between "not yet" and
             "something is wrong". */}
-        {playlist.itemsSynced
-          ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
-          : 'Not read yet'}
+        {playlist.unavailable
+          ? 'YouTube will not open this one'
+          : playlist.itemsSynced
+            ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
+            : signedOut
+              ? 'Waiting for a YouTube session'
+              : 'Not read yet'}
       </p>
     </Link>
   )

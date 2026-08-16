@@ -117,6 +117,12 @@ const (
 	// CatalogServiceListStalePlaylistsProcedure is the fully-qualified name of the CatalogService's
 	// ListStalePlaylists RPC.
 	CatalogServiceListStalePlaylistsProcedure = "/catalog.v1.CatalogService/ListStalePlaylists"
+	// CatalogServiceListUnreadPlaylistsProcedure is the fully-qualified name of the CatalogService's
+	// ListUnreadPlaylists RPC.
+	CatalogServiceListUnreadPlaylistsProcedure = "/catalog.v1.CatalogService/ListUnreadPlaylists"
+	// CatalogServiceMarkPlaylistUnavailableProcedure is the fully-qualified name of the
+	// CatalogService's MarkPlaylistUnavailable RPC.
+	CatalogServiceMarkPlaylistUnavailableProcedure = "/catalog.v1.CatalogService/MarkPlaylistUnavailable"
 	// CatalogServicePruneImportedPlaylistsProcedure is the fully-qualified name of the CatalogService's
 	// PruneImportedPlaylists RPC.
 	CatalogServicePruneImportedPlaylistsProcedure = "/catalog.v1.CatalogService/PruneImportedPlaylists"
@@ -196,6 +202,15 @@ type CatalogServiceClient interface {
 	// Imported playlists whose contents were read longest ago, never-synced
 	// first. Bounded: reading a playlist is a request on a credentialed session.
 	ListStalePlaylists(context.Context, *connect.Request[v1.ListStalePlaylistsRequest]) (*connect.Response[v1.ListStalePlaylistsResponse], error)
+	// Playlists whose contents have never been read. Separate from the stale ones
+	// because filling the library happens once, while re-reading is the hourly
+	// cost — so the two carry different budgets and must not return each other's
+	// rows.
+	ListUnreadPlaylists(context.Context, *connect.Request[v1.ListUnreadPlaylistsRequest]) (*connect.Response[v1.ListUnreadPlaylistsResponse], error)
+	// Records that upstream will not hand this playlist over. Only upstream's own
+	// refusal may call this: a network failure is not an answer about the
+	// playlist, and recording it as one would bury a readable list for good.
+	MarkPlaylistUnavailable(context.Context, *connect.Request[v1.MarkPlaylistUnavailableRequest]) (*connect.Response[v1.MarkPlaylistUnavailableResponse], error)
 	// Drops imported playlists the member no longer has upstream. The other half
 	// of the mirror: without it a playlist deleted on YouTube stays here for ever,
 	// and nothing in this app can remove it.
@@ -393,6 +408,18 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListStalePlaylists")),
 			connect.WithClientOptions(opts...),
 		),
+		listUnreadPlaylists: connect.NewClient[v1.ListUnreadPlaylistsRequest, v1.ListUnreadPlaylistsResponse](
+			httpClient,
+			baseURL+CatalogServiceListUnreadPlaylistsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListUnreadPlaylists")),
+			connect.WithClientOptions(opts...),
+		),
+		markPlaylistUnavailable: connect.NewClient[v1.MarkPlaylistUnavailableRequest, v1.MarkPlaylistUnavailableResponse](
+			httpClient,
+			baseURL+CatalogServiceMarkPlaylistUnavailableProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("MarkPlaylistUnavailable")),
+			connect.WithClientOptions(opts...),
+		),
 		pruneImportedPlaylists: connect.NewClient[v1.PruneImportedPlaylistsRequest, v1.PruneImportedPlaylistsResponse](
 			httpClient,
 			baseURL+CatalogServicePruneImportedPlaylistsProcedure,
@@ -422,39 +449,41 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // catalogServiceClient implements CatalogServiceClient.
 type catalogServiceClient struct {
-	getVideo               *connect.Client[v1.GetVideoRequest, v1.GetVideoResponse]
-	batchGetVideos         *connect.Client[v1.BatchGetVideosRequest, v1.BatchGetVideosResponse]
-	searchVideos           *connect.Client[v1.SearchVideosRequest, v1.SearchVideosResponse]
-	suggest                *connect.Client[v1.SuggestRequest, v1.SuggestResponse]
-	listChannelVideos      *connect.Client[v1.ListChannelVideosRequest, v1.ListChannelVideosResponse]
-	getChannel             *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
-	listTopics             *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
-	listVideoFeatures      *connect.Client[v1.ListVideoFeaturesRequest, v1.ListVideoFeaturesResponse]
-	upsertChannel          *connect.Client[v1.UpsertChannelRequest, v1.UpsertChannelResponse]
-	upsertVideo            *connect.Client[v1.UpsertVideoRequest, v1.UpsertVideoResponse]
-	setMediaState          *connect.Client[v1.SetMediaStateRequest, v1.SetMediaStateResponse]
-	setShort               *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
-	listUncheckedShorts    *connect.Client[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse]
-	findBySourceURL        *connect.Client[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse]
-	listComments           *connect.Client[v1.ListCommentsRequest, v1.ListCommentsResponse]
-	createComment          *connect.Client[v1.CreateCommentRequest, v1.CreateCommentResponse]
-	importComments         *connect.Client[v1.ImportCommentsRequest, v1.ImportCommentsResponse]
-	recordWatchProgress    *connect.Client[v1.RecordWatchProgressRequest, v1.RecordWatchProgressResponse]
-	setReaction            *connect.Client[v1.SetReactionRequest, v1.SetReactionResponse]
-	setSubscription        *connect.Client[v1.SetSubscriptionRequest, v1.SetSubscriptionResponse]
-	listSubscriptions      *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
-	listHistory            *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
-	listWatchLater         *connect.Client[v1.ListWatchLaterRequest, v1.ListWatchLaterResponse]
-	importWatchLater       *connect.Client[v1.ImportWatchLaterRequest, v1.ImportWatchLaterResponse]
-	listPlaylists          *connect.Client[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse]
-	getPlaylist            *connect.Client[v1.GetPlaylistRequest, v1.GetPlaylistResponse]
-	createPlaylist         *connect.Client[v1.CreatePlaylistRequest, v1.CreatePlaylistResponse]
-	importPlaylistItems    *connect.Client[v1.ImportPlaylistItemsRequest, v1.ImportPlaylistItemsResponse]
-	listStalePlaylists     *connect.Client[v1.ListStalePlaylistsRequest, v1.ListStalePlaylistsResponse]
-	pruneImportedPlaylists *connect.Client[v1.PruneImportedPlaylistsRequest, v1.PruneImportedPlaylistsResponse]
-	getStorageUsage        *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
-	setPinned              *connect.Client[v1.SetPinnedRequest, v1.SetPinnedResponse]
-	listPinnedVideos       *connect.Client[v1.ListPinnedVideosRequest, v1.ListPinnedVideosResponse]
+	getVideo                *connect.Client[v1.GetVideoRequest, v1.GetVideoResponse]
+	batchGetVideos          *connect.Client[v1.BatchGetVideosRequest, v1.BatchGetVideosResponse]
+	searchVideos            *connect.Client[v1.SearchVideosRequest, v1.SearchVideosResponse]
+	suggest                 *connect.Client[v1.SuggestRequest, v1.SuggestResponse]
+	listChannelVideos       *connect.Client[v1.ListChannelVideosRequest, v1.ListChannelVideosResponse]
+	getChannel              *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
+	listTopics              *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
+	listVideoFeatures       *connect.Client[v1.ListVideoFeaturesRequest, v1.ListVideoFeaturesResponse]
+	upsertChannel           *connect.Client[v1.UpsertChannelRequest, v1.UpsertChannelResponse]
+	upsertVideo             *connect.Client[v1.UpsertVideoRequest, v1.UpsertVideoResponse]
+	setMediaState           *connect.Client[v1.SetMediaStateRequest, v1.SetMediaStateResponse]
+	setShort                *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
+	listUncheckedShorts     *connect.Client[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse]
+	findBySourceURL         *connect.Client[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse]
+	listComments            *connect.Client[v1.ListCommentsRequest, v1.ListCommentsResponse]
+	createComment           *connect.Client[v1.CreateCommentRequest, v1.CreateCommentResponse]
+	importComments          *connect.Client[v1.ImportCommentsRequest, v1.ImportCommentsResponse]
+	recordWatchProgress     *connect.Client[v1.RecordWatchProgressRequest, v1.RecordWatchProgressResponse]
+	setReaction             *connect.Client[v1.SetReactionRequest, v1.SetReactionResponse]
+	setSubscription         *connect.Client[v1.SetSubscriptionRequest, v1.SetSubscriptionResponse]
+	listSubscriptions       *connect.Client[v1.ListSubscriptionsRequest, v1.ListSubscriptionsResponse]
+	listHistory             *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
+	listWatchLater          *connect.Client[v1.ListWatchLaterRequest, v1.ListWatchLaterResponse]
+	importWatchLater        *connect.Client[v1.ImportWatchLaterRequest, v1.ImportWatchLaterResponse]
+	listPlaylists           *connect.Client[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse]
+	getPlaylist             *connect.Client[v1.GetPlaylistRequest, v1.GetPlaylistResponse]
+	createPlaylist          *connect.Client[v1.CreatePlaylistRequest, v1.CreatePlaylistResponse]
+	importPlaylistItems     *connect.Client[v1.ImportPlaylistItemsRequest, v1.ImportPlaylistItemsResponse]
+	listStalePlaylists      *connect.Client[v1.ListStalePlaylistsRequest, v1.ListStalePlaylistsResponse]
+	listUnreadPlaylists     *connect.Client[v1.ListUnreadPlaylistsRequest, v1.ListUnreadPlaylistsResponse]
+	markPlaylistUnavailable *connect.Client[v1.MarkPlaylistUnavailableRequest, v1.MarkPlaylistUnavailableResponse]
+	pruneImportedPlaylists  *connect.Client[v1.PruneImportedPlaylistsRequest, v1.PruneImportedPlaylistsResponse]
+	getStorageUsage         *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
+	setPinned               *connect.Client[v1.SetPinnedRequest, v1.SetPinnedResponse]
+	listPinnedVideos        *connect.Client[v1.ListPinnedVideosRequest, v1.ListPinnedVideosResponse]
 }
 
 // GetVideo calls catalog.v1.CatalogService.GetVideo.
@@ -602,6 +631,16 @@ func (c *catalogServiceClient) ListStalePlaylists(ctx context.Context, req *conn
 	return c.listStalePlaylists.CallUnary(ctx, req)
 }
 
+// ListUnreadPlaylists calls catalog.v1.CatalogService.ListUnreadPlaylists.
+func (c *catalogServiceClient) ListUnreadPlaylists(ctx context.Context, req *connect.Request[v1.ListUnreadPlaylistsRequest]) (*connect.Response[v1.ListUnreadPlaylistsResponse], error) {
+	return c.listUnreadPlaylists.CallUnary(ctx, req)
+}
+
+// MarkPlaylistUnavailable calls catalog.v1.CatalogService.MarkPlaylistUnavailable.
+func (c *catalogServiceClient) MarkPlaylistUnavailable(ctx context.Context, req *connect.Request[v1.MarkPlaylistUnavailableRequest]) (*connect.Response[v1.MarkPlaylistUnavailableResponse], error) {
+	return c.markPlaylistUnavailable.CallUnary(ctx, req)
+}
+
 // PruneImportedPlaylists calls catalog.v1.CatalogService.PruneImportedPlaylists.
 func (c *catalogServiceClient) PruneImportedPlaylists(ctx context.Context, req *connect.Request[v1.PruneImportedPlaylistsRequest]) (*connect.Response[v1.PruneImportedPlaylistsResponse], error) {
 	return c.pruneImportedPlaylists.CallUnary(ctx, req)
@@ -687,6 +726,15 @@ type CatalogServiceHandler interface {
 	// Imported playlists whose contents were read longest ago, never-synced
 	// first. Bounded: reading a playlist is a request on a credentialed session.
 	ListStalePlaylists(context.Context, *connect.Request[v1.ListStalePlaylistsRequest]) (*connect.Response[v1.ListStalePlaylistsResponse], error)
+	// Playlists whose contents have never been read. Separate from the stale ones
+	// because filling the library happens once, while re-reading is the hourly
+	// cost — so the two carry different budgets and must not return each other's
+	// rows.
+	ListUnreadPlaylists(context.Context, *connect.Request[v1.ListUnreadPlaylistsRequest]) (*connect.Response[v1.ListUnreadPlaylistsResponse], error)
+	// Records that upstream will not hand this playlist over. Only upstream's own
+	// refusal may call this: a network failure is not an answer about the
+	// playlist, and recording it as one would bury a readable list for good.
+	MarkPlaylistUnavailable(context.Context, *connect.Request[v1.MarkPlaylistUnavailableRequest]) (*connect.Response[v1.MarkPlaylistUnavailableResponse], error)
 	// Drops imported playlists the member no longer has upstream. The other half
 	// of the mirror: without it a playlist deleted on YouTube stays here for ever,
 	// and nothing in this app can remove it.
@@ -880,6 +928,18 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListStalePlaylists")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListUnreadPlaylistsHandler := connect.NewUnaryHandler(
+		CatalogServiceListUnreadPlaylistsProcedure,
+		svc.ListUnreadPlaylists,
+		connect.WithSchema(catalogServiceMethods.ByName("ListUnreadPlaylists")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceMarkPlaylistUnavailableHandler := connect.NewUnaryHandler(
+		CatalogServiceMarkPlaylistUnavailableProcedure,
+		svc.MarkPlaylistUnavailable,
+		connect.WithSchema(catalogServiceMethods.ByName("MarkPlaylistUnavailable")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServicePruneImportedPlaylistsHandler := connect.NewUnaryHandler(
 		CatalogServicePruneImportedPlaylistsProcedure,
 		svc.PruneImportedPlaylists,
@@ -964,6 +1024,10 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceImportPlaylistItemsHandler.ServeHTTP(w, r)
 		case CatalogServiceListStalePlaylistsProcedure:
 			catalogServiceListStalePlaylistsHandler.ServeHTTP(w, r)
+		case CatalogServiceListUnreadPlaylistsProcedure:
+			catalogServiceListUnreadPlaylistsHandler.ServeHTTP(w, r)
+		case CatalogServiceMarkPlaylistUnavailableProcedure:
+			catalogServiceMarkPlaylistUnavailableHandler.ServeHTTP(w, r)
 		case CatalogServicePruneImportedPlaylistsProcedure:
 			catalogServicePruneImportedPlaylistsHandler.ServeHTTP(w, r)
 		case CatalogServiceGetStorageUsageProcedure:
@@ -1095,6 +1159,14 @@ func (UnimplementedCatalogServiceHandler) ImportPlaylistItems(context.Context, *
 
 func (UnimplementedCatalogServiceHandler) ListStalePlaylists(context.Context, *connect.Request[v1.ListStalePlaylistsRequest]) (*connect.Response[v1.ListStalePlaylistsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListStalePlaylists is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListUnreadPlaylists(context.Context, *connect.Request[v1.ListUnreadPlaylistsRequest]) (*connect.Response[v1.ListUnreadPlaylistsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListUnreadPlaylists is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) MarkPlaylistUnavailable(context.Context, *connect.Request[v1.MarkPlaylistUnavailableRequest]) (*connect.Response[v1.MarkPlaylistUnavailableResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.MarkPlaylistUnavailable is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) PruneImportedPlaylists(context.Context, *connect.Request[v1.PruneImportedPlaylistsRequest]) (*connect.Response[v1.PruneImportedPlaylistsResponse], error) {

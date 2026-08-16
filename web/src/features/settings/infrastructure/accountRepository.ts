@@ -18,14 +18,28 @@ export interface AccountStatus {
   lastScanAt?: string
 }
 
-export interface ScanResult {
+/**
+ * What the pass in flight is doing.
+ *
+ * Read from the server rather than kept in the browser, which is what makes a
+ * page reload mid-pass harmless: a first fill reads every playlist a member has
+ * and takes minutes, so the pass outlives whatever started it.
+ */
+export interface ScanStatus {
+  running: boolean
+  durationMs: number
+  /** In words: "reading playlists (7 of 28)". Empty when idle. */
+  phase: string
+  playlistsRead: number
+  playlistsTotal: number
   accounts: number
   subscriptions: number
   videos: number
   expired: number
-  /** Every playlist is named each pass; only a few have their contents read. */
   playlists: number
   playlistVideos: number
+  /** Failures that did not stop the pass. Bounded server-side. */
+  errors: string[]
 }
 
 export const accountRepository = {
@@ -53,7 +67,12 @@ export const accountRepository = {
     await apiFetch('/api/settings/youtube-account', { method: 'DELETE' })
   },
 
-  async scanNow(): Promise<ScanResult> {
-    return apiJSON<ScanResult>('/api/settings/youtube-account/scan', { method: 'POST' })
+  /** Starts a pass. Returns as soon as it has begun — poll scanStatus for the rest. */
+  async scanNow(): Promise<void> {
+    await apiFetch('/api/settings/youtube-account/scan', { method: 'POST' })
+  },
+
+  async scanStatus(): Promise<ScanStatus> {
+    return apiJSON<ScanStatus>('/api/settings/youtube-account/scan')
   },
 }

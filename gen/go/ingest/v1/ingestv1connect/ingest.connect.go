@@ -94,6 +94,9 @@ const (
 	// IngestServiceScanAccountsProcedure is the fully-qualified name of the IngestService's
 	// ScanAccounts RPC.
 	IngestServiceScanAccountsProcedure = "/ingest.v1.IngestService/ScanAccounts"
+	// IngestServiceGetAccountScanStatusProcedure is the fully-qualified name of the IngestService's
+	// GetAccountScanStatus RPC.
+	IngestServiceGetAccountScanStatusProcedure = "/ingest.v1.IngestService/GetAccountScanStatus"
 	// IngestServiceListChannelUploadsProcedure is the fully-qualified name of the IngestService's
 	// ListChannelUploads RPC.
 	IngestServiceListChannelUploadsProcedure = "/ingest.v1.IngestService/ListChannelUploads"
@@ -174,6 +177,9 @@ type IngestServiceClient interface {
 	ListAccounts(context.Context, *connect.Request[v1.ListAccountsRequest]) (*connect.Response[v1.ListAccountsResponse], error)
 	RemoveAccount(context.Context, *connect.Request[v1.RemoveAccountRequest]) (*connect.Response[v1.RemoveAccountResponse], error)
 	ScanAccounts(context.Context, *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error)
+	// What the pass in flight is doing. Polled by the settings screen, which is
+	// how progress survives a page reload.
+	GetAccountScanStatus(context.Context, *connect.Request[v1.GetAccountScanStatusRequest]) (*connect.Response[v1.GetAccountScanStatusResponse], error)
 	// Lists a channel's uploads straight from YouTube, paginated. The channel
 	// page uses this rather than the local catalog so browsing a channel is not
 	// limited to whatever a scan happened to bring in.
@@ -333,6 +339,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("ScanAccounts")),
 			connect.WithClientOptions(opts...),
 		),
+		getAccountScanStatus: connect.NewClient[v1.GetAccountScanStatusRequest, v1.GetAccountScanStatusResponse](
+			httpClient,
+			baseURL+IngestServiceGetAccountScanStatusProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("GetAccountScanStatus")),
+			connect.WithClientOptions(opts...),
+		),
 		listChannelUploads: connect.NewClient[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse](
 			httpClient,
 			baseURL+IngestServiceListChannelUploadsProcedure,
@@ -350,31 +362,32 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // ingestServiceClient implements IngestServiceClient.
 type ingestServiceClient struct {
-	search              *connect.Client[v1.SearchRequest, v1.SearchResponse]
-	ensureVideo         *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
-	previewVideo        *connect.Client[v1.PreviewVideoRequest, v1.PreviewVideoResponse]
-	refresh             *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
-	backfillTopics      *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
-	getBackfillStatus   *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
-	getScanStatus       *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
-	resolveStream       *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
-	submit              *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
-	getJob              *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
-	listJobs            *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
-	cancelJob           *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
-	dismissJob          *connect.Client[v1.DismissJobRequest, v1.DismissJobResponse]
-	dismissJobs         *connect.Client[v1.DismissJobsRequest, v1.DismissJobsResponse]
-	retryJob            *connect.Client[v1.RetryJobRequest, v1.RetryJobResponse]
-	listScans           *connect.Client[v1.ListScansRequest, v1.ListScansResponse]
-	clearScans          *connect.Client[v1.ClearScansRequest, v1.ClearScansResponse]
-	cancelVideoDownload *connect.Client[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse]
-	expandLibrary       *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
-	setAccountCookies   *connect.Client[v1.SetAccountCookiesRequest, v1.SetAccountCookiesResponse]
-	listAccounts        *connect.Client[v1.ListAccountsRequest, v1.ListAccountsResponse]
-	removeAccount       *connect.Client[v1.RemoveAccountRequest, v1.RemoveAccountResponse]
-	scanAccounts        *connect.Client[v1.ScanAccountsRequest, v1.ScanAccountsResponse]
-	listChannelUploads  *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
-	fetchComments       *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
+	search               *connect.Client[v1.SearchRequest, v1.SearchResponse]
+	ensureVideo          *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
+	previewVideo         *connect.Client[v1.PreviewVideoRequest, v1.PreviewVideoResponse]
+	refresh              *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
+	backfillTopics       *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
+	getBackfillStatus    *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
+	getScanStatus        *connect.Client[v1.GetScanStatusRequest, v1.GetScanStatusResponse]
+	resolveStream        *connect.Client[v1.ResolveStreamRequest, v1.ResolveStreamResponse]
+	submit               *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
+	getJob               *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	listJobs             *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	cancelJob            *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	dismissJob           *connect.Client[v1.DismissJobRequest, v1.DismissJobResponse]
+	dismissJobs          *connect.Client[v1.DismissJobsRequest, v1.DismissJobsResponse]
+	retryJob             *connect.Client[v1.RetryJobRequest, v1.RetryJobResponse]
+	listScans            *connect.Client[v1.ListScansRequest, v1.ListScansResponse]
+	clearScans           *connect.Client[v1.ClearScansRequest, v1.ClearScansResponse]
+	cancelVideoDownload  *connect.Client[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse]
+	expandLibrary        *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
+	setAccountCookies    *connect.Client[v1.SetAccountCookiesRequest, v1.SetAccountCookiesResponse]
+	listAccounts         *connect.Client[v1.ListAccountsRequest, v1.ListAccountsResponse]
+	removeAccount        *connect.Client[v1.RemoveAccountRequest, v1.RemoveAccountResponse]
+	scanAccounts         *connect.Client[v1.ScanAccountsRequest, v1.ScanAccountsResponse]
+	getAccountScanStatus *connect.Client[v1.GetAccountScanStatusRequest, v1.GetAccountScanStatusResponse]
+	listChannelUploads   *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
+	fetchComments        *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
 }
 
 // Search calls ingest.v1.IngestService.Search.
@@ -492,6 +505,11 @@ func (c *ingestServiceClient) ScanAccounts(ctx context.Context, req *connect.Req
 	return c.scanAccounts.CallUnary(ctx, req)
 }
 
+// GetAccountScanStatus calls ingest.v1.IngestService.GetAccountScanStatus.
+func (c *ingestServiceClient) GetAccountScanStatus(ctx context.Context, req *connect.Request[v1.GetAccountScanStatusRequest]) (*connect.Response[v1.GetAccountScanStatusResponse], error) {
+	return c.getAccountScanStatus.CallUnary(ctx, req)
+}
+
 // ListChannelUploads calls ingest.v1.IngestService.ListChannelUploads.
 func (c *ingestServiceClient) ListChannelUploads(ctx context.Context, req *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {
 	return c.listChannelUploads.CallUnary(ctx, req)
@@ -574,6 +592,9 @@ type IngestServiceHandler interface {
 	ListAccounts(context.Context, *connect.Request[v1.ListAccountsRequest]) (*connect.Response[v1.ListAccountsResponse], error)
 	RemoveAccount(context.Context, *connect.Request[v1.RemoveAccountRequest]) (*connect.Response[v1.RemoveAccountResponse], error)
 	ScanAccounts(context.Context, *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error)
+	// What the pass in flight is doing. Polled by the settings screen, which is
+	// how progress survives a page reload.
+	GetAccountScanStatus(context.Context, *connect.Request[v1.GetAccountScanStatusRequest]) (*connect.Response[v1.GetAccountScanStatusResponse], error)
 	// Lists a channel's uploads straight from YouTube, paginated. The channel
 	// page uses this rather than the local catalog so browsing a channel is not
 	// limited to whatever a scan happened to bring in.
@@ -729,6 +750,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("ScanAccounts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceGetAccountScanStatusHandler := connect.NewUnaryHandler(
+		IngestServiceGetAccountScanStatusProcedure,
+		svc.GetAccountScanStatus,
+		connect.WithSchema(ingestServiceMethods.ByName("GetAccountScanStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceListChannelUploadsHandler := connect.NewUnaryHandler(
 		IngestServiceListChannelUploadsProcedure,
 		svc.ListChannelUploads,
@@ -789,6 +816,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceRemoveAccountHandler.ServeHTTP(w, r)
 		case IngestServiceScanAccountsProcedure:
 			ingestServiceScanAccountsHandler.ServeHTTP(w, r)
+		case IngestServiceGetAccountScanStatusProcedure:
+			ingestServiceGetAccountScanStatusHandler.ServeHTTP(w, r)
 		case IngestServiceListChannelUploadsProcedure:
 			ingestServiceListChannelUploadsHandler.ServeHTTP(w, r)
 		case IngestServiceFetchCommentsProcedure:
@@ -892,6 +921,10 @@ func (UnimplementedIngestServiceHandler) RemoveAccount(context.Context, *connect
 
 func (UnimplementedIngestServiceHandler) ScanAccounts(context.Context, *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ScanAccounts is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) GetAccountScanStatus(context.Context, *connect.Request[v1.GetAccountScanStatusRequest]) (*connect.Response[v1.GetAccountScanStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.GetAccountScanStatus is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {

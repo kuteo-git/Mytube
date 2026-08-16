@@ -92,24 +92,55 @@ func (s *Server) RemoveAccount(
 	return connect.NewResponse(&ingestv1.RemoveAccountResponse{}), nil
 }
 
+// ScanAccounts starts a pass and returns; it does not wait for it.
+//
+// A first fill reads every playlist a member has, three seconds apart, so this
+// used to hold a browser request open for minutes and lose everything if the
+// page reloaded. The caller polls GetAccountScanStatus instead.
+//
+// The pass runs on context.Background() rather than the request's: the request
+// is over the moment this returns, and cancelling the pass with it would mean
+// no pass ever finished.
 func (s *Server) ScanAccounts(
-	ctx context.Context, _ *connect.Request[ingestv1.ScanAccountsRequest],
+	_ context.Context, req *connect.Request[ingestv1.ScanAccountsRequest],
 ) (*connect.Response[ingestv1.ScanAccountsResponse], error) {
 	if s.accountScanner == nil {
 		return connect.NewResponse(&ingestv1.ScanAccountsResponse{}), nil
 	}
-	result, err := s.accountScanner.ScanAll(ctx)
-	if err != nil {
-		return nil, toConnectErr(err)
+	userID := req.Msg.GetUserId()
+	// The error is not dropped: ScanAll records it in the status this caller is
+	// about to poll, which is the only place a detached pass can be seen.
+	go func() { _, _ = s.accountScanner.ScanAll(context.Background(), userID) }()
+	return connect.NewResponse(&ingestv1.ScanAccountsResponse{}), nil
+}
+
+func (s *Server) GetAccountScanStatus(
+	_ context.Context, _ *connect.Request[ingestv1.GetAccountScanStatusRequest],
+) (*connect.Response[ingestv1.GetAccountScanStatusResponse], error) {
+	if s.accountScanner == nil {
+		return connect.NewResponse(&ingestv1.GetAccountScanStatusResponse{
+			Status: &ingestv1.AccountScanStatus{},
+		}), nil
 	}
-	return connect.NewResponse(&ingestv1.ScanAccountsResponse{
-		Accounts:       int32(result.Accounts),
-		Subscriptions:  int32(result.Subscriptions),
-		Videos:         int32(result.Videos),
-		Playlists:      int32(result.Playlists),
-		PlaylistVideos: int32(result.PlaylistVideos),
-		Expired:        int32(result.Expired),
-	}), nil
+	st := s.accountScanner.Status()
+	out := &ingestv1.AccountScanStatus{
+		Running:        st.Running,
+		DurationMs:     st.DurationMs,
+		Phase:          st.Phase,
+		PlaylistsRead:  int32(st.PlaylistsRead),
+		PlaylistsTotal: int32(st.PlaylistsTotal),
+		Accounts:       int32(st.Accounts),
+		Subscriptions:  int32(st.Subscriptions),
+		Playlists:      int32(st.Playlists),
+		Videos:         int32(st.Videos),
+		PlaylistVideos: int32(st.PlaylistVideos),
+		Expired:        int32(st.Expired),
+		Errors:         st.Errors,
+	}
+	if !st.StartedAt.IsZero() {
+		out.StartedAt = timestamppb.New(st.StartedAt)
+	}
+	return connect.NewResponse(&ingestv1.GetAccountScanStatusResponse{Status: out}), nil
 }
 
 func videoToProto(v domain.ExternalVideo) *ingestv1.ExternalVideo {

@@ -251,3 +251,50 @@ func TestAnIdCannotEscapeTheDirectory(t *testing.T) {
 		t.Errorf("the id was not reduced to a base name: %v", err)
 	}
 }
+
+// Re-pasting is the answer to an expired session, so it has to actually revive
+// the account — state and failure count both.
+//
+// Carrying the old count forward would expire the new session on its first bad
+// hour, and leaving the state alone would mean CookiePath goes on refusing to
+// hand out a cookie that works. Neither shows up until somebody has already
+// pasted and is watching nothing happen.
+func TestRepastingRevivesAnExpiredAccount(t *testing.T) {
+	dir := t.TempDir()
+	store := New(dir)
+	ctx := context.Background()
+
+	if err := store.Save(ctx, "u_lm", "", goodCookies); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	// Two failures in a row is what retires an account.
+	for i := 0; i < domain.AccountFailureLimit; i++ {
+		if err := store.Record(ctx, "u_lm", "signed out", true); err != nil {
+			t.Fatalf("Record: %v", err)
+		}
+	}
+	if _, err := store.CookiePath(ctx, "u_lm"); err == nil {
+		t.Fatal("an expired account still handed out its cookie path")
+	}
+
+	if err := store.Save(ctx, "u_lm", "", goodCookies); err != nil {
+		t.Fatalf("re-paste: %v", err)
+	}
+
+	accounts, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(accounts) != 1 {
+		t.Fatalf("accounts = %d, want 1", len(accounts))
+	}
+	if accounts[0].State != domain.AccountOK {
+		t.Errorf("state = %q, want OK", accounts[0].State)
+	}
+	if accounts[0].Failures != 0 {
+		t.Errorf("failures = %d, want the count cleared", accounts[0].Failures)
+	}
+	if _, err := store.CookiePath(ctx, "u_lm"); err != nil {
+		t.Errorf("CookiePath after re-paste: %v", err)
+	}
+}

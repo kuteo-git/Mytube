@@ -79,6 +79,8 @@ type memFeeds struct {
 	// The member's own playlists, by name. Their contents come from byFeed,
 	// keyed by the playlist URL, because that is how they are really read.
 	playlists []domain.AccountPlaylist
+	// Feeds that fail, by name or URL, with the error upstream really gives.
+	failFeed map[string]error
 }
 
 func (m *memFeeds) ListAccountPlaylists(
@@ -107,6 +109,9 @@ func (m *memFeeds) ListAccountFeed(
 	m.asked = append(m.asked, struct{ cookies, feed string }{cookiesFile, feed})
 	if m.authOn[feed] {
 		return nil, domain.ErrAccountAuth
+	}
+	if err := m.failFeed[feed]; err != nil {
+		return nil, err
 	}
 	return m.byFeed[feed], nil
 }
@@ -158,7 +163,7 @@ func TestSubscriptionsLandUnderTheMemberWhoseTheyAre(t *testing.T) {
 	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background()); err != nil {
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
 
@@ -181,7 +186,7 @@ func TestEachMemberIsReadAsThemselves(t *testing.T) {
 	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 
 	seen := map[string]bool{}
 	for _, a := range feeds.asked {
@@ -205,7 +210,7 @@ func TestRecommendationsAreTaggedSoRankingCanFenceThem(t *testing.T) {
 	}}
 	lib := &recordingLibrary{known: map[string]bool{}, channels: map[string]domain.ExternalVideo{}}
 
-	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 
 	if got := lib.channels["chosen"].DiscoveredVia; got != "SOURCE" {
 		t.Errorf("a subscription video was tagged %q, want SOURCE", got)
@@ -223,7 +228,7 @@ func TestLikesAreImportedForThatMemberOnly(t *testing.T) {
 	}}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 
 	if len(lib.liked) != 1 || lib.liked[0].userID != "u_luc" || lib.liked[0].videoID != "loved" {
 		t.Errorf("likes = %+v", lib.liked)
@@ -242,7 +247,7 @@ func TestADeadSessionStopsThatMembersPassImmediately(t *testing.T) {
 	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 
 	if len(feeds.asked) != 1 {
 		t.Errorf("made %d requests after being signed out, want 1", len(feeds.asked))
@@ -262,7 +267,7 @@ func TestAnExpiredAccountIsNotAskedAgain(t *testing.T) {
 	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	result, _ := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	result, _ := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 
 	if len(feeds.asked) != 0 {
 		t.Errorf("an expired session was replayed: %v", feeds.asked)
@@ -289,7 +294,7 @@ func TestAnOrdinaryFailureDoesNotRetireTheAccount(t *testing.T) {
 	failing := &failingFeeds{err: errors.New("network unreachable")}
 	scanner.feeds = failing
 
-	_, _ = scanner.ScanAll(context.Background())
+	_, _ = scanner.ScanAll(context.Background(), "")
 
 	if len(accounts.recorded) != 1 || accounts.recorded[0].failed {
 		t.Errorf("an ordinary error was recorded as an authentication failure: %+v", accounts.recorded)
@@ -327,7 +332,7 @@ func TestTheRecordedNoteHoldsNoSession(t *testing.T) {
 	}}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	_, _ = newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 
 	if len(accounts.recorded) != 1 {
 		t.Fatalf("recorded = %+v", accounts.recorded)
@@ -371,7 +376,7 @@ func TestAnImportedSubscriptionReachesTheRankerToo(t *testing.T) {
 	lib := &recordingLibrary{known: map[string]bool{}}
 	signals := &memSignals{}
 
-	if _, err := newAccountScannerWith(t, accounts, feeds, lib, signals).ScanAll(context.Background()); err != nil {
+	if _, err := newAccountScannerWith(t, accounts, feeds, lib, signals).ScanAll(context.Background(), ""); err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
 
@@ -396,7 +401,7 @@ func TestAFailingRankerDoesNotFailTheImport(t *testing.T) {
 	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	result, err := newAccountScannerWith(t, accounts, feeds, lib, failingSignals{}).ScanAll(context.Background())
+	result, err := newAccountScannerWith(t, accounts, feeds, lib, failingSignals{}).ScanAll(context.Background(), "")
 	if err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
@@ -436,7 +441,7 @@ func TestSubscriptionsComeFromTheListAndNotTheUploads(t *testing.T) {
 	}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	result, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	result, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 	if err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
@@ -465,7 +470,7 @@ func TestAnEmptyListUnsubscribesNobody(t *testing.T) {
 	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}, channels: nil}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background()); err != nil {
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
 
@@ -492,7 +497,7 @@ func TestWatchLaterLandsOnTheList(t *testing.T) {
 	}}
 	lib := &recordingLibrary{known: map[string]bool{}}
 
-	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background()); err != nil {
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
 
@@ -532,28 +537,43 @@ func TestWatchLaterAndLikedAreNotImportedAsPlaylists(t *testing.T) {
 	}
 }
 
-// The playlist list is named for every playlist each pass; the contents of only
-// a few are read.
+// Every playlist is named each pass; the ones never read are read in full, and
+// only a few already-read ones are refreshed.
 //
-// This is the whole of what keeps it affordable. The member measured here has
-// thirty playlists, and reading them all hourly would put thirty requests an
-// hour on the one session that carries a name — the traffic §8's risk 6 is
-// about, against an account rather than an address.
-func TestEveryPlaylistIsNamedButFewAreRead(t *testing.T) {
+// The split is the whole of what keeps this affordable *and* what stops a
+// freshly imported playlist sitting empty for hours. Filling the library happens
+// once — 28 requests three seconds apart is shorter and slower than an ordinary
+// hour of the anonymous scanner. Re-reading is the part that repeats hourly, and
+// that is where the small number belongs: §8's risk 6, raised from an address to
+// an account.
+func TestUnreadPlaylistsAreAllReadAndRereadsAreFew(t *testing.T) {
 	accounts := newMemAccounts("u_luc")
 	lists := make([]domain.AccountPlaylist, 0, 30)
-	stale := make([]domain.StalePlaylist, 0, 30)
+	unread := make([]domain.StalePlaylist, 0, 30)
 	for i := 0; i < 30; i++ {
 		id := fmt.Sprintf("PL%d", i)
 		lists = append(lists, domain.AccountPlaylist{ID: id, Title: id})
+		unread = append(unread, domain.StalePlaylist{
+			ID: id, UserID: "u_luc", SourceURL: domain.PlaylistURL(id),
+		})
+	}
+	// Ten that have been read before, so the re-read budget has something to
+	// spend and can be told apart from the first fill.
+	stale := make([]domain.StalePlaylist, 0, 10)
+	for i := 0; i < 10; i++ {
+		id := fmt.Sprintf("OLD%d", i)
 		stale = append(stale, domain.StalePlaylist{
 			ID: id, UserID: "u_luc", SourceURL: domain.PlaylistURL(id),
 		})
 	}
 	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}, playlists: lists}
-	lib := &recordingLibrary{known: map[string]bool{}, stalePlaylists: stale}
+	lib := &recordingLibrary{
+		known:           map[string]bool{},
+		unreadPlaylists: unread,
+		stalePlaylists:  stale,
+	}
 
-	result, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background())
+	result, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "")
 	if err != nil {
 		t.Fatalf("ScanAll: %v", err)
 	}
@@ -561,14 +581,113 @@ func TestEveryPlaylistIsNamedButFewAreRead(t *testing.T) {
 	if result.Playlists != 30 {
 		t.Errorf("named %d playlists, want all 30", result.Playlists)
 	}
-	// The stalest handful only, and asked for as such rather than trimmed after
-	// the fact: the bound has to be in the request, or catalog hands over
-	// thirty and the pass reads them.
-	if lib.staleLimit != playlistsPerPass {
-		t.Errorf("asked for %d stale playlists, want %d", lib.staleLimit, playlistsPerPass)
+	// Both bounds have to be in the request. Asking for everything and trimming
+	// afterwards would mean catalog handed over the rows and the pass read them.
+	if lib.unreadLimit != firstFillLimit {
+		t.Errorf("asked for %d unread playlists, want %d", lib.unreadLimit, firstFillLimit)
 	}
-	if len(lib.playlistItems) != playlistsPerPass {
-		t.Errorf("read %d playlists in one pass, want %d",
-			len(lib.playlistItems), playlistsPerPass)
+	if lib.staleLimit != playlistRereadsPerPass {
+		t.Errorf("asked for %d stale playlists, want %d", lib.staleLimit, playlistRereadsPerPass)
+	}
+	if want := 30 + playlistRereadsPerPass; len(lib.playlistItems) != want {
+		t.Errorf("read %d playlists in one pass, want %d", len(lib.playlistItems), want)
+	}
+}
+
+// And the first fill is bounded, so a member with hundreds does not do hundreds
+// in one go.
+func TestTheFirstFillIsStillBounded(t *testing.T) {
+	accounts := newMemAccounts("u_luc")
+	unread := make([]domain.StalePlaylist, 0, firstFillLimit*2)
+	for i := 0; i < firstFillLimit*2; i++ {
+		id := fmt.Sprintf("PL%d", i)
+		unread = append(unread, domain.StalePlaylist{
+			ID: id, UserID: "u_luc", SourceURL: domain.PlaylistURL(id),
+		})
+	}
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}}
+	lib := &recordingLibrary{known: map[string]bool{}, unreadPlaylists: unread}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+	if len(lib.playlistItems) > firstFillLimit {
+		t.Errorf("read %d playlists, want at most %d", len(lib.playlistItems), firstFillLimit)
+	}
+}
+
+// The button scans whoever pressed it. The hourly timer scans everybody.
+//
+// It sits on a screen about *your* account, so scanning the whole household
+// from it is a surprise — and on a house of five, four times the requests
+// nobody asked for.
+func TestScanningOneMemberLeavesTheOthersAlone(t *testing.T) {
+	accounts := newMemAccounts("u_luc", "u_lm")
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}}
+	lib := &recordingLibrary{known: map[string]bool{}}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), "u_luc"); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	for _, a := range feeds.asked {
+		if a.cookies == "/tmp/u_lm.txt" {
+			t.Error("scanning one member reached another member's session")
+		}
+	}
+}
+
+// A playlist upstream lists but will not hand over is asked once, not for ever.
+//
+// Measured: 10 of this household's 27 playlists answer "The playlist does not
+// exist" when fetched by URL, reproducibly, with a live session. Without
+// recording that, each costs a request every pass and sits at the front of the
+// unread queue ahead of playlists that could have been read.
+func TestAPlaylistUpstreamRefusesIsAskedOnce(t *testing.T) {
+	accounts := newMemAccounts("u_luc")
+	feeds := &memFeeds{
+		byFeed: map[string][]domain.ExternalVideo{},
+		// The read of this playlist fails the way YouTube really fails it.
+		failFeed: map[string]error{
+			domain.PlaylistURL("PLgone"): errors.New(
+				"[youtube:tab] PLgone: YouTube said: The playlist does not exist."),
+		},
+	}
+	lib := &recordingLibrary{
+		known: map[string]bool{},
+		unreadPlaylists: []domain.StalePlaylist{
+			{ID: "pl_gone", UserID: "u_luc", SourceURL: domain.PlaylistURL("PLgone")},
+		},
+	}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	if len(lib.unavailablePlaylists) != 1 || lib.unavailablePlaylists[0] != "pl_gone" {
+		t.Errorf("upstream's refusal was not recorded: %v", lib.unavailablePlaylists)
+	}
+}
+
+// And an ordinary failure is not read as one. A network error says nothing
+// about the playlist, and recording it as a refusal would bury a readable list.
+func TestAnOrdinaryFailureDoesNotBuryAPlaylist(t *testing.T) {
+	accounts := newMemAccounts("u_luc")
+	feeds := &memFeeds{
+		byFeed:   map[string][]domain.ExternalVideo{},
+		failFeed: map[string]error{domain.PlaylistURL("PLfine"): errors.New("network unreachable")},
+	}
+	lib := &recordingLibrary{
+		known: map[string]bool{},
+		unreadPlaylists: []domain.StalePlaylist{
+			{ID: "pl_fine", UserID: "u_luc", SourceURL: domain.PlaylistURL("PLfine")},
+		},
+	}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+	if len(lib.unavailablePlaylists) != 0 {
+		t.Errorf("a network error buried a playlist: %v", lib.unavailablePlaylists)
 	}
 }

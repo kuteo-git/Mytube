@@ -341,3 +341,27 @@ func (l *Library) PruneImportedPlaylists(ctx context.Context, userID string, kee
 	}))
 	return err
 }
+
+func (l *Library) ListUnreadPlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	resp, err := l.client.ListUnreadPlaylists(ctx, connect.NewRequest(&catalogv1.ListUnreadPlaylistsRequest{
+		Limit: limit,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.StalePlaylist, 0, len(resp.Msg.GetPlaylists()))
+	for _, p := range resp.Msg.GetPlaylists() {
+		out = append(out, domain.StalePlaylist{
+			ID: p.GetId(), UserID: p.GetUserId(), SourceURL: p.GetSourceUrl(),
+		})
+	}
+	return out, nil
+}
+
+func (l *Library) MarkPlaylistUnavailable(ctx context.Context, playlistID, userID string) error {
+	_, err := l.client.MarkPlaylistUnavailable(ctx, connect.NewRequest(&catalogv1.MarkPlaylistUnavailableRequest{
+		PlaylistId: playlistID,
+		UserId:     userID,
+	}))
+	return err
+}

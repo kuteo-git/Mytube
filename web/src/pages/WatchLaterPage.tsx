@@ -1,4 +1,5 @@
 import { useWatchLater } from '@/features/catalog/application/queries'
+import { useAccountState } from '@/features/settings/application/account-state'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
@@ -13,6 +14,7 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
 export function WatchLaterPage() {
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useWatchLater()
+  const { signedOut } = useAccountState()
 
   const videos = data?.pages.flatMap((page) => page.videos) ?? []
 
@@ -44,8 +46,9 @@ export function WatchLaterPage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          Nothing put aside yet. Use &ldquo;Watch later&rdquo; on a video, or connect your
-          YouTube account in Settings to bring your list across.
+          {signedOut
+            ? 'YouTube signed you out, so this list is not being brought across. Paste your cookies again in Settings.'
+            : 'Nothing here yet. This list is a copy of your YouTube Watch later, brought across on each account scan.'}
         </p>
       )}
     </div>

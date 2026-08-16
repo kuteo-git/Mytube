@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 
-import { accountRepository } from '../infrastructure/accountRepository'
+import { useAccountState } from '../application/account-state'
 
 /**
  * Says when a YouTube session has ended.
@@ -15,16 +14,9 @@ import { accountRepository } from '../infrastructure/accountRepository'
  * work is a banner nobody reads on the day they need to.
  */
 export function CookieExpiryBanner() {
-  const { data: account } = useQuery({
-    queryKey: ['youtube-account'],
-    queryFn: () => accountRepository.get(),
-    // Checked rarely: this changes about as often as a password does, and the
-    // banner is the least urgent thing on any page it appears on.
-    staleTime: 10 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
-  })
+  const { signedOut } = useAccountState()
 
-  if (account?.state !== 'EXPIRED') return null
+  if (!signedOut) return null
 
   return (
     <div

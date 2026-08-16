@@ -26,7 +26,7 @@ import (
 // rssFeed is the Atom feed YouTube publishes per channel. Only the fields the
 // scanner needs are modelled; the rest is ignored.
 type rssFeed struct {
-	XMLName xml.Name  `xml:"feed"`
+	XMLName xml.Name   `xml:"feed"`
 	Entries []rssEntry `xml:"entry"`
 }
 

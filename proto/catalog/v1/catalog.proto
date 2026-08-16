@@ -81,6 +81,15 @@ service CatalogService {
   // Imported playlists whose contents were read longest ago, never-synced
   // first. Bounded: reading a playlist is a request on a credentialed session.
   rpc ListStalePlaylists(ListStalePlaylistsRequest) returns (ListStalePlaylistsResponse);
+  // Playlists whose contents have never been read. Separate from the stale ones
+  // because filling the library happens once, while re-reading is the hourly
+  // cost — so the two carry different budgets and must not return each other's
+  // rows.
+  rpc ListUnreadPlaylists(ListUnreadPlaylistsRequest) returns (ListUnreadPlaylistsResponse);
+  // Records that upstream will not hand this playlist over. Only upstream's own
+  // refusal may call this: a network failure is not an answer about the
+  // playlist, and recording it as one would bury a readable list for good.
+  rpc MarkPlaylistUnavailable(MarkPlaylistUnavailableRequest) returns (MarkPlaylistUnavailableResponse);
   // Drops imported playlists the member no longer has upstream. The other half
   // of the mirror: without it a playlist deleted on YouTube stays here for ever,
   // and nothing in this app can remove it.
@@ -577,6 +586,9 @@ message Playlist {
   // First few thumbnails, for the card on the playlists page. Sent with the
   // list so the page is one call rather than one call per playlist.
   repeated string thumbnail_paths = 7;
+  // Upstream lists this playlist but will not hand it over — measured at 10 of
+  // 27 here. Asked once and remembered, so it stops costing a request a pass.
+  bool unavailable = 9;
   // Whether this playlist's contents have been read yet.
   //
   // They are read a few playlists per account scan, so a freshly imported one
@@ -620,6 +632,13 @@ message CreatePlaylistResponse {
   Playlist playlist = 1;
 }
 
+message MarkPlaylistUnavailableRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+}
+
+message MarkPlaylistUnavailableResponse {}
+
 message ImportPlaylistItemsRequest {
   string playlist_id = 1;
   string user_id = 2;
@@ -648,6 +667,16 @@ message PruneImportedPlaylistsRequest {
 
 message PruneImportedPlaylistsResponse {
   int32 removed = 1;
+}
+
+// Its own pair rather than reusing the stale one: buf refuses a message shared
+// between RPCs, and the two questions can drift apart later without a rename.
+message ListUnreadPlaylistsRequest {
+  int32 limit = 1;
+}
+
+message ListUnreadPlaylistsResponse {
+  repeated StalePlaylist playlists = 1;
 }
 
 message ListStalePlaylistsRequest {

@@ -204,7 +204,6 @@ func TestFetchChannelFeedTimeParsing(t *testing.T) {
 	}
 }
 
-
 func sptr(s string) *string { return &s }
 
 func TestToExternalExtractsLanguageFromYtdlp(t *testing.T) {

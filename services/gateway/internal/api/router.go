@@ -84,6 +84,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("PUT /api/settings/youtube-account", g.handleYouTubeAccount)
 	mux.HandleFunc("DELETE /api/settings/youtube-account", g.handleYouTubeAccount)
 	mux.HandleFunc("POST /api/settings/youtube-account/scan", g.handleScanAccounts)
+	mux.HandleFunc("GET /api/settings/youtube-account/scan", g.handleAccountScanStatus)
 	mux.HandleFunc("POST /api/profiles", g.handleProfiles)
 	mux.HandleFunc("GET /api/settings/feed-mix/buckets", g.handleFeedMixBuckets)
 	mux.HandleFunc("GET /api/settings/ranking", g.handleGetRanking)

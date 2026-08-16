@@ -311,8 +311,40 @@ type Library interface {
 	// ListStalePlaylists returns imported playlists whose contents were read
 	// longest ago, never-synced first.
 	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+	// ListUnreadPlaylists is the ones never read, which the first fill takes all of.
+	ListUnreadPlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+	// MarkPlaylistUnavailable records upstream's refusal, so it is asked once.
+	MarkPlaylistUnavailable(ctx context.Context, playlistID, userID string) error
 	// PruneImportedPlaylists drops imported playlists the member no longer has.
 	PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) error
+}
+
+// AccountScanStatus is what the account pass in flight is doing.
+//
+// Kept on the server rather than returned to whoever pressed the button: a first
+// fill reads every playlist a member has and takes minutes, so the pass outlives
+// the request that started it, and a browser that reloads has to be able to ask
+// again rather than lose sight of it.
+type AccountScanStatus struct {
+	Running    bool
+	StartedAt  time.Time
+	DurationMs int64
+	// What it is doing now, in words meant for the settings screen: "reading
+	// subscriptions", "reading playlists (7 of 28)". Empty when idle.
+	Phase string
+	// Playlists whose contents have been read this pass, and how many this pass
+	// set out to read. Together they are the progress bar.
+	PlaylistsRead  int
+	PlaylistsTotal int
+
+	Accounts       int
+	Subscriptions  int
+	Playlists      int
+	Videos         int
+	PlaylistVideos int
+	Expired        int
+	// What went wrong without stopping the pass, newest last. Bounded.
+	Errors []string
 }
 
 // StalePlaylist is a playlist whose contents are due to be read again.

@@ -1233,7 +1233,7 @@ func diskFreeBytes(path string) int64 {
 // so the playlists page is one query rather than one per playlist.
 const playlistSelect = `
 SELECT p.id, p.user_id, p.title, p.description, p.source_url, p.updated_at,
-       (p.items_synced_at IS NOT NULL),
+       (p.items_synced_at IS NOT NULL), p.unavailable,
        (SELECT count(*) FROM playlist_items i WHERE i.playlist_id = p.id)::int,
        COALESCE((
          SELECT array_agg(t.thumbnail_path ORDER BY t.position)
@@ -1255,7 +1255,7 @@ func scanPlaylist(row pgx.Row) (domain.Playlist, error) {
 		sourceURL *string
 	)
 	err := row.Scan(&p.ID, &p.UserID, &p.Title, &p.Description, &sourceURL,
-		&p.UpdatedAt, &p.ItemsSynced, &p.ItemCount, &p.ThumbnailPaths)
+		&p.UpdatedAt, &p.ItemsSynced, &p.Unavailable, &p.ItemCount, &p.ThumbnailPaths)
 	if sourceURL != nil {
 		p.SourceURL = *sourceURL
 	}
@@ -1446,13 +1446,53 @@ func (r *Repository) PruneImportedPlaylists(
 	return int32(tag.RowsAffected()), nil
 }
 
-func (r *Repository) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
-	rows, err := r.pool.Query(ctx, `
+// ListUnreadPlaylists is the playlists whose contents have never been read.
+//
+// Separate from ListStalePlaylists because the two answer different questions
+// and carry different budgets. Filling the library happens once and an unread
+// playlist is an empty page with a title; re-reading is the hourly cost, and
+// that is where a small number belongs. One query each, so neither can quietly
+// return the other's rows.
+func (r *Repository) ListUnreadPlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	return r.queryStalePlaylists(ctx, `
 		SELECT id, user_id, source_url
 		FROM playlists
-		WHERE source_url IS NOT NULL
-		ORDER BY items_synced_at ASC NULLS FIRST
+		WHERE source_url IS NOT NULL AND items_synced_at IS NULL AND NOT unavailable
+		ORDER BY created_at
 		LIMIT $1`, limit)
+}
+
+// ListStalePlaylists is the already-read playlists, longest ago first.
+func (r *Repository) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	return r.queryStalePlaylists(ctx, `
+		SELECT id, user_id, source_url
+		FROM playlists
+		WHERE source_url IS NOT NULL AND items_synced_at IS NOT NULL AND NOT unavailable
+		ORDER BY items_synced_at ASC
+		LIMIT $1`, limit)
+}
+
+// MarkPlaylistUnavailable records that upstream lists this playlist but will
+// not hand it over.
+//
+// Asked once and remembered. Without it each refusal costs a request every pass
+// for ever, and sits at the front of the unread queue ahead of playlists that
+// could have been read.
+func (r *Repository) MarkPlaylistUnavailable(ctx context.Context, playlistID, userID string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE playlists SET unavailable = true, items_synced_at = now()
+		WHERE id = $1 AND user_id = $2`, playlistID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+func (r *Repository) queryStalePlaylists(ctx context.Context, query string, limit int32) ([]domain.StalePlaylist, error) {
+	rows, err := r.pool.Query(ctx, query, limit)
 	if err != nil {
 		return nil, err
 	}

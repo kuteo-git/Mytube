@@ -189,6 +189,8 @@ type Playlist struct {
 	ThumbnailPaths []string
 	// Whether the contents have been read from upstream yet.
 	ItemsSynced bool
+	// Upstream lists it but will not hand it over.
+	Unavailable bool
 }
 
 // StalePlaylist is what the importer needs to go and read one again: which
@@ -270,6 +272,8 @@ type Repository interface {
 	// ListStalePlaylists returns imported playlists whose contents were read
 	// longest ago, never-synced first.
 	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+	ListUnreadPlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)
+	MarkPlaylistUnavailable(ctx context.Context, playlistID, userID string) error
 	// PruneImportedPlaylists drops imported playlists the member no longer has
 	// upstream. An empty keep-list is refused rather than obeyed.
 	PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) (int32, error)

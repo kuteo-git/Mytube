@@ -34,10 +34,13 @@ type recordingLibrary struct {
 		videoIDs []string
 		complete bool
 	}
-	playlists      map[string]string
-	stalePlaylists []domain.StalePlaylist
-	staleLimit     int32
-	pruned         []struct {
+	playlists            map[string]string
+	stalePlaylists       []domain.StalePlaylist
+	staleLimit           int32
+	unreadPlaylists      []domain.StalePlaylist
+	unreadLimit          int32
+	unavailablePlaylists []string
+	pruned               []struct {
 		userID string
 		keep   []string
 	}
@@ -366,6 +369,21 @@ func (r *recordingLibrary) ImportPlaylistItems(_ context.Context, playlistID, us
 		complete           bool
 	}{playlistID, userID, videoIDs, complete})
 	return nil
+}
+
+// The never-read ones. The fake keeps one list and splits it by whether the
+// test put anything in stalePlaylists, which is enough for the callers here.
+func (r *recordingLibrary) MarkPlaylistUnavailable(_ context.Context, playlistID, userID string) error {
+	r.unavailablePlaylists = append(r.unavailablePlaylists, playlistID)
+	return nil
+}
+
+func (r *recordingLibrary) ListUnreadPlaylists(_ context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	r.unreadLimit = limit
+	if limit > 0 && int(limit) < len(r.unreadPlaylists) {
+		return r.unreadPlaylists[:limit], nil
+	}
+	return r.unreadPlaylists, nil
 }
 
 // Honours the limit, as the real server does: catalog clamps it and returns at

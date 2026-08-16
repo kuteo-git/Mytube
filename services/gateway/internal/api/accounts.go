@@ -158,23 +158,58 @@ func (g *Gateway) deleteYouTubeAccount(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleScanAccounts runs a pass now, for the settings screen's button.
+// handleScanAccounts starts a pass and returns at once.
+//
+// It used to wait for the whole thing, which was fine when a pass was five
+// requests and is not now: a first fill reads every playlist a member has, three
+// seconds apart. The browser polls handleAccountScanStatus instead, and a page
+// reloaded mid-pass picks the progress straight back up.
+//
+// Scans the caller's own account. The hourly timer inside ingest is what scans
+// the whole household; this button sits on a screen about *your* account.
 func (g *Gateway) handleScanAccounts(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := contextWithTimeout(5 * time.Minute)
+	ctx, cancel := contextWithTimeout(30 * time.Second)
 	defer cancel()
 
-	resp, err := g.ingest.ScanAccounts(ctx, connect.NewRequest(&ingestv1.ScanAccountsRequest{}))
+	if _, err := g.ingest.ScanAccounts(ctx, connect.NewRequest(&ingestv1.ScanAccountsRequest{
+		UserId: g.userID(r),
+	})); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": connectMessage(err)})
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// handleAccountScanStatus is what the settings screen polls while a pass runs.
+func (g *Gateway) handleAccountScanStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := contextWithTimeout(10 * time.Second)
+	defer cancel()
+
+	resp, err := g.ingest.GetAccountScanStatus(ctx,
+		connect.NewRequest(&ingestv1.GetAccountScanStatusRequest{}))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"error": connectMessage(err)})
 		return
 	}
+	st := resp.Msg.GetStatus()
+
+	errs := st.GetErrors()
+	if errs == nil {
+		errs = []string{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"accounts":       resp.Msg.GetAccounts(),
-		"subscriptions":  resp.Msg.GetSubscriptions(),
-		"videos":         resp.Msg.GetVideos(),
-		"expired":        resp.Msg.GetExpired(),
-		"playlists":      resp.Msg.GetPlaylists(),
-		"playlistVideos": resp.Msg.GetPlaylistVideos(),
+		"running":        st.GetRunning(),
+		"durationMs":     st.GetDurationMs(),
+		"phase":          st.GetPhase(),
+		"playlistsRead":  st.GetPlaylistsRead(),
+		"playlistsTotal": st.GetPlaylistsTotal(),
+		"accounts":       st.GetAccounts(),
+		"subscriptions":  st.GetSubscriptions(),
+		"videos":         st.GetVideos(),
+		"expired":        st.GetExpired(),
+		"playlists":      st.GetPlaylists(),
+		"playlistVideos": st.GetPlaylistVideos(),
+		"errors":         errs,
 	})
 }
 

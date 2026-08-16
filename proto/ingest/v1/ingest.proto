@@ -90,6 +90,9 @@ service IngestService {
   rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
   rpc RemoveAccount(RemoveAccountRequest) returns (RemoveAccountResponse);
   rpc ScanAccounts(ScanAccountsRequest) returns (ScanAccountsResponse);
+  // What the pass in flight is doing. Polled by the settings screen, which is
+  // how progress survives a page reload.
+  rpc GetAccountScanStatus(GetAccountScanStatusRequest) returns (GetAccountScanStatusResponse);
 
   // Lists a channel's uploads straight from YouTube, paginated. The channel
   // page uses this rather than the local catalog so browsing a channel is not
@@ -162,7 +165,42 @@ message RemoveAccountRequest {
 
 message RemoveAccountResponse {}
 
-message ScanAccountsRequest {}
+message ScanAccountsRequest {
+  // Whose account to scan. Empty means the whole household, which is what the
+  // hourly timer does; the Scan now button sends whoever pressed it, because
+  // that button sits on a screen about *your* account.
+  string user_id = 1;
+}
+
+message GetAccountScanStatusRequest {}
+
+message GetAccountScanStatusResponse {
+  AccountScanStatus status = 1;
+}
+
+// What the account pass in flight is doing.
+//
+// A first fill reads every playlist a member has and takes minutes, so the pass
+// outlives the request that started it. The browser holds nothing: it asks for
+// this, which is what makes a page reload mid-pass harmless.
+message AccountScanStatus {
+  bool running = 1;
+  google.protobuf.Timestamp started_at = 2;
+  int64 duration_ms = 3;
+  // In words meant for a settings screen. Never carries account details.
+  string phase = 4;
+  int32 playlists_read = 5;
+  int32 playlists_total = 6;
+  int32 accounts = 7;
+  int32 subscriptions = 8;
+  int32 playlists = 9;
+  int32 videos = 10;
+  int32 playlist_videos = 11;
+  int32 expired = 12;
+  // Bounded: a pass that fails on a hundred playlists must not grow a
+  // hundred-line message. The log has all of them.
+  repeated string errors = 13;
+}
 
 message ScanAccountsResponse {
   int32 accounts = 1;

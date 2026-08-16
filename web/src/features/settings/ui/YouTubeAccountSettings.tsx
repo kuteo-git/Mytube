@@ -48,9 +48,22 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
 
   const scan = useMutation({
     mutationFn: () => accountRepository.scanNow(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['youtube-account'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['youtube-account'] })
+      void queryClient.invalidateQueries({ queryKey: ['account-scan-status'] })
+    },
   })
 
+  // Polled from the server rather than held here, which is the whole point: a
+  // first fill takes minutes, so the pass outlives this component and survives
+  // a reload. Polled quickly while it runs and left alone when it does not.
+  const { data: status } = useQuery({
+    queryKey: ['account-scan-status'],
+    queryFn: () => accountRepository.scanStatus(),
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : false),
+  })
+
+  const running = Boolean(status?.running) || scan.isPending
   const state = account?.state ?? 'NEVER_SET'
 
   return (
@@ -138,7 +151,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
               onClick={() => scan.mutate()}
               className="min-h-11 rounded-lg bg-surface px-4 text-sm disabled:opacity-50"
             >
-              {scan.isPending ? 'Scanning…' : 'Scan now'}
+              {running ? 'Scanning…' : 'Scan now'}
             </button>
             <button
               type="button"
@@ -151,11 +164,38 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
         )}
       </div>
 
-      {scan.data && (
-        <p className="pt-2 text-xs text-text-2">
-          {scan.data.subscriptions} subscriptions, {scan.data.playlists} playlists,{' '}
-          {scan.data.videos} videos.
-        </p>
+      {status && (running || status.accounts > 0) && (
+        <div className="pt-2 text-xs text-text-2">
+          {running ? (
+            <>
+              <p>{status.phase || 'starting'}…</p>
+              {/* A bar only once there is something to divide by. A playlist
+                  pass of zero would otherwise draw a full bar and then jump. */}
+              {status.playlistsTotal > 0 && (
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-surface">
+                  <div
+                    className="h-full bg-text-2 transition-[width] duration-300 ease-out"
+                    style={{
+                      width: `${Math.round((status.playlistsRead / status.playlistsTotal) * 100)}%`,
+                    }}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <p>
+              {status.subscriptions} subscriptions, {status.playlists} playlists,{' '}
+              {status.videos} videos.
+            </p>
+          )}
+          {status.errors.length > 0 && (
+            <ul className="mt-1.5 list-disc pl-4">
+              {status.errors.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </SettingsSection>
   )

@@ -113,6 +113,8 @@ export interface Playlist {
   updatedAt: string
   /** False until this playlist's contents have been read from YouTube. */
   itemsSynced: boolean
+  /** YouTube lists it but will not hand it over. Asked once, then left alone. */
+  unavailable: boolean
   thumbnails: string[]
 }
 

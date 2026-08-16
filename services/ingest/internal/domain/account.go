@@ -138,6 +138,18 @@ type AccountChannel struct {
 	Name string
 }
 
+// PlaylistGone is upstream's own answer that a playlist it listed cannot be
+// read: "YouTube said: The playlist does not exist".
+//
+// Reproduced with a live session, minutes apart, on 10 of this household's 27
+// playlists — so it is a property of the playlist rather than a bad moment.
+// Matched narrowly and on YouTube's own wording, the same discipline
+// ClassifyUnavailable follows for videos: anything vaguer would bury a readable
+// playlist on a network error.
+func PlaylistGone(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "The playlist does not exist")
+}
+
 // AccountFeedSource reads one of those feeds as the account whose cookies these
 // are.
 type AccountFeedSource interface {

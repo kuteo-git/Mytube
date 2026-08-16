@@ -43,8 +43,8 @@ func TestTLSAndLoopbackAreAllowedThrough(t *testing.T) {
 			r.Host = "mac.local"
 			r.Header.Set("X-Forwarded-Proto", "https")
 		},
-		"localhost": func(r *http.Request) { r.Host = "localhost:8180" },
-		"127.0.0.1": func(r *http.Request) { r.Host = "127.0.0.1:8180" },
+		"localhost":     func(r *http.Request) { r.Host = "localhost:8180" },
+		"127.0.0.1":     func(r *http.Request) { r.Host = "127.0.0.1:8180" },
 		"ipv6 loopback": func(r *http.Request) { r.Host = "[::1]:8180" },
 	}
 	for name, setup := range cases {

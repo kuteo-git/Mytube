@@ -203,3 +203,7 @@ func (f *fakeLibrary) PruneImportedPlaylists(context.Context, string, []string) 
 func (f *fakeLibrary) ListStalePlaylists(context.Context, int32) ([]domain.StalePlaylist, error) {
 	return nil, nil
 }
+func (f *fakeLibrary) ListUnreadPlaylists(context.Context, int32) ([]domain.StalePlaylist, error) {
+	return nil, nil
+}
+func (f *fakeLibrary) MarkPlaylistUnavailable(context.Context, string, string) error { return nil }

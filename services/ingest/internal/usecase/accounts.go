@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
@@ -34,16 +35,33 @@ const accountFeedLimit = 50
 // Between one account's requests and the next.
 const accountRequestPause = 3 * time.Second
 
-// How many playlists' contents one pass reads, and how deep into each.
+// How many playlists one pass reads, and how deep into each.
 //
-// Four an hour walks thirty playlists in under a day, at four requests a pass
-// on the one session that carries a name. The depth matches accountFeedLimit
-// for the same reason: this is read for what a playlist mostly is, not to mirror
-// a thousand-video list into the library.
+// Two different numbers, because they answer two different questions.
+//
+// A playlist nobody has read yet is empty, and an empty playlist reads as
+// broken. Filling the library happens once, so it is not the traffic the
+// credential rule is about — that rule is about what this does *every hour*.
+// So the first fill takes them all (up to firstFillLimit, which exists only so
+// a member with hundreds does not do hundreds in one go), spaced by the same
+// pause as every other account request.
+//
+// Re-reading is the hourly part, and that is where the small number belongs:
+// four a pass keeps a household's playlists honest for four requests an hour.
+//
+// The depth matches accountFeedLimit for the same reason it does there: this
+// reads what a playlist mostly is, rather than mirroring a thousand-video list.
 const (
-	playlistsPerPass  = 4
-	playlistItemLimit = 50
+	playlistRereadsPerPass = 4
+	firstFillLimit         = 60
+	playlistItemLimit      = 50
 )
+
+// How many failures one pass will report on the settings screen.
+//
+// A pass that fails on every one of a hundred playlists must not grow a
+// hundred-line message; the log has all of them.
+const maxScanErrors = 10
 
 // AccountScanner reads household members' own feeds.
 type AccountScanner struct {
@@ -55,6 +73,15 @@ type AccountScanner struct {
 	// ignorant — which is exactly the half-working state this exists to close.
 	signals domain.SignalSink
 	logger  *slog.Logger
+
+	// What the pass in flight is doing, for the settings screen.
+	//
+	// Held here rather than returned, because a pass now outlives the request
+	// that started it: a first fill reads every playlist and takes minutes, and
+	// a browser that reloads in the middle must be able to ask again rather than
+	// lose it. Same shape as the topic scanner's LastScan for the same reason.
+	mu     sync.Mutex
+	status domain.AccountScanStatus
 
 	// Gap between requests. Zero means the package default; tests set it so
 	// they do not wait out a pause that exists for YouTube.
@@ -93,8 +120,62 @@ type AccountScanResult struct {
 	Expired        int
 }
 
+// Status is what the pass in flight is doing, or what the last one did.
+//
+// Held on the server rather than returned to whoever pressed the button: a first
+// fill reads every playlist a member has and takes minutes, so the pass outlives
+// the request that started it, and a browser that reloads has to be able to ask
+// again rather than lose sight of it. Same shape as the topic scanner's
+// LastScan, for the same reason.
+//
+// In memory, deliberately. A pass cannot survive a restart, so neither should
+// the claim that one is running.
+func (s *AccountScanner) Status() domain.AccountScanStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.status
+	if out.Running {
+		out.DurationMs = time.Since(out.StartedAt).Milliseconds()
+	}
+	// Copied: the caller is a request goroutine and the pass is still writing.
+	out.Errors = append([]string(nil), s.status.Errors...)
+	return out
+}
+
+func (s *AccountScanner) setPhase(phase string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status.Phase = phase
+}
+
+// noteError records a failure that did not stop the pass.
+//
+// Bounded: a pass that fails on every one of a hundred playlists must not grow a
+// hundred-line message on a settings screen.
+func (s *AccountScanner) noteError(text string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.status.Errors) < maxScanErrors {
+		s.status.Errors = append(s.status.Errors, text)
+	}
+}
+
+func (s *AccountScanner) setPlaylistProgress(read, total int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status.PlaylistsRead, s.status.PlaylistsTotal = read, total
+	if total > 0 {
+		s.status.Phase = fmt.Sprintf("reading playlists (%d of %d)", read, total)
+	}
+}
+
 // ScanAll reads every account that still has a working session.
-func (s *AccountScanner) ScanAll(ctx context.Context) (AccountScanResult, error) {
+//
+// onlyUser limits the pass to one member; empty means the whole household. The
+// timer passes empty; the Scan now button passes whoever pressed it, because
+// that button sits on a screen about *your* account and scanning everybody from
+// it is a surprise.
+func (s *AccountScanner) ScanAll(ctx context.Context, onlyUser string) (AccountScanResult, error) {
 	var out AccountScanResult
 	if s.accounts == nil || s.feeds == nil {
 		return out, nil
@@ -103,14 +184,39 @@ func (s *AccountScanner) ScanAll(ctx context.Context) (AccountScanResult, error)
 		return out, nil
 	}
 	s.running = true
-	defer func() { s.running = false }()
+
+	s.mu.Lock()
+	started := time.Now()
+	s.status = domain.AccountScanStatus{Running: true, StartedAt: started, Phase: "starting"}
+	s.mu.Unlock()
+
+	defer func() {
+		s.running = false
+		s.mu.Lock()
+		s.status.Running = false
+		s.status.Phase = ""
+		s.status.DurationMs = time.Since(started).Milliseconds()
+		s.status.Accounts = out.Accounts
+		s.status.Subscriptions = out.Subscriptions
+		s.status.Playlists = out.Playlists
+		s.status.Videos = out.Videos
+		s.status.PlaylistVideos = out.PlaylistVideos
+		s.status.Expired = out.Expired
+		s.mu.Unlock()
+	}()
 
 	list, err := s.accounts.List(ctx)
 	if err != nil {
+		// Noted as well as returned: the pass runs detached from whoever started
+		// it, so the status is the only place this can be seen.
+		s.noteError("could not read the list of accounts")
 		return out, err
 	}
 
 	for _, account := range list {
+		if onlyUser != "" && account.UserID != onlyUser {
+			continue
+		}
 		if account.State == domain.AccountExpired {
 			out.Expired++
 			continue
@@ -120,6 +226,9 @@ func (s *AccountScanner) ScanAll(ctx context.Context) (AccountScanResult, error)
 			continue
 		}
 		out.Accounts++
+		// No account details in the phase: it is shown on a settings screen, the
+		// same rule the recorded note follows.
+		s.setPhase("reading subscriptions and feeds")
 
 		result, authFailed := s.scanOne(ctx, account.UserID, path)
 		out.Subscriptions += result.Subscriptions
@@ -370,20 +479,37 @@ func (s *AccountScanner) importPlaylists(
 	return true
 }
 
-// syncPlaylistItems reads the contents of the playlists nobody has looked at in
-// longest, and appends what it finds.
+// syncPlaylistItems reads playlist contents: everything never read, then a few
+// of the ones read longest ago.
 //
-// Deliberately outside the per-member loop: which playlists are stalest is a
+// Two lists with two budgets, because they are two different costs. Filling the
+// library happens **once** and an unread playlist is an empty page with a title,
+// so the first fill takes them all — 28 requests three seconds apart is shorter
+// and slower than an ordinary hour of the anonymous scanner. Re-reading is the
+// part that repeats every hour, and that is where the small number belongs.
+//
+// Deliberately outside the per-member loop: which playlists are due is a
 // question about all of them at once, and asking it per member would let a
 // household of four spend four times the requests on the same budget.
 func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScanResult) {
-	stale, err := s.library.ListStalePlaylists(ctx, playlistsPerPass)
+	unread, err := s.library.ListUnreadPlaylists(ctx, firstFillLimit)
+	if err != nil {
+		s.logger.Warn("list unread playlists", "error", err)
+		s.noteError("could not list playlists to read")
+	}
+	stale, err := s.library.ListStalePlaylists(ctx, playlistRereadsPerPass)
 	if err != nil {
 		s.logger.Warn("list stale playlists", "error", err)
-		return
+		s.noteError("could not list playlists to refresh")
 	}
 
-	for _, p := range stale {
+	// Unread first: an empty playlist is the thing somebody is looking at right
+	// now, and a refresh of one that already has videos can wait.
+	due := append(unread, stale...)
+	s.setPlaylistProgress(0, len(due))
+
+	for i, p := range due {
+		s.setPlaylistProgress(i, len(due))
 		cookiePath, err := s.accounts.CookiePath(ctx, p.UserID)
 		if err != nil {
 			// The member whose playlist this is has no working session. Skipped
@@ -406,7 +532,20 @@ func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScan
 		// an alias, so this is the same call the other feeds make.
 		videos, err := s.feeds.ListAccountFeed(ctx, cookiePath, p.SourceURL, playlistItemLimit)
 		if err != nil {
+			// Upstream's own answer, remembered once rather than asked for ever.
+			// Ten of this household's twenty-seven playlists are listed on
+			// /feed/playlists and refuse to be read; without this each costs a
+			// request every pass and sits at the front of the unread queue ahead
+			// of playlists that could have been read.
+			if domain.PlaylistGone(err) {
+				if err := s.library.MarkPlaylistUnavailable(ctx, p.ID, p.UserID); err != nil {
+					s.logger.Warn("mark playlist unavailable", "playlist", p.ID, "error", err)
+				}
+				s.logger.Info("playlist unreadable upstream", "user", p.UserID, "playlist", p.ID)
+				continue
+			}
 			s.logger.Warn("read playlist", "user", p.UserID, "playlist", p.ID, "error", err)
+			s.noteError("a playlist could not be read")
 			continue
 		}
 
@@ -438,6 +577,7 @@ func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScan
 			continue
 		}
 		out.PlaylistVideos += len(ids)
+		s.setPlaylistProgress(i+1, len(due))
 	}
 }
 
@@ -457,11 +597,13 @@ func (s *AccountScanner) Run(ctx context.Context, initialDelay, interval time.Du
 	}
 
 	for {
-		if result, err := s.ScanAll(ctx); err != nil {
+		// The timer scans the whole household; only the button is per member.
+		if result, err := s.ScanAll(ctx, ""); err != nil {
 			s.logger.Warn("scheduled account scan", "error", err)
 		} else if result.Accounts > 0 {
 			s.logger.Info("account scan", "accounts", result.Accounts,
-				"subscriptions", result.Subscriptions, "videos", result.Videos,
+				"subscriptions", result.Subscriptions, "playlists", result.Playlists,
+				"videos", result.Videos, "playlist videos", result.PlaylistVideos,
 				"expired", result.Expired)
 		}
 		select {

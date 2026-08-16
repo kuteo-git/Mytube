@@ -23,11 +23,13 @@ const (
 	// YouTube, and §8 of the charter is about exactly this: a pass is always
 	// bounded, and a zero limit means this number rather than "all of them".
 	maxShortCheckBatch = 200
-	// How many playlists one importer pass may be handed. Each is a request to
-	// YouTube on a credentialed session, and there are 30 on this installation:
-	// a pass that walked them all would put thirty named requests an hour
-	// against the address §8's risk 6 is about.
-	maxStalePlaylists = 25
+	// The server's own ceiling on how many playlists one importer pass may be
+	// handed, whichever list it asks for.
+	//
+	// Each is a request to YouTube on a credentialed session. The caller picks
+	// the real number — small for the hourly re-read, large for the one-time
+	// first fill — and this only stops a caller asking for thousands.
+	maxStalePlaylists = 100
 )
 
 type Catalog struct {
@@ -392,10 +394,25 @@ func (c *Catalog) ImportWatchLater(ctx context.Context, userID string, videoIDs 
 // each answer costs a request to YouTube, on the one session that carries a
 // name. A zero limit means the bound rather than "all of them".
 func (c *Catalog) ListStalePlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
-	if limit <= 0 || limit > maxStalePlaylists {
-		limit = maxStalePlaylists
+	return c.repo.ListStalePlaylists(ctx, clampPlaylistBatch(limit))
+}
+
+func (c *Catalog) ListUnreadPlaylists(ctx context.Context, limit int32) ([]domain.StalePlaylist, error) {
+	return c.repo.ListUnreadPlaylists(ctx, clampPlaylistBatch(limit))
+}
+
+func (c *Catalog) MarkPlaylistUnavailable(ctx context.Context, playlistID, userID string) error {
+	if playlistID == "" || userID == "" {
+		return fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
 	}
-	return c.repo.ListStalePlaylists(ctx, limit)
+	return c.repo.MarkPlaylistUnavailable(ctx, playlistID, userID)
+}
+
+func clampPlaylistBatch(limit int32) int32 {
+	if limit <= 0 || limit > maxStalePlaylists {
+		return maxStalePlaylists
+	}
+	return limit
 }
 
 func (c *Catalog) PruneImportedPlaylists(ctx context.Context, userID string, keepSourceURLs []string) (int32, error) {

@@ -227,6 +227,7 @@ type playlistDTO struct {
 	SourceURL   string   `json:"sourceUrl,omitempty"`
 	UpdatedAt   string   `json:"updatedAt"`
 	ItemsSynced bool     `json:"itemsSynced"`
+	Unavailable bool     `json:"unavailable"`
 	Thumbnails  []string `json:"thumbnails"`
 }
 
@@ -253,6 +254,7 @@ func toPlaylistDTO(p *catalogv1.Playlist) playlistDTO {
 		SourceURL:   p.GetSourceUrl(),
 		UpdatedAt:   p.GetUpdatedAt().AsTime().Format(time.RFC3339),
 		ItemsSynced: p.GetItemsSynced(),
+		Unavailable: p.GetUnavailable(),
 		Thumbnails:  thumbnails,
 	}
 }

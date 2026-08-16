@@ -613,6 +613,7 @@ func playlistToProto(p domain.Playlist) *catalogv1.Playlist {
 		UpdatedAt:      timestamppb.New(p.UpdatedAt),
 		ThumbnailPaths: p.ThumbnailPaths,
 		ItemsSynced:    p.ItemsSynced,
+		Unavailable:    p.Unavailable,
 	}
 }
 
@@ -658,6 +659,34 @@ func (s *Server) ImportPlaylistItems(ctx context.Context, req *connect.Request[c
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.ImportPlaylistItemsResponse{Added: added}), nil
+}
+
+func (s *Server) ListUnreadPlaylists(ctx context.Context, req *connect.Request[catalogv1.ListUnreadPlaylistsRequest]) (*connect.Response[catalogv1.ListUnreadPlaylistsResponse], error) {
+	ps, err := s.catalog.ListUnreadPlaylists(ctx, req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ListUnreadPlaylistsResponse{
+		Playlists: stalePlaylistsToProto(ps),
+	}), nil
+}
+
+func (s *Server) MarkPlaylistUnavailable(ctx context.Context, req *connect.Request[catalogv1.MarkPlaylistUnavailableRequest]) (*connect.Response[catalogv1.MarkPlaylistUnavailableResponse], error) {
+	if err := s.catalog.MarkPlaylistUnavailable(ctx,
+		req.Msg.GetPlaylistId(), req.Msg.GetUserId()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.MarkPlaylistUnavailableResponse{}), nil
+}
+
+func stalePlaylistsToProto(ps []domain.StalePlaylist) []*catalogv1.StalePlaylist {
+	out := make([]*catalogv1.StalePlaylist, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, &catalogv1.StalePlaylist{
+			Id: p.ID, UserId: p.UserID, SourceUrl: p.SourceURL,
+		})
+	}
+	return out
 }
 
 func (s *Server) ListStalePlaylists(ctx context.Context, req *connect.Request[catalogv1.ListStalePlaylistsRequest]) (*connect.Response[catalogv1.ListStalePlaylistsResponse], error) {
