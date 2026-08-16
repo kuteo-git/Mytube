@@ -118,6 +118,12 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/pinned", g.handlePinned)
 	mux.HandleFunc("GET /api/watch-later", g.handleWatchLater)
+	mux.HandleFunc("GET /api/playlists", g.handleListPlaylists)
+	mux.HandleFunc("POST /api/playlists", g.handleCreatePlaylist)
+	mux.HandleFunc("GET /api/playlists/{id}", g.handleGetPlaylist)
+	mux.HandleFunc("PATCH /api/playlists/{id}", g.handleUpdatePlaylist)
+	mux.HandleFunc("DELETE /api/playlists/{id}", g.handleDeletePlaylist)
+	mux.HandleFunc("POST /api/playlists/{id}/items", g.handleSetPlaylistItem)
 	mux.HandleFunc("POST /api/videos/{id}/watch-later", g.handleSetWatchLater)
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
 	mux.HandleFunc("POST /api/videos/{id}/not-interested", g.handleNotInterested)
@@ -1011,4 +1017,125 @@ func unavailableReason(message string) string {
 		}
 	}
 	return "unavailable"
+}
+
+// ---------------------------------------------------------------------------
+// Playlists
+// ---------------------------------------------------------------------------
+
+func (g *Gateway) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListPlaylists(r.Context(), connect.NewRequest(&catalogv1.ListPlaylistsRequest{
+		UserId: g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]playlistDTO, 0, len(resp.Msg.GetPlaylists()))
+	for _, p := range resp.Msg.GetPlaylists() {
+		out = append(out, toPlaylistDTO(p))
+	}
+	writeJSON(w, http.StatusOK, playlistsResponse{Playlists: out})
+}
+
+func (g *Gateway) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.GetPlaylist(r.Context(), connect.NewRequest(&catalogv1.GetPlaylistRequest{
+		PlaylistId: r.PathValue("id"),
+		UserId:     g.userID(r),
+		PageSize:   intParam(r, "pageSize", 24),
+		PageToken:  r.URL.Query().Get("pageToken"),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	videos := make([]videoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		videos = append(videos, toVideoDTO(v))
+	}
+	writeJSON(w, http.StatusOK, playlistPageResponse{
+		Playlist:      toPlaylistDTO(resp.Msg.GetPlaylist()),
+		Videos:        videos,
+		NextPageToken: resp.Msg.GetNextPageToken(),
+	})
+}
+
+func (g *Gateway) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	resp, err := g.catalog.CreatePlaylist(r.Context(), connect.NewRequest(&catalogv1.CreatePlaylistRequest{
+		UserId:      g.userID(r),
+		Title:       body.Title,
+		Description: body.Description,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toPlaylistDTO(resp.Msg.GetPlaylist()))
+}
+
+func (g *Gateway) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	resp, err := g.catalog.UpdatePlaylist(r.Context(), connect.NewRequest(&catalogv1.UpdatePlaylistRequest{
+		PlaylistId:  r.PathValue("id"),
+		UserId:      g.userID(r),
+		Title:       body.Title,
+		Description: body.Description,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toPlaylistDTO(resp.Msg.GetPlaylist()))
+}
+
+func (g *Gateway) handleDeletePlaylist(w http.ResponseWriter, r *http.Request) {
+	if _, err := g.catalog.DeletePlaylist(r.Context(), connect.NewRequest(&catalogv1.DeletePlaylistRequest{
+		PlaylistId: r.PathValue("id"),
+		UserId:     g.userID(r),
+	})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleSetPlaylistItem(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		VideoID  string `json:"videoId"`
+		Included bool   `json:"included"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	if _, err := g.catalog.SetPlaylistItem(r.Context(), connect.NewRequest(&catalogv1.SetPlaylistItemRequest{
+		PlaylistId: r.PathValue("id"),
+		UserId:     g.userID(r),
+		VideoId:    body.VideoID,
+		Included:   body.Included,
+	})); err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

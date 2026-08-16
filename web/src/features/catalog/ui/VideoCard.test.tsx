@@ -36,12 +36,12 @@ const video: Video = {
   subtitles: [],
 }
 
-function renderCard(variant?: VideoCardVariant) {
+function renderCard(variant?: VideoCardVariant, playlistId?: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <VideoCard video={video} variant={variant} />
+        <VideoCard video={video} variant={variant} playlistId={playlistId} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -131,6 +131,20 @@ describe('card menu by variant', () => {
     expect(screen.getByText('Remove from Watch later')).toBeInTheDocument()
     expect(screen.queryByText('Watch later')).not.toBeInTheDocument()
     expect(screen.getByText('Save')).toBeInTheDocument()
+  })
+
+  it('playlist offers leaving the playlist it is shown in', () => {
+    renderCard('playlist', 'pl_1')
+    openMenu()
+    expect(screen.getByText('Remove from playlist')).toBeInTheDocument()
+  })
+
+  // Without a playlist id the card cannot know which list to leave, and the
+  // menu is the wrong place to ask.
+  it('playlist without an id offers no removal', () => {
+    renderCard('playlist')
+    openMenu()
+    expect(screen.queryByText('Remove from playlist')).not.toBeInTheDocument()
   })
 
   it('storage shows Save', () => {

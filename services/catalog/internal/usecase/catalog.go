@@ -327,3 +327,71 @@ func (c *Catalog) ListPinnedVideos(ctx context.Context, userID string, size, off
 	}
 	return c.repo.ListPinnedVideos(ctx, userID, clampPage(size, offset))
 }
+
+// ---------------------------------------------------------------------------
+// Playlists
+// ---------------------------------------------------------------------------
+
+func (c *Catalog) ListPlaylists(ctx context.Context, userID string) ([]domain.Playlist, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	return c.repo.ListPlaylists(ctx, userID)
+}
+
+func (c *Catalog) GetPlaylist(ctx context.Context, playlistID, userID string, size, offset int32) (domain.Playlist, []domain.Video, error) {
+	if playlistID == "" || userID == "" {
+		return domain.Playlist{}, nil, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
+	}
+	p, err := c.repo.GetPlaylist(ctx, playlistID, userID)
+	if err != nil {
+		return domain.Playlist{}, nil, err
+	}
+	vs, err := c.repo.ListPlaylistVideos(ctx, playlistID, userID, clampPage(size, offset))
+	return p, vs, err
+}
+
+func (c *Catalog) CreatePlaylist(ctx context.Context, userID, title, description, sourceURL string) (domain.Playlist, error) {
+	title = strings.TrimSpace(title)
+	if userID == "" {
+		return domain.Playlist{}, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	// A list with no name cannot be told from another on the playlists page, and
+	// there is nowhere else its identity could come from.
+	if title == "" {
+		return domain.Playlist{}, fmt.Errorf("%w: title is required", domain.ErrInvalid)
+	}
+	return c.repo.CreatePlaylist(ctx, domain.Playlist{
+		ID:          c.newID(),
+		UserID:      userID,
+		Title:       title,
+		Description: strings.TrimSpace(description),
+		SourceURL:   sourceURL,
+	})
+}
+
+func (c *Catalog) UpdatePlaylist(ctx context.Context, playlistID, userID, title, description string) (domain.Playlist, error) {
+	if playlistID == "" || userID == "" {
+		return domain.Playlist{}, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
+	}
+	return c.repo.UpdatePlaylist(ctx, domain.Playlist{
+		ID:          playlistID,
+		UserID:      userID,
+		Title:       strings.TrimSpace(title),
+		Description: strings.TrimSpace(description),
+	})
+}
+
+func (c *Catalog) DeletePlaylist(ctx context.Context, playlistID, userID string) error {
+	if playlistID == "" || userID == "" {
+		return fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
+	}
+	return c.repo.DeletePlaylist(ctx, playlistID, userID)
+}
+
+func (c *Catalog) SetPlaylistItem(ctx context.Context, playlistID, userID, videoID string, included bool) error {
+	if playlistID == "" || userID == "" || videoID == "" {
+		return fmt.Errorf("%w: playlist_id, user_id and video_id are required", domain.ErrInvalid)
+	}
+	return c.repo.SetPlaylistItem(ctx, playlistID, userID, videoID, included)
+}

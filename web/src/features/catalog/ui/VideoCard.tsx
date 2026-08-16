@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
+import { AddToPlaylistDialog } from '@/features/catalog/ui/AddToPlaylistDialog'
 import {
   Bookmark,
   BookmarkMinus,
@@ -7,6 +8,8 @@ import {
   Clock,
   ClockFading,
   EyeOff,
+  ListMinus,
+  ListPlus,
   MoreVertical,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -17,6 +20,7 @@ import {
   useMarkWatched,
   useNotInterested,
   useSetPinned,
+  useSetPlaylistItem,
   useSetWatchLater,
   useStreamPrefetch,
 } from '../application/queries'
@@ -32,11 +36,21 @@ export type VideoCardVariant =
   | 'feed'
   | 'saved'
   | 'watchLater'
+  | 'playlist'
   | 'history'
   | 'storage'
 
 /** Card. Hover comes from videoItemHover, shared with every other item. */
-export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?: VideoCardVariant }) {
+export function VideoCard({
+  video,
+  variant = 'feed',
+  playlistId,
+}: {
+  video: Video
+  variant?: VideoCardVariant
+  /** Which playlist this card is being shown inside, so it can offer to leave it. */
+  playlistId?: string
+}) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -151,7 +165,14 @@ export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?:
           >
             <MoreVertical size={20} />
           </button>
-          {menuOpen && <CardMenu video={video} variant={variant} close={() => setMenuOpen(false)} />}
+          {menuOpen && (
+            <CardMenu
+              video={video}
+              variant={variant}
+              playlistId={playlistId}
+              close={() => setMenuOpen(false)}
+            />
+          )}
         </div>
       </div>
     </article>
@@ -196,16 +217,20 @@ export function VideoCardSkeleton() {
 function CardMenu({
   video,
   variant,
+  playlistId,
   close,
 }: {
   video: Video
   variant: VideoCardVariant
+  playlistId?: string
   close: () => void
 }) {
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
   const setPinned = useSetPinned()
   const setWatchLater = useSetWatchLater()
+  const setPlaylistItem = useSetPlaylistItem()
+  const [addingToPlaylist, setAddingToPlaylist] = useState(false)
   const toast = useToast()
 
   const items: React.ReactNode[] = []
@@ -318,21 +343,58 @@ function CardMenu({
     </li>
   )
 
+  const addToPlaylistItem = (
+    <li key="add-to-playlist">
+      <button
+        type="button"
+        onClick={() => setAddingToPlaylist(true)}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <ListPlus size={16} />
+        Add to playlist
+      </button>
+    </li>
+  )
+
+  // Only offered where the card knows which playlist it is in. Elsewhere
+  // "remove from playlist" would have to ask which, and the card menu is the
+  // wrong place to ask a question.
+  const removeFromPlaylistItem = playlistId ? (
+    <li key="remove-from-playlist">
+      <button
+        type="button"
+        onClick={() => {
+          setPlaylistItem.mutate({ playlistId, videoId: video.id, included: false })
+          toast('Removed from playlist')
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <ListMinus size={16} />
+        Remove from playlist
+      </button>
+    </li>
+  ) : null
+
   switch (variant) {
     case 'continueWatching':
       items.push(watchedItem, notInterestedItem)
       break
     case 'feed':
-      items.push(watchedItem, watchLaterItem, saveItem, notInterestedItem)
+      items.push(watchedItem, watchLaterItem, addToPlaylistItem, saveItem, notInterestedItem)
       break
     case 'saved':
-      items.push(watchLaterItem, unsaveItem)
+      items.push(watchLaterItem, addToPlaylistItem, unsaveItem)
       break
     case 'watchLater':
-      items.push(watchedItem, removeWatchLaterItem, saveItem)
+      items.push(watchedItem, removeWatchLaterItem, addToPlaylistItem, saveItem)
+      break
+
+    case 'playlist':
+      items.push(watchedItem, removeFromPlaylistItem, watchLaterItem, saveItem)
       break
     case 'history':
-      items.push(watchLaterItem, saveItem)
+      items.push(watchLaterItem, addToPlaylistItem, saveItem)
       break
     case 'storage':
       items.push(saveItem)
@@ -340,8 +402,19 @@ function CardMenu({
   }
 
   return (
-    <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
-      {items}
-    </ul>
+    <>
+      <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
+        {items}
+      </ul>
+      {addingToPlaylist && (
+        <AddToPlaylistDialog
+          videoId={video.id}
+          onClose={() => {
+            setAddingToPlaylist(false)
+            close()
+          }}
+        />
+      )}
+    </>
   )
 }

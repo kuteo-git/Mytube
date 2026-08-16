@@ -102,6 +102,18 @@ export interface Topic {
   videoCount: number
 }
 
+/** One member's collection. Watch later is deliberately not one of these. */
+export interface Playlist {
+  id: string
+  title: string
+  description: string
+  itemCount: number
+  /** The YouTube playlist it was imported from. Absent when made here. */
+  sourceUrl?: string
+  updatedAt: string
+  thumbnails: string[]
+}
+
 export interface StorageUsage {
   usedBytes: number
   budgetBytes: number

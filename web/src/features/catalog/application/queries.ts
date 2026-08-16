@@ -407,6 +407,75 @@ export function useSaved() {
   })
 }
 
+// Playlists are a small list read whole, so a plain query rather than an
+// infinite one. The videos inside a playlist page, and that query is separate.
+export function usePlaylists() {
+  const me = useProfileScope()
+  return useQuery({
+    queryKey: ['playlists', me],
+    queryFn: () => repo.listPlaylists(),
+  })
+}
+
+export function usePlaylist(id: string) {
+  const me = useProfileScope()
+  return useInfiniteQuery({
+    queryKey: ['playlist', id, me],
+    queryFn: ({ pageParam }) => repo.getPlaylist(id, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+    enabled: Boolean(id),
+  })
+}
+
+export function useCreatePlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (title: string) => repo.createPlaylist(title),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['playlists'] }),
+  })
+}
+
+export function useRenamePlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => repo.renamePlaylist(id, title),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['playlists'] })
+      void queryClient.invalidateQueries({ queryKey: ['playlist'] })
+    },
+  })
+}
+
+export function useDeletePlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => repo.deletePlaylist(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['playlists'] }),
+  })
+}
+
+export function useSetPlaylistItem() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      playlistId,
+      videoId,
+      included,
+    }: {
+      playlistId: string
+      videoId: string
+      included: boolean
+    }) => repo.setPlaylistItem(playlistId, videoId, included),
+    onSuccess: () => {
+      // Both: the card on the playlists page carries the count and the first
+      // few thumbnails, so it is as stale as the page inside it.
+      void queryClient.invalidateQueries({ queryKey: ['playlists'] })
+      void queryClient.invalidateQueries({ queryKey: ['playlist'] })
+    },
+  })
+}
+
 export function useWatchLater() {
   const me = useProfileScope()
   return useInfiniteQuery({

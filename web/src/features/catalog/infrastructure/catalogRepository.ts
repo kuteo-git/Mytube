@@ -3,6 +3,7 @@ import type {
   Channel,
   Topic,
   Comment,
+  Playlist,
   ReactionState,
   StorageUsage,
   Video,
@@ -37,6 +38,13 @@ export interface CatalogRepository {
   /** Videos the viewer has pinned as worth keeping. */
   listPinned(pageToken?: string): Promise<Feed>
   setPinned(videoId: string, pinned: boolean): Promise<void>
+  /** The viewer's own playlists, most recently touched first. */
+  listPlaylists(): Promise<Playlist[]>
+  getPlaylist(id: string, pageToken?: string): Promise<{ playlist: Playlist; videos: Video[]; nextPageToken?: string }>
+  createPlaylist(title: string): Promise<Playlist>
+  renamePlaylist(id: string, title: string): Promise<Playlist>
+  deletePlaylist(id: string): Promise<void>
+  setPlaylistItem(playlistId: string, videoId: string, included: boolean): Promise<void>
   /** Videos the viewer has put aside to watch next, most recently added first. */
   listWatchLater(pageToken?: string): Promise<Feed>
   setWatchLater(videoId: string, inWatchLater: boolean): Promise<void>
@@ -415,6 +423,41 @@ export const httpCatalogRepository: CatalogRepository = {
     await request<void>(`/videos/${encodeURIComponent(videoId)}/pinned`, {
       method: 'POST',
       body: JSON.stringify({ pinned }),
+    })
+  },
+
+  listPlaylists() {
+    return request<{ playlists: Playlist[] }>('/playlists').then((r) => r.playlists)
+  },
+
+  getPlaylist(id, pageToken) {
+    return request<{ playlist: Playlist; videos: Video[]; nextPageToken?: string }>(
+      `/playlists/${encodeURIComponent(id)}${query({ pageToken })}`,
+    )
+  },
+
+  createPlaylist(title) {
+    return request<Playlist>('/playlists', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    })
+  },
+
+  renamePlaylist(id, title) {
+    return request<Playlist>(`/playlists/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    })
+  },
+
+  async deletePlaylist(id) {
+    await request<void>(`/playlists/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  async setPlaylistItem(playlistId, videoId, included) {
+    await request<void>(`/playlists/${encodeURIComponent(playlistId)}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ videoId, included }),
     })
   },
 

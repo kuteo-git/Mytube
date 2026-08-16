@@ -1,5 +1,14 @@
 import clsx from 'clsx'
-import { Activity, Bookmark, Clock, HardDrive, Home, Settings, Tag } from 'lucide-react'
+import {
+  Activity,
+  Bookmark,
+  Clock,
+  HardDrive,
+  Home,
+  ListVideo,
+  Settings,
+  Tag,
+} from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useSubscriptions, useTopics } from '@/features/catalog/application/queries'
@@ -18,9 +27,9 @@ interface Item {
 /**
  * Fixed entries plus the topics from topics.yaml.
  *
- * Compared to youtube.com this drops Playlists, Liked videos, Your videos,
- * YouTube Music, YouTube Kids, Shorts, Live and the legal footer. None of them
- * has anything behind it — see CLAUDE.md §5.
+ * Compared to youtube.com this drops Liked videos, Your videos, YouTube Music,
+ * YouTube Kids, Shorts, Live and the legal footer. None of them has anything
+ * behind it — see CLAUDE.md §5.
  *
  * Watch later was in that list until it stopped being empty. The table had
  * existed since 0001_init and every video already reported in_watch_later, but
@@ -30,6 +39,7 @@ interface Item {
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
   { icon: Clock, label: 'Watch later', to: '/watch-later' },
+  { icon: ListVideo, label: 'Playlists', to: '/playlists' },
   { icon: Bookmark, label: 'Saved', to: '/saved' },
   { icon: Clock, label: 'History', to: '/history' },
   { icon: HardDrive, label: 'Storage', to: '/storage' },

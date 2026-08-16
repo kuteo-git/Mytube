@@ -66,6 +66,19 @@ service CatalogService {
   rpc SetWatchLater(SetWatchLaterRequest) returns (SetWatchLaterResponse);
   rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
 
+  // Playlists, per member. Watch Later is deliberately not one of these: it has
+  // no name, cannot be created and cannot be deleted, so as a row here it would
+  // be a playlist that is not one.
+  rpc ListPlaylists(ListPlaylistsRequest) returns (ListPlaylistsResponse);
+  rpc GetPlaylist(GetPlaylistRequest) returns (GetPlaylistResponse);
+  rpc CreatePlaylist(CreatePlaylistRequest) returns (CreatePlaylistResponse);
+  rpc UpdatePlaylist(UpdatePlaylistRequest) returns (UpdatePlaylistResponse);
+  rpc DeletePlaylist(DeletePlaylistRequest) returns (DeletePlaylistResponse);
+  // One toggle rather than an add/remove pair: the caller always knows which
+  // way the menu entry is facing, and two RPCs would be two places to get the
+  // position rules wrong.
+  rpc SetPlaylistItem(SetPlaylistItemRequest) returns (SetPlaylistItemResponse);
+
   // Storage. Backs the Storage page and the eviction banner.
   rpc GetStorageUsage(GetStorageUsageRequest) returns (GetStorageUsageResponse);
   rpc SetPinned(SetPinnedRequest) returns (SetPinnedResponse);
@@ -545,6 +558,78 @@ message SetPinnedRequest {
 }
 
 message SetPinnedResponse {}
+
+message Playlist {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  int32 item_count = 4;
+  // The YouTube playlist this was imported from. Empty when it was made here.
+  string source_url = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  // First few thumbnails, for the card on the playlists page. Sent with the
+  // list so the page is one call rather than one call per playlist.
+  repeated string thumbnail_paths = 7;
+}
+
+message ListPlaylistsRequest {
+  string user_id = 1;
+}
+
+message ListPlaylistsResponse {
+  repeated Playlist playlists = 1;
+}
+
+message GetPlaylistRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message GetPlaylistResponse {
+  Playlist playlist = 1;
+  repeated Video videos = 2;
+  string next_page_token = 3;
+}
+
+message CreatePlaylistRequest {
+  string user_id = 1;
+  string title = 2;
+  string description = 3;
+}
+
+message CreatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message UpdatePlaylistRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+  string title = 3;
+  string description = 4;
+}
+
+message UpdatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message DeletePlaylistRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+}
+
+message DeletePlaylistResponse {}
+
+message SetPlaylistItemRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+  string video_id = 3;
+  // False removes it.
+  bool included = 4;
+}
+
+message SetPlaylistItemResponse {}
 
 message SetWatchLaterRequest {
   string user_id = 1;

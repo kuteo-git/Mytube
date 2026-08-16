@@ -38,6 +38,7 @@ const TAB_ROOTS = new Set([
   '/subscriptions',
   '/saved',
   '/watch-later',
+  '/playlists',
   '/history',
   '/storage',
   '/settings',

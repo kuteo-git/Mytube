@@ -7,6 +7,8 @@
 package api
 
 import (
+	"time"
+
 	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 )
 
@@ -215,4 +217,40 @@ func orEmpty(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+type playlistDTO struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	ItemCount   int32    `json:"itemCount"`
+	SourceURL   string   `json:"sourceUrl,omitempty"`
+	UpdatedAt   string   `json:"updatedAt"`
+	Thumbnails  []string `json:"thumbnails"`
+}
+
+type playlistsResponse struct {
+	Playlists []playlistDTO `json:"playlists"`
+}
+
+type playlistPageResponse struct {
+	Playlist      playlistDTO `json:"playlist"`
+	Videos        []videoDTO  `json:"videos"`
+	NextPageToken string      `json:"nextPageToken,omitempty"`
+}
+
+func toPlaylistDTO(p *catalogv1.Playlist) playlistDTO {
+	thumbnails := p.GetThumbnailPaths()
+	if thumbnails == nil {
+		thumbnails = []string{}
+	}
+	return playlistDTO{
+		ID:          p.GetId(),
+		Title:       p.GetTitle(),
+		Description: p.GetDescription(),
+		ItemCount:   p.GetItemCount(),
+		SourceURL:   p.GetSourceUrl(),
+		UpdatedAt:   p.GetUpdatedAt().AsTime().Format(time.RFC3339),
+		Thumbnails:  thumbnails,
+	}
 }

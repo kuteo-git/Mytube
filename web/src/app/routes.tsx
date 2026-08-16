@@ -5,6 +5,8 @@ import { HistoryPage } from '@/pages/HistoryPage'
 import { HomePage } from '@/pages/HomePage'
 import { SavedPage } from '@/pages/SavedPage'
 import { WatchLaterPage } from '@/pages/WatchLaterPage'
+import { PlaylistsPage } from '@/pages/PlaylistsPage'
+import { PlaylistPage } from '@/pages/PlaylistPage'
 import { SearchResultsPage } from '@/pages/SearchResultsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import {
@@ -42,6 +44,8 @@ export const pageRoutes = (
     <Route path="/history" element={<HistoryPage />} />
     <Route path="/saved" element={<SavedPage />} />
     <Route path="/watch-later" element={<WatchLaterPage />} />
+    <Route path="/playlists" element={<PlaylistsPage />} />
+    <Route path="/playlist/:playlistId" element={<PlaylistPage />} />
     <Route path="/subscriptions" element={<SubscriptionsPage />} />
     <Route path="/storage" element={<StoragePage />} />
     <Route path="/settings" element={<SettingsPage />} />

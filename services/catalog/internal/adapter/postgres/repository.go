@@ -1207,3 +1207,194 @@ func diskFreeBytes(path string) int64 {
 	}
 	return int64(stat.Bavail) * int64(stat.Bsize)
 }
+
+// ---------------------------------------------------------------------------
+// Playlists
+// ---------------------------------------------------------------------------
+
+// playlistSelect carries the count and the first few thumbnails with the row,
+// so the playlists page is one query rather than one per playlist.
+const playlistSelect = `
+SELECT p.id, p.user_id, p.title, p.description, p.source_url, p.updated_at,
+       (SELECT count(*) FROM playlist_items i WHERE i.playlist_id = p.id)::int,
+       COALESCE((
+         SELECT array_agg(t.thumbnail_path ORDER BY t.position)
+         FROM (
+           SELECT v.thumbnail_path, i.position
+           FROM playlist_items i
+           JOIN videos v ON v.id = i.video_id
+           WHERE i.playlist_id = p.id AND v.thumbnail_path <> ''
+           ORDER BY i.position
+           LIMIT 4
+         ) t
+       ), '{}')
+FROM playlists p
+`
+
+func scanPlaylist(row pgx.Row) (domain.Playlist, error) {
+	var (
+		p         domain.Playlist
+		sourceURL *string
+	)
+	err := row.Scan(&p.ID, &p.UserID, &p.Title, &p.Description, &sourceURL,
+		&p.UpdatedAt, &p.ItemCount, &p.ThumbnailPaths)
+	if sourceURL != nil {
+		p.SourceURL = *sourceURL
+	}
+	return p, err
+}
+
+func (r *Repository) ListPlaylists(ctx context.Context, userID string) ([]domain.Playlist, error) {
+	rows, err := r.pool.Query(ctx, playlistSelect+`
+		WHERE p.user_id = $1
+		ORDER BY p.updated_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Playlist
+	for rows.Next() {
+		p, err := scanPlaylist(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// GetPlaylist reads one playlist, scoped to its owner.
+//
+// The user_id is part of the lookup rather than checked afterwards: a playlist
+// belonging to somebody else must be indistinguishable from one that does not
+// exist, and a check written separately from the query is a check that can be
+// forgotten at the next call site.
+func (r *Repository) GetPlaylist(ctx context.Context, playlistID, userID string) (domain.Playlist, error) {
+	p, err := scanPlaylist(r.pool.QueryRow(ctx, playlistSelect+`
+		WHERE p.id = $1 AND p.user_id = $2`, playlistID, userID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
+	}
+	return p, err
+}
+
+func (r *Repository) ListPlaylistVideos(
+	ctx context.Context, playlistID, userID string, page domain.Page,
+) ([]domain.Video, error) {
+	return r.queryVideos(ctx, videoSelect+`
+		JOIN playlist_items pi ON pi.video_id = v.id
+		JOIN playlists      pl ON pl.id = pi.playlist_id
+		WHERE pi.playlist_id = $2 AND pl.user_id = $1
+		ORDER BY pi.position
+		LIMIT $3 OFFSET $4`,
+		userID, playlistID, page.Size, page.Offset)
+}
+
+func (r *Repository) CreatePlaylist(ctx context.Context, p domain.Playlist) (domain.Playlist, error) {
+	// An imported playlist that is already here is updated rather than doubled.
+	// Re-importing is the ordinary case — the account scan runs hourly — and a
+	// second copy per pass is what makes that unbearable.
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO playlists (id, user_id, title, description, source_url)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+		ON CONFLICT (user_id, source_url) WHERE source_url IS NOT NULL
+		DO UPDATE SET title = EXCLUDED.title,
+		              description = EXCLUDED.description,
+		              updated_at = now()`,
+		p.ID, p.UserID, p.Title, p.Description, p.SourceURL)
+	if err != nil {
+		return domain.Playlist{}, err
+	}
+	if p.SourceURL != "" {
+		return r.playlistBySource(ctx, p.UserID, p.SourceURL)
+	}
+	return r.GetPlaylist(ctx, p.ID, p.UserID)
+}
+
+func (r *Repository) playlistBySource(ctx context.Context, userID, sourceURL string) (domain.Playlist, error) {
+	p, err := scanPlaylist(r.pool.QueryRow(ctx, playlistSelect+`
+		WHERE p.user_id = $1 AND p.source_url = $2`, userID, sourceURL))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", sourceURL, domain.ErrNotFound)
+	}
+	return p, err
+}
+
+func (r *Repository) UpdatePlaylist(ctx context.Context, p domain.Playlist) (domain.Playlist, error) {
+	// Each field keeps what it had when the incoming one says nothing, the same
+	// rule UpsertChannel follows: a rename must not blank the description.
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE playlists
+		SET title = COALESCE(NULLIF($3, ''), title),
+		    description = COALESCE(NULLIF($4, ''), description),
+		    updated_at = now()
+		WHERE id = $1 AND user_id = $2`,
+		p.ID, p.UserID, p.Title, p.Description)
+	if err != nil {
+		return domain.Playlist{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", p.ID, domain.ErrNotFound)
+	}
+	return r.GetPlaylist(ctx, p.ID, p.UserID)
+}
+
+func (r *Repository) DeletePlaylist(ctx context.Context, playlistID, userID string) error {
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM playlists WHERE id = $1 AND user_id = $2`, playlistID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+// SetPlaylistItem appends a video to the end of a playlist, or removes it.
+//
+// Appended rather than inserted, and the position is taken from the playlist's
+// own maximum rather than from its length: removing the third of five leaves
+// four items whose positions still run to five, and counting would then hand
+// the next addition a position another row already holds.
+func (r *Repository) SetPlaylistItem(
+	ctx context.Context, playlistID, userID, videoID string, included bool,
+) error {
+	// Ownership is asked first, so somebody else's playlist is a 404 rather than
+	// a silent no-op — and the write below can then be a plain statement.
+	if _, err := r.GetPlaylist(ctx, playlistID, userID); err != nil {
+		return err
+	}
+
+	var err error
+	if included {
+		// Asked before the insert so an unknown video is a 404. Left to the
+		// foreign key it arrives as a constraint violation, which the caller can
+		// only report as this service having failed — measured: adding an id the
+		// library does not hold answered 500.
+		var exists bool
+		if err := r.pool.QueryRow(ctx,
+			`SELECT true FROM videos WHERE id = $1`, videoID).Scan(&exists); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+			}
+			return err
+		}
+		_, err = r.pool.Exec(ctx, `
+			INSERT INTO playlist_items (playlist_id, video_id, position)
+			SELECT $1, $2, COALESCE(max(position), 0) + 1
+			FROM playlist_items WHERE playlist_id = $1
+			ON CONFLICT DO NOTHING`, playlistID, videoID)
+	} else {
+		_, err = r.pool.Exec(ctx,
+			`DELETE FROM playlist_items WHERE playlist_id = $1 AND video_id = $2`,
+			playlistID, videoID)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = r.pool.Exec(ctx,
+		`UPDATE playlists SET updated_at = now() WHERE id = $1`, playlistID)
+	return err
+}

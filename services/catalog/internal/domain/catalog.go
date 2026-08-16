@@ -174,6 +174,21 @@ type StorageUsage struct {
 	EvictionCandidates []Video
 }
 
+// Playlist is one member's collection. Watch Later is deliberately not one:
+// it has no name, cannot be created and cannot be deleted.
+type Playlist struct {
+	ID          string
+	UserID      string
+	Title       string
+	Description string
+	ItemCount   int32
+	// The YouTube playlist this was imported from. Empty when made here.
+	SourceURL string
+	UpdatedAt time.Time
+	// A few thumbnails for the card on the playlists page, in playlist order.
+	ThumbnailPaths []string
+}
+
 type Page struct {
 	Size   int32
 	Offset int32
@@ -231,6 +246,16 @@ type Repository interface {
 	RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)
 	SetWatchLater(ctx context.Context, userID, videoID string, inWatchLater bool) error
+
+	ListPlaylists(ctx context.Context, userID string) ([]Playlist, error)
+	GetPlaylist(ctx context.Context, playlistID, userID string) (Playlist, error)
+	ListPlaylistVideos(ctx context.Context, playlistID, userID string, page Page) ([]Video, error)
+	CreatePlaylist(ctx context.Context, p Playlist) (Playlist, error)
+	UpdatePlaylist(ctx context.Context, p Playlist) (Playlist, error)
+	DeletePlaylist(ctx context.Context, playlistID, userID string) error
+	// SetPlaylistItem appends a video to the end of the playlist, or removes it.
+	// Appending rather than inserting is what keeps an imported order intact.
+	SetPlaylistItem(ctx context.Context, playlistID, userID, videoID string, included bool) error
 	ListWatchLater(ctx context.Context, userID string, page Page) ([]Video, error)
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	ListSubscriptions(ctx context.Context, userID string) ([]Channel, error)

@@ -198,14 +198,23 @@ Every element either does something real or is dropped.
 | Downloads | → Storage |
 | Explore / chip filter | → driven by real tags and categories in the catalog |
 | Watch later | Real. Its own list, per member, and its own page |
-| Playlists, Your videos, YT Music, YT Kids, footer, Shorts, Live | **DROPPED** |
+| Playlists | Real. Per member, made here or imported |
+| Subscribe | Real in P1: adds the channel as a live ingest source |
+| Share | → the YouTube link (`video.sourceUrl` or `https://www.youtube.com/watch?v=<id>`) |
+| Your videos, YT Music, YT Kids, footer, Shorts, Live | **DROPPED** |
 
 **Watch later and Save are two different intentions and two different controls.** Watch later is a note about what to do next and clears itself once the video has been watched; Save keeps the file on the disk against the eviction sweep and never clears itself. One control could not mean both.
 
 - `catalog.watch_later` and `videoSelect`'s read of it have existed since `0001_init`, so every video has always reported `user_state.in_watch_later` — **nothing could write it**, so it answered false for everybody, forever. The account import read `:ytwatchlater` and stored its videos as ordinary ones, so a list somebody had built deliberately arrived as an anonymous handful of new videos. Nothing here is new but the writing and the page.
 - **Not told to the ranker.** Putting something aside is not a statement about taste, and unlike a like it is meant to be undone.
-| Subscribe | Real in P1: adds the channel as a live ingest source |
-| Share | → the YouTube link (`video.sourceUrl` or `https://www.youtube.com/watch?v=<id>`) |
+
+**Playlists are per member, and Watch later is not one of them.** A playlist has a name, is created and can be deleted; Watch later has none of those, so as a row in `playlists` it would be a playlist that is not one — and YouTube keeps them apart for the same reason.
+
+- `playlists`/`playlist_items` fall on the per-user side of the schema, next to `watch_progress`, `reactions`, `subscriptions`, `watch_later` and `saved`. Importing one member's YouTube playlists into a shared table would repeat exactly the defect `0014_saved.sql` was written to fix. Sharing later is a column; splitting a shared table apart afterwards is a migration nobody wants to write.
+- **`position` is carried, never derived.** Filled from the order an import returned, appended to at the end, and taken from the playlist's own `max(position)` rather than its length — removing the third of five leaves four rows whose positions still run to five, and counting would hand the next addition a position another row already holds. Drag-to-reorder has no column left to add: this is that column.
+- **Ownership is part of the lookup, not a check after it.** A playlist belonging to somebody else is indistinguishable from one that does not exist, and a check written separately from the query is one that can be forgotten at the next call site.
+- Opening a playlist queues **no downloads**. §2's budget is 300 GiB and there is one worker slot; a 200-video list fetching itself is the fault the live-broadcast rule already exists to prevent.
+- Requires `0015_playlists.sql`.
 
 ### Player behavior
 

@@ -606,3 +606,78 @@ func (s *Server) ImportComments(ctx context.Context, req *connect.Request[catalo
 	}
 	return connect.NewResponse(&catalogv1.ImportCommentsResponse{Imported: imported}), nil
 }
+
+// ---------------------------------------------------------------------------
+// Playlists
+// ---------------------------------------------------------------------------
+
+func playlistToProto(p domain.Playlist) *catalogv1.Playlist {
+	return &catalogv1.Playlist{
+		Id:             p.ID,
+		Title:          p.Title,
+		Description:    p.Description,
+		ItemCount:      p.ItemCount,
+		SourceUrl:      p.SourceURL,
+		UpdatedAt:      timestamppb.New(p.UpdatedAt),
+		ThumbnailPaths: p.ThumbnailPaths,
+	}
+}
+
+func (s *Server) ListPlaylists(ctx context.Context, req *connect.Request[catalogv1.ListPlaylistsRequest]) (*connect.Response[catalogv1.ListPlaylistsResponse], error) {
+	ps, err := s.catalog.ListPlaylists(ctx, req.Msg.GetUserId())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*catalogv1.Playlist, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, playlistToProto(p))
+	}
+	return connect.NewResponse(&catalogv1.ListPlaylistsResponse{Playlists: out}), nil
+}
+
+func (s *Server) GetPlaylist(ctx context.Context, req *connect.Request[catalogv1.GetPlaylistRequest]) (*connect.Response[catalogv1.GetPlaylistResponse], error) {
+	offset := decodePageToken(req.Msg.GetPageToken())
+	p, vs, err := s.catalog.GetPlaylist(ctx,
+		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetPageSize(), offset)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.GetPlaylistResponse{
+		Playlist:      playlistToProto(p),
+		Videos:        videosToProto(vs),
+		NextPageToken: nextPageToken(offset, req.Msg.GetPageSize(), len(vs)),
+	}), nil
+}
+
+func (s *Server) CreatePlaylist(ctx context.Context, req *connect.Request[catalogv1.CreatePlaylistRequest]) (*connect.Response[catalogv1.CreatePlaylistResponse], error) {
+	p, err := s.catalog.CreatePlaylist(ctx,
+		req.Msg.GetUserId(), req.Msg.GetTitle(), req.Msg.GetDescription(), "")
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.CreatePlaylistResponse{Playlist: playlistToProto(p)}), nil
+}
+
+func (s *Server) UpdatePlaylist(ctx context.Context, req *connect.Request[catalogv1.UpdatePlaylistRequest]) (*connect.Response[catalogv1.UpdatePlaylistResponse], error) {
+	p, err := s.catalog.UpdatePlaylist(ctx,
+		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetTitle(), req.Msg.GetDescription())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.UpdatePlaylistResponse{Playlist: playlistToProto(p)}), nil
+}
+
+func (s *Server) DeletePlaylist(ctx context.Context, req *connect.Request[catalogv1.DeletePlaylistRequest]) (*connect.Response[catalogv1.DeletePlaylistResponse], error) {
+	if err := s.catalog.DeletePlaylist(ctx, req.Msg.GetPlaylistId(), req.Msg.GetUserId()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.DeletePlaylistResponse{}), nil
+}
+
+func (s *Server) SetPlaylistItem(ctx context.Context, req *connect.Request[catalogv1.SetPlaylistItemRequest]) (*connect.Response[catalogv1.SetPlaylistItemResponse], error) {
+	if err := s.catalog.SetPlaylistItem(ctx, req.Msg.GetPlaylistId(),
+		req.Msg.GetUserId(), req.Msg.GetVideoId(), req.Msg.GetIncluded()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.SetPlaylistItemResponse{}), nil
+}

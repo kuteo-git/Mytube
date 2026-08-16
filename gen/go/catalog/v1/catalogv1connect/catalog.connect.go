@@ -102,6 +102,24 @@ const (
 	// CatalogServiceListWatchLaterProcedure is the fully-qualified name of the CatalogService's
 	// ListWatchLater RPC.
 	CatalogServiceListWatchLaterProcedure = "/catalog.v1.CatalogService/ListWatchLater"
+	// CatalogServiceListPlaylistsProcedure is the fully-qualified name of the CatalogService's
+	// ListPlaylists RPC.
+	CatalogServiceListPlaylistsProcedure = "/catalog.v1.CatalogService/ListPlaylists"
+	// CatalogServiceGetPlaylistProcedure is the fully-qualified name of the CatalogService's
+	// GetPlaylist RPC.
+	CatalogServiceGetPlaylistProcedure = "/catalog.v1.CatalogService/GetPlaylist"
+	// CatalogServiceCreatePlaylistProcedure is the fully-qualified name of the CatalogService's
+	// CreatePlaylist RPC.
+	CatalogServiceCreatePlaylistProcedure = "/catalog.v1.CatalogService/CreatePlaylist"
+	// CatalogServiceUpdatePlaylistProcedure is the fully-qualified name of the CatalogService's
+	// UpdatePlaylist RPC.
+	CatalogServiceUpdatePlaylistProcedure = "/catalog.v1.CatalogService/UpdatePlaylist"
+	// CatalogServiceDeletePlaylistProcedure is the fully-qualified name of the CatalogService's
+	// DeletePlaylist RPC.
+	CatalogServiceDeletePlaylistProcedure = "/catalog.v1.CatalogService/DeletePlaylist"
+	// CatalogServiceSetPlaylistItemProcedure is the fully-qualified name of the CatalogService's
+	// SetPlaylistItem RPC.
+	CatalogServiceSetPlaylistItemProcedure = "/catalog.v1.CatalogService/SetPlaylistItem"
 	// CatalogServiceGetStorageUsageProcedure is the fully-qualified name of the CatalogService's
 	// GetStorageUsage RPC.
 	CatalogServiceGetStorageUsageProcedure = "/catalog.v1.CatalogService/GetStorageUsage"
@@ -163,6 +181,18 @@ type CatalogServiceClient interface {
 	// write it, so it answered false for everybody, forever.
 	SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error)
 	ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error)
+	// Playlists, per member. Watch Later is deliberately not one of these: it has
+	// no name, cannot be created and cannot be deleted, so as a row here it would
+	// be a playlist that is not one.
+	ListPlaylists(context.Context, *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error)
+	GetPlaylist(context.Context, *connect.Request[v1.GetPlaylistRequest]) (*connect.Response[v1.GetPlaylistResponse], error)
+	CreatePlaylist(context.Context, *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error)
+	UpdatePlaylist(context.Context, *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error)
+	DeletePlaylist(context.Context, *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error)
+	// One toggle rather than an add/remove pair: the caller always knows which
+	// way the menu entry is facing, and two RPCs would be two places to get the
+	// position rules wrong.
+	SetPlaylistItem(context.Context, *connect.Request[v1.SetPlaylistItemRequest]) (*connect.Response[v1.SetPlaylistItemResponse], error)
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error)
@@ -326,6 +356,42 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListWatchLater")),
 			connect.WithClientOptions(opts...),
 		),
+		listPlaylists: connect.NewClient[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse](
+			httpClient,
+			baseURL+CatalogServiceListPlaylistsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListPlaylists")),
+			connect.WithClientOptions(opts...),
+		),
+		getPlaylist: connect.NewClient[v1.GetPlaylistRequest, v1.GetPlaylistResponse](
+			httpClient,
+			baseURL+CatalogServiceGetPlaylistProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("GetPlaylist")),
+			connect.WithClientOptions(opts...),
+		),
+		createPlaylist: connect.NewClient[v1.CreatePlaylistRequest, v1.CreatePlaylistResponse](
+			httpClient,
+			baseURL+CatalogServiceCreatePlaylistProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("CreatePlaylist")),
+			connect.WithClientOptions(opts...),
+		),
+		updatePlaylist: connect.NewClient[v1.UpdatePlaylistRequest, v1.UpdatePlaylistResponse](
+			httpClient,
+			baseURL+CatalogServiceUpdatePlaylistProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("UpdatePlaylist")),
+			connect.WithClientOptions(opts...),
+		),
+		deletePlaylist: connect.NewClient[v1.DeletePlaylistRequest, v1.DeletePlaylistResponse](
+			httpClient,
+			baseURL+CatalogServiceDeletePlaylistProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("DeletePlaylist")),
+			connect.WithClientOptions(opts...),
+		),
+		setPlaylistItem: connect.NewClient[v1.SetPlaylistItemRequest, v1.SetPlaylistItemResponse](
+			httpClient,
+			baseURL+CatalogServiceSetPlaylistItemProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("SetPlaylistItem")),
+			connect.WithClientOptions(opts...),
+		),
 		getStorageUsage: connect.NewClient[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse](
 			httpClient,
 			baseURL+CatalogServiceGetStorageUsageProcedure,
@@ -373,6 +439,12 @@ type catalogServiceClient struct {
 	listHistory         *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
 	setWatchLater       *connect.Client[v1.SetWatchLaterRequest, v1.SetWatchLaterResponse]
 	listWatchLater      *connect.Client[v1.ListWatchLaterRequest, v1.ListWatchLaterResponse]
+	listPlaylists       *connect.Client[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse]
+	getPlaylist         *connect.Client[v1.GetPlaylistRequest, v1.GetPlaylistResponse]
+	createPlaylist      *connect.Client[v1.CreatePlaylistRequest, v1.CreatePlaylistResponse]
+	updatePlaylist      *connect.Client[v1.UpdatePlaylistRequest, v1.UpdatePlaylistResponse]
+	deletePlaylist      *connect.Client[v1.DeletePlaylistRequest, v1.DeletePlaylistResponse]
+	setPlaylistItem     *connect.Client[v1.SetPlaylistItemRequest, v1.SetPlaylistItemResponse]
 	getStorageUsage     *connect.Client[v1.GetStorageUsageRequest, v1.GetStorageUsageResponse]
 	setPinned           *connect.Client[v1.SetPinnedRequest, v1.SetPinnedResponse]
 	listPinnedVideos    *connect.Client[v1.ListPinnedVideosRequest, v1.ListPinnedVideosResponse]
@@ -498,6 +570,36 @@ func (c *catalogServiceClient) ListWatchLater(ctx context.Context, req *connect.
 	return c.listWatchLater.CallUnary(ctx, req)
 }
 
+// ListPlaylists calls catalog.v1.CatalogService.ListPlaylists.
+func (c *catalogServiceClient) ListPlaylists(ctx context.Context, req *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error) {
+	return c.listPlaylists.CallUnary(ctx, req)
+}
+
+// GetPlaylist calls catalog.v1.CatalogService.GetPlaylist.
+func (c *catalogServiceClient) GetPlaylist(ctx context.Context, req *connect.Request[v1.GetPlaylistRequest]) (*connect.Response[v1.GetPlaylistResponse], error) {
+	return c.getPlaylist.CallUnary(ctx, req)
+}
+
+// CreatePlaylist calls catalog.v1.CatalogService.CreatePlaylist.
+func (c *catalogServiceClient) CreatePlaylist(ctx context.Context, req *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error) {
+	return c.createPlaylist.CallUnary(ctx, req)
+}
+
+// UpdatePlaylist calls catalog.v1.CatalogService.UpdatePlaylist.
+func (c *catalogServiceClient) UpdatePlaylist(ctx context.Context, req *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error) {
+	return c.updatePlaylist.CallUnary(ctx, req)
+}
+
+// DeletePlaylist calls catalog.v1.CatalogService.DeletePlaylist.
+func (c *catalogServiceClient) DeletePlaylist(ctx context.Context, req *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error) {
+	return c.deletePlaylist.CallUnary(ctx, req)
+}
+
+// SetPlaylistItem calls catalog.v1.CatalogService.SetPlaylistItem.
+func (c *catalogServiceClient) SetPlaylistItem(ctx context.Context, req *connect.Request[v1.SetPlaylistItemRequest]) (*connect.Response[v1.SetPlaylistItemResponse], error) {
+	return c.setPlaylistItem.CallUnary(ctx, req)
+}
+
 // GetStorageUsage calls catalog.v1.CatalogService.GetStorageUsage.
 func (c *catalogServiceClient) GetStorageUsage(ctx context.Context, req *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error) {
 	return c.getStorageUsage.CallUnary(ctx, req)
@@ -563,6 +665,18 @@ type CatalogServiceHandler interface {
 	// write it, so it answered false for everybody, forever.
 	SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error)
 	ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error)
+	// Playlists, per member. Watch Later is deliberately not one of these: it has
+	// no name, cannot be created and cannot be deleted, so as a row here it would
+	// be a playlist that is not one.
+	ListPlaylists(context.Context, *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error)
+	GetPlaylist(context.Context, *connect.Request[v1.GetPlaylistRequest]) (*connect.Response[v1.GetPlaylistResponse], error)
+	CreatePlaylist(context.Context, *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error)
+	UpdatePlaylist(context.Context, *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error)
+	DeletePlaylist(context.Context, *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error)
+	// One toggle rather than an add/remove pair: the caller always knows which
+	// way the menu entry is facing, and two RPCs would be two places to get the
+	// position rules wrong.
+	SetPlaylistItem(context.Context, *connect.Request[v1.SetPlaylistItemRequest]) (*connect.Response[v1.SetPlaylistItemResponse], error)
 	// Storage. Backs the Storage page and the eviction banner.
 	GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error)
 	SetPinned(context.Context, *connect.Request[v1.SetPinnedRequest]) (*connect.Response[v1.SetPinnedResponse], error)
@@ -722,6 +836,42 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListWatchLater")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListPlaylistsHandler := connect.NewUnaryHandler(
+		CatalogServiceListPlaylistsProcedure,
+		svc.ListPlaylists,
+		connect.WithSchema(catalogServiceMethods.ByName("ListPlaylists")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceGetPlaylistHandler := connect.NewUnaryHandler(
+		CatalogServiceGetPlaylistProcedure,
+		svc.GetPlaylist,
+		connect.WithSchema(catalogServiceMethods.ByName("GetPlaylist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceCreatePlaylistHandler := connect.NewUnaryHandler(
+		CatalogServiceCreatePlaylistProcedure,
+		svc.CreatePlaylist,
+		connect.WithSchema(catalogServiceMethods.ByName("CreatePlaylist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceUpdatePlaylistHandler := connect.NewUnaryHandler(
+		CatalogServiceUpdatePlaylistProcedure,
+		svc.UpdatePlaylist,
+		connect.WithSchema(catalogServiceMethods.ByName("UpdatePlaylist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceDeletePlaylistHandler := connect.NewUnaryHandler(
+		CatalogServiceDeletePlaylistProcedure,
+		svc.DeletePlaylist,
+		connect.WithSchema(catalogServiceMethods.ByName("DeletePlaylist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceSetPlaylistItemHandler := connect.NewUnaryHandler(
+		CatalogServiceSetPlaylistItemProcedure,
+		svc.SetPlaylistItem,
+		connect.WithSchema(catalogServiceMethods.ByName("SetPlaylistItem")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceGetStorageUsageHandler := connect.NewUnaryHandler(
 		CatalogServiceGetStorageUsageProcedure,
 		svc.GetStorageUsage,
@@ -790,6 +940,18 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceSetWatchLaterHandler.ServeHTTP(w, r)
 		case CatalogServiceListWatchLaterProcedure:
 			catalogServiceListWatchLaterHandler.ServeHTTP(w, r)
+		case CatalogServiceListPlaylistsProcedure:
+			catalogServiceListPlaylistsHandler.ServeHTTP(w, r)
+		case CatalogServiceGetPlaylistProcedure:
+			catalogServiceGetPlaylistHandler.ServeHTTP(w, r)
+		case CatalogServiceCreatePlaylistProcedure:
+			catalogServiceCreatePlaylistHandler.ServeHTTP(w, r)
+		case CatalogServiceUpdatePlaylistProcedure:
+			catalogServiceUpdatePlaylistHandler.ServeHTTP(w, r)
+		case CatalogServiceDeletePlaylistProcedure:
+			catalogServiceDeletePlaylistHandler.ServeHTTP(w, r)
+		case CatalogServiceSetPlaylistItemProcedure:
+			catalogServiceSetPlaylistItemHandler.ServeHTTP(w, r)
 		case CatalogServiceGetStorageUsageProcedure:
 			catalogServiceGetStorageUsageHandler.ServeHTTP(w, r)
 		case CatalogServiceSetPinnedProcedure:
@@ -899,6 +1061,30 @@ func (UnimplementedCatalogServiceHandler) SetWatchLater(context.Context, *connec
 
 func (UnimplementedCatalogServiceHandler) ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListWatchLater is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListPlaylists(context.Context, *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListPlaylists is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) GetPlaylist(context.Context, *connect.Request[v1.GetPlaylistRequest]) (*connect.Response[v1.GetPlaylistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.GetPlaylist is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) CreatePlaylist(context.Context, *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.CreatePlaylist is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) UpdatePlaylist(context.Context, *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.UpdatePlaylist is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) DeletePlaylist(context.Context, *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.DeletePlaylist is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) SetPlaylistItem(context.Context, *connect.Request[v1.SetPlaylistItemRequest]) (*connect.Response[v1.SetPlaylistItemResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetPlaylistItem is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) GetStorageUsage(context.Context, *connect.Request[v1.GetStorageUsageRequest]) (*connect.Response[v1.GetStorageUsageResponse], error) {

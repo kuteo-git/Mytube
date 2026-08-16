@@ -27,6 +27,7 @@ const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   [(p) => p.startsWith('/channel/'), null],
   [(p) => p === '/saved', 'Saved'],
   [(p) => p === '/watch-later', 'Watch later'],
+  [(p) => p === '/playlists', 'Playlists'],
   [(p) => p === '/storage', 'Storage'],
   [(p) => p === '/activity', 'Activity'],
   [(p) => p === '/settings/feed', 'Home feed'],
