@@ -317,7 +317,9 @@ Key rules:
 - `BOUNCED` is its own Reason.
 - Affinity is read from watch history, not likes alone.
 - A 3-hour `RecentlyWatched` window with a large penalty breaks the two-video loop.
-- `applyChannelDiversity`: at most 3 videos per channel in each window of 24.
+- `applyChannelDiversity`: at most 3 videos per channel in each window of 24, **and at least `window/perChannel` = 8 slots apart**. The count alone could not tell a mixed page from a channel's page — measured on the real feed, one channel at positions 6, 7 and 9 of the first window, another at 3 and 4, a third at 13 and 14. It also reset at each window, so a channel could take slot 23 and slot 24. The gap is derived from the cap rather than chosen separately, so the two can never disagree.
+- New uploads from followed channels keep their exemption from the *cap* but get a small gap of 3. The full gap would push a channel's sixth upload of the day past the first window, which is what the exemption exists to prevent; nothing about the exemption required them to be adjacent.
+- Held-back videos are retried **before every slot**, not only at window boundaries. A video held by the count cannot move until the window resets, so waiting cost nothing; one held by the gap becomes placeable a few slots later, and waiting sent six uploads that should have shared a page onto the next one.
 - Retention is computed in recsys, not catalog.
 
 ### Likes / dislikes

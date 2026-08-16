@@ -403,3 +403,99 @@ func TestTheDefaultMixMatchesTheOneTheGatewayPublishes(t *testing.T) {
 		t.Fatalf("DefaultFeedMix = %+v, want %+v — update the gateway's copy too", DefaultFeedMix, want)
 	}
 }
+
+// Three from one channel in twenty-four slots is a mixed page. The same three
+// at positions 6, 7 and 9 is that channel's page.
+//
+// The cap could not tell those apart: it counted how many and never asked
+// where. Measured on the real feed before the gap existed — one channel at
+// positions 6, 7 and 9 of the first window, another at 3 and 4, a third at 13
+// and 14, and the top channel taking its full three in every one of the first
+// five windows.
+func TestVideosFromOneChannelAreSpacedOut(t *testing.T) {
+	slots := map[string]feedSlot{}
+	channelOf := map[string]string{}
+	var ranked []domain.RankedVideo
+
+	// One channel holding the top scores, so left alone it would take the first
+	// three slots outright.
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("loud%d", i)
+		slots[id] = slotAffinity
+		channelOf[id] = "ch_loud"
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(100 - i)})
+	}
+	for i := 0; i < 60; i++ {
+		id := fmt.Sprintf("other%d", i)
+		slots[id] = slotAffinity
+		channelOf[id] = fmt.Sprintf("ch_%d", i)
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(50 - i)})
+	}
+
+	got := applyChannelDiversity(ranked, channelOf, slots, maxPerChannelPerWindow, quotaWindow)
+
+	last := -1
+	gap := channelGap(maxPerChannelPerWindow, quotaWindow)
+	for i, v := range got[:quotaWindow] {
+		if channelOf[v.VideoID] != "ch_loud" {
+			continue
+		}
+		if last >= 0 && i-last < gap {
+			t.Fatalf("two videos from one channel at %d and %d, want at least %d apart", last, i, gap)
+		}
+		last = i
+	}
+}
+
+// The gap holds across the window boundary, which the count never did.
+//
+// `seen` resets at each window, so a channel could take its third slot at 23
+// and its next at 24 — two adjacent videos from one channel, with both windows
+// reporting themselves within the cap.
+func TestTheGapSurvivesTheWindowBoundary(t *testing.T) {
+	slots := map[string]feedSlot{}
+	channelOf := map[string]string{}
+	var ranked []domain.RankedVideo
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("loud%d", i)
+		slots[id] = slotAffinity
+		channelOf[id] = "ch_loud"
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(100 - i)})
+	}
+	for i := 0; i < 200; i++ {
+		id := fmt.Sprintf("other%d", i)
+		slots[id] = slotAffinity
+		channelOf[id] = fmt.Sprintf("ch_%d", i)
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(50 - i)})
+	}
+
+	got := applyChannelDiversity(ranked, channelOf, slots, maxPerChannelPerWindow, quotaWindow)
+
+	gap := channelGap(maxPerChannelPerWindow, quotaWindow)
+	last := -1
+	for i, v := range got[:3*quotaWindow] {
+		if channelOf[v.VideoID] != "ch_loud" {
+			continue
+		}
+		if last >= 0 && i-last < gap {
+			t.Fatalf("positions %d and %d are %d apart, want %d — the boundary let a run through",
+				last, i, i-last, gap)
+		}
+		last = i
+	}
+}
+
+// Nothing is dropped by the spacing, only moved.
+func TestSpacingReordersAndNeverDrops(t *testing.T) {
+	slots := map[string]feedSlot{}
+	channelOf := map[string]string{}
+	var ranked []domain.RankedVideo
+	for i := 0; i < 30; i++ {
+		id := fmt.Sprintf("v%d", i)
+		slots[id] = slotAffinity
+		channelOf[id] = "ch_one"
+		ranked = append(ranked, domain.RankedVideo{VideoID: id, Score: float64(30 - i)})
+	}
+	got := applyChannelDiversity(ranked, channelOf, slots, maxPerChannelPerWindow, quotaWindow)
+	assertSameSet(t, got, ranked)
+}

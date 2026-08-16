@@ -340,6 +340,17 @@ func applyChannelDiversity(
 	// Videos held back from the current window, still in score order.
 	var deferred []domain.RankedVideo
 	seen := map[string]int{}
+	// Where each channel last appeared in the output, counted across windows.
+	//
+	// The count alone was not enough, and the gap between the two is what a
+	// viewer actually sees. Three from one channel spread through twenty-four
+	// slots reads as a varied page; the same three at positions 6, 7 and 9 reads
+	// as that channel's page — and the counter could not tell those apart,
+	// because it only ever asked how many and never where.
+	//
+	// It also survives the window boundary, which the counter did not: `seen`
+	// resets, so a channel could take its third slot at 23 and its next at 24.
+	lastAt := map[string]int{}
 	inWindow := 0
 
 	startWindow := func() {
@@ -352,30 +363,65 @@ func applyChannelDiversity(
 		exempt := slots[video.VideoID] == slotFreshSubscribed
 		// A video whose channel is unknown cannot crowd a channel out, so it is
 		// never held back.
-		if !exempt && channel != "" && seen[channel] >= perChannel {
-			return false
+		if channel != "" {
+			if !exempt && seen[channel] >= perChannel {
+				return false
+			}
+			// Spacing applies to the exempt slot too, but not the same spacing.
+			//
+			// The full gap would defeat the exemption it is meant to coexist
+			// with: a channel that posted six times today would have three of
+			// those pushed past the first window, which is the "I never see new
+			// videos" the exemption exists to prevent. What the exemption never
+			// asked for is for them to be adjacent, so new uploads get the small
+			// gap — enough that they read as separate items on a page rather
+			// than as a block of one channel.
+			gap := channelGap(perChannel, window)
+			if exempt {
+				gap = freshChannelGap
+			}
+			if at, placed := lastAt[channel]; placed && len(out)-at < gap {
+				return false
+			}
 		}
 		out = append(out, video)
+		lastAt[channel] = len(out) - 1
 		seen[channel]++
 		inWindow++
 		return true
 	}
 
+	// Try everything held back, in score order, and keep whatever still will
+	// not fit.
+	//
+	// Run before each new video rather than only at window boundaries, which is
+	// what the counter used to need. A video held back by the *count* cannot be
+	// placed until the window resets, so waiting for the boundary cost nothing.
+	// One held back by the *gap* becomes placeable a few slots later, and
+	// leaving it until the boundary sent six uploads that should have shared the
+	// first page onto the second.
+	drain := func() {
+		if len(deferred) == 0 {
+			return
+		}
+		remaining := deferred
+		deferred = nil
+		for i, held := range remaining {
+			if inWindow >= window || !take(held) {
+				deferred = append(deferred, remaining[i:]...)
+				return
+			}
+		}
+	}
+
 	for _, video := range ranked {
 		if inWindow >= window {
 			startWindow()
-			// Held-back videos outscore everything still to come, so they lead
-			// the new window.
-			remaining := deferred
-			deferred = nil
-			for _, held := range remaining {
-				if !take(held) {
-					deferred = append(deferred, held)
-				}
-				if inWindow >= window {
-					break
-				}
-			}
+		}
+		drain()
+		if inWindow >= window {
+			startWindow()
+			drain()
 		}
 		if !take(video) {
 			deferred = append(deferred, video)
@@ -385,6 +431,34 @@ func applyChannelDiversity(
 	// Whatever is still held back goes on the end, in score order. Emitting it
 	// under the cap would need windows nobody is going to scroll to.
 	return append(out, deferred...)
+}
+
+// How far apart two new uploads from the same followed channel must sit.
+//
+// Small, and a constant rather than derived: it is not enforcing a share of the
+// page, it is only stopping a run. Three means a viewer reads two other things
+// between them.
+const freshChannelGap = 3
+
+// channelGap is how far apart two videos from one channel must sit.
+//
+// Derived from the cap rather than chosen separately, so the two can never
+// disagree: at most `perChannel` in a window of `window` slots is the same
+// statement as "at least window/perChannel apart", and saying it as a distance
+// is what makes the page look mixed rather than merely be mixed. Three per
+// twenty-four becomes one every eight.
+//
+// It subsumes the cap for spaced-out feeds and is stricter at the boundaries,
+// which is the point: the count reset every window and this does not.
+func channelGap(perChannel, window int) int {
+	if perChannel <= 0 {
+		return 0
+	}
+	gap := window / perChannel
+	if gap < 1 {
+		return 1
+	}
+	return gap
 }
 
 // How sharply sampling favours the higher score.
