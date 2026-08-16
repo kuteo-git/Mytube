@@ -29,6 +29,7 @@ const (
 	excludedNoPublishDate    = "no publish date"
 	excludedTooOld           = "published over a year ago"
 	excludedShort            = "a Short"
+	excludedUnreadable       = "a language nobody here watches"
 )
 
 // rankInputs is everything the per-video score depends on beyond the video.
@@ -44,13 +45,15 @@ type rankInputs struct {
 	likes           ReactionAffinity
 	dislikes        ReactionAffinity
 	rotation        ChannelRotation
-	retention       map[string]float32
-	coverage        map[string]int
-	suppressed      func(channelID string) bool
-	topic           string
-	languages       []string
-	now             time.Time
-	tuning          resolvedTuning
+	// Languages this household demonstrably watches. Empty means the rule is off.
+	watchedLanguages map[string]bool
+	retention        map[string]float32
+	coverage         map[string]int
+	suppressed       func(channelID string) bool
+	topic            string
+	languages        []string
+	now              time.Time
+	tuning           resolvedTuning
 }
 
 // ScoreBreakdown is one video's score with its working shown.
@@ -230,6 +233,21 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 			out.Excluded = excludedLanguage
 			return out
 		}
+	}
+	// Something uninvited, in a language nobody here reads.
+	//
+	// Only for channels the viewer has not subscribed to. A subscription is a
+	// deliberate choice and is theirs to make in any language; this is about
+	// what the feed pushes at somebody who did not ask for it, which was Hindi,
+	// Malayalam, Indonesian and Nepali to a household that has never watched a
+	// single video in any of them.
+	//
+	// Placed after the media-state rules and before the age ones, so a video is
+	// never reported as unreadable when the real reason it cannot be shown is
+	// that it will not play.
+	if !in.profile.Subscribed[f.ChannelID] && unreadable(f, in.watchedLanguages) {
+		out.Excluded = excludedUnreadable
+		return out
 	}
 	// Videos without a publish date are skipped — the feed only ranks content
 	// whose age is known. AddedAt is a fallback for the age penalty on the

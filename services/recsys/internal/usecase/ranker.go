@@ -443,7 +443,10 @@ func (r *Ranker) buildInputs(
 		// Which channels have been in front of this viewer lately, and which
 		// have gone quiet. See rotation.go for why Home needed it.
 		rotation: buildChannelRotation(features, profile, now),
-		likes:           buildLikeAffinity(features, profile.Liked),
+		// Learned from the history rather than configured, so it corrects itself:
+		// start watching a language and it stops being filtered out.
+		watchedLanguages: buildWatchedLanguages(features, profile.WatchedFraction),
+		likes:            buildLikeAffinity(features, profile.Liked),
 		// What the dislikes say beyond the videos they were pressed on. Subtracted
 		// rather than added, and aged — see buildDislikeAffinity.
 		dislikes:   buildDislikeAffinity(features, profile.Disliked, now),

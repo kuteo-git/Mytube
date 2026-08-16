@@ -346,6 +346,21 @@ The cause was not the buckets, which are broad (the affinity bucket holds 174 vi
 
 After: **49** distinct channels in the first 120 (was 36), top-3 hold **35** (was 38), **38** subscribed channels in the first 240 (was 28).
 
+### Uninvited videos, and the language they are in
+
+Measured: the feed was offering Hindi, Malayalam, Indonesian and Nepali to a household whose entire watch history is **406 English, 200 unknown, 27 Vietnamese, 18 en-US** and not one view in any of the four. Vietnamese was **11 of the first 1000 slots against Hindi's 21**.
+
+Not a ranking fault. Those videos sit in the `affinity` and `discovery` buckets, which are *defined* as channels the viewer has not subscribed to, and the `subscribed`/`fresh_subscribed` slots measured 100% subscribed. The fault is the pool those buckets draw from: **621 of the library's 708 channels arrived through `ExpandLibrary`** reaching InnerTube search, and a search by topic name returns whatever YouTube returns. A third of Home comes from channels nobody asked for.
+
+- **The rule is about provenance, not language as such.** A subscription is a deliberate choice and is honoured in any language; only *uninvited* videos — non-subscribed channels — must be in a language the household demonstrably watches.
+- **Learned, never configured** (`buildWatchedLanguages`). It corrects itself: start watching a language and it stops being filtered. The `?lang=` query parameter still exists as a per-request override and nothing in the web app has ever sent it.
+- **A language needs ≥3 watched videos** to count. The `language` column is filled from the title on flat listings, so one row is as likely to be a mis-tagged title as a real viewing.
+- **Off entirely below 20 watched videos.** A fresh library cannot know what anybody reads, and guessing would leave a new installation showing almost nothing.
+- **Unknown language always passes.** 1961 of 8310 videos carry none and 200 of those have been watched; excluding them to catch a handful of Bollywood would be the worst trade in the ranker.
+- `en-US` and `en` are one language: primary subtag only.
+
+Result: 54 videos excluded, and hi/ne/ml gone from the feed. **Vietnamese stays scarce for a reason ranking cannot fix** — the library holds 125 Vietnamese videos out of 8310. The feed cannot show what was never ingested; that is a `topics.yaml` and subscriptions question.
+
 ### Up-next
 
 Reversed 2026-07-29: subject leads, channel is one way of sharing the subject. `weightSameChannel = weightSharedTags = 2.5` per matching tag, with a hard cap of 3 videos per channel in the rail.
