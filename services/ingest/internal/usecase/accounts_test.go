@@ -691,3 +691,41 @@ func TestAnOrdinaryFailureDoesNotBuryAPlaylist(t *testing.T) {
 		t.Errorf("a network error buried a playlist: %v", lib.unavailablePlaylists)
 	}
 }
+
+// Progress counts playlists actually read, not places in the loop.
+//
+// A pass whose sessions have all expired skips every playlist, and counting the
+// index called that progress: the settings screen showed "16 of 17" while
+// nothing had been read at all, which is the one number on that screen anybody
+// would trust.
+func TestProgressCountsWhatWasReadNotWhatWasSkipped(t *testing.T) {
+	accounts := newMemAccounts("u_luc")
+	// The session is gone, so every playlist below is skipped.
+	a := accounts.accounts["u_luc"]
+	a.State = domain.AccountExpired
+	accounts.accounts["u_luc"] = a
+
+	unread := make([]domain.StalePlaylist, 0, 5)
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("PL%d", i)
+		unread = append(unread, domain.StalePlaylist{
+			ID: id, UserID: "u_luc", SourceURL: domain.PlaylistURL(id),
+		})
+	}
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{}}
+	lib := &recordingLibrary{known: map[string]bool{}, unreadPlaylists: unread}
+
+	scanner := newAccountScanner(t, accounts, feeds, lib)
+	if _, err := scanner.ScanAll(context.Background(), ""); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	status := scanner.Status()
+	if status.PlaylistsRead != 0 {
+		t.Errorf("reported %d playlists read, want 0 — none could be", status.PlaylistsRead)
+	}
+	// And it says why, rather than looking like a pass with nothing to do.
+	if len(status.Errors) == 0 {
+		t.Error("a pass that read nothing for want of a session said nothing")
+	}
+}

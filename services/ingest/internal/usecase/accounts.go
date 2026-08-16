@@ -506,16 +506,21 @@ func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScan
 	// Unread first: an empty playlist is the thing somebody is looking at right
 	// now, and a refresh of one that already has videos can wait.
 	due := append(unread, stale...)
+
+	// Counted, not indexed. The loop skips a playlist whose owner has no working
+	// session, and counting the index called that progress: a pass that read
+	// nothing at all reported "16 of 17" and looked like it had worked.
+	read, skipped := 0, 0
 	s.setPlaylistProgress(0, len(due))
 
-	for i, p := range due {
-		s.setPlaylistProgress(i, len(due))
+	for _, p := range due {
 		cookiePath, err := s.accounts.CookiePath(ctx, p.UserID)
 		if err != nil {
 			// The member whose playlist this is has no working session. Skipped
 			// rather than read anonymously: a playlist can be private, and asking
 			// for one without the account that owns it is a request that fails
 			// and teaches nothing.
+			skipped++
 			continue
 		}
 
@@ -577,7 +582,15 @@ func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScan
 			continue
 		}
 		out.PlaylistVideos += len(ids)
-		s.setPlaylistProgress(i+1, len(due))
+		read++
+		s.setPlaylistProgress(read, len(due)-skipped)
+	}
+
+	// Said plainly rather than left as silence. A pass that skipped everything
+	// for want of a session looked, from the settings screen, exactly like a
+	// pass that had nothing to do.
+	if skipped > 0 && read == 0 {
+		s.noteError("no working YouTube session — playlists were not read")
 	}
 }
 
