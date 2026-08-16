@@ -144,6 +144,13 @@ message Video {
   // Primary language of the video, e.g. "en", "vi". From yt-dlp on full fetch,
   // or detected from the title on flat listings. Empty when unknown.
   string language = 20;
+  // How this video reached the library: SOURCE, RELATED or SEARCH.
+  //
+  // Empty for everything ingested before the field existed, and deliberately
+  // not guessed at afterwards — the obvious proxy (expansion stored videos
+  // unfiled) was wrong, because the metadata backfill later fills YouTube's own
+  // category in for everything.
+  string discovered_via = 22;
   // Whether this is a YouTube Short. Absent until it has been asked.
   //
   // Optional rather than a plain bool because "no" and "not yet asked" are
@@ -318,6 +325,8 @@ message VideoFeatures {
   // Short", so a video is never withheld from the feed over a question the
   // checker has not reached yet.
   bool is_short = 11;
+  // How this video reached the library. Empty where it is not known.
+  string discovered_via = 12;
 }
 
 // ---------------------------------------------------------------------------

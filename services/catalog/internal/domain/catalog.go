@@ -67,6 +67,9 @@ type Video struct {
 	Subtitles       []SubtitleTrack
 	UserState       *VideoUserState
 	Language        string
+	// How this video reached the library: SOURCE, RELATED or SEARCH. Empty for
+	// anything ingested before the column existed, and never guessed at.
+	DiscoveredVia string
 }
 
 // SubtitleTrack is a caption file on disk, fetched with the media.
@@ -157,6 +160,8 @@ type VideoFeatures struct {
 	// True only where YouTube has confirmed it. Unknown reads as false, so a
 	// video is never withheld from the feed over a question nobody has asked.
 	IsShort bool
+	// How this video reached the library. Empty where it is not known.
+	DiscoveredVia string
 }
 
 type StorageUsage struct {

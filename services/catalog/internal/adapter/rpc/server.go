@@ -118,6 +118,7 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		SourceUrl:       v.SourceURL,
 		LikeCount:       v.LikeCount,
 		Language:        v.Language,
+		DiscoveredVia:   v.DiscoveredVia,
 	}
 
 	for _, t := range v.Subtitles {
@@ -310,6 +311,7 @@ func featuresToProto(fs []domain.VideoFeatures) []*catalogv1.VideoFeatures {
 			Language:        f.Language,
 			ViewCount:       f.ViewCount,
 			IsShort:         f.IsShort,
+			DiscoveredVia:   f.DiscoveredVia,
 		}
 		// Left unset rather than sent as the zero instant: the ranker excludes
 		// an undated video outright, and epoch zero is a date.
@@ -369,6 +371,7 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 		SizeBytes:       in.GetSizeBytes(),
 		SourceURL:       in.GetSourceUrl(),
 		Language:        in.GetLanguage(),
+		DiscoveredVia:   in.GetDiscoveredVia(),
 	}
 	if ts := in.GetPublishedAt(); ts != nil {
 		v.PublishedAt = ts.AsTime()

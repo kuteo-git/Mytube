@@ -380,6 +380,13 @@ type Video struct {
 	// Primary language of the video, e.g. "en", "vi". From yt-dlp on full fetch,
 	// or detected from the title on flat listings. Empty when unknown.
 	Language string `protobuf:"bytes,20,opt,name=language,proto3" json:"language,omitempty"`
+	// How this video reached the library: SOURCE, RELATED or SEARCH.
+	//
+	// Empty for everything ingested before the field existed, and deliberately
+	// not guessed at afterwards — the obvious proxy (expansion stored videos
+	// unfiled) was wrong, because the metadata backfill later fills YouTube's own
+	// category in for everything.
+	DiscoveredVia string `protobuf:"bytes,22,opt,name=discovered_via,json=discoveredVia,proto3" json:"discovered_via,omitempty"`
 	// Whether this is a YouTube Short. Absent until it has been asked.
 	//
 	// Optional rather than a plain bool because "no" and "not yet asked" are
@@ -557,6 +564,13 @@ func (x *Video) GetSubtitles() []*SubtitleTrack {
 func (x *Video) GetLanguage() string {
 	if x != nil {
 		return x.Language
+	}
+	return ""
+}
+
+func (x *Video) GetDiscoveredVia() string {
+	if x != nil {
+		return x.DiscoveredVia
 	}
 	return ""
 }
@@ -1847,7 +1861,9 @@ type VideoFeatures struct {
 	// True only where it has been confirmed. Ranking treats unknown as "not a
 	// Short", so a video is never withheld from the feed over a question the
 	// checker has not reached yet.
-	IsShort       bool `protobuf:"varint,11,opt,name=is_short,json=isShort,proto3" json:"is_short,omitempty"`
+	IsShort bool `protobuf:"varint,11,opt,name=is_short,json=isShort,proto3" json:"is_short,omitempty"`
+	// How this video reached the library. Empty where it is not known.
+	DiscoveredVia string `protobuf:"bytes,12,opt,name=discovered_via,json=discoveredVia,proto3" json:"discovered_via,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1957,6 +1973,13 @@ func (x *VideoFeatures) GetIsShort() bool {
 		return x.IsShort
 	}
 	return false
+}
+
+func (x *VideoFeatures) GetDiscoveredVia() string {
+	if x != nil {
+		return x.DiscoveredVia
+	}
+	return ""
 }
 
 type UpsertChannelRequest struct {
@@ -3805,7 +3828,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"subscribed\x18\a \x01(\bR\n" +
 	"subscribed\x12\x1f\n" +
 	"\vbanner_path\x18\b \x01(\tR\n" +
-	"bannerPath\"\xb7\x06\n" +
+	"bannerPath\"\xde\x06\n" +
 	"\x05Video\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12-\n" +
@@ -3834,7 +3857,8 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"like_count\x18\x12 \x01(\x03R\tlikeCount\x127\n" +
 	"\tsubtitles\x18\x13 \x03(\v2\x19.catalog.v1.SubtitleTrackR\tsubtitles\x12\x1a\n" +
-	"\blanguage\x18\x14 \x01(\tR\blanguage\x12\x1e\n" +
+	"\blanguage\x18\x14 \x01(\tR\blanguage\x12%\n" +
+	"\x0ediscovered_via\x18\x16 \x01(\tR\rdiscoveredVia\x12\x1e\n" +
 	"\bis_short\x18\x15 \x01(\bH\x01R\aisShort\x88\x01\x01B\r\n" +
 	"\v_user_stateB\v\n" +
 	"\t_is_short\"s\n" +
@@ -3932,7 +3956,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"v\n" +
 	"\x19ListVideoFeaturesResponse\x121\n" +
 	"\x06videos\x18\x01 \x03(\v2\x19.catalog.v1.VideoFeaturesR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xad\x03\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd4\x03\n" +
 	"\rVideoFeatures\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x1d\n" +
 	"\n" +
@@ -3948,7 +3972,8 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"view_count\x18\n" +
 	" \x01(\x03R\tviewCount\x12\x19\n" +
-	"\bis_short\x18\v \x01(\bR\aisShort\"E\n" +
+	"\bis_short\x18\v \x01(\bR\aisShort\x12%\n" +
+	"\x0ediscovered_via\x18\f \x01(\tR\rdiscoveredVia\"E\n" +
 	"\x14UpsertChannelRequest\x12-\n" +
 	"\achannel\x18\x01 \x01(\v2\x13.catalog.v1.ChannelR\achannel\"F\n" +
 	"\x15UpsertChannelResponse\x12-\n" +

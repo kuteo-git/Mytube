@@ -59,6 +59,9 @@ type VideoFeatures struct {
 	DurationSeconds int32
 	// Confirmed by asking YouTube, never inferred from DurationSeconds.
 	IsShort bool
+	// How this video reached the library: SOURCE, RELATED or SEARCH. Empty for
+	// anything ingested before the column existed.
+	DiscoveredVia string
 	MediaState      string
 	Language        string
 	ViewCount       int64

@@ -109,3 +109,69 @@ func TestASubscribedChannelIsNeverFilteredByLanguage(t *testing.T) {
 		t.Error("a video from a channel the viewer subscribed to was filtered by language")
 	}
 }
+
+// Expansion's finds are discovery, never affinity.
+//
+// The affinity slot means "more of what you watch". A channel the viewer never
+// chose cannot be more of anything — at best it resembles their taste — and
+// letting it sit there gave uninvited material a fifth of the page under a name
+// saying the viewer had asked for it. Discovery is where it belongs: bounded,
+// reserved, and explicitly for the unfamiliar.
+func TestExpansionMaterialIsDiscoveryNotAffinity(t *testing.T) {
+	now := time.Now()
+	base := domain.VideoFeatures{
+		ChannelID: "ch_x", PublishedAt: now, AddedAt: now,
+		MediaState: "MEDIA_STATE_READY",
+	}
+	in := rankInputs{
+		profile:    emptyProfile(),
+		suppressed: func(string) bool { return false },
+		now:        now,
+		tuning:     Tuning{}.resolve(),
+		// High affinity for the channel, so without the provenance rule these
+		// would land in the affinity slot.
+		watchAffinity: WatchAffinity{
+			Channels: map[string]float64{"ch_x": 1},
+			Topics:   map[string]float64{},
+		},
+	}
+
+	curated := base
+	curated.VideoID = "curated"
+	if got := scoreVideo(curated, in); got.Slot != slotAffinity {
+		t.Errorf("a curated video with high affinity landed in %q, want the affinity slot", got.Slot)
+	}
+
+	found := base
+	found.VideoID = "found"
+	found.DiscoveredVia = "RELATED"
+	if got := scoreVideo(found, in); got.Slot != slotDiscovery {
+		t.Errorf("an expansion find landed in %q, want discovery", got.Slot)
+	}
+}
+
+// Anything ingested before the column existed is treated as curated.
+//
+// Guessing retroactively is what the previous attempt at this got wrong: it
+// read "no topic" as "arrived uninvited", until the metadata backfill filled
+// YouTube's own category in for everything.
+func TestVideosWithNoRecordedProvenanceAreTreatedAsCurated(t *testing.T) {
+	now := time.Now()
+	in := rankInputs{
+		profile:    emptyProfile(),
+		suppressed: func(string) bool { return false },
+		now:        now,
+		tuning:     Tuning{}.resolve(),
+		watchAffinity: WatchAffinity{
+			Channels: map[string]float64{"ch_x": 1},
+			Topics:   map[string]float64{},
+		},
+	}
+	legacy := domain.VideoFeatures{
+		VideoID: "legacy", ChannelID: "ch_x", PublishedAt: now, AddedAt: now,
+		MediaState: "MEDIA_STATE_READY",
+	}
+	if got := scoreVideo(legacy, in); got.Slot != slotAffinity {
+		t.Errorf("a video with no provenance was demoted to %q", got.Slot)
+	}
+}

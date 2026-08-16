@@ -70,6 +70,9 @@ type ExternalVideo struct {
 	Topics    []string
 	Hashtags  []string
 	InLibrary bool
+	// How this video was reached: SOURCE, RELATED or SEARCH. Set by whichever
+	// path found it, and empty where nobody said.
+	DiscoveredVia string
 	// Category is the first entry of YouTube's own category list for this
 	// video. Only present when the caller did a full metadata fetch (Preview);
 	// a flat playlist listing never carries it.

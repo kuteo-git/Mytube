@@ -356,7 +356,19 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 	// were spread across the never-watched and recently-added buckets, mixed in
 	// with everything else that happened to be new.
 	if !in.profile.Subscribed[f.ChannelID] {
-		if combinedAffinity < discoveryAffinityThreshold {
+		// Something expansion found may be discovered; it may not be affinity.
+		//
+		// The affinity slot means "more of what you watch", and a channel the
+		// viewer has never chosen cannot be more of anything — it is at best a
+		// guess that resembles their taste. Expansion's material belongs in the
+		// discovery share, which is bounded, reserved and explicitly for the
+		// unfamiliar; putting it in the affinity share let it take a fifth of
+		// the page under a name that says the viewer asked for it.
+		//
+		// Videos from before the column existed carry no provenance and are
+		// treated as curated. Guessing retroactively is what the last attempt at
+		// this got wrong.
+		if combinedAffinity < discoveryAffinityThreshold || f.DiscoveredVia == "RELATED" {
 			out.Reason = domain.ReasonDiscovery
 			out.DiscoveryBase = weightDiscoveryBase
 			score += out.DiscoveryBase

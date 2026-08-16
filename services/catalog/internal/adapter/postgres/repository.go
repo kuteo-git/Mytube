@@ -393,8 +393,8 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		INSERT INTO videos (id, title, channel_id, duration_seconds, view_count,
 		                    published_at, added_at, thumbnail_path, description,
 		                    hashtags, topics, media_state, media_path,
-		                    size_bytes, source_url, language)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		                    size_bytes, source_url, language, discovered_via)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		ON CONFLICT (id) DO UPDATE
 		SET title = EXCLUDED.title,
 		    channel_id = EXCLUDED.channel_id,
@@ -423,11 +423,17 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		    -- the first one instead of being reassigned.
 		    topics = ARRAY(SELECT DISTINCT unnest(videos.topics || EXCLUDED.topics)),
 		    source_url = EXCLUDED.source_url,
-		    language = COALESCE(NULLIF(EXCLUDED.language, ''), videos.language)`,
+		    language = COALESCE(NULLIF(EXCLUDED.language, ''), videos.language),
+		    -- First writer wins. How a video reached the library is a fact about
+		    -- the moment it arrived, and a later scan finding it again under a
+		    -- curated source does not change where it came from — nor should a
+		    -- related lookup be able to relabel something the viewer chose.
+		    discovered_via = COALESCE(videos.discovered_via, NULLIF(EXCLUDED.discovered_via, ''))`,
 		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, nullableCount(v.ViewCount),
 		nullableTime(v.PublishedAt),
 		v.ThumbnailPath, v.Description, v.Hashtags, v.Topics,
-		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL, v.Language)
+		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL, v.Language,
+		nullableText(v.DiscoveredVia))
 	if err != nil {
 		return domain.Video{}, err
 	}
@@ -597,7 +603,8 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 		       duration_seconds, media_state, language, view_count,
 		       -- Unknown reads as "not a Short". Ranking must never withhold a
 		       -- video over a question the checker has not reached yet.
-		       COALESCE(is_short, false)
+		       COALESCE(is_short, false),
+		       discovered_via
 		FROM videos
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, page.Size, page.Offset)
@@ -614,10 +621,14 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 			publishedAt *time.Time
 		)
 		var viewCountFeature *int64
+		var discoveredVia *string
 		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Topics, &f.Hashtags,
 			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state, &f.Language, &viewCountFeature,
-			&f.IsShort); err != nil {
+			&f.IsShort, &discoveredVia); err != nil {
 			return nil, err
+		}
+		if discoveredVia != nil {
+			f.DiscoveredVia = *discoveredVia
 		}
 		if publishedAt != nil {
 			f.PublishedAt = *publishedAt
@@ -1058,6 +1069,19 @@ func nullableTime(t time.Time) *time.Time {
 		return nil
 	}
 	return &t
+}
+
+// nullableText writes NULL for the empty string.
+//
+// The column is a tri-state and "" is not one of its three values: the CHECK
+// allows SOURCE, RELATED, SEARCH or NULL. It also keeps the first-writer-wins
+// COALESCE in UpsertVideo honest — an empty string from a caller that does not
+// know the provenance must not overwrite one that did.
+func nullableText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func nullableCount(n int64) *int64 {

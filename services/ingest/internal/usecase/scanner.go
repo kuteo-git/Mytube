@@ -209,6 +209,9 @@ func (s *Scanner) upsertFromFeed(
 	if video.Language == "" && isLatinTitle(video.Title) {
 		video.Language = "en"
 	}
+	// Everything the scanner finds came from a curated source or a subscribed
+	// channel's uploads. That is what the scanner is.
+	video.DiscoveredVia = "SOURCE"
 	if err := s.library.UpsertVideo(ctx, video, "QUEUED"); err != nil {
 		s.logger.Warn("upsert video from feed", "video", video.ID, "error", err)
 	}
@@ -396,6 +399,7 @@ func (s *Scanner) scanSource(
 
 		// QUEUED means "known, not on disk". The feed can rank it; pressing
 		// play is what turns it into a download.
+		v.DiscoveredVia = "SOURCE"
 		if err := s.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
 			s.logger.Warn("upsert video", "video", v.ID, "error", err)
 			continue

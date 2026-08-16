@@ -126,7 +126,7 @@ func (e *Expander) deepen(ctx context.Context, topic string) int {
 			for i := range videos {
 				videos[i].Topics = []string{t.Name}
 			}
-			added += e.store(ctx, videos)
+			added += e.store(ctx, videos, viaSource)
 
 			if err := e.cursors.AdvanceOffset(ctx, source, int32(len(videos))); err != nil {
 				e.logger.Warn("advance source cursor", "source", source, "error", err)
@@ -149,7 +149,7 @@ func (e *Expander) fromRelated(ctx context.Context, seedVideoIDs []string) int {
 			e.logger.Warn("related lookup", "seed", seed, "error", err)
 			continue
 		}
-		added += e.store(ctx, videos)
+		added += e.store(ctx, videos, viaRelated)
 		if added >= expandTarget {
 			return added
 		}
@@ -168,7 +168,15 @@ func (e *Expander) fromRelated(ctx context.Context, seedVideoIDs []string) int {
 // curated source's topic, related and search leave them unfiled. YouTube's own
 // category arrives later, free, the first time full metadata is fetched for the
 // video — see CLAUDE.md §7.
-func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo) int {
+// Where a video was reached from. Recorded so the question "who asked for this"
+// can be answered from the data rather than guessed at — see
+// migrations/0012_discovered_via.sql for the guess that was wrong.
+const (
+	viaSource  = "SOURCE"
+	viaRelated = "RELATED"
+)
+
+func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo, via string) int {
 	added := 0
 	// How many this pass has taken from each channel.
 	//
@@ -195,6 +203,7 @@ func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo) int
 			e.logger.Warn("upsert channel", "video", v.ID, "error", err)
 			continue
 		}
+		v.DiscoveredVia = via
 		if err := e.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
 			e.logger.Warn("upsert video", "video", v.ID, "error", err)
 			continue
