@@ -57,7 +57,11 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
     <SettingsSection
       icon={<KeyRound size={18} />}
       title="YouTube account"
-      description="Brings your own subscriptions, playlists and liked videos into the library. Your account, on this machine only."
+      // Names what the import actually does. It said "playlists", which nothing
+      // here has ever brought in — there is no playlist anywhere in this system.
+      // §5's rule against a button that does nothing holds for a sentence that
+      // promises something too.
+      description="Brings your own subscriptions and liked videos into the library. Your account, on this machine only."
       headless={headless}
     >
       <div className="pt-2">
