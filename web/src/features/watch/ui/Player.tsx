@@ -1280,7 +1280,22 @@ export function Player({
       return
     }
 
-    const lead = postSeekRef.current ? REMUX_SEEK_LEAD_SECONDS : REMUX_PREPARE_LEAD_SECONDS
+    // The lead is there because the playhead keeps moving while the mux is
+    // being prepared: open it where the viewer is and they will have gone past
+    // it by the time it arrives. A playhead that is not running arrives
+    // nowhere, so the lead has nothing to buy and becomes a jump forward.
+    //
+    // The case that made this matter is the instant tier being refused — 403,
+    // twice, in one of googlevideo's refusal waves. The front element then sits
+    // at zero with an error on it and will never advance, the climb parks a
+    // muxed stream at twenty seconds, and the viewer is handed a video that
+    // begins twenty seconds in, clock included, for a video they never started.
+    //
+    // An error is the test rather than `paused`, which is also true of a front
+    // still waiting for autoplay on a fresh page — that playhead is about to
+    // move, and taking its lead away would spend the climb catching up.
+    const stalled = front()?.error != null
+    const lead = stalled ? 0 : postSeekRef.current ? REMUX_SEEK_LEAD_SECONDS : REMUX_PREPARE_LEAD_SECONDS
     const mark = positionRef.current + lead
     // Claim the attempt before asking anything, or the poll that re-runs this
     // effect a moment later would start a second mux for the same climb.
@@ -1306,7 +1321,25 @@ export function Player({
       pendingTierRef.current = { tier: wanted, offset, url }
       setBackSrc(url)
     })
-  }, [tiers, tier, quality, remuxFailed, localFailed, climbAttempt, frontSrc, setBackSrc, videoId])
+  }, [tiers, tier, quality, remuxFailed, localFailed, climbAttempt, frontSrc, setBackSrc, videoId, front])
+
+  // Drop the climb in flight without holding it against the tier it was for.
+  //
+  // The front layer dying is not evidence about the layer being prepared: the
+  // claim is discarded because the playhead it was measured from has stopped,
+  // not because the mux failed, so counting it towards the three attempts that
+  // switch 1080p off for the video would punish the wrong tier. Asking again
+  // straight away rather than waiting for the next poll of the stream answer,
+  // because the viewer is looking at a video that is not playing.
+  const dropClimb = useCallback(() => {
+    if (!pendingTierRef.current) return
+    pendingTierRef.current = undefined
+    upgradingToRef.current = undefined
+    window.cancelAnimationFrame(handoverFrameRef.current)
+    if (frontIsARef.current) setSrcB(undefined)
+    else setSrcA(undefined)
+    setClimbAttempt((n) => n + 1)
+  }, [])
 
   // Give up on an upgrade and keep playing what already works. Failing to
   // prepare a better source is not a playback failure — nothing on screen
@@ -1496,6 +1529,12 @@ export function Player({
      */
     const catchUpToViewer = () => {
       const within = current.currentTime + offsetRef.current - (pendingTierRef.current?.offset ?? 0)
+      // Negative means the replacement begins *after* the viewer, and there is
+      // nothing to be done about that here: a muxed stream calls its own mark
+      // zero, so there is no earlier moment inside it to wind back to. Reading
+      // it as "already in the right place" is what handed a viewer sitting at
+      // 0:00 a stream that starts at 0:20, clock and all.
+      if (within < -0.05) return false
       if (within <= 0.05) return true
       const ranges = next.buffered
       const filledTo = ranges.length > 0 ? ranges.end(ranges.length - 1) : 0
@@ -2684,6 +2723,14 @@ export function Player({
                     // and jump the viewer forward.
                     if (mine && !mine.tier.seekable) {
                       handoverToBack()
+                    } else if (mark < -0.05) {
+                      // The replacement starts after the viewer. It cannot be
+                      // moved back to them — its mark is its zero — so handing
+                      // it over would take them forward to it. This read as
+                      // "both elements already agree on where they are", which
+                      // is true only when the difference is nothing, not when
+                      // it is negative.
+                      abandonUpgrade()
                     } else if (mark <= 0) {
                       // Nothing has played yet, so both elements already agree
                       // on where they are.
@@ -2821,6 +2868,14 @@ export function Player({
                     abandonUpgrade()
                     return
                   }
+                  // Whatever climb is in flight was measured from this
+                  // playhead, and this playhead has just stopped for good: it
+                  // is parked a lead ahead of a viewer who will never travel
+                  // that far. Letting it stand is what turned a refused instant
+                  // tier into a silent jump to 1080p twenty seconds in. Dropped
+                  // here so the next attempt is made from where the viewer
+                  // actually is.
+                  dropClimb()
                   if (retriedRef.current) {
                     setLoadFailed(true)
                     return

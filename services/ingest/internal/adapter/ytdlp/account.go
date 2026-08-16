@@ -13,6 +13,36 @@ import (
 // The feed names are domain.Feed*, which are yt-dlp's own aliases. This file
 // exists apart from the rest of the downloader for one reason: these are the
 // only requests in the system made as somebody.
+
+// The most entries one feed read will take, and what an out-of-range ask means.
+//
+// Both halves were wrong and the second hid the first. The ceiling was 200,
+// below what a playlist needs — this household's "Luke Music" holds 139 and
+// the caller asks for 500 — and anything above the ceiling fell back to **50**
+// rather than to the ceiling, so asking for more silently returned less than
+// asking for 200 would. Raising the caller's limit changed nothing and left no
+// trace; the playlists came back at exactly 50 for a second time.
+//
+// Clamping to the ceiling is the only honest reading of "more than I allow":
+// give what is allowed, never quietly give the least.
+//
+// Two thousand because the household's real playlists are 776 and 1186 videos
+// and 500 cut both of them, and because the cost is a page fetch per hundred
+// rather than a request per video: measured, 1186 entries in 8s, one
+// invocation. Bounded all the same — §8 says a pass always is — and beyond
+// 1186 it is unmeasured.
+const maxAccountFeedItems = 2000
+
+func clampFeedLimit(limit int32) int32 {
+	if limit <= 0 {
+		return 50
+	}
+	if limit > maxAccountFeedItems {
+		return maxAccountFeedItems
+	}
+	return limit
+}
+
 // ListAccountFeed reads one feed as the account whose cookies these are.
 //
 // Flat, like every other listing here: metadata only, no media, and nothing
@@ -26,9 +56,7 @@ func (d *Downloader) ListAccountFeed(
 	if cookiesFile == "" {
 		return nil, domain.ErrNoAccount
 	}
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
+	limit = clampFeedLimit(limit)
 
 	result, err := newAccountCommand(cookiesFile).
 		FlatPlaylist().

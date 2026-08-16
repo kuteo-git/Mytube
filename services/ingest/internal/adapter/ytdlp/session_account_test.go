@@ -105,3 +105,23 @@ func TestARefusalIsStillNotADeadSession(t *testing.T) {
 		t.Error("a 403 retired the account")
 	}
 }
+
+// Asking for more than the ceiling gives the ceiling, not the least.
+//
+// It used to fall back to 50, so raising the playlist read depth to 500 changed
+// nothing and said nothing: the playlists came back at exactly 50 for a second
+// time, which is what "silently" costs.
+func TestAnOverLargeLimitGivesTheCeiling(t *testing.T) {
+	if got := clampFeedLimit(maxAccountFeedItems + 1); got != maxAccountFeedItems {
+		t.Errorf("one over the ceiling = %d, want %d", got, maxAccountFeedItems)
+	}
+	if got := clampFeedLimit(100_000); got != maxAccountFeedItems {
+		t.Errorf("an absurd limit = %d, want the ceiling %d", got, maxAccountFeedItems)
+	}
+	if got := clampFeedLimit(50); got != 50 {
+		t.Errorf("an ordinary limit = %d, want it untouched", got)
+	}
+	if got := clampFeedLimit(0); got != 50 {
+		t.Errorf("no limit = %d, want the default 50", got)
+	}
+}

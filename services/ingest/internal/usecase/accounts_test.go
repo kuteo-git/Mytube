@@ -729,3 +729,44 @@ func TestProgressCountsWhatWasReadNotWhatWasSkipped(t *testing.T) {
 		t.Error("a pass that read nothing for want of a session said nothing")
 	}
 }
+
+// A playlist is read whole, not fifty deep.
+//
+// The depth started as accountFeedLimit, which is right for a feed and wrong
+// for a playlist: this household's "Luke Music" holds 139 videos and arrived
+// with 50. It also broke the mirror silently — `complete` means "the read saw
+// the whole list", so at a cap of 50 every longer playlist was permanently read
+// in part and could never have anything removed from it.
+func TestAPlaylistIsReadWholeAndKnowsIt(t *testing.T) {
+	const held = 139
+	accounts := newMemAccounts("u_luc")
+
+	videos := make([]domain.ExternalVideo, 0, held)
+	for i := 0; i < held; i++ {
+		videos = append(videos, video(fmt.Sprintf("v%d", i), "ch_1"))
+	}
+	feeds := &memFeeds{
+		byFeed: map[string][]domain.ExternalVideo{domain.PlaylistURL("PLbig"): videos},
+	}
+	lib := &recordingLibrary{
+		known: map[string]bool{},
+		unreadPlaylists: []domain.StalePlaylist{
+			{ID: "pl_big", UserID: "u_luc", SourceURL: domain.PlaylistURL("PLbig")},
+		},
+	}
+
+	if _, err := newAccountScanner(t, accounts, feeds, lib).ScanAll(context.Background(), ""); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	if len(lib.playlistItems) != 1 {
+		t.Fatalf("imported %d playlists, want 1", len(lib.playlistItems))
+	}
+	if got := len(lib.playlistItems[0].videoIDs); got != held {
+		t.Errorf("imported %d videos, want all %d", got, held)
+	}
+	// And a read that saw everything may mirror removals.
+	if !lib.playlistItems[0].complete {
+		t.Error("a whole playlist was recorded as read in part")
+	}
+}

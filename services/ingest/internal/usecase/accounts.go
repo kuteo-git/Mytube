@@ -49,12 +49,36 @@ const accountRequestPause = 3 * time.Second
 // Re-reading is the hourly part, and that is where the small number belongs:
 // four a pass keeps a household's playlists honest for four requests an hour.
 //
-// The depth matches accountFeedLimit for the same reason it does there: this
-// reads what a playlist mostly is, rather than mirroring a thousand-video list.
+// playlistItemLimit is deliberately *not* accountFeedLimit, which is where it
+// started and where it was wrong.
+//
+// Fifty is right for a feed — a subscription or recommendation feed is read from
+// the top for what is new, and walking it to the end every hour would be the
+// high-volume traffic the credential rule exists to avoid. A playlist is not a
+// feed. It is a finite list somebody assembled, and half of one is not a smaller
+// version of it: this household's "Luke Music" holds 139 videos and arrived with
+// 50.
+//
+// It also cost nothing to fix, which is the part I should have checked first.
+// Reading a playlist is one yt-dlp invocation whatever the depth — the
+// pagination is internal — and measured on that same playlist: 50 entries in 1s,
+// all 139 in 2s.
+//
+// And it quietly broke the mirror. `complete` is "did the read see the whole
+// list", computed as fewer entries than the cap, so at 50 every playlist longer
+// than 50 was permanently "read in part" and could never have anything removed
+// from it.
+//
+// Still bounded, because §8 says a pass is always bounded. Two thousand, from
+// the sizes actually here: 1186 and 776 are real playlists in this house, and
+// 500 cut both. The cost is a page fetch per hundred entries rather than a
+// request per video — 1186 read in 8s, one invocation — so the bound is about
+// not walking away with somebody's 20,000-video music dump, not about the
+// hourly traffic the credential rule guards.
 const (
 	playlistRereadsPerPass = 4
 	firstFillLimit         = 60
-	playlistItemLimit      = 50
+	playlistItemLimit      = 2000
 )
 
 // How many failures one pass will report on the settings screen.
