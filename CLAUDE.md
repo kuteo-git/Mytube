@@ -328,6 +328,22 @@ Key rules:
 - Channel suppression needs ≥3 disliked videos **and** ≥30% of that channel's videos, with a ceiling of ≥20. Subscribed channels are immune.
 - The ceiling was 8, and 8 is an ordinary rate of "not this one" on a channel with forty videos. It took Igor Presnyakov and Drumeo (both 8 of ~42), Tinh te and Vox Weather (9) out of the library altogether — 143 of the 402 videos in Music between them, which is most of why that feed held 27 videos. Twenty still catches NoCopyrightSounds at 26, the case the ceiling exists for.
 
+### Channel rotation, and signals that age
+
+Measured on this library before any of it existed: three channels held **38 of the first 120 slots**, only **36 distinct channels** appeared in those 120, and **55 of 85 subscribed channels had no video before position 240**. Almost nothing was excluded — 2 channels, for age. The rest was simply outranked for ever.
+
+The cause was not the buckets, which are broad (the affinity bucket holds 174 videos across 106 channels). Sampling only sees the best `samplePoolSize` of a bucket, and the same channels sat at the top of that pool on every request, because **nothing in the score knew that time passes**.
+
+- **Reaction scores are bounded at the scoring site** (`squashReaction`, `x/(1+x)`), not in the builders. Like/dislike totals grow by one per reaction with no ceiling — measured at **+17.6 / −12.4** on one video against `weightSubscribed`'s 2.5 — so two terms an order of magnitude above everything else were deciding the feed alone. Normalising the *maps* was tried and is wrong: it erases both the 1.0/0.8/0.5 axis ordering and the difference between two likes and one. The accumulation is real information; letting it reach the score unbounded was not.
+- **Watch affinity ages** — 60-day half-life, against 90 for a dislike. What somebody enjoyed fades faster than what they turned down.
+- **Watch affinity counts time, not just fraction** (`watchTimeWeight`, `log1p(seconds)/log1p(180)`). Half of a 60-minute video and half of a 2-minute one were the same evidence.
+- **`channelHeat` — half-life 7 days.** How recently a channel was watched *or shown*; being shown counts at 0.25 of being watched, or a channel offered on every page and never opened stays cold for ever and keeps being offered. Subtracted as `channel_fatigue` (`weightChannelHeat = 2.0`, comparable to subscribing) so a hot channel leaves the top of the pool without being buried.
+- **`channel_revival`** lifts a channel the viewer once watched and has not returned to, saturating over **21 days** and capped at half of subscribing. Deliberately slower than heat decays: falling quiet should be quick and returning gradual, or the rut becomes a rotation just as predictable. **Never for a channel never watched** — that is the discovery share's job.
+- **`ignored_penalty`** — a video shown more than 3 times and never opened loses 0.5 per further showing, capped at 3.0. Nothing here has ever seen a thumbnail; this is as close as it gets to reading one. Watched videos are exempt outright.
+- All three are **additive and applied last**, never multipliers: resting a channel must not scale how good its videos are.
+
+After: **49** distinct channels in the first 120 (was 36), top-3 hold **35** (was 38), **38** subscribed channels in the first 240 (was 28).
+
 ### Up-next
 
 Reversed 2026-07-29: subject leads, channel is one way of sharing the subject. `weightSameChannel = weightSharedTags = 2.5` per matching tag, with a hard cap of 3 videos per channel in the rail.

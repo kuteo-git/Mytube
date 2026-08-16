@@ -79,6 +79,8 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 		Subscribed:        map[string]bool{},
 		RecentImpressions: map[string]bool{},
 		RecentlyWatched:   map[string]bool{},
+		WatchedAt:         map[string]time.Time{},
+		ImpressionCounts:  map[string]int{},
 		SessionWatched:    map[string]float32{},
 	}
 	if userID == "" {
@@ -87,8 +89,13 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 
 	// Highest watched fraction per video wins: a partial rewatch must not
 	// downgrade a video the user already finished.
+	//
+	// The most recent watch comes back with it, and it is deliberately max() of
+	// the time rather than the time of the best watch: what ages here is the
+	// viewer's contact with the channel, and someone who reopened a video last
+	// night has not gone cold on it because their longest sitting was in March.
 	rows, err := s.pool.Query(ctx, `
-		SELECT video_id, max(watched_fraction)
+		SELECT video_id, max(watched_fraction), max(occurred_at)
 		FROM signals
 		WHERE user_id = $1 AND type = 'WATCH' AND video_id <> ''
 		GROUP BY video_id`, userID)
@@ -97,14 +104,16 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 	}
 	for rows.Next() {
 		var (
-			videoID  string
-			fraction float32
+			videoID   string
+			fraction  float32
+			watchedAt time.Time
 		)
-		if err := rows.Scan(&videoID, &fraction); err != nil {
+		if err := rows.Scan(&videoID, &fraction, &watchedAt); err != nil {
 			rows.Close()
 			return profile, err
 		}
 		profile.WatchedFraction[videoID] = fraction
+		profile.WatchedAt[videoID] = watchedAt
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -168,6 +177,33 @@ func (s *Store) BuildProfile(ctx context.Context, userID string, impressionWindo
 			return profile, err
 		}
 		profile.RecentImpressions[videoID] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return profile, err
+	}
+
+	// How often each video has been offered to this viewer, over all time.
+	//
+	// Not windowed like the set above. What this is for is the offer that keeps
+	// being declined, and that only becomes visible across weeks: a video shown
+	// once and skipped says nothing, and a video shown eight times and never
+	// opened has been answered.
+	rows, err = s.pool.Query(ctx,
+		`SELECT video_id, shown_count FROM impressions WHERE user_id = $1`, userID)
+	if err != nil {
+		return profile, err
+	}
+	for rows.Next() {
+		var (
+			videoID string
+			count   int
+		)
+		if err := rows.Scan(&videoID, &count); err != nil {
+			rows.Close()
+			return profile, err
+		}
+		profile.ImpressionCounts[videoID] = count
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {

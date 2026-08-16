@@ -83,6 +83,21 @@ type UserProfile struct {
 	Subscribed map[string]bool
 	// Videos shown recently, suppressed to keep the feed from repeating.
 	RecentImpressions map[string]bool
+	// How many times each video has been put in front of *this* viewer, ever.
+	//
+	// RecentImpressions answers "again already?" and forgets within the day.
+	// This is the longer reading: a video offered eight times and never opened
+	// has been answered. The viewer saw the thumbnail and the title and the
+	// channel and chose something else, repeatedly, and there is no reason to
+	// keep asking.
+	ImpressionCounts map[string]int
+	// When each video was last watched.
+	//
+	// WatchedFraction says how far, and until this there was nowhere to say
+	// when. Everything that ages needs it: affinity that fades, a channel going
+	// cold, and the difference between a viewer who watched this channel
+	// yesterday and one who watched it in March. Both were the same number.
+	WatchedAt map[string]time.Time
 	// Videos watched in the last few hours. Distinct from WatchedFraction,
 	// which records whether something was ever watched and not when: deciding
 	// what follows a video needs "just now" specifically.

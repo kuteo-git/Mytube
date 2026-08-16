@@ -156,7 +156,7 @@ func TestWatchAffinityIsBoundedByItsStrongestEntry(t *testing.T) {
 		watched[id] = 1.0
 	}
 
-	affinity := buildWatchAffinity(features, watched)
+	affinity := buildWatchAffinity(features, watched, nil, time.Now())
 	for channel, value := range affinity.Channels {
 		if value > 1.0 {
 			t.Fatalf("channel %q affinity %.2f exceeds 1", channel, value)
@@ -180,7 +180,7 @@ func TestWatchAffinityWeightsByHowMuchWasWatched(t *testing.T) {
 	affinity := buildWatchAffinity(features, map[string]float32{
 		"finished":  0.95,
 		"abandoned": 0.05,
-	})
+	}, nil, time.Now())
 
 	if affinity.Channels["ch_loved"] <= affinity.Channels["ch_meh"] {
 		t.Fatalf("channel affinity ignored watch depth: %.2f vs %.2f",
@@ -304,7 +304,7 @@ func TestTopicAffinityTakesTheBestMatchNotTheSum(t *testing.T) {
 	features := []domain.VideoFeatures{
 		{VideoID: "seen", ChannelID: "ch", Topics: []string{"Music", "Vietnamese music"}},
 	}
-	affinity := buildWatchAffinity(features, map[string]float32{"seen": 1.0})
+	affinity := buildWatchAffinity(features, map[string]float32{"seen": 1.0}, nil, time.Now())
 
 	twoLabels := affinity.TopicScore(domain.VideoFeatures{
 		Topics: []string{"Music", "Vietnamese music"},

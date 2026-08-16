@@ -69,6 +69,7 @@ func buildLikeAffinity(features []domain.VideoFeatures, liked map[string]bool) R
 		}
 		affinity.add(f, 1)
 	}
+
 	return affinity
 }
 
@@ -95,6 +96,7 @@ func buildDislikeAffinity(
 		}
 		affinity.add(f, dislikeAgeFactor(at, now))
 	}
+
 	return affinity
 }
 
@@ -112,6 +114,33 @@ func dislikeAgeFactor(at, now time.Time) float64 {
 		return 1
 	}
 	return math.Exp2(-days / dislikeHalfLifeDays)
+}
+
+// squashReaction bounds an accumulated reaction score to below 1.
+//
+// The totals it is given grow by one for every video reacted to, with no
+// ceiling — a topic liked thirty times scores thirty. Measured on this library
+// that reached 17.6 for likes and -12.4 for dislikes on a single video, against
+// weightSubscribed's 2.5 and the 1.5 for never having watched something. Two
+// terms an order of magnitude above everything else were deciding the feed on
+// their own, and no adjustment anywhere else could have been felt underneath
+// them.
+//
+// Bounded here rather than inside the builders, and that placement is the
+// point. The accumulation is real information — two likes do mean more than
+// one, and a dislike really does fade — and normalising the maps would have
+// erased exactly that by making every reaction set peak at 1.0 whatever it
+// contained. What was wrong was never the ratios, it was letting an unbounded
+// count reach the score.
+//
+// x/(1+x): one reaction is worth a half, four are worth four fifths, and thirty
+// are worth what thirty-one would be. Ordering is kept everywhere and the
+// contribution can no longer outgrow the rest of the ranker.
+func squashReaction(score float64) float64 {
+	if score <= 0 {
+		return 0
+	}
+	return score / (1 + score)
 }
 
 func (a ReactionAffinity) add(f domain.VideoFeatures, weight float64) {

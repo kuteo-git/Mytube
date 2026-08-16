@@ -431,11 +431,18 @@ func (r *Ranker) buildInputs(
 
 	return features, rankInputs{
 		profile:       profile,
-		watchAffinity: buildWatchAffinity(features, profile.WatchedFraction),
+		watchAffinity: buildWatchAffinity(features, profile.WatchedFraction, profile.WatchedAt, now),
 		// The same computation over the last few videos only. Built the same way
 		// because it is the same question asked over a shorter window, and two
 		// different notions of "what this person likes" would be one too many.
-		sessionAffinity: buildWatchAffinity(features, profile.SessionWatched),
+		//
+		// No decay applied to this one: everything in it happened within hours,
+		// so ageing it would only be arithmetic on a number already too small to
+		// matter, and the session is supposed to speak loudly while it lasts.
+		sessionAffinity: buildWatchAffinity(features, profile.SessionWatched, nil, now),
+		// Which channels have been in front of this viewer lately, and which
+		// have gone quiet. See rotation.go for why Home needed it.
+		rotation: buildChannelRotation(features, profile, now),
 		likes:           buildLikeAffinity(features, profile.Liked),
 		// What the dislikes say beyond the videos they were pressed on. Subtracted
 		// rather than added, and aged — see buildDislikeAffinity.
@@ -516,7 +523,7 @@ func (r *Ranker) GetUpNext(ctx context.Context, userID, currentVideoID, channelF
 		return nil, 0, err
 	}
 
-	watchAffinity := buildWatchAffinity(features, profile.WatchedFraction)
+	watchAffinity := buildWatchAffinity(features, profile.WatchedFraction, profile.WatchedAt, time.Now())
 	retention, err := r.store.VideoRetention(ctx)
 	if err != nil {
 		retention = map[string]float32{}
@@ -684,8 +691,30 @@ type WatchAffinity struct {
 // Weighting by fraction rather than counting openings is the whole point: a
 // video watched to the end argues for its channel far more than one abandoned
 // after ten seconds, and counting would make those identical.
+// How long a viewing keeps its full say over what a channel is worth.
+//
+// Sixty days, against ninety for a dislike. Deliberately shorter: what somebody
+// enjoyed fades faster than what they turned down, and a feed that keeps
+// arguing from last spring's watching is the one this was written to fix.
+const watchAffinityHalfLifeDays = 60.0
+
+// watchTimeWeight turns seconds watched into a multiplier around 1.
+//
+// Logarithmic and centred so a few minutes is neutral: an hour is worth roughly
+// twice a minute rather than sixty times, because what this reads is that time
+// was given to something, not how much of it there was. A video with no known
+// duration comes back neutral rather than zero — an unfilled column must not
+// erase a real viewing.
+func watchTimeWeight(seconds float64) float64 {
+	if seconds <= 0 {
+		return 1
+	}
+	return math.Log1p(seconds) / math.Log1p(180)
+}
+
 func buildWatchAffinity(
 	features []domain.VideoFeatures, watched map[string]float32,
+	watchedAt map[string]time.Time, now time.Time,
 ) WatchAffinity {
 	affinity := WatchAffinity{
 		Channels: map[string]float64{},
@@ -713,6 +742,23 @@ func buildWatchAffinity(
 		if fraction < 0.5 {
 			weight *= 0.25
 		}
+
+		// How long it actually took, not only how much of it there was.
+		//
+		// Fraction alone made half of a sixty-minute video and half of a
+		// two-minute one the same evidence, when one is half an hour of
+		// somebody's evening and the other is a minute. Logarithmic, so an hour
+		// counts for more than a minute without counting for sixty times more —
+		// what is being measured is that time was spent, not how much.
+		weight *= watchTimeWeight(float64(fraction) * float64(feature.DurationSeconds))
+
+		// And how long ago. Without this a channel watched to death last spring
+		// argued exactly as loudly as one watched last night, for ever, which is
+		// how a feed ends up frozen around whatever somebody used to like.
+		if when, ok := watchedAt[videoID]; ok {
+			weight *= halfLifeDecay(now.Sub(when), watchAffinityHalfLifeDays)
+		}
+
 		affinity.Channels[feature.ChannelID] += weight
 		for _, topic := range feature.Topics {
 			affinity.Topics[strings.ToLower(topic)] += weight

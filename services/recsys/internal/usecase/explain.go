@@ -43,6 +43,7 @@ type rankInputs struct {
 	sessionAffinity WatchAffinity
 	likes           ReactionAffinity
 	dislikes        ReactionAffinity
+	rotation        ChannelRotation
 	retention       map[string]float32
 	coverage        map[string]int
 	suppressed      func(channelID string) bool
@@ -79,6 +80,9 @@ type ScoreBreakdown struct {
 	ExplorationBonus  float64
 	LikeAffinity      float64
 	DislikeAffinity   float64
+	ChannelFatigue    float64
+	ChannelRevival    float64
+	IgnoredPenalty    float64
 	Retention         float64
 	ImpressionPenalty float64
 
@@ -134,6 +138,9 @@ func (b ScoreBreakdown) Components() map[string]float64 {
 		"times_shown":           float64(b.TimesShown),
 		"like_affinity":         b.LikeAffinity,
 		"dislike_affinity":      b.DislikeAffinity,
+		"channel_fatigue":       b.ChannelFatigue,
+		"channel_revival":       b.ChannelRevival,
+		"ignored_penalty":       b.IgnoredPenalty,
 		"retention":             b.Retention,
 		"impression_penalty":    b.ImpressionPenalty,
 		"published_age_penalty": b.PublishedAgePenalty,
@@ -358,13 +365,13 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 
 	score *= out.AffinityMultiplier
 
-	out.LikeAffinity = weightLikeAffinity * in.likes.Score(f)
+	out.LikeAffinity = weightLikeAffinity * squashReaction(in.likes.Score(f))
 	score += out.LikeAffinity
 	// The other half of the same sentence. Outside the multiplier for the same
 	// reason likes are: reactions are rare next to watch signals, and scaling a
 	// rejection by how much the viewer likes the channel it came from is not what
 	// the rejection said.
-	out.DislikeAffinity = -weightDislikeAffinity * in.dislikes.Score(f)
+	out.DislikeAffinity = -weightDislikeAffinity * squashReaction(in.dislikes.Score(f))
 	score += out.DislikeAffinity
 	out.Retention = weightRetention * float64(in.retention[f.VideoID])
 	score += out.Retention
@@ -387,6 +394,29 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 	// tenth says the same thing and says how much.
 	out.FreshnessBoost = freshnessBoost(f.PublishedAt, f.ViewCount, now, in.tuning.freshnessWindow)
 	score *= out.FreshnessBoost
+
+	// Rotation, last and additive on purpose.
+	//
+	// Additive rather than a multiplier because these must be able to move a
+	// channel out of the top of a sample pool without scaling how good its
+	// videos are — a channel being rested is not a channel being judged, and
+	// multiplying would make the rest deeper the more the viewer likes it.
+	//
+	// Last, so that everything it is correcting has already been counted.
+	out.ChannelFatigue = -weightChannelHeat * in.rotation.FatigueFor(f.ChannelID)
+	score += out.ChannelFatigue
+	out.ChannelRevival = weightChannelRevival * in.rotation.RevivalFor(f.ChannelID, now)
+	score += out.ChannelRevival
+
+	// And the offer that keeps being declined.
+	//
+	// Nothing in this service has ever seen a thumbnail, and this is as close as
+	// it gets to reading one: a video put in front of somebody eight times and
+	// never opened has been answered, whatever its topic score says. Per video
+	// rather than per channel, because it is the thumbnail and the title that
+	// were refused, not the channel — which the rest of the feed still shows.
+	out.IgnoredPenalty = -ignoredPenalty(f.VideoID, in.profile)
+	score += out.IgnoredPenalty
 
 	out.Score = score
 	return out
