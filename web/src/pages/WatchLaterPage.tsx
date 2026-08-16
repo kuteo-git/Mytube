@@ -1,15 +1,21 @@
 import { useWatchLater } from '@/features/catalog/application/queries'
 import { useAccountState } from '@/features/settings/application/account-state'
+import { watchLaterQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
 /**
  * The videos somebody put aside to watch next.
  *
- * Deliberately separate from Saved, which the two were never the same thing:
- * Saved keeps a video's bytes on the disk against the eviction sweep, and
- * Watch Later is a note about what to do this evening. A video normally leaves
- * this list once it has been watched; it never leaves Saved on its own.
+ * Built to match PlaylistPage exactly — same heading and count, same grid, same
+ * card variant, and the same behaviour when one is opened. The two are the same
+ * kind of thing: a read-only list from the member's YouTube account, played
+ * through in its own order. Any difference between them is a difference the
+ * viewer has to learn for no reason.
+ *
+ * Deliberately separate from Saved, which is not the same kind of thing at all:
+ * Saved keeps a video's bytes on the disk against the eviction sweep, and this
+ * is a note about what to do this evening.
  */
 export function WatchLaterPage() {
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
@@ -21,6 +27,11 @@ export function WatchLaterPage() {
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
       <h1 className="py-4 text-2xl font-bold">Watch later</h1>
+      {!isPending && !isError && (
+        <p className="-mt-2 pb-4 text-sm text-text-2">
+          {videos.length} {videos.length === 1 ? 'video' : 'videos'}
+        </p>
+      )}
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
@@ -32,7 +43,12 @@ export function WatchLaterPage() {
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
               : videos.map((video) => (
-                  <VideoCard key={video.id} video={video} variant="fromYouTube" />
+                  <VideoCard
+                    key={video.id}
+                    video={video}
+                    variant="fromYouTube"
+                    queueSearch={watchLaterQueueSearch()}
+                  />
                 ))}
           </div>
 

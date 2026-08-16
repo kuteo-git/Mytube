@@ -17,10 +17,13 @@ export function QueueRail({
   items,
   currentIndex,
   search,
+  label = '',
 }: {
   items: QueueItem[]
   currentIndex: number
   search: string
+  /** The list's own name. Empty falls back to the generic wording. */
+  label?: string
 }) {
   const activeRef = useRef<HTMLAnchorElement>(null)
 
@@ -33,7 +36,7 @@ export function QueueRail({
   return (
     <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label="Queue">
       <div className="border-b border-line px-4 py-3">
-        <p className="text-sm font-medium">Playing from queue</p>
+        <p className="text-sm font-medium">{label ? `Playing from ${label}` : 'Playing from queue'}</p>
         <p className="mt-0.5 text-xs text-text-2">
           {currentIndex >= 0 ? `${currentIndex + 1} / ${items.length}` : `${items.length} videos`}
         </p>

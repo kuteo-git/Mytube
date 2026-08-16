@@ -176,6 +176,7 @@ export function WatchPage() {
             items={queue.items}
             currentIndex={queue.currentIndex}
             search={queue.search}
+            label={queue.label}
           />
         ) : (
           <UpNextRail current={video} exclude={trail} />

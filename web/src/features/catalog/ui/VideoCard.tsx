@@ -30,7 +30,20 @@ export type VideoCardVariant =
   | 'storage'
 
 /** Card. Hover comes from videoItemHover, shared with every other item. */
-export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?: VideoCardVariant }) {
+export function VideoCard({
+  video,
+  variant = 'feed',
+  queueSearch = '',
+}: {
+  video: Video
+  variant?: VideoCardVariant
+  /**
+   * `?list=…` to append to this card's links, so opening the video plays the
+   * list it came from rather than an unrelated recommendation. Empty means the
+   * video is opened on its own.
+   */
+  queueSearch?: string
+}) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -60,7 +73,7 @@ export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?:
       onFocus={() => prefetch(video.id)}
       onBlur={cancel}
     >
-      <Link to={`/watch/${video.id}`} tabIndex={-1} aria-hidden className="block">
+      <Link to={`/watch/${video.id}${queueSearch}`} tabIndex={-1} aria-hidden className="block">
         <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title} channelName={video.channel.name}>
           {video.reason === 'DISCOVERY' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
@@ -105,7 +118,7 @@ export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?:
 
         <div className="min-w-0 flex-1">
           <h3 className="clamp-2 text-sm leading-5 font-medium">
-            <Link to={`/watch/${video.id}`}>{video.title}</Link>
+            <Link to={`/watch/${video.id}${queueSearch}`}>{video.title}</Link>
           </h3>
           <p className="mt-1 flex items-center gap-1 text-xs text-text-2">
             <Link to={`/channel/${video.channel.id}`} className="hover:text-text">

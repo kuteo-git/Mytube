@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom'
 import { usePlaylist } from '@/features/catalog/application/queries'
+import { playlistQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
@@ -42,7 +43,16 @@ export function PlaylistPage() {
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
               : videos.map((video) => (
-<VideoCard key={video.id} video={video} variant="fromYouTube" />
+<VideoCard
+                    key={video.id}
+                    video={video}
+                    variant="fromYouTube"
+                    // Opening a video here plays the playlist, in the
+                    // playlist's order: next is the next entry rather than a
+                    // recommendation. Without it a playlist is only a way of
+                    // finding something to leave it by.
+                    queueSearch={playlistQueueSearch(playlistId)}
+                  />
                 ))}
           </div>
 

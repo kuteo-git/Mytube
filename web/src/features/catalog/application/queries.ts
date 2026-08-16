@@ -432,13 +432,17 @@ export function usePlaylist(id: string) {
 // a read-only mirror of the member's YouTube account, refreshed on every account
 // scan — a write here would be reverted by the next pass.
 
-export function useWatchLater() {
+// `enabled` exists for the playback queue, which calls this unconditionally —
+// hooks must be — but only wants the request when Watch later is the list being
+// played through.
+export function useWatchLater(enabled = true) {
   const me = useProfileScope()
   return useInfiniteQuery({
     queryKey: ['watch-later', me],
     queryFn: ({ pageParam }) => repo.listWatchLater(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+    enabled,
   })
 }
 
