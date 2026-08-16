@@ -30,7 +30,7 @@ export function WatchLaterPage() {
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
               : videos.map((video) => (
-                  <VideoCard key={video.id} video={video} variant="watchLater" />
+                  <VideoCard key={video.id} video={video} variant="fromYouTube" />
                 ))}
           </div>
 

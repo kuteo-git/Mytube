@@ -65,6 +65,9 @@ service CatalogService {
   // write it, so it answered false for everybody, forever.
   rpc SetWatchLater(SetWatchLaterRequest) returns (SetWatchLaterResponse);
   rpc ListWatchLater(ListWatchLaterRequest) returns (ListWatchLaterResponse);
+  // The account importer's write. Watch later is a mirror of the member's
+  // YouTube list, so this replaces it — see ImportWatchLaterRequest.complete.
+  rpc ImportWatchLater(ImportWatchLaterRequest) returns (ImportWatchLaterResponse);
 
   // Playlists, per member. Watch Later is deliberately not one of these: it has
   // no name, cannot be created and cannot be deleted, so as a row here it would
@@ -645,9 +648,15 @@ message SetPlaylistItemResponse {}
 message ImportPlaylistItemsRequest {
   string playlist_id = 1;
   string user_id = 2;
-  // In the order YouTube returned them. Ones already present keep the position
-  // they have; the rest are appended in this order.
+  // In the order YouTube returned them.
   repeated string video_ids = 3;
+  // Whether this is the whole playlist rather than the first page of it.
+  //
+  // The read is bounded, so a long playlist comes back truncated. Mirroring a
+  // truncated read would delete everything past the cap — so a complete read
+  // replaces the contents, and a truncated one only adds. The caller knows
+  // which it got; catalog cannot tell.
+  bool complete = 4;
 }
 
 message ImportPlaylistItemsResponse {
@@ -669,6 +678,15 @@ message StalePlaylist {
   string user_id = 2;
   string source_url = 3;
 }
+
+message ImportWatchLaterRequest {
+  string user_id = 1;
+  repeated string video_ids = 2;
+  // As above: a complete read replaces the list, a truncated one only adds.
+  bool complete = 3;
+}
+
+message ImportWatchLaterResponse {}
 
 message SetWatchLaterRequest {
   string user_id = 1;

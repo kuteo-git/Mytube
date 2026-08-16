@@ -191,6 +191,14 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 		{name: domain.FeedRecommended, via: "YOUTUBE_REC"},
 	}
 
+	// Filled by the Watch later pass and written once it has finished: the
+	// mirror needs the whole read at once to know what has left the list.
+	var (
+		watchLaterIDs      []string
+		watchLaterComplete bool
+		watchLaterRead     bool
+	)
+
 	for i, feed := range feeds {
 		if i > 0 {
 			select {
@@ -212,6 +220,12 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 			}
 			s.logger.Warn("account feed", "user", userID, "feed", feed.name, "error", err)
 			continue
+		}
+
+		if feed.watchLater {
+			watchLaterRead = true
+			// A read that came back at the cap is a first page, not a list.
+			watchLaterComplete = len(videos) < accountFeedLimit
 		}
 
 		for _, v := range videos {
@@ -236,14 +250,21 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 				}
 				s.tellRanker(ctx, userID, v.ID, false)
 			}
-			// Not told to the ranker. Watch Later is a note to oneself about
-			// what to do next, not a statement about taste — and unlike a like,
-			// it is cleared as soon as the video is watched.
+			// Collected rather than written one at a time, and never told to the
+			// ranker: Watch later is a note about what to do next, not a
+			// statement about taste.
 			if feed.watchLater {
-				if err := s.library.SetWatchLater(ctx, userID, v.ID); err != nil {
-					s.logger.Warn("watch later", "user", userID, "video", v.ID, "error", err)
-				}
+				watchLaterIDs = append(watchLaterIDs, v.ID)
 			}
+		}
+	}
+
+	// The mirror, written once. Skipped when the feed was never reached: an
+	// empty list from a pass that never got there reads as an emptied one.
+	if watchLaterRead && len(watchLaterIDs) > 0 {
+		if err := s.library.ImportWatchLater(
+			ctx, userID, watchLaterIDs, watchLaterComplete); err != nil {
+			s.logger.Warn("import watch later", "user", userID, "error", err)
 		}
 	}
 	return out, false
@@ -396,7 +417,11 @@ func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScan
 			ids = append(ids, v.ID)
 		}
 
-		if err := s.library.ImportPlaylistItems(ctx, p.ID, p.UserID, ids); err != nil {
+		// Whether the whole playlist was seen. A read that came back at the cap
+		// is a first page, not a list, and the mirror must not delete what it
+		// never looked at.
+		complete := len(videos) < playlistItemLimit
+		if err := s.library.ImportPlaylistItems(ctx, p.ID, p.UserID, ids, complete); err != nil {
 			s.logger.Warn("import playlist items", "playlist", p.ID, "error", err)
 			continue
 		}

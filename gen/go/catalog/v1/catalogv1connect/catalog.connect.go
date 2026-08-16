@@ -102,6 +102,9 @@ const (
 	// CatalogServiceListWatchLaterProcedure is the fully-qualified name of the CatalogService's
 	// ListWatchLater RPC.
 	CatalogServiceListWatchLaterProcedure = "/catalog.v1.CatalogService/ListWatchLater"
+	// CatalogServiceImportWatchLaterProcedure is the fully-qualified name of the CatalogService's
+	// ImportWatchLater RPC.
+	CatalogServiceImportWatchLaterProcedure = "/catalog.v1.CatalogService/ImportWatchLater"
 	// CatalogServiceListPlaylistsProcedure is the fully-qualified name of the CatalogService's
 	// ListPlaylists RPC.
 	CatalogServiceListPlaylistsProcedure = "/catalog.v1.CatalogService/ListPlaylists"
@@ -187,6 +190,9 @@ type CatalogServiceClient interface {
 	// write it, so it answered false for everybody, forever.
 	SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error)
 	ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error)
+	// The account importer's write. Watch later is a mirror of the member's
+	// YouTube list, so this replaces it — see ImportWatchLaterRequest.complete.
+	ImportWatchLater(context.Context, *connect.Request[v1.ImportWatchLaterRequest]) (*connect.Response[v1.ImportWatchLaterResponse], error)
 	// Playlists, per member. Watch Later is deliberately not one of these: it has
 	// no name, cannot be created and cannot be deleted, so as a row here it would
 	// be a playlist that is not one.
@@ -369,6 +375,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListWatchLater")),
 			connect.WithClientOptions(opts...),
 		),
+		importWatchLater: connect.NewClient[v1.ImportWatchLaterRequest, v1.ImportWatchLaterResponse](
+			httpClient,
+			baseURL+CatalogServiceImportWatchLaterProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ImportWatchLater")),
+			connect.WithClientOptions(opts...),
+		),
 		listPlaylists: connect.NewClient[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse](
 			httpClient,
 			baseURL+CatalogServiceListPlaylistsProcedure,
@@ -464,6 +476,7 @@ type catalogServiceClient struct {
 	listHistory         *connect.Client[v1.ListHistoryRequest, v1.ListHistoryResponse]
 	setWatchLater       *connect.Client[v1.SetWatchLaterRequest, v1.SetWatchLaterResponse]
 	listWatchLater      *connect.Client[v1.ListWatchLaterRequest, v1.ListWatchLaterResponse]
+	importWatchLater    *connect.Client[v1.ImportWatchLaterRequest, v1.ImportWatchLaterResponse]
 	listPlaylists       *connect.Client[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse]
 	getPlaylist         *connect.Client[v1.GetPlaylistRequest, v1.GetPlaylistResponse]
 	createPlaylist      *connect.Client[v1.CreatePlaylistRequest, v1.CreatePlaylistResponse]
@@ -597,6 +610,11 @@ func (c *catalogServiceClient) ListWatchLater(ctx context.Context, req *connect.
 	return c.listWatchLater.CallUnary(ctx, req)
 }
 
+// ImportWatchLater calls catalog.v1.CatalogService.ImportWatchLater.
+func (c *catalogServiceClient) ImportWatchLater(ctx context.Context, req *connect.Request[v1.ImportWatchLaterRequest]) (*connect.Response[v1.ImportWatchLaterResponse], error) {
+	return c.importWatchLater.CallUnary(ctx, req)
+}
+
 // ListPlaylists calls catalog.v1.CatalogService.ListPlaylists.
 func (c *catalogServiceClient) ListPlaylists(ctx context.Context, req *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error) {
 	return c.listPlaylists.CallUnary(ctx, req)
@@ -702,6 +720,9 @@ type CatalogServiceHandler interface {
 	// write it, so it answered false for everybody, forever.
 	SetWatchLater(context.Context, *connect.Request[v1.SetWatchLaterRequest]) (*connect.Response[v1.SetWatchLaterResponse], error)
 	ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error)
+	// The account importer's write. Watch later is a mirror of the member's
+	// YouTube list, so this replaces it — see ImportWatchLaterRequest.complete.
+	ImportWatchLater(context.Context, *connect.Request[v1.ImportWatchLaterRequest]) (*connect.Response[v1.ImportWatchLaterResponse], error)
 	// Playlists, per member. Watch Later is deliberately not one of these: it has
 	// no name, cannot be created and cannot be deleted, so as a row here it would
 	// be a playlist that is not one.
@@ -880,6 +901,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListWatchLater")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceImportWatchLaterHandler := connect.NewUnaryHandler(
+		CatalogServiceImportWatchLaterProcedure,
+		svc.ImportWatchLater,
+		connect.WithSchema(catalogServiceMethods.ByName("ImportWatchLater")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceListPlaylistsHandler := connect.NewUnaryHandler(
 		CatalogServiceListPlaylistsProcedure,
 		svc.ListPlaylists,
@@ -996,6 +1023,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceSetWatchLaterHandler.ServeHTTP(w, r)
 		case CatalogServiceListWatchLaterProcedure:
 			catalogServiceListWatchLaterHandler.ServeHTTP(w, r)
+		case CatalogServiceImportWatchLaterProcedure:
+			catalogServiceImportWatchLaterHandler.ServeHTTP(w, r)
 		case CatalogServiceListPlaylistsProcedure:
 			catalogServiceListPlaylistsHandler.ServeHTTP(w, r)
 		case CatalogServiceGetPlaylistProcedure:
@@ -1121,6 +1150,10 @@ func (UnimplementedCatalogServiceHandler) SetWatchLater(context.Context, *connec
 
 func (UnimplementedCatalogServiceHandler) ListWatchLater(context.Context, *connect.Request[v1.ListWatchLaterRequest]) (*connect.Response[v1.ListWatchLaterResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListWatchLater is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ImportWatchLater(context.Context, *connect.Request[v1.ImportWatchLaterRequest]) (*connect.Response[v1.ImportWatchLaterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ImportWatchLater is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ListPlaylists(context.Context, *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error) {

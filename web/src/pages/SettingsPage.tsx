@@ -2,12 +2,14 @@ import {
   Activity,
   Bookmark,
   ChevronRight,
+  Clock,
   Eye,
   EyeOff,
   HardDrive,
   Headphones,
   Languages,
   LayoutGrid,
+  ListVideo,
   KeyRound,
   SlidersHorizontal,
   UserRound,
@@ -100,6 +102,20 @@ const PHONE_LIBRARY = [
   { to: '/activity', icon: Activity, label: 'Activity' },
 ]
 
+/**
+ * The read-only mirrors of the YouTube account, kept as their own group for the
+ * same reason the sidebar keeps them apart: they are a copy of what that account
+ * says, not lists this app can change, and grouping them with Saved would put a
+ * page you can edit beside two you cannot under one heading.
+ *
+ * On a phone this is the only way in — the bottom bar is full at five, and what
+ * earns a place there is what you move between while browsing.
+ */
+const PHONE_FROM_YOUTUBE = [
+  { to: '/watch-later', icon: Clock, label: 'Watch later' },
+  { to: '/playlists', icon: ListVideo, label: 'Playlists' },
+]
+
 const PHONE_PREFS = [
   { to: '/settings/profile', icon: UserRound, label: 'Profile' },
   { to: '/settings/youtube-account', icon: KeyRound, label: 'YouTube account' },
@@ -113,6 +129,7 @@ function PhoneMenu() {
   return (
     <nav className="mt-4 flex flex-col gap-6" aria-label="Settings">
       <MenuGroup label="Library" items={PHONE_LIBRARY} />
+      <MenuGroup label="From YouTube" items={PHONE_FROM_YOUTUBE} />
       <MenuGroup label="Preferences" items={PHONE_PREFS} />
     </nav>
   )

@@ -27,15 +27,20 @@ type recordingLibrary struct {
 	uncheckedShorts []string
 	shortAnswers    map[string]bool
 	// What the account pass wrote on each member's behalf.
-	subscribedBy   []struct{ userID, channelID string }
-	liked          []struct{ userID, videoID string }
-	watchLater     []struct{ userID, videoID string }
+	subscribedBy []struct{ userID, channelID string }
+	liked        []struct{ userID, videoID string }
+	watchLater   []struct {
+		userID   string
+		videoIDs []string
+		complete bool
+	}
 	playlists      map[string]string
 	stalePlaylists []domain.StalePlaylist
 	staleLimit     int32
 	playlistItems  []struct {
 		playlistID, userID string
 		videoIDs           []string
+		complete           bool
 	}
 }
 
@@ -341,11 +346,21 @@ func (r *recordingLibrary) UpsertPlaylist(_ context.Context, userID, sourceURL, 
 	return id, nil
 }
 
-func (r *recordingLibrary) ImportPlaylistItems(_ context.Context, playlistID, userID string, videoIDs []string) error {
+func (r *recordingLibrary) ImportWatchLater(_ context.Context, userID string, videoIDs []string, complete bool) error {
+	r.watchLater = append(r.watchLater, struct {
+		userID   string
+		videoIDs []string
+		complete bool
+	}{userID, videoIDs, complete})
+	return nil
+}
+
+func (r *recordingLibrary) ImportPlaylistItems(_ context.Context, playlistID, userID string, videoIDs []string, complete bool) error {
 	r.playlistItems = append(r.playlistItems, struct {
 		playlistID, userID string
 		videoIDs           []string
-	}{playlistID, userID, videoIDs})
+		complete           bool
+	}{playlistID, userID, videoIDs, complete})
 	return nil
 }
 
@@ -358,9 +373,4 @@ func (r *recordingLibrary) ListStalePlaylists(_ context.Context, limit int32) ([
 		return r.stalePlaylists[:limit], nil
 	}
 	return r.stalePlaylists, nil
-}
-
-func (r *recordingLibrary) SetWatchLater(_ context.Context, userID, videoID string) error {
-	r.watchLater = append(r.watchLater, struct{ userID, videoID string }{userID, videoID})
-	return nil
 }

@@ -1,17 +1,6 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
-import { AddToPlaylistDialog } from '@/features/catalog/ui/AddToPlaylistDialog'
-import {
-  Bookmark,
-  BookmarkMinus,
-  CheckCircle,
-  Clock,
-  ClockFading,
-  EyeOff,
-  ListMinus,
-  ListPlus,
-  MoreVertical,
-} from 'lucide-react'
+import { Bookmark, BookmarkMinus, CheckCircle, EyeOff, MoreVertical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Video } from '../domain/video'
@@ -20,8 +9,6 @@ import {
   useMarkWatched,
   useNotInterested,
   useSetPinned,
-  useSetPlaylistItem,
-  useSetWatchLater,
   useStreamPrefetch,
 } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
@@ -35,22 +22,15 @@ export type VideoCardVariant =
   | 'continueWatching'
   | 'feed'
   | 'saved'
-  | 'watchLater'
-  | 'playlist'
+  // Watch later and the playlists are one variant, not two. Both are read-only
+  // mirrors of the member's YouTube account, so a card in either offers exactly
+  // the same things — and two variants would be two chances for them to drift.
+  | 'fromYouTube'
   | 'history'
   | 'storage'
 
 /** Card. Hover comes from videoItemHover, shared with every other item. */
-export function VideoCard({
-  video,
-  variant = 'feed',
-  playlistId,
-}: {
-  video: Video
-  variant?: VideoCardVariant
-  /** Which playlist this card is being shown inside, so it can offer to leave it. */
-  playlistId?: string
-}) {
+export function VideoCard({ video, variant = 'feed' }: { video: Video; variant?: VideoCardVariant }) {
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -165,14 +145,7 @@ export function VideoCard({
           >
             <MoreVertical size={20} />
           </button>
-          {menuOpen && (
-            <CardMenu
-              video={video}
-              variant={variant}
-              playlistId={playlistId}
-              close={() => setMenuOpen(false)}
-            />
-          )}
+          {menuOpen && <CardMenu video={video} variant={variant} close={() => setMenuOpen(false)} />}
         </div>
       </div>
     </article>
@@ -217,20 +190,15 @@ export function VideoCardSkeleton() {
 function CardMenu({
   video,
   variant,
-  playlistId,
   close,
 }: {
   video: Video
   variant: VideoCardVariant
-  playlistId?: string
   close: () => void
 }) {
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
   const setPinned = useSetPinned()
-  const setWatchLater = useSetWatchLater()
-  const setPlaylistItem = useSetPlaylistItem()
-  const [addingToPlaylist, setAddingToPlaylist] = useState(false)
   const toast = useToast()
 
   const items: React.ReactNode[] = []
@@ -309,92 +277,28 @@ function CardMenu({
   // Putting a video aside and keeping its bytes are two different intentions,
   // so they are two entries. Watch later is a note about this evening; Save is
   // an instruction to the eviction sweep.
-  const watchLaterItem = (
-    <li key="watch-later">
-      <button
-        type="button"
-        onClick={() => {
-          setWatchLater.mutate({ videoId: video.id, inWatchLater: true })
-          toast('Added to Watch later')
-          close()
-        }}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-      >
-        <Clock size={16} />
-        Watch later
-      </button>
-    </li>
-  )
-
-  const removeWatchLaterItem = (
-    <li key="remove-watch-later">
-      <button
-        type="button"
-        onClick={() => {
-          setWatchLater.mutate({ videoId: video.id, inWatchLater: false })
-          toast('Removed from Watch later')
-          close()
-        }}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-      >
-        <ClockFading size={16} />
-        Remove from Watch later
-      </button>
-    </li>
-  )
-
-  const addToPlaylistItem = (
-    <li key="add-to-playlist">
-      <button
-        type="button"
-        onClick={() => setAddingToPlaylist(true)}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-      >
-        <ListPlus size={16} />
-        Add to playlist
-      </button>
-    </li>
-  )
-
-  // Only offered where the card knows which playlist it is in. Elsewhere
-  // "remove from playlist" would have to ask which, and the card menu is the
-  // wrong place to ask a question.
-  const removeFromPlaylistItem = playlistId ? (
-    <li key="remove-from-playlist">
-      <button
-        type="button"
-        onClick={() => {
-          setPlaylistItem.mutate({ playlistId, videoId: video.id, included: false })
-          toast('Removed from playlist')
-          close()
-        }}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
-      >
-        <ListMinus size={16} />
-        Remove from playlist
-      </button>
-    </li>
-  ) : null
+  // No "add to playlist" and no "remove from playlist". Watch later and the
+  // playlists are a read-only mirror of the member's YouTube account, refreshed
+  // on every account scan: an edit made here would be reverted by the next pass,
+  // which is worse than not offering it.
 
   switch (variant) {
     case 'continueWatching':
       items.push(watchedItem, notInterestedItem)
       break
     case 'feed':
-      items.push(watchedItem, watchLaterItem, addToPlaylistItem, saveItem, notInterestedItem)
+      items.push(watchedItem, saveItem, notInterestedItem)
       break
     case 'saved':
-      items.push(watchLaterItem, addToPlaylistItem, unsaveItem)
+      items.push(unsaveItem)
       break
-    case 'watchLater':
-      items.push(watchedItem, removeWatchLaterItem, addToPlaylistItem, saveItem)
-      break
-
-    case 'playlist':
-      items.push(watchedItem, removeFromPlaylistItem, watchLaterItem, saveItem)
+    // A mirror of YouTube, so the menu offers only what belongs to this
+    // library: marking it watched, and keeping its bytes.
+    case 'fromYouTube':
+      items.push(watchedItem, saveItem)
       break
     case 'history':
-      items.push(watchLaterItem, addToPlaylistItem, saveItem)
+      items.push(saveItem)
       break
     case 'storage':
       items.push(saveItem)
@@ -402,19 +306,8 @@ function CardMenu({
   }
 
   return (
-    <>
-      <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
-        {items}
-      </ul>
-      {addingToPlaylist && (
-        <AddToPlaylistDialog
-          videoId={video.id}
-          onClose={() => {
-            setAddingToPlaylist(false)
-            close()
-          }}
-        />
-      )}
-    </>
+    <ul className="absolute right-0 bottom-10 z-40 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
+      {items}
+    </ul>
   )
 }

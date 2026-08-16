@@ -428,53 +428,9 @@ export function usePlaylist(id: string) {
   })
 }
 
-export function useCreatePlaylist() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (title: string) => repo.createPlaylist(title),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['playlists'] }),
-  })
-}
-
-export function useRenamePlaylist() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, title }: { id: string; title: string }) => repo.renamePlaylist(id, title),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] })
-      void queryClient.invalidateQueries({ queryKey: ['playlist'] })
-    },
-  })
-}
-
-export function useDeletePlaylist() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => repo.deletePlaylist(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['playlists'] }),
-  })
-}
-
-export function useSetPlaylistItem() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({
-      playlistId,
-      videoId,
-      included,
-    }: {
-      playlistId: string
-      videoId: string
-      included: boolean
-    }) => repo.setPlaylistItem(playlistId, videoId, included),
-    onSuccess: () => {
-      // Both: the card on the playlists page carries the count and the first
-      // few thumbnails, so it is as stale as the page inside it.
-      void queryClient.invalidateQueries({ queryKey: ['playlists'] })
-      void queryClient.invalidateQueries({ queryKey: ['playlist'] })
-    },
-  })
-}
+// No create, rename, delete, or add/remove hooks. Playlists and Watch later are
+// a read-only mirror of the member's YouTube account, refreshed on every account
+// scan — a write here would be reverted by the next pass.
 
 export function useWatchLater() {
   const me = useProfileScope()
@@ -483,20 +439,6 @@ export function useWatchLater() {
     queryFn: ({ pageParam }) => repo.listWatchLater(pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
-  })
-}
-
-export function useSetWatchLater() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ videoId, inWatchLater }: { videoId: string; inWatchLater: boolean }) =>
-      repo.setWatchLater(videoId, inWatchLater),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['watch-later'] })
-      // The watch page reads in_watch_later off the video itself, so the button
-      // there would go on showing the state it had before the press.
-      void queryClient.invalidateQueries({ queryKey: ['video'] })
-    },
   })
 }
 

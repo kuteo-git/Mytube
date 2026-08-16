@@ -855,6 +855,41 @@ func (r *Repository) SetWatchLater(ctx context.Context, userID, videoID string, 
 	return err
 }
 
+// ImportWatchLater makes the member's Watch later match what the import found.
+//
+// Same rule as ImportPlaylistItems, and for the same reason: the list cannot be
+// edited in this app, so it has to follow upstream — but only as far as the read
+// actually saw. A truncated read adds and removes nothing; an empty one is
+// treated as a refusal rather than as an emptied list.
+func (r *Repository) ImportWatchLater(
+	ctx context.Context, userID string, videoIDs []string, complete bool,
+) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if complete && len(videoIDs) > 0 {
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM watch_later
+			WHERE user_id = $1 AND video_id <> ALL($2::text[])`,
+			userID, videoIDs); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO watch_later (user_id, video_id)
+		SELECT $1, w.video_id
+		FROM unnest($2::text[]) AS w(video_id)
+		JOIN videos v ON v.id = w.video_id
+		ON CONFLICT DO NOTHING`, userID, videoIDs); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 // ListWatchLater is one viewer's list, oldest addition last.
 //
 // Newest first, like the Saved shelf: a list read to decide what to watch next
@@ -1399,15 +1434,24 @@ func (r *Repository) SetPlaylistItem(
 	return err
 }
 
-// ImportPlaylistItems appends what the account import found, in the order it
-// found it, and stamps items_synced_at.
+// ImportPlaylistItems makes the playlist match what the account import found,
+// and stamps items_synced_at.
 //
-// Appends and never removes, the same rule the subscription import follows: a
-// short answer from YouTube, a page it did not finish, or a playlist made
-// private must not empty a list somebody assembled. Positions continue from the
-// playlist's own maximum, so anything added by hand keeps its place.
+// A playlist here is a mirror of the member's YouTube playlist and cannot be
+// edited in this app, so a video removed upstream has to go — otherwise the two
+// drift and there is no way to correct it.
+//
+// **But only when the whole playlist was read.** The read is bounded, so a long
+// list comes back truncated, and mirroring a truncated read would delete
+// everything past the cap. `complete` says which happened: a complete read
+// replaces the contents, a truncated one only adds. Neither ever removes a video
+// the read did not cover.
+//
+// Positions come from the order given when the read was complete, so the
+// playlist matches upstream exactly; an incomplete read appends from the current
+// maximum and leaves what is there alone.
 func (r *Repository) ImportPlaylistItems(
-	ctx context.Context, playlistID, userID string, videoIDs []string,
+	ctx context.Context, playlistID, userID string, videoIDs []string, complete bool,
 ) (int32, error) {
 	if _, err := r.GetPlaylist(ctx, playlistID, userID); err != nil {
 		return 0, err
@@ -1424,6 +1468,27 @@ func (r *Repository) ImportPlaylistItems(
 	// that order into SQL. Videos the library does not hold are skipped by the
 	// join rather than raising a foreign-key error — the import walks a whole
 	// playlist, and one unavailable video must not abandon the rest.
+	// The mirror's removal half. Confined to complete reads, and skipped
+	// entirely for an empty one: a playlist that answers with nothing is far
+	// likelier to be a refusal than a list somebody emptied.
+	if complete && len(videoIDs) > 0 {
+		if _, err := tx.Exec(ctx, `
+			DELETE FROM playlist_items
+			WHERE playlist_id = $1 AND video_id <> ALL($2::text[])`,
+			playlistID, videoIDs); err != nil {
+			return 0, err
+		}
+		// Positions are rewritten from the read, so the order here is upstream's
+		// order rather than the order things happened to arrive in.
+		if _, err := tx.Exec(ctx, `
+			UPDATE playlist_items i SET position = w.ord
+			FROM unnest($2::text[]) WITH ORDINALITY AS w(video_id, ord)
+			WHERE i.playlist_id = $1 AND i.video_id = w.video_id`,
+			playlistID, videoIDs); err != nil {
+			return 0, err
+		}
+	}
+
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO playlist_items (playlist_id, video_id, position)
 		SELECT $1, w.video_id,

@@ -496,13 +496,19 @@ func TestWatchLaterLandsOnTheList(t *testing.T) {
 		t.Fatalf("ScanAll: %v", err)
 	}
 
-	if len(lib.watchLater) != 1 ||
-		lib.watchLater[0].userID != "u_lm" || lib.watchLater[0].videoID != "later" {
+	// Written once, from the whole read: the list is a mirror of YouTube's
+	// rather than an accumulation, so it is set in one go or not at all.
+	if len(lib.watchLater) != 1 || lib.watchLater[0].userID != "u_lm" ||
+		len(lib.watchLater[0].videoIDs) != 1 || lib.watchLater[0].videoIDs[0] != "later" {
 		t.Errorf("watch later: %+v", lib.watchLater)
 	}
+	// A read below the cap is the whole list, so the mirror may remove.
+	if !lib.watchLater[0].complete {
+		t.Error("a short read was not treated as the whole list")
+	}
 	// And only that feed's. A liked video is not a note about what to watch next.
-	for _, w := range lib.watchLater {
-		if w.videoID == "loved" {
+	for _, id := range lib.watchLater[0].videoIDs {
+		if id == "loved" {
 			t.Error("a liked video was put on Watch Later")
 		}
 	}

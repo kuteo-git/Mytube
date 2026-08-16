@@ -4,6 +4,7 @@ import {
   Bookmark,
   Clock,
   HardDrive,
+  History,
   Home,
   ListVideo,
   Settings,
@@ -38,13 +39,26 @@ interface Item {
  */
 const PRIMARY: Item[] = [
   { icon: Home, label: 'Home', to: '/' },
-  { icon: Clock, label: 'Watch later', to: '/watch-later' },
-  { icon: ListVideo, label: 'Playlists', to: '/playlists' },
   { icon: Bookmark, label: 'Saved', to: '/saved' },
-  { icon: Clock, label: 'History', to: '/history' },
+  { icon: History, label: 'History', to: '/history' },
   { icon: HardDrive, label: 'Storage', to: '/storage' },
   { icon: Settings, label: 'Settings', to: '/settings' },
   { icon: Activity, label: 'Activity', to: '/activity' },
+]
+
+/**
+ * Read-only mirrors of the signed-in account, kept apart from everything above.
+ *
+ * The separation is the honest label for what they are. Saved and History are
+ * this library's own records and can be changed here; these two are a copy of
+ * what the member's YouTube account says, refreshed on every account scan, and
+ * nothing in this app may edit them — an edit would be silently reverted by the
+ * next pass, which is worse than not offering it (§5's rule against a control
+ * that does not do what it says).
+ */
+const FROM_YOUTUBE: Item[] = [
+  { icon: Clock, label: 'Watch later', to: '/watch-later' },
+  { icon: ListVideo, label: 'Playlists', to: '/playlists' },
 ]
 
 /**
@@ -55,7 +69,7 @@ const PRIMARY: Item[] = [
  * exists in neither the router nor the other is a link to the not-found page,
  * and nothing about rendering it would say so.
  */
-export const SIDEBAR_ROUTES = PRIMARY.map((i) => i.to)
+export const SIDEBAR_ROUTES = [...PRIMARY, ...FROM_YOUTUBE].map((i) => i.to)
 
 function Row({ item, mini }: { item: Item; mini: boolean }) {
   const { icon: Icon, label, to } = item
@@ -89,7 +103,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
         aria-label="Main"
         className="fixed top-[var(--top-bar)] bottom-0 left-0 z-20 w-[72px] overflow-y-auto bg-bg py-1 no-scrollbar"
       >
-        {PRIMARY.map((item) => (
+        {[...PRIMARY, ...FROM_YOUTUBE].map((item) => (
           <Row key={item.to} item={item} mini />
         ))}
       </nav>
@@ -103,6 +117,14 @@ export function Sidebar({ mini }: { mini: boolean }) {
     >
       <section className="flex flex-col gap-0.5">
         {PRIMARY.map((item) => (
+          <Row key={item.to} item={item} mini={false} />
+        ))}
+      </section>
+
+      <hr className="my-3 border-0 border-t border-line" />
+      <section className="flex flex-col gap-0.5">
+        <h2 className="px-3 py-1.5 text-base font-medium">From YouTube</h2>
+        {FROM_YOUTUBE.map((item) => (
           <Row key={item.to} item={item} mini={false} />
         ))}
       </section>

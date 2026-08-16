@@ -401,14 +401,24 @@ func (c *Catalog) SetPlaylistItem(ctx context.Context, playlistID, userID, video
 	return c.repo.SetPlaylistItem(ctx, playlistID, userID, videoID, included)
 }
 
-func (c *Catalog) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) (int32, error) {
+func (c *Catalog) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) (int32, error) {
 	if playlistID == "" || userID == "" {
 		return 0, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
 	}
 	if len(videoIDs) == 0 {
 		return 0, nil
 	}
-	return c.repo.ImportPlaylistItems(ctx, playlistID, userID, videoIDs)
+	return c.repo.ImportPlaylistItems(ctx, playlistID, userID, videoIDs, complete)
+}
+
+func (c *Catalog) ImportWatchLater(ctx context.Context, userID string, videoIDs []string, complete bool) error {
+	if userID == "" {
+		return fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	if len(videoIDs) == 0 {
+		return nil
+	}
+	return c.repo.ImportWatchLater(ctx, userID, videoIDs, complete)
 }
 
 // ListStalePlaylists is bounded for the same reason the metadata backfill is:

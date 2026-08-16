@@ -298,15 +298,16 @@ type Library interface {
 	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
 	// SetLiked records a like a member already gave the video on YouTube.
 	SetLiked(ctx context.Context, userID, videoID string) error
-	// SetWatchLater records that the video is on the member's Watch Later list
-	// on YouTube. Per user for the same reason SetSubscription is.
-	SetWatchLater(ctx context.Context, userID, videoID string) error
 	// UpsertPlaylist records one of the member's YouTube playlists by name, and
 	// returns the local playlist it maps to. Idempotent on (user, source).
 	UpsertPlaylist(ctx context.Context, userID, sourceURL, title string) (string, error)
 	// ImportPlaylistItems appends the videos to a playlist, in order. Never
 	// removes: see the subscription import for why.
-	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) error
+	// ImportPlaylistItems makes the playlist match what was read. complete says
+	// whether the whole playlist was seen: only then may anything be removed.
+	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) error
+	// ImportWatchLater does the same for the member's Watch later.
+	ImportWatchLater(ctx context.Context, userID string, videoIDs []string, complete bool) error
 	// ListStalePlaylists returns imported playlists whose contents were read
 	// longest ago, never-synced first.
 	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)

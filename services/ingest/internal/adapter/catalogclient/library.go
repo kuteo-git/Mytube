@@ -119,14 +119,6 @@ func (l *Library) SetLiked(ctx context.Context, userID, videoID string) error {
 	return err
 }
 
-func (l *Library) SetWatchLater(ctx context.Context, userID, videoID string) error {
-	_, err := l.client.SetWatchLater(ctx, connect.NewRequest(&catalogv1.SetWatchLaterRequest{
-		UserId:       userID,
-		VideoId:      videoID,
-		InWatchLater: true,
-	}))
-	return err
-}
 
 // SetShort records YouTube's answer for one video.
 func (l *Library) SetShort(ctx context.Context, videoID string, isShort bool) error {
@@ -308,11 +300,21 @@ func (l *Library) UpsertPlaylist(ctx context.Context, userID, sourceURL, title s
 	return resp.Msg.GetPlaylist().GetId(), nil
 }
 
-func (l *Library) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) error {
+func (l *Library) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) error {
 	_, err := l.client.ImportPlaylistItems(ctx, connect.NewRequest(&catalogv1.ImportPlaylistItemsRequest{
 		PlaylistId: playlistID,
 		UserId:     userID,
 		VideoIds:   videoIDs,
+		Complete:   complete,
+	}))
+	return err
+}
+
+func (l *Library) ImportWatchLater(ctx context.Context, userID string, videoIDs []string, complete bool) error {
+	_, err := l.client.ImportWatchLater(ctx, connect.NewRequest(&catalogv1.ImportWatchLaterRequest{
+		UserId:   userID,
+		VideoIds: videoIDs,
+		Complete: complete,
 	}))
 	return err
 }

@@ -38,12 +38,7 @@ export function PlaylistPage() {
             {isPending
               ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
               : videos.map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    variant="playlist"
-                    playlistId={playlistId}
-                  />
+<VideoCard key={video.id} video={video} variant="fromYouTube" />
                 ))}
           </div>
 

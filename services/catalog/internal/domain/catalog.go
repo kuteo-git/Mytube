@@ -267,7 +267,8 @@ type Repository interface {
 	SetPlaylistItem(ctx context.Context, playlistID, userID, videoID string, included bool) error
 	// ImportPlaylistItems appends the given videos in order, skipping any the
 	// playlist already holds, and records that the contents were read now.
-	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string) (int32, error)
+	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) (int32, error)
+	ImportWatchLater(ctx context.Context, userID string, videoIDs []string, complete bool) error
 	// ListStalePlaylists returns imported playlists whose contents were read
 	// longest ago, never-synced first.
 	ListStalePlaylists(ctx context.Context, limit int32) ([]StalePlaylist, error)

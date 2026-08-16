@@ -38,16 +38,14 @@ export interface CatalogRepository {
   /** Videos the viewer has pinned as worth keeping. */
   listPinned(pageToken?: string): Promise<Feed>
   setPinned(videoId: string, pinned: boolean): Promise<void>
-  /** The viewer's own playlists, most recently touched first. */
+  /**
+   * The member's playlists, as their YouTube account has them. Read-only: this
+   * is a mirror refreshed on every account scan, so there is nothing to write.
+   */
   listPlaylists(): Promise<Playlist[]>
   getPlaylist(id: string, pageToken?: string): Promise<{ playlist: Playlist; videos: Video[]; nextPageToken?: string }>
-  createPlaylist(title: string): Promise<Playlist>
-  renamePlaylist(id: string, title: string): Promise<Playlist>
-  deletePlaylist(id: string): Promise<void>
-  setPlaylistItem(playlistId: string, videoId: string, included: boolean): Promise<void>
-  /** Videos the viewer has put aside to watch next, most recently added first. */
+  /** The member's Watch later, from the same mirror. Read-only for the same reason. */
   listWatchLater(pageToken?: string): Promise<Feed>
-  setWatchLater(videoId: string, inWatchLater: boolean): Promise<void>
   /** Every video the viewer has watched, most recent first. */
   listHistory(pageToken?: string): Promise<Feed>
 
@@ -436,41 +434,14 @@ export const httpCatalogRepository: CatalogRepository = {
     )
   },
 
-  createPlaylist(title) {
-    return request<Playlist>('/playlists', {
-      method: 'POST',
-      body: JSON.stringify({ title }),
-    })
-  },
 
-  renamePlaylist(id, title) {
-    return request<Playlist>(`/playlists/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ title }),
-    })
-  },
 
-  async deletePlaylist(id) {
-    await request<void>(`/playlists/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  },
 
-  async setPlaylistItem(playlistId, videoId, included) {
-    await request<void>(`/playlists/${encodeURIComponent(playlistId)}/items`, {
-      method: 'POST',
-      body: JSON.stringify({ videoId, included }),
-    })
-  },
 
   listWatchLater(pageToken) {
     return request<Feed>(`/watch-later${query({ pageToken })}`)
   },
 
-  async setWatchLater(videoId, inWatchLater) {
-    await request<void>(`/videos/${encodeURIComponent(videoId)}/watch-later`, {
-      method: 'POST',
-      body: JSON.stringify({ inWatchLater }),
-    })
-  },
 
   listHistory(pageToken) {
     return request<Feed>(`/history${query({ pageToken })}`)

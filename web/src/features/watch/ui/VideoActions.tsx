@@ -1,21 +1,8 @@
 import type { ReactNode } from 'react'
-import {
-  Bookmark,
-  CheckCircle,
-  Clock,
-  MoreHorizontal,
-  Share2,
-  ThumbsDown,
-  ThumbsUp,
-} from 'lucide-react'
+import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
-import {
-  useSetPinned,
-  useSetReaction,
-  useSetSubscription,
-  useSetWatchLater,
-} from '@/features/catalog/application/queries'
+import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
@@ -42,8 +29,6 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   const setReaction = useSetReaction(video.id)
   const setSubscription = useSetSubscription(video.channel.id)
   const setPinned = useSetPinned()
-  const setWatchLater = useSetWatchLater()
-  const inWatchLater = video.userState?.inWatchLater ?? false
 
   // A share sheet where there is one, the clipboard where there is not.
   //
@@ -139,17 +124,9 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             }).then(announce)
           }}
         />
-        {/* Two intentions, two buttons. Watch later is a note about what to
-            do next and clears itself once the video has been watched; Save
-            keeps the file on the disk against the eviction sweep and never
-            clears itself. One control could not mean both. */}
-        <ActionPill
-          icon={<Clock size={20} fill={inWatchLater ? 'currentColor' : 'none'} />}
-          label={inWatchLater ? 'In Watch later' : 'Watch later'}
-          onClick={() =>
-            setWatchLater.mutate({ videoId: video.id, inWatchLater: !inWatchLater })
-          }
-        />
+        {/* No Watch later button. That list is a read-only mirror of the
+            member's YouTube account, refreshed on every account scan, so a
+            press here would be undone by the next pass. */}
         <ActionPill
           icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
           label={video.pinned ? 'Saved' : 'Save'}

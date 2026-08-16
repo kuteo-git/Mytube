@@ -36,12 +36,12 @@ const video: Video = {
   subtitles: [],
 }
 
-function renderCard(variant?: VideoCardVariant, playlistId?: string) {
+function renderCard(variant?: VideoCardVariant) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <VideoCard video={video} variant={variant} playlistId={playlistId} />
+        <VideoCard video={video} variant={variant} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -116,34 +116,16 @@ describe('card menu by variant', () => {
     expect(screen.queryByText('Not interested')).not.toBeInTheDocument()
   })
 
-  // Putting a video aside and keeping its bytes are two intentions, so a card
-  // offers both and never conflates them.
-  it('feed offers Watch later alongside Save', () => {
-    renderCard('feed')
+  // One variant for Watch later and for a playlist, because both are read-only
+  // mirrors of the YouTube account: the menu offers only what belongs to this
+  // library, and two variants would be two chances for them to drift apart.
+  it('a mirrored list offers Watched and Save, and nothing that edits it', () => {
+    renderCard('fromYouTube')
     openMenu()
-    expect(screen.getByText('Watch later')).toBeInTheDocument()
+    expect(screen.getByText('Watched')).toBeInTheDocument()
     expect(screen.getByText('Save')).toBeInTheDocument()
-  })
-
-  it('watchLater shows Remove from Watch later, and still offers Save', () => {
-    renderCard('watchLater')
-    openMenu()
-    expect(screen.getByText('Remove from Watch later')).toBeInTheDocument()
     expect(screen.queryByText('Watch later')).not.toBeInTheDocument()
-    expect(screen.getByText('Save')).toBeInTheDocument()
-  })
-
-  it('playlist offers leaving the playlist it is shown in', () => {
-    renderCard('playlist', 'pl_1')
-    openMenu()
-    expect(screen.getByText('Remove from playlist')).toBeInTheDocument()
-  })
-
-  // Without a playlist id the card cannot know which list to leave, and the
-  // menu is the wrong place to ask.
-  it('playlist without an id offers no removal', () => {
-    renderCard('playlist')
-    openMenu()
+    expect(screen.queryByText('Add to playlist')).not.toBeInTheDocument()
     expect(screen.queryByText('Remove from playlist')).not.toBeInTheDocument()
   })
 

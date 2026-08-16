@@ -684,7 +684,7 @@ func (s *Server) SetPlaylistItem(ctx context.Context, req *connect.Request[catal
 
 func (s *Server) ImportPlaylistItems(ctx context.Context, req *connect.Request[catalogv1.ImportPlaylistItemsRequest]) (*connect.Response[catalogv1.ImportPlaylistItemsResponse], error) {
 	added, err := s.catalog.ImportPlaylistItems(ctx,
-		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetVideoIds())
+		req.Msg.GetPlaylistId(), req.Msg.GetUserId(), req.Msg.GetVideoIds(), req.Msg.GetComplete())
 	if err != nil {
 		return nil, toConnectErr(err)
 	}
@@ -703,4 +703,12 @@ func (s *Server) ListStalePlaylists(ctx context.Context, req *connect.Request[ca
 		})
 	}
 	return connect.NewResponse(&catalogv1.ListStalePlaylistsResponse{Playlists: out}), nil
+}
+
+func (s *Server) ImportWatchLater(ctx context.Context, req *connect.Request[catalogv1.ImportWatchLaterRequest]) (*connect.Response[catalogv1.ImportWatchLaterResponse], error) {
+	if err := s.catalog.ImportWatchLater(ctx,
+		req.Msg.GetUserId(), req.Msg.GetVideoIds(), req.Msg.GetComplete()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ImportWatchLaterResponse{}), nil
 }

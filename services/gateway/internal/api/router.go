@@ -117,14 +117,13 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/scan-status", g.handleScanStatus)
 	mux.HandleFunc("GET /api/history", g.handleHistory)
 	mux.HandleFunc("GET /api/pinned", g.handlePinned)
+	// Read-only, both of them: Watch later and the playlists are a mirror of the
+	// member's YouTube account, refreshed on every account scan. A write route
+	// here would offer an edit the next pass reverts, so there is none — the
+	// importer reaches catalog directly.
 	mux.HandleFunc("GET /api/watch-later", g.handleWatchLater)
 	mux.HandleFunc("GET /api/playlists", g.handleListPlaylists)
-	mux.HandleFunc("POST /api/playlists", g.handleCreatePlaylist)
 	mux.HandleFunc("GET /api/playlists/{id}", g.handleGetPlaylist)
-	mux.HandleFunc("PATCH /api/playlists/{id}", g.handleUpdatePlaylist)
-	mux.HandleFunc("DELETE /api/playlists/{id}", g.handleDeletePlaylist)
-	mux.HandleFunc("POST /api/playlists/{id}/items", g.handleSetPlaylistItem)
-	mux.HandleFunc("POST /api/videos/{id}/watch-later", g.handleSetWatchLater)
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
 	mux.HandleFunc("POST /api/videos/{id}/not-interested", g.handleNotInterested)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
@@ -140,7 +139,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/videos/{id}/up-next", g.handleUpNext)
 	mux.HandleFunc("GET /api/videos/{id}/comments", g.handleListComments)
 	mux.HandleFunc("POST /api/videos/{id}/comments", g.handleCreateComment)
-		mux.HandleFunc("POST /api/videos/{id}/comments/fetch", g.handleFetchComments)
+	mux.HandleFunc("POST /api/videos/{id}/comments/fetch", g.handleFetchComments)
 	mux.HandleFunc("POST /api/videos/{id}/progress", g.handleProgress)
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 
@@ -417,6 +416,7 @@ func (g *Gateway) handleUpNext(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: nextPageToken})
 }
+
 // ---------------------------------------------------------------------------
 // Straight pass-throughs
 // ---------------------------------------------------------------------------
@@ -573,26 +573,6 @@ func (g *Gateway) handleWatchLater(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toVideoDTO(v))
 	}
 	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
-}
-
-func (g *Gateway) handleSetWatchLater(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		InWatchLater bool `json:"inWatchLater"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	if _, err := g.catalog.SetWatchLater(r.Context(), connect.NewRequest(&catalogv1.SetWatchLaterRequest{
-		UserId:       g.userID(r),
-		VideoId:      r.PathValue("id"),
-		InWatchLater: body.InWatchLater,
-	})); err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (g *Gateway) handlePinned(w http.ResponseWriter, r *http.Request) {
@@ -1060,82 +1040,4 @@ func (g *Gateway) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {
 		Videos:        videos,
 		NextPageToken: resp.Msg.GetNextPageToken(),
 	})
-}
-
-func (g *Gateway) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	resp, err := g.catalog.CreatePlaylist(r.Context(), connect.NewRequest(&catalogv1.CreatePlaylistRequest{
-		UserId:      g.userID(r),
-		Title:       body.Title,
-		Description: body.Description,
-	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, toPlaylistDTO(resp.Msg.GetPlaylist()))
-}
-
-func (g *Gateway) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	resp, err := g.catalog.UpdatePlaylist(r.Context(), connect.NewRequest(&catalogv1.UpdatePlaylistRequest{
-		PlaylistId:  r.PathValue("id"),
-		UserId:      g.userID(r),
-		Title:       body.Title,
-		Description: body.Description,
-	}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toPlaylistDTO(resp.Msg.GetPlaylist()))
-}
-
-func (g *Gateway) handleDeletePlaylist(w http.ResponseWriter, r *http.Request) {
-	if _, err := g.catalog.DeletePlaylist(r.Context(), connect.NewRequest(&catalogv1.DeletePlaylistRequest{
-		PlaylistId: r.PathValue("id"),
-		UserId:     g.userID(r),
-	})); err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (g *Gateway) handleSetPlaylistItem(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		VideoID  string `json:"videoId"`
-		Included bool   `json:"included"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-
-	if _, err := g.catalog.SetPlaylistItem(r.Context(), connect.NewRequest(&catalogv1.SetPlaylistItemRequest{
-		PlaylistId: r.PathValue("id"),
-		UserId:     g.userID(r),
-		VideoId:    body.VideoID,
-		Included:   body.Included,
-	})); err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
