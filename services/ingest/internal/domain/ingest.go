@@ -290,6 +290,14 @@ type Library interface {
 	ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error)
 	// SetShort records the answer for one video.
 	SetShort(ctx context.Context, videoID string, isShort bool) error
+	// SetSubscription records that a household member follows a channel.
+	//
+	// Per user by nature: importing one person's subscriptions must not
+	// subscribe anybody else. The videos are shared — that is what a household
+	// library is — and the relationships are not.
+	SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error
+	// SetLiked records a like a member already gave the video on YouTube.
+	SetLiked(ctx context.Context, userID, videoID string) error
 }
 
 // ShortChecker answers the one question duration cannot.

@@ -368,7 +368,7 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 		// Videos from before the column existed carry no provenance and are
 		// treated as curated. Guessing retroactively is what the last attempt at
 		// this got wrong.
-		if combinedAffinity < discoveryAffinityThreshold || f.DiscoveredVia == "RELATED" {
+		if combinedAffinity < discoveryAffinityThreshold || fencedToDiscovery(f.DiscoveredVia) {
 			out.Reason = domain.ReasonDiscovery
 			out.DiscoveryBase = weightDiscoveryBase
 			score += out.DiscoveryBase
@@ -450,6 +450,21 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 
 	out.Score = score
 	return out
+}
+
+// fencedToDiscovery is provenance the affinity slot may not hold.
+//
+// Both are guesses made by something other than the viewer. RELATED is what
+// ExpandLibrary found next to a video already here; YOUTUBE_REC is what
+// YouTube's own home feed offered a signed-in member. Either may be a good
+// video, and neither is "more of what you watch" — which is what the affinity
+// slot claims about everything in it.
+//
+// YOUTUBE_REC is fenced for a second reason as well. §6's value is that every
+// score here can be explained; letting an ordering nobody can account for take
+// a fifth of the page would spend that quietly.
+func fencedToDiscovery(discoveredVia string) bool {
+	return discoveredVia == "RELATED" || discoveredVia == "YOUTUBE_REC"
 }
 
 // blendAffinity weighs a channel score against a topic score by their weights.

@@ -29,6 +29,7 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/topicfile"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/accountfile"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/youtube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/ytdlp"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/usecase"
@@ -201,8 +202,25 @@ func main() {
 		logger,
 	)
 
+	// The household's own YouTube sessions.
+	//
+	// A directory rather than one file, because there is one session per person
+	// and they must never be interchangeable. Beside the gateway's config by
+	// default; see accountfile for why these are files and not rows.
+	accountStore := accountfile.New(env("ACCOUNT_COOKIE_DIR", "./data/cookies"))
+	accountScanner := usecase.NewAccountScanner(accountStore, downloader,
+		catalogclient.New(catalogHTTP, catalogURL, devUserID), logger)
+
+	// Its own schedule, deliberately apart from the anonymous scanner's. This
+	// is the only traffic here that carries a name, and it has to be possible to
+	// stop it without stopping the library from being scanned at all.
+	go accountScanner.Run(ctx,
+		envDuration("ACCOUNT_SCAN_START_DELAY", 3*time.Minute),
+		envDuration("ACCOUNT_SCAN_INTERVAL", time.Hour))
+
 	mux := http.NewServeMux()
-	mux.Handle(ingestv1connect.NewIngestServiceHandler(rpc.NewServer(ingest, scanner, expander)))
+	mux.Handle(ingestv1connect.NewIngestServiceHandler(
+		rpc.NewServer(ingest, scanner, expander).WithAccounts(accountStore, accountScanner)))
 
 	// Plain HTTP, not ConnectRPC: this is a continuous body of media bytes, and
 	// wrapping it in an RPC envelope would buy nothing.

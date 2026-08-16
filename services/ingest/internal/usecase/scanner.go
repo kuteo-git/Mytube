@@ -24,7 +24,7 @@ type Scanner struct {
 	// listing because it is the only source that carries view counts and upload
 	// dates; it is undocumented, so every use falls back to fetch.
 	channels domain.ChannelSource
-	library domain.Library
+	library  domain.Library
 	// Where passes are kept so the Activity page can show more than the last
 	// one. Optional: a scanner without it still scans, and the tests that
 	// exercise scanning do not need a database to do it.
@@ -601,7 +601,6 @@ func channelVideosURL(c domain.SubscribedChannel) string {
 	}
 	return "https://www.youtube.com/channel/" + c.ID + "/videos"
 }
-
 
 // isLatinTitle reports whether every letter in the title belongs to the Latin
 // script. Titles mixing Latin with other scripts are treated as non-Latin.

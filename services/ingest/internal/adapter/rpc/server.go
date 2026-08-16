@@ -17,10 +17,97 @@ type Server struct {
 	ingest   *usecase.Ingest
 	scanner  *usecase.Scanner
 	expander *usecase.Expander
+	// The household's YouTube sessions, and the pass that uses them. Both nil
+	// in a deployment that has pasted no cookies, which must keep working.
+	accounts       domain.AccountStore
+	accountScanner *usecase.AccountScanner
 }
 
 func NewServer(ingest *usecase.Ingest, scanner *usecase.Scanner, expander *usecase.Expander) *Server {
 	return &Server{ingest: ingest, scanner: scanner, expander: expander}
+}
+
+// WithAccounts attaches the household's YouTube sessions.
+//
+// Optional and set separately, like the scan store: everything else this
+// service does works without an account, and a deployment that has pasted no
+// cookies must keep scanning, ranking and playing exactly as before.
+func (s *Server) WithAccounts(store domain.AccountStore, scanner *usecase.AccountScanner) *Server {
+	s.accounts = store
+	s.accountScanner = scanner
+	return s
+}
+
+func (s *Server) SetAccountCookies(
+	ctx context.Context, req *connect.Request[ingestv1.SetAccountCookiesRequest],
+) (*connect.Response[ingestv1.SetAccountCookiesResponse], error) {
+	if s.accounts == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("accounts are not configured"))
+	}
+	err := s.accounts.Save(ctx, req.Msg.GetUserId(), req.Msg.GetLabel(), req.Msg.GetCookies())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.SetAccountCookiesResponse{}), nil
+}
+
+func (s *Server) ListAccounts(
+	ctx context.Context, _ *connect.Request[ingestv1.ListAccountsRequest],
+) (*connect.Response[ingestv1.ListAccountsResponse], error) {
+	if s.accounts == nil {
+		return connect.NewResponse(&ingestv1.ListAccountsResponse{}), nil
+	}
+	list, err := s.accounts.List(ctx)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*ingestv1.Account, 0, len(list))
+	for _, a := range list {
+		entry := &ingestv1.Account{
+			UserId:     a.UserID,
+			Label:      a.Label,
+			LastResult: a.LastResult,
+			State:      string(a.State),
+		}
+		if !a.AddedAt.IsZero() {
+			entry.AddedAt = timestamppb.New(a.AddedAt)
+		}
+		if !a.LastScanAt.IsZero() {
+			entry.LastScanAt = timestamppb.New(a.LastScanAt)
+		}
+		out = append(out, entry)
+	}
+	return connect.NewResponse(&ingestv1.ListAccountsResponse{Accounts: out}), nil
+}
+
+func (s *Server) RemoveAccount(
+	ctx context.Context, req *connect.Request[ingestv1.RemoveAccountRequest],
+) (*connect.Response[ingestv1.RemoveAccountResponse], error) {
+	if s.accounts == nil {
+		return connect.NewResponse(&ingestv1.RemoveAccountResponse{}), nil
+	}
+	if err := s.accounts.Remove(ctx, req.Msg.GetUserId()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.RemoveAccountResponse{}), nil
+}
+
+func (s *Server) ScanAccounts(
+	ctx context.Context, _ *connect.Request[ingestv1.ScanAccountsRequest],
+) (*connect.Response[ingestv1.ScanAccountsResponse], error) {
+	if s.accountScanner == nil {
+		return connect.NewResponse(&ingestv1.ScanAccountsResponse{}), nil
+	}
+	result, err := s.accountScanner.ScanAll(ctx)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.ScanAccountsResponse{
+		Accounts:      int32(result.Accounts),
+		Subscriptions: int32(result.Subscriptions),
+		Videos:        int32(result.Videos),
+		Expired:       int32(result.Expired),
+	}), nil
 }
 
 func videoToProto(v domain.ExternalVideo) *ingestv1.ExternalVideo {

@@ -107,7 +107,7 @@ func (fakeStore) LastFailureFor(context.Context, string) (time.Time, bool, error
 func (fakeStore) RequeueFailed(context.Context, []time.Duration) (domain.Job, bool, error) {
 	return domain.Job{}, false, nil
 }
-func (fakeStore) Get(context.Context, string) (domain.Job, error)             { return domain.Job{}, nil }
+func (fakeStore) Get(context.Context, string) (domain.Job, error) { return domain.Job{}, nil }
 func (fakeStore) List(context.Context, bool, bool, int32) ([]domain.Job, error) {
 	return nil, nil
 }
@@ -188,3 +188,7 @@ func (f *fakeLibrary) ListUncheckedShorts(context.Context, int32) ([]string, err
 }
 
 func (f *fakeLibrary) SetShort(context.Context, string, bool) error { return nil }
+
+func (f *fakeLibrary) SetSubscription(context.Context, string, string, bool) error { return nil }
+
+func (f *fakeLibrary) SetLiked(context.Context, string, string) error { return nil }

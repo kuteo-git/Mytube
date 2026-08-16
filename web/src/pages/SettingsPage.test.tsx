@@ -81,6 +81,7 @@ describe('Settings on a phone', () => {
       '/activity',
       // Profile leads Preferences: it decides whose every other setting here is.
       '/settings/profile',
+      '/settings/youtube-account',
       '/settings/feed',
       '/settings/narration',
       '/settings/translation',

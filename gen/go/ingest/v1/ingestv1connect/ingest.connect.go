@@ -82,6 +82,18 @@ const (
 	// IngestServiceExpandLibraryProcedure is the fully-qualified name of the IngestService's
 	// ExpandLibrary RPC.
 	IngestServiceExpandLibraryProcedure = "/ingest.v1.IngestService/ExpandLibrary"
+	// IngestServiceSetAccountCookiesProcedure is the fully-qualified name of the IngestService's
+	// SetAccountCookies RPC.
+	IngestServiceSetAccountCookiesProcedure = "/ingest.v1.IngestService/SetAccountCookies"
+	// IngestServiceListAccountsProcedure is the fully-qualified name of the IngestService's
+	// ListAccounts RPC.
+	IngestServiceListAccountsProcedure = "/ingest.v1.IngestService/ListAccounts"
+	// IngestServiceRemoveAccountProcedure is the fully-qualified name of the IngestService's
+	// RemoveAccount RPC.
+	IngestServiceRemoveAccountProcedure = "/ingest.v1.IngestService/RemoveAccount"
+	// IngestServiceScanAccountsProcedure is the fully-qualified name of the IngestService's
+	// ScanAccounts RPC.
+	IngestServiceScanAccountsProcedure = "/ingest.v1.IngestService/ScanAccounts"
 	// IngestServiceListChannelUploadsProcedure is the fully-qualified name of the IngestService's
 	// ListChannelUploads RPC.
 	IngestServiceListChannelUploadsProcedure = "/ingest.v1.IngestService/ListChannelUploads"
@@ -153,6 +165,15 @@ type IngestServiceClient interface {
 	// Brings new material into the library when the feed is running low. Metadata
 	// only: nothing is downloaded until someone presses play.
 	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
+	// A household member's own YouTube session.
+	//
+	// Write-only by design: there is no RPC that returns cookie content, because
+	// a cookies.txt is a live Google session and the only thing that should ever
+	// hold it is the yt-dlp command line being built for it.
+	SetAccountCookies(context.Context, *connect.Request[v1.SetAccountCookiesRequest]) (*connect.Response[v1.SetAccountCookiesResponse], error)
+	ListAccounts(context.Context, *connect.Request[v1.ListAccountsRequest]) (*connect.Response[v1.ListAccountsResponse], error)
+	RemoveAccount(context.Context, *connect.Request[v1.RemoveAccountRequest]) (*connect.Response[v1.RemoveAccountResponse], error)
+	ScanAccounts(context.Context, *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error)
 	// Lists a channel's uploads straight from YouTube, paginated. The channel
 	// page uses this rather than the local catalog so browsing a channel is not
 	// limited to whatever a scan happened to bring in.
@@ -288,6 +309,30 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("ExpandLibrary")),
 			connect.WithClientOptions(opts...),
 		),
+		setAccountCookies: connect.NewClient[v1.SetAccountCookiesRequest, v1.SetAccountCookiesResponse](
+			httpClient,
+			baseURL+IngestServiceSetAccountCookiesProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("SetAccountCookies")),
+			connect.WithClientOptions(opts...),
+		),
+		listAccounts: connect.NewClient[v1.ListAccountsRequest, v1.ListAccountsResponse](
+			httpClient,
+			baseURL+IngestServiceListAccountsProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ListAccounts")),
+			connect.WithClientOptions(opts...),
+		),
+		removeAccount: connect.NewClient[v1.RemoveAccountRequest, v1.RemoveAccountResponse](
+			httpClient,
+			baseURL+IngestServiceRemoveAccountProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("RemoveAccount")),
+			connect.WithClientOptions(opts...),
+		),
+		scanAccounts: connect.NewClient[v1.ScanAccountsRequest, v1.ScanAccountsResponse](
+			httpClient,
+			baseURL+IngestServiceScanAccountsProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ScanAccounts")),
+			connect.WithClientOptions(opts...),
+		),
 		listChannelUploads: connect.NewClient[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse](
 			httpClient,
 			baseURL+IngestServiceListChannelUploadsProcedure,
@@ -324,6 +369,10 @@ type ingestServiceClient struct {
 	clearScans          *connect.Client[v1.ClearScansRequest, v1.ClearScansResponse]
 	cancelVideoDownload *connect.Client[v1.CancelVideoDownloadRequest, v1.CancelVideoDownloadResponse]
 	expandLibrary       *connect.Client[v1.ExpandLibraryRequest, v1.ExpandLibraryResponse]
+	setAccountCookies   *connect.Client[v1.SetAccountCookiesRequest, v1.SetAccountCookiesResponse]
+	listAccounts        *connect.Client[v1.ListAccountsRequest, v1.ListAccountsResponse]
+	removeAccount       *connect.Client[v1.RemoveAccountRequest, v1.RemoveAccountResponse]
+	scanAccounts        *connect.Client[v1.ScanAccountsRequest, v1.ScanAccountsResponse]
 	listChannelUploads  *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
 	fetchComments       *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
 }
@@ -423,6 +472,26 @@ func (c *ingestServiceClient) ExpandLibrary(ctx context.Context, req *connect.Re
 	return c.expandLibrary.CallUnary(ctx, req)
 }
 
+// SetAccountCookies calls ingest.v1.IngestService.SetAccountCookies.
+func (c *ingestServiceClient) SetAccountCookies(ctx context.Context, req *connect.Request[v1.SetAccountCookiesRequest]) (*connect.Response[v1.SetAccountCookiesResponse], error) {
+	return c.setAccountCookies.CallUnary(ctx, req)
+}
+
+// ListAccounts calls ingest.v1.IngestService.ListAccounts.
+func (c *ingestServiceClient) ListAccounts(ctx context.Context, req *connect.Request[v1.ListAccountsRequest]) (*connect.Response[v1.ListAccountsResponse], error) {
+	return c.listAccounts.CallUnary(ctx, req)
+}
+
+// RemoveAccount calls ingest.v1.IngestService.RemoveAccount.
+func (c *ingestServiceClient) RemoveAccount(ctx context.Context, req *connect.Request[v1.RemoveAccountRequest]) (*connect.Response[v1.RemoveAccountResponse], error) {
+	return c.removeAccount.CallUnary(ctx, req)
+}
+
+// ScanAccounts calls ingest.v1.IngestService.ScanAccounts.
+func (c *ingestServiceClient) ScanAccounts(ctx context.Context, req *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error) {
+	return c.scanAccounts.CallUnary(ctx, req)
+}
+
 // ListChannelUploads calls ingest.v1.IngestService.ListChannelUploads.
 func (c *ingestServiceClient) ListChannelUploads(ctx context.Context, req *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {
 	return c.listChannelUploads.CallUnary(ctx, req)
@@ -496,6 +565,15 @@ type IngestServiceHandler interface {
 	// Brings new material into the library when the feed is running low. Metadata
 	// only: nothing is downloaded until someone presses play.
 	ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error)
+	// A household member's own YouTube session.
+	//
+	// Write-only by design: there is no RPC that returns cookie content, because
+	// a cookies.txt is a live Google session and the only thing that should ever
+	// hold it is the yt-dlp command line being built for it.
+	SetAccountCookies(context.Context, *connect.Request[v1.SetAccountCookiesRequest]) (*connect.Response[v1.SetAccountCookiesResponse], error)
+	ListAccounts(context.Context, *connect.Request[v1.ListAccountsRequest]) (*connect.Response[v1.ListAccountsResponse], error)
+	RemoveAccount(context.Context, *connect.Request[v1.RemoveAccountRequest]) (*connect.Response[v1.RemoveAccountResponse], error)
+	ScanAccounts(context.Context, *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error)
 	// Lists a channel's uploads straight from YouTube, paginated. The channel
 	// page uses this rather than the local catalog so browsing a channel is not
 	// limited to whatever a scan happened to bring in.
@@ -627,6 +705,30 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("ExpandLibrary")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceSetAccountCookiesHandler := connect.NewUnaryHandler(
+		IngestServiceSetAccountCookiesProcedure,
+		svc.SetAccountCookies,
+		connect.WithSchema(ingestServiceMethods.ByName("SetAccountCookies")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceListAccountsHandler := connect.NewUnaryHandler(
+		IngestServiceListAccountsProcedure,
+		svc.ListAccounts,
+		connect.WithSchema(ingestServiceMethods.ByName("ListAccounts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceRemoveAccountHandler := connect.NewUnaryHandler(
+		IngestServiceRemoveAccountProcedure,
+		svc.RemoveAccount,
+		connect.WithSchema(ingestServiceMethods.ByName("RemoveAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceScanAccountsHandler := connect.NewUnaryHandler(
+		IngestServiceScanAccountsProcedure,
+		svc.ScanAccounts,
+		connect.WithSchema(ingestServiceMethods.ByName("ScanAccounts")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceListChannelUploadsHandler := connect.NewUnaryHandler(
 		IngestServiceListChannelUploadsProcedure,
 		svc.ListChannelUploads,
@@ -679,6 +781,14 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceCancelVideoDownloadHandler.ServeHTTP(w, r)
 		case IngestServiceExpandLibraryProcedure:
 			ingestServiceExpandLibraryHandler.ServeHTTP(w, r)
+		case IngestServiceSetAccountCookiesProcedure:
+			ingestServiceSetAccountCookiesHandler.ServeHTTP(w, r)
+		case IngestServiceListAccountsProcedure:
+			ingestServiceListAccountsHandler.ServeHTTP(w, r)
+		case IngestServiceRemoveAccountProcedure:
+			ingestServiceRemoveAccountHandler.ServeHTTP(w, r)
+		case IngestServiceScanAccountsProcedure:
+			ingestServiceScanAccountsHandler.ServeHTTP(w, r)
 		case IngestServiceListChannelUploadsProcedure:
 			ingestServiceListChannelUploadsHandler.ServeHTTP(w, r)
 		case IngestServiceFetchCommentsProcedure:
@@ -766,6 +876,22 @@ func (UnimplementedIngestServiceHandler) CancelVideoDownload(context.Context, *c
 
 func (UnimplementedIngestServiceHandler) ExpandLibrary(context.Context, *connect.Request[v1.ExpandLibraryRequest]) (*connect.Response[v1.ExpandLibraryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ExpandLibrary is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) SetAccountCookies(context.Context, *connect.Request[v1.SetAccountCookiesRequest]) (*connect.Response[v1.SetAccountCookiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.SetAccountCookies is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ListAccounts(context.Context, *connect.Request[v1.ListAccountsRequest]) (*connect.Response[v1.ListAccountsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ListAccounts is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) RemoveAccount(context.Context, *connect.Request[v1.RemoveAccountRequest]) (*connect.Response[v1.RemoveAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.RemoveAccount is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ScanAccounts(context.Context, *connect.Request[v1.ScanAccountsRequest]) (*connect.Response[v1.ScanAccountsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ScanAccounts is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) ListChannelUploads(context.Context, *connect.Request[v1.ListChannelUploadsRequest]) (*connect.Response[v1.ListChannelUploadsResponse], error) {

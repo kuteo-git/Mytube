@@ -22,7 +22,6 @@ type previewDownloader struct {
 	requested []string
 }
 
-
 func (p *previewDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
 	return nil, nil
 }

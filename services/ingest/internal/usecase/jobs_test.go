@@ -33,7 +33,9 @@ func (s *recordingStore) Dismiss(_ context.Context, jobID string) error {
 	return s.dismissEr
 }
 
-func (s *recordingStore) DismissByState(_ context.Context, state string) (int64, error) { return 0, nil }
+func (s *recordingStore) DismissByState(_ context.Context, state string) (int64, error) {
+	return 0, nil
+}
 
 func failedJob() domain.Job {
 	return domain.Job{

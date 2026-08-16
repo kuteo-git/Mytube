@@ -8,6 +8,7 @@ import {
   Headphones,
   Languages,
   LayoutGrid,
+  KeyRound,
   SlidersHorizontal,
   UserRound,
 } from 'lucide-react'
@@ -33,6 +34,7 @@ import { usePlayer } from '@/features/watch/application/player-context'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
 import { ActionBar } from '@/features/settings/ui/ActionBar'
 import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
+import { YouTubeAccountSettings } from '@/features/settings/ui/YouTubeAccountSettings'
 
 import {
   SettingRow,
@@ -66,6 +68,7 @@ export function SettingsPage() {
       <h1 className="text-2xl font-bold">Settings</h1>
       {/* First, because it decides whose every other setting on this page is. */}
       <ProfileSettings />
+      <YouTubeAccountSettings />
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
@@ -99,6 +102,7 @@ const PHONE_LIBRARY = [
 
 const PHONE_PREFS = [
   { to: '/settings/profile', icon: UserRound, label: 'Profile' },
+  { to: '/settings/youtube-account', icon: KeyRound, label: 'YouTube account' },
   { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
   { to: '/settings/narration', icon: Headphones, label: 'Narration' },
   { to: '/settings/translation', icon: Languages, label: 'Translation' },

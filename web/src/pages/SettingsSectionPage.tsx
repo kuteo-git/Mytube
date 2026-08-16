@@ -1,5 +1,6 @@
 import { AdvancedSettings } from '@/features/settings/ui/AdvancedSettings'
 import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
+import { YouTubeAccountSettings } from '@/features/settings/ui/YouTubeAccountSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { NarrationSettings, TranslationSettings } from './SettingsPage'
 
@@ -52,6 +53,14 @@ export function ProfileSettingsPage() {
   return (
     <div className="px-4 pb-16">
       <ProfileSettings headless />
+    </div>
+  )
+}
+
+export function YouTubeAccountPage() {
+  return (
+    <div className="px-4 pb-16">
+      <YouTubeAccountSettings headless />
     </div>
   )
 }

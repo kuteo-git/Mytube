@@ -175,3 +175,31 @@ func TestVideosWithNoRecordedProvenanceAreTreatedAsCurated(t *testing.T) {
 		t.Errorf("a video with no provenance was demoted to %q", got.Slot)
 	}
 }
+
+// YouTube's own home feed is fenced exactly as ExpandLibrary's finds are.
+//
+// It arrives through a household member's signed-in session, so it is not
+// uninvited in the way a search result was — but it is still an ordering nobody
+// here can account for, and §6's whole value is that every score can be. It is
+// allowed to be material; it is not allowed to be a fifth of the page under a
+// name saying the viewer asked for it.
+func TestYouTubeRecommendationsAreDiscoveryNotAffinity(t *testing.T) {
+	now := time.Now()
+	in := rankInputs{
+		profile:    emptyProfile(),
+		suppressed: func(string) bool { return false },
+		now:        now,
+		tuning:     Tuning{}.resolve(),
+		watchAffinity: WatchAffinity{
+			Channels: map[string]float64{"ch_x": 1},
+			Topics:   map[string]float64{},
+		},
+	}
+	f := domain.VideoFeatures{
+		VideoID: "guessed", ChannelID: "ch_x", PublishedAt: now, AddedAt: now,
+		MediaState: "MEDIA_STATE_READY", DiscoveredVia: "YOUTUBE_REC",
+	}
+	if got := scoreVideo(f, in); got.Slot != slotDiscovery {
+		t.Errorf("a YouTube recommendation landed in %q, want discovery", got.Slot)
+	}
+}

@@ -99,6 +99,26 @@ func (l *Library) ListUncheckedShorts(ctx context.Context, limit int32) ([]strin
 	return resp.Msg.GetVideoIds(), nil
 }
 
+// SetSubscription records that this member follows the channel.
+func (l *Library) SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error {
+	_, err := l.client.SetSubscription(ctx, connect.NewRequest(&catalogv1.SetSubscriptionRequest{
+		UserId:     userID,
+		ChannelId:  channelID,
+		Subscribed: subscribed,
+	}))
+	return err
+}
+
+// SetLiked records a like the member already gave this video on YouTube.
+func (l *Library) SetLiked(ctx context.Context, userID, videoID string) error {
+	_, err := l.client.SetReaction(ctx, connect.NewRequest(&catalogv1.SetReactionRequest{
+		UserId:   userID,
+		VideoId:  videoID,
+		Reaction: catalogv1.Reaction_REACTION_LIKE,
+	}))
+	return err
+}
+
 // SetShort records YouTube's answer for one video.
 func (l *Library) SetShort(ctx context.Context, videoID string, isShort bool) error {
 	_, err := l.client.SetShort(ctx, connect.NewRequest(&catalogv1.SetShortRequest{

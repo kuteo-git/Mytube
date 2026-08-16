@@ -81,6 +81,16 @@ service IngestService {
   // only: nothing is downloaded until someone presses play.
   rpc ExpandLibrary(ExpandLibraryRequest) returns (ExpandLibraryResponse);
 
+  // A household member's own YouTube session.
+  //
+  // Write-only by design: there is no RPC that returns cookie content, because
+  // a cookies.txt is a live Google session and the only thing that should ever
+  // hold it is the yt-dlp command line being built for it.
+  rpc SetAccountCookies(SetAccountCookiesRequest) returns (SetAccountCookiesResponse);
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+  rpc RemoveAccount(RemoveAccountRequest) returns (RemoveAccountResponse);
+  rpc ScanAccounts(ScanAccountsRequest) returns (ScanAccountsResponse);
+
   // Lists a channel's uploads straight from YouTube, paginated. The channel
   // page uses this rather than the local catalog so browsing a channel is not
   // limited to whatever a scan happened to bring in.
@@ -115,6 +125,50 @@ message ListChannelUploadsResponse {
   // The channel's picture, taken from the same response rather than fetched.
   // Empty when the listing fell back to a flat playlist, which has no header.
   string avatar_url = 4;
+}
+
+message SetAccountCookiesRequest {
+  string user_id = 1;
+  string label = 2;
+  // Netscape cookies.txt, as exported by a browser extension. Validated before
+  // anything is written; an invalid paste stores nothing.
+  string cookies = 3;
+}
+
+message SetAccountCookiesResponse {}
+
+message ListAccountsRequest {}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
+
+// Metadata about a stored session. Never the session.
+message Account {
+  string user_id = 1;
+  string label = 2;
+  google.protobuf.Timestamp added_at = 3;
+  google.protobuf.Timestamp last_scan_at = 4;
+  // A short sentence for the settings screen. Holds nothing read out of the
+  // cookie file.
+  string last_result = 5;
+  // OK, EXPIRED or NEVER_SET.
+  string state = 6;
+}
+
+message RemoveAccountRequest {
+  string user_id = 1;
+}
+
+message RemoveAccountResponse {}
+
+message ScanAccountsRequest {}
+
+message ScanAccountsResponse {
+  int32 accounts = 1;
+  int32 subscriptions = 2;
+  int32 videos = 3;
+  int32 expired = 4;
 }
 
 message ExpandLibraryRequest {

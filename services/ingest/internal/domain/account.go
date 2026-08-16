@@ -41,6 +41,14 @@ const (
 // ErrNoAccount is returned when a profile has no cookies stored.
 var ErrNoAccount = errors.New("no account")
 
+// ErrAccountAuth is upstream saying this session has ended.
+//
+// Distinct from every other failure on purpose. Only this one counts towards
+// retiring an account: a 403 from googlevideo is an ordinary refusal that comes
+// in waves, and treating it as an ended session would take a working account out
+// of service on a bad afternoon.
+var ErrAccountAuth = errors.New("account authentication failed")
+
 // AccountStore keeps the cookie files and the little that is known about them.
 //
 // Deliberately narrow, and deliberately without a "read the cookies" method
@@ -58,6 +66,30 @@ type AccountStore interface {
 	CookiePath(ctx context.Context, userID string) (string, error)
 	// Record what a pass found, including whether the session still works.
 	Record(ctx context.Context, userID string, result string, authFailed bool) error
+}
+
+// The feeds a signed-in member has, by yt-dlp's own aliases.
+//
+// Confirmed present in yt-dlp 2026.07.04 via --extractor-descriptions; the
+// first three are listed there as "requires cookies", which is what makes them
+// worth having and also what makes them the only requests here made as
+// somebody.
+//
+// Watch history (":ythis") is deliberately absent. It is the most personal of
+// these, and the catalogue already keeps its own history from what was actually
+// played on this machine — importing a second one would mean holding a record
+// of everything somebody watched anywhere, to no end this library has.
+const (
+	FeedSubscriptions = ":ytsubs"
+	FeedLiked         = ":ytfav"
+	FeedWatchLater    = ":ytwatchlater"
+	FeedRecommended   = ":ytrec"
+)
+
+// AccountFeedSource reads one of those feeds as the account whose cookies these
+// are.
+type AccountFeedSource interface {
+	ListAccountFeed(ctx context.Context, cookiesFile, feed string, limit int32) ([]ExternalVideo, error)
 }
 
 // How many authentication failures in a row before an account is left alone.

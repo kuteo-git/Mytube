@@ -7,6 +7,7 @@ import { bareTitle } from '@/features/navigation/application/bare-screens'
 import { BackBar } from '@/features/catalog/ui/BackBar'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
+import { CookieExpiryBanner } from '@/features/settings/ui/CookieExpiryBanner'
 import { TopBar } from '@/features/navigation/ui/TopBar'
 import { Player } from '@/features/watch/ui/Player'
 import { PlayerProvider, usePlayer } from '@/features/watch/application/player-context'
@@ -177,6 +178,10 @@ function AppShellInner() {
       {chromeHidden && !isWatch && bareTitle(pathname) !== null && (
         <BackBar title={bareTitle(pathname) ?? ''} showTitle fallback="/" />
       )}
+
+      {/* Above everything, and only when a session has actually ended: the
+          household's subscriptions stop updating silently otherwise. */}
+      <CookieExpiryBanner />
 
       <TopBar
         opacity={chromeHidden ? fade : 1}

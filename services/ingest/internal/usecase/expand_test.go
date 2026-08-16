@@ -26,6 +26,9 @@ type recordingLibrary struct {
 	subscribed      []domain.SubscribedChannel
 	uncheckedShorts []string
 	shortAnswers    map[string]bool
+	// What the account pass wrote on each member's behalf.
+	subscribedBy []struct{ userID, channelID string }
+	liked        []struct{ userID, videoID string }
 }
 
 func (r *recordingLibrary) FindBySourceURL(_ context.Context, url string) (string, bool, error) {
@@ -309,4 +312,14 @@ func TestExpandNeverSearchesUpstream(t *testing.T) {
 	if downloader.searched {
 		t.Error("expansion searched YouTube for a topic name")
 	}
+}
+
+func (r *recordingLibrary) SetSubscription(_ context.Context, userID, channelID string, _ bool) error {
+	r.subscribedBy = append(r.subscribedBy, struct{ userID, channelID string }{userID, channelID})
+	return nil
+}
+
+func (r *recordingLibrary) SetLiked(_ context.Context, userID, videoID string) error {
+	r.liked = append(r.liked, struct{ userID, videoID string }{userID, videoID})
+	return nil
 }

@@ -393,6 +393,27 @@ In up-next, everything not a relationship to the video playing (channel affinity
 - Videos older than 365 days (PublishedAt, or AddedAt fallback) are filtered from Home — **but only when no topic chip is picked**. Choosing a chip is a stated intent, and the answer to "show me music" is not "music from this year": 170 of the library's music videos are over a year old against 148 under it, where an ordinary topic loses 7%.
 - **`EVICTED` videos are offered.** They were excluded for as long as "no local copy" meant "pressing this does nothing"; the instant tier plays an undownloaded video straight away while the copy is fetched behind it. Excluding them cost 359 videos across the library and 104 of the 402 in Music.
 
+## 6b. Household members and their YouTube accounts
+
+**There is no `identity` service.** §3 lists one; it was never built. `gateway.userID` reads `X-User-Id` and falls back to `DEV_USER_ID`, and until this the web app never sent the header — so every browser in the house was one person, and `recsys.signals` held 39,583 rows under a single id.
+
+- **A profile picker, not a login.** §2 is 2–5 people with no public sign-up and §3 leaves media URLs unprotected; a password here would be a stricter trust model guarding metadata about films anyone on the LAN can already fetch. The separation is **convenience, not security** — anything on the LAN can claim to be anyone by setting a header. The cookie files are the one place that bites, and they are protected by file mode on the server, never by who claims to be whom.
+- The header is **omitted, never sent empty**, when nobody has chosen: absence is what triggers the gateway's fallback, and that fallback is what keeps a pre-existing install working with its history intact. For the same reason `data/profiles.json` falls back to `DEV_USER_ID` under a readable name rather than to an empty picker.
+- **The picker appears only once a second person exists.** A household of one has no question to answer.
+- Switching profile **clears the whole query cache** — nearly everything is answered per user, and a leftover key shows one person's shelf under another's name.
+- `shared/api/http.ts` is the only thing that calls `fetch` for the gateway. "Every request must say who is asking" does not survive being remembered at forty call sites.
+
+**Cookies (`accountfile`)** — files, mode 0600 in a directory 0700, never the database: a cookies.txt is a live Google session, and in Postgres it would be in every backup, every `SELECT *` and the query log. **Write-only across the API**: no route returns cookie content, so there is no read path to leak and none to log. The paste endpoint **refuses plaintext HTTP** (426), loopback excepted.
+
+- **`purposeAccount` carries a session; `purposeListing` still carries none.** The old rule said cookies never touch listings because the scanner walks 93 sources an hour; reading one person's own subscription feed is a listing too, so the rule is made *narrower*, not dropped. There is a test saying so that should not be deleted — verified by removing the guard and watching it fail.
+- **Two authentication failures in a row expire an account**, and an expired account is skipped entirely. One is ordinary — the same URL here has answered 206, then 403, then 206 within an hour — and a 403 is deliberately **not** read as a dead session. Replaying a dead cookie hourly is how a blocked address (§8 risk 6) becomes a banned account. A good pass clears the count; re-pasting revives it.
+- Imported per member into tables that already exist: `:ytsubs` → `catalog.subscriptions`, `:ytfav` → `catalog.reactions`. **`:ythis` (watch history) is not imported** — the catalogue already keeps its own from actual playback.
+- **`:ytrec` is tagged `YOUTUBE_REC` and fenced to the discovery bucket**, like `RELATED`. §6's value is that every score can be explained, and YouTube's ordering cannot be; it is allowed to be material, not a fifth of the page.
+- `ACCOUNT_SCAN_INTERVAL` (1h), on its own schedule apart from the anonymous scanner — this is the only traffic carrying a name, and it must be stoppable without stopping the library being scanned at all.
+- The settings screen names **Get cookies.txt LOCALLY** and warns against **"Get cookies.txt"** without LOCALLY, which was pulled from the Chrome Web Store as malware. A reader is about to hand an extension their Google session; naming the wrong one is the worst thing that page can cause.
+
+Applying `0012_discovered_via.sql` and `0013_discovered_via_youtube_rec.sql` is required.
+
 ## 7. Scope
 
 ### Phase 1 — the core loop

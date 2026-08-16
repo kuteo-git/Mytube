@@ -35,7 +35,6 @@ type captionDownloader struct {
 	entered chan struct{}
 }
 
-
 func (c *captionDownloader) FetchComments(_ context.Context, _ string) ([]domain.YouTubeComment, error) {
 	return nil, nil
 }
