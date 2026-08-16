@@ -514,12 +514,21 @@ message GetStorageUsageResponse {
   int32 evicted_count = 5;
   // Videos closest to being evicted, least recently accessed first.
   repeated Video eviction_candidates = 6;
+  // Downloaded videos at least one member has saved, and so the sweep may not
+  // delete. Household-wide on purpose: Storage is where somebody asks why the
+  // disk is full, and "because people are keeping things" is the answer they
+  // are looking for. The Save button itself stays personal.
+  int32 kept_count = 7;
 }
 
 message SetPinnedRequest {
   string video_id = 1;
   // Pinned videos are never evicted, regardless of access time.
   bool pinned = 2;
+  // Whose shelf. Saving is personal — the Saved page is one member's — while
+  // the protection from eviction it grants is not: one disk, one budget, so a
+  // video stays pinned while anybody has it saved.
+  string user_id = 3;
 }
 
 message SetPinnedResponse {}

@@ -3533,8 +3533,13 @@ type GetStorageUsageResponse struct {
 	EvictedCount  int32 `protobuf:"varint,5,opt,name=evicted_count,json=evictedCount,proto3" json:"evicted_count,omitempty"`
 	// Videos closest to being evicted, least recently accessed first.
 	EvictionCandidates []*Video `protobuf:"bytes,6,rep,name=eviction_candidates,json=evictionCandidates,proto3" json:"eviction_candidates,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Downloaded videos at least one member has saved, and so the sweep may not
+	// delete. Household-wide on purpose: Storage is where somebody asks why the
+	// disk is full, and "because people are keeping things" is the answer they
+	// are looking for. The Save button itself stays personal.
+	KeptCount     int32 `protobuf:"varint,7,opt,name=kept_count,json=keptCount,proto3" json:"kept_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetStorageUsageResponse) Reset() {
@@ -3609,11 +3614,22 @@ func (x *GetStorageUsageResponse) GetEvictionCandidates() []*Video {
 	return nil
 }
 
+func (x *GetStorageUsageResponse) GetKeptCount() int32 {
+	if x != nil {
+		return x.KeptCount
+	}
+	return 0
+}
+
 type SetPinnedRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	VideoId string                 `protobuf:"bytes,1,opt,name=video_id,json=videoId,proto3" json:"video_id,omitempty"`
 	// Pinned videos are never evicted, regardless of access time.
-	Pinned        bool `protobuf:"varint,2,opt,name=pinned,proto3" json:"pinned,omitempty"`
+	Pinned bool `protobuf:"varint,2,opt,name=pinned,proto3" json:"pinned,omitempty"`
+	// Whose shelf. Saving is personal — the Saved page is one member's — while
+	// the protection from eviction it grants is not: one disk, one budget, so a
+	// video stays pinned while anybody has it saved.
+	UserId        string `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3660,6 +3676,13 @@ func (x *SetPinnedRequest) GetPinned() bool {
 		return x.Pinned
 	}
 	return false
+}
+
+func (x *SetPinnedRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
 }
 
 type SetPinnedResponse struct {
@@ -4075,7 +4098,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\x13ListHistoryResponse\x12)\n" +
 	"\x06videos\x18\x01 \x03(\v2\x11.catalog.v1.VideoR\x06videos\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x18\n" +
-	"\x16GetStorageUsageRequest\"\x8d\x02\n" +
+	"\x16GetStorageUsageRequest\"\xac\x02\n" +
 	"\x17GetStorageUsageResponse\x12\x1d\n" +
 	"\n" +
 	"used_bytes\x18\x01 \x01(\x03R\tusedBytes\x12!\n" +
@@ -4084,10 +4107,13 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\vvideo_count\x18\x04 \x01(\x05R\n" +
 	"videoCount\x12#\n" +
 	"\revicted_count\x18\x05 \x01(\x05R\fevictedCount\x12B\n" +
-	"\x13eviction_candidates\x18\x06 \x03(\v2\x11.catalog.v1.VideoR\x12evictionCandidates\"E\n" +
+	"\x13eviction_candidates\x18\x06 \x03(\v2\x11.catalog.v1.VideoR\x12evictionCandidates\x12\x1d\n" +
+	"\n" +
+	"kept_count\x18\a \x01(\x05R\tkeptCount\"^\n" +
 	"\x10SetPinnedRequest\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12\x16\n" +
-	"\x06pinned\x18\x02 \x01(\bR\x06pinned\"\x13\n" +
+	"\x06pinned\x18\x02 \x01(\bR\x06pinned\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\tR\x06userId\"\x13\n" +
 	"\x11SetPinnedResponse\"n\n" +
 	"\x17ListPinnedVideosRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +

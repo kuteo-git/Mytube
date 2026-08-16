@@ -579,6 +579,7 @@ func (g *Gateway) handleSetPinned(w http.ResponseWriter, r *http.Request) {
 	if _, err := g.catalog.SetPinned(r.Context(), connect.NewRequest(&catalogv1.SetPinnedRequest{
 		VideoId: r.PathValue("id"),
 		Pinned:  body.Pinned,
+		UserId:  g.userID(r),
 	})); err != nil {
 		g.writeErr(w, r, err)
 		return
@@ -610,6 +611,7 @@ func (g *Gateway) handleStorage(w http.ResponseWriter, r *http.Request) {
 		DiskFreeBytes:      resp.Msg.GetDiskFreeBytes(),
 		VideoCount:         resp.Msg.GetVideoCount(),
 		EvictedCount:       resp.Msg.GetEvictedCount(),
+		KeptCount:          resp.Msg.GetKeptCount(),
 		EvictionCandidates: candidates,
 	})
 }

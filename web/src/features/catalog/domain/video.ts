@@ -108,6 +108,8 @@ export interface StorageUsage {
   diskFreeBytes: number
   videoCount: number
   evictedCount: number
+  /** Downloaded videos somebody in the household has saved, so the sweep leaves them. */
+  keptCount: number
   evictionCandidates: Video[]
 }
 

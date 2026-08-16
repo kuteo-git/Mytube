@@ -52,6 +52,15 @@ export function StoragePage() {
         />
         <StatCard label="Videos on disk" value={String(data.videoCount)} />
         <StatCard label="Evicted" value={String(data.evictedCount)} />
+        {/* Saving is personal — each member has their own Saved page — but the
+            disk is not, and this is the page where somebody asks why it is
+            full. A saved video is one the sweep may not delete, whoever saved
+            it. */}
+        <StatCard
+          label="Kept"
+          value={String(data.keptCount)}
+          detail="saved by someone, never removed"
+        />
       </section>
 
       {data.evictionCandidates && data.evictionCandidates.length > 0 && (

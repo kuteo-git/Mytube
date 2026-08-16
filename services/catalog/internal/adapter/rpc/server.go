@@ -535,12 +535,14 @@ func (s *Server) GetStorageUsage(ctx context.Context, _ *connect.Request[catalog
 		DiskFreeBytes:      u.DiskFreeBytes,
 		VideoCount:         u.VideoCount,
 		EvictedCount:       u.EvictedCount,
+		KeptCount:          u.KeptCount,
 		EvictionCandidates: videosToProto(u.EvictionCandidates),
 	}), nil
 }
 
 func (s *Server) SetPinned(ctx context.Context, req *connect.Request[catalogv1.SetPinnedRequest]) (*connect.Response[catalogv1.SetPinnedResponse], error) {
-	if err := s.catalog.SetPinned(ctx, req.Msg.GetVideoId(), req.Msg.GetPinned()); err != nil {
+	if err := s.catalog.SetPinned(ctx,
+		req.Msg.GetUserId(), req.Msg.GetVideoId(), req.Msg.GetPinned()); err != nil {
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.SetPinnedResponse{}), nil

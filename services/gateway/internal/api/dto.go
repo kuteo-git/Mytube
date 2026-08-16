@@ -112,6 +112,7 @@ type storageResponse struct {
 	DiskFreeBytes      int64      `json:"diskFreeBytes"`
 	VideoCount         int32      `json:"videoCount"`
 	EvictedCount       int32      `json:"evictedCount"`
+	KeptCount          int32      `json:"keptCount"`
 	EvictionCandidates []videoDTO `json:"evictionCandidates"`
 }
 

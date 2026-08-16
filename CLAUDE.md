@@ -413,7 +413,15 @@ In up-next, everything not a relationship to the video playing (channel affinity
 - `ACCOUNT_SCAN_INTERVAL` (1h), on its own schedule apart from the anonymous scanner — this is the only traffic carrying a name, and it must be stoppable without stopping the library being scanned at all.
 - The settings screen names **Get cookies.txt LOCALLY** and warns against **"Get cookies.txt"** without LOCALLY, which was pulled from the Chrome Web Store as malware. A reader is about to hand an extension their Google session; naming the wrong one is the worst thing that page can cause.
 
-Applying `0012_discovered_via.sql` and `0013_discovered_via_youtube_rec.sql` is required.
+**Save is a personal shelf; pinning is a fact about the disk.** They were one boolean — `videos.pinned` — so one member pressing Save put the video on everybody's Saved page. It was the only per-viewer state in catalog not keyed by `user_id`, next to `watch_progress`, `reactions`, `subscriptions` and `watch_later`, which all are.
+
+- They cannot be separated by adding `user_id` to `pinned`, because they are two facts. Whose shelf a video is on is personal; whether the sweep may delete its bytes is a question about one disk and one 300 GiB budget, and the answer must be "no" while **anybody** has it saved.
+- So `catalog.saved (user_id, video_id)` is the shelf and `videos.pinned` is **derived** from it — recomputed as `EXISTS(SELECT 1 FROM saved …)` inside the same transaction as the save, never set from the direction of the call. Eviction and its partial index go on reading the column untouched.
+- **`Video.pinned` on the wire means "this viewer saved it"**, resolved through `videoSelect`'s join like every other per-viewer field. Nothing outside catalog wants the household-wide flag; every card on the page wants this one to label its own button.
+- Pre-picker saves go to `DEV_USER_ID`, the same answer §6b already gives for signals. The literal is in the migration, because a migration must produce the same database twice.
+- Storage shows a **Kept** count — household-wide, deliberately. That page is where somebody asks why the disk is full, and "people are keeping things" is the answer. The button itself stays personal.
+
+Applying `0012_discovered_via.sql`, `0013_discovered_via_youtube_rec.sql` and `0014_saved.sql` is required.
 
 ## 7. Scope
 

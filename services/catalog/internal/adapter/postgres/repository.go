@@ -35,7 +35,7 @@ func New(pool *pgxpool.Pool, mediaRoot string) *Repository {
 const videoSelect = `
 SELECT v.id, v.title, v.duration_seconds, v.view_count, v.published_at, v.added_at,
        v.thumbnail_path, v.description, v.hashtags, v.topics, v.media_state,
-       v.media_path, v.size_bytes, v.pinned, v.source_url,
+       v.media_path, v.size_bytes, (sv.user_id IS NOT NULL) AS pinned, v.source_url,
        c.id, c.name, c.handle, c.avatar_path, c.subscriber_count, c.verified,
        (s.user_id IS NOT NULL) AS subscribed,
        wp.position_seconds, wp.watched_fraction, wp.last_watched_at,
@@ -48,7 +48,15 @@ LEFT JOIN subscriptions  s  ON s.channel_id = c.id  AND s.user_id  = $1
 LEFT JOIN watch_progress wp ON wp.video_id  = v.id  AND wp.user_id = $1
 LEFT JOIN reactions      r  ON r.video_id   = v.id  AND r.user_id  = $1
 LEFT JOIN watch_later    wl ON wl.video_id  = v.id  AND wl.user_id = $1
+LEFT JOIN saved          sv ON sv.video_id  = v.id  AND sv.user_id = $1
 `
+
+// Video.pinned carries "this viewer has saved it", not videos.pinned, which
+// after 0014_saved.sql means "somebody has, so the sweep must leave the file
+// alone". Only the eviction queries want the second, and they read the column
+// directly a few hundred lines below; nothing outside this service has a use
+// for a household-wide flag, while every card on the page needs the first to
+// label its own button.
 
 func scanVideo(row pgx.Row) (domain.Video, error) {
 	var (
@@ -268,9 +276,12 @@ func (r *Repository) ListHistory(ctx context.Context, userID string, page domain
 }
 
 func (r *Repository) ListPinnedVideos(ctx context.Context, userID string, page domain.Page) ([]domain.Video, error) {
+	// One member's shelf, newest save first — not the video's added_at, which
+	// ordered the page by when the library got the video rather than by when
+	// this viewer put it there.
 	return r.queryVideos(ctx, videoSelect+`
-		WHERE v.pinned = true
-		ORDER BY v.added_at DESC
+		WHERE sv.user_id IS NOT NULL
+		ORDER BY sv.created_at DESC
 		LIMIT $2 OFFSET $3`,
 		userID, page.Size, page.Offset)
 }
@@ -846,9 +857,10 @@ func (r *Repository) GetStorageUsage(ctx context.Context, budgetBytes int64) (do
 	err := r.pool.QueryRow(ctx, `
 		SELECT coalesce(sum(size_bytes) FILTER (WHERE media_state = 'READY'), 0),
 		       count(*)::int,
-		       count(*) FILTER (WHERE media_state = 'EVICTED')::int
+		       count(*) FILTER (WHERE media_state = 'EVICTED')::int,
+		       count(*) FILTER (WHERE media_state = 'READY' AND pinned)::int
 		FROM videos`).
-		Scan(&usage.UsedBytes, &usage.VideoCount, &usage.EvictedCount)
+		Scan(&usage.UsedBytes, &usage.VideoCount, &usage.EvictedCount, &usage.KeptCount)
 	if err != nil {
 		return usage, err
 	}
@@ -863,15 +875,55 @@ func (r *Repository) GetStorageUsage(ctx context.Context, budgetBytes int64) (do
 	return usage, err
 }
 
-func (r *Repository) SetPinned(ctx context.Context, videoID string, pinned bool) error {
-	tag, err := r.pool.Exec(ctx, `UPDATE videos SET pinned = $2 WHERE id = $1`, videoID, pinned)
+// SetPinned puts a video on one member's shelf, or takes it off, and recomputes
+// whether the eviction sweep may touch its bytes.
+//
+// Two writes rather than one because they answer two questions (0014_saved.sql).
+// videos.pinned is derived from the shelf and never set directly: a member
+// unsaving must not expose a file another member is keeping, and computing it
+// from the table rather than from the direction of this call means the two can
+// never drift.
+//
+// In one transaction so a crash between them cannot leave a pinned video nobody
+// has saved — which nothing would ever clear, since only a save or an unsave of
+// that same video recomputes it.
+func (r *Repository) SetPinned(ctx context.Context, userID, videoID string, pinned bool) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Asked first, and taking the row, so an unknown video is a 404 rather than
+	// a foreign-key violation from the insert below — which the caller can only
+	// report as a fault of this service.
+	var exists bool
+	if err := tx.QueryRow(ctx,
+		`SELECT true FROM videos WHERE id = $1 FOR UPDATE`, videoID).Scan(&exists); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("video %s: %w", videoID, domain.ErrNotFound)
+		}
+		return err
 	}
-	return nil
+
+	if pinned {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO saved (user_id, video_id) VALUES ($1, $2)
+			ON CONFLICT DO NOTHING`, userID, videoID)
+	} else {
+		_, err = tx.Exec(ctx,
+			`DELETE FROM saved WHERE user_id = $1 AND video_id = $2`, userID, videoID)
+	}
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE videos v SET pinned = EXISTS (SELECT 1 FROM saved s WHERE s.video_id = v.id)
+		WHERE v.id = $1`, videoID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) UsedBytes(ctx context.Context) (int64, error) {

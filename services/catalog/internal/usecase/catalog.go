@@ -290,11 +290,17 @@ func (c *Catalog) GetStorageUsage(ctx context.Context) (domain.StorageUsage, err
 	return c.repo.GetStorageUsage(ctx, c.budgetBytes)
 }
 
-func (c *Catalog) SetPinned(ctx context.Context, videoID string, pinned bool) error {
+func (c *Catalog) SetPinned(ctx context.Context, userID, videoID string, pinned bool) error {
 	if videoID == "" {
 		return fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
 	}
-	return c.repo.SetPinned(ctx, videoID, pinned)
+	// Required rather than defaulted. Saving is per member now, and a save with
+	// no member is a row on a shelf nobody can see and nobody can take back —
+	// while still pinning the file against eviction for good.
+	if userID == "" {
+		return fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	return c.repo.SetPinned(ctx, userID, videoID, pinned)
 }
 
 func (c *Catalog) ListPinnedVideos(ctx context.Context, userID string, size, offset int32) ([]domain.Video, error) {
