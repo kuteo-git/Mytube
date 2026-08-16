@@ -39,7 +39,11 @@ type AccountScanner struct {
 	accounts domain.AccountStore
 	feeds    domain.AccountFeedSource
 	library  domain.Library
-	logger   *slog.Logger
+	// Where ranking learns about it. Optional: without one the import still
+	// fills the library and the Subscriptions page, and only the feed stays
+	// ignorant — which is exactly the half-working state this exists to close.
+	signals domain.SignalSink
+	logger  *slog.Logger
 
 	// Gap between requests. Zero means the package default; tests set it so
 	// they do not wait out a pause that exists for YouTube.
@@ -54,12 +58,16 @@ func NewAccountScanner(
 	accounts domain.AccountStore,
 	feeds domain.AccountFeedSource,
 	library domain.Library,
+	signals domain.SignalSink,
 	logger *slog.Logger,
 ) *AccountScanner {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &AccountScanner{accounts: accounts, feeds: feeds, library: library, logger: logger}
+	return &AccountScanner{
+		accounts: accounts, feeds: feeds, library: library,
+		signals: signals, logger: logger,
+	}
 }
 
 // AccountScanResult is what one pass did, for the settings screen.
@@ -184,12 +192,17 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 					s.logger.Warn("subscribe", "user", userID, "channel", v.ChannelID, "error", err)
 					continue
 				}
+				// And the ranker, which keeps its own record and would
+				// otherwise go on believing this member follows nobody.
+				s.tellRanker(ctx, userID, v.ChannelID, true)
 				out.Subscriptions++
 			}
 			if feed.like {
 				if err := s.library.SetLiked(ctx, userID, v.ID); err != nil {
 					s.logger.Warn("like", "user", userID, "video", v.ID, "error", err)
+					continue
 				}
+				s.tellRanker(ctx, userID, v.ID, false)
 			}
 		}
 	}
@@ -224,6 +237,26 @@ func (s *AccountScanner) Run(ctx context.Context, initialDelay, interval time.Du
 			return
 		case <-time.After(interval):
 		}
+	}
+}
+
+// tellRanker records the same fact in recsys's own terms.
+//
+// Logged and stepped over rather than returned: a lost signal degrades ranking
+// slightly, and it must never take down an import that has already written the
+// authoritative row.
+func (s *AccountScanner) tellRanker(ctx context.Context, userID, target string, subscribe bool) {
+	if s.signals == nil {
+		return
+	}
+	var err error
+	if subscribe {
+		err = s.signals.Subscribed(ctx, userID, target, time.Now())
+	} else {
+		err = s.signals.Liked(ctx, userID, target, time.Now())
+	}
+	if err != nil {
+		s.logger.Warn("record account signal", "user", userID, "target", target, "error", err)
 	}
 }
 

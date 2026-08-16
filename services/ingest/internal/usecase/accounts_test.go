@@ -92,9 +92,33 @@ func video(id, channel string) domain.ExternalVideo {
 	}
 }
 
+// memSignals is the ranker's own record, which is a different record from the
+// catalogue's and has to be written too.
+type memSignals struct {
+	subscribed []struct{ userID, channelID string }
+	liked      []struct{ userID, videoID string }
+}
+
+func (m *memSignals) Subscribed(_ context.Context, userID, channelID string, _ time.Time) error {
+	m.subscribed = append(m.subscribed, struct{ userID, channelID string }{userID, channelID})
+	return nil
+}
+
+func (m *memSignals) Liked(_ context.Context, userID, videoID string, _ time.Time) error {
+	m.liked = append(m.liked, struct{ userID, videoID string }{userID, videoID})
+	return nil
+}
+
 func newAccountScanner(t *testing.T, accounts *memAccounts, feeds *memFeeds, lib *recordingLibrary) *AccountScanner {
 	t.Helper()
-	s := NewAccountScanner(accounts, feeds, lib, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return newAccountScannerWith(t, accounts, feeds, lib, &memSignals{})
+}
+
+func newAccountScannerWith(
+	t *testing.T, accounts *memAccounts, feeds *memFeeds, lib *recordingLibrary, signals domain.SignalSink,
+) *AccountScanner {
+	t.Helper()
+	s := NewAccountScanner(accounts, feeds, lib, signals, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	s.pause = time.Nanosecond
 	return s
 }
@@ -288,4 +312,67 @@ func indexOf(haystack, needle string) int {
 		}
 	}
 	return -1
+}
+
+// The ranker keeps its own record, and it has to be written too.
+//
+// This is the bug the whole file exists around. `catalog.subscriptions` is the
+// authoritative list and is what the Subscriptions page shows; `recsys.signals`
+// is what ranking reads. Writing only the first left an imported account
+// looking as though it followed nobody — measured on a real household member
+// with 19 imported subscriptions and 829 videos from them, whose entire first
+// page came back labelled DISCOVERY, 24 of 24.
+func TestAnImportedSubscriptionReachesTheRankerToo(t *testing.T) {
+	accounts := newMemAccounts("u_lm")
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{
+		domain.FeedSubscriptions: {video("a", "ch_1")},
+		domain.FeedLiked:         {video("b", "ch_2")},
+	}}
+	lib := &recordingLibrary{known: map[string]bool{}}
+	signals := &memSignals{}
+
+	if _, err := newAccountScannerWith(t, accounts, feeds, lib, signals).ScanAll(context.Background()); err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+
+	if len(signals.subscribed) != 1 || signals.subscribed[0].channelID != "ch_1" {
+		t.Errorf("the ranker was not told about the subscription: %+v", signals.subscribed)
+	}
+	if signals.subscribed[0].userID != "u_lm" {
+		t.Errorf("told the ranker the wrong member: %+v", signals.subscribed)
+	}
+	if len(signals.liked) != 1 || signals.liked[0].videoID != "b" {
+		t.Errorf("the ranker was not told about the like: %+v", signals.liked)
+	}
+}
+
+// A lost signal degrades ranking; it must never undo an import that has already
+// written the authoritative row.
+func TestAFailingRankerDoesNotFailTheImport(t *testing.T) {
+	accounts := newMemAccounts("u_lm")
+	feeds := &memFeeds{byFeed: map[string][]domain.ExternalVideo{
+		domain.FeedSubscriptions: {video("a", "ch_1")},
+	}}
+	lib := &recordingLibrary{known: map[string]bool{}}
+
+	result, err := newAccountScannerWith(t, accounts, feeds, lib, failingSignals{}).ScanAll(context.Background())
+	if err != nil {
+		t.Fatalf("ScanAll: %v", err)
+	}
+	if result.Subscriptions != 1 {
+		t.Errorf("subscriptions = %d, want the catalogue write to stand", result.Subscriptions)
+	}
+	if len(lib.subscribedBy) != 1 {
+		t.Error("the authoritative row was rolled back over a lost signal")
+	}
+}
+
+type failingSignals struct{}
+
+func (failingSignals) Subscribed(context.Context, string, string, time.Time) error {
+	return errors.New("recsys is down")
+}
+
+func (failingSignals) Liked(context.Context, string, string, time.Time) error {
+	return errors.New("recsys is down")
 }

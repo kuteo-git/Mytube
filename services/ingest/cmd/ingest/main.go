@@ -30,6 +30,7 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/topicfile"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/accountfile"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/recsysclient"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/youtube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/ytdlp"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/usecase"
@@ -209,7 +210,12 @@ func main() {
 	// default; see accountfile for why these are files and not rows.
 	accountStore := accountfile.New(env("ACCOUNT_COOKIE_DIR", "./data/cookies"))
 	accountScanner := usecase.NewAccountScanner(accountStore, downloader,
-		catalogclient.New(catalogHTTP, catalogURL, devUserID), logger)
+		catalogclient.New(catalogHTTP, catalogURL, devUserID),
+		// Ranking keeps its own record of what a member follows, built from
+		// signals. Writing only the catalogue left an imported account looking
+		// as though it followed nobody, and its whole feed read "Suggested".
+		recsysclient.New(catalogHTTP, env("RECSYS_URL", "http://localhost:8182")),
+		logger)
 
 	// Its own schedule, deliberately apart from the anonymous scanner's. This
 	// is the only traffic here that carries a name, and it has to be possible to

@@ -92,6 +92,19 @@ type AccountFeedSource interface {
 	ListAccountFeed(ctx context.Context, cookiesFile, feed string, limit int32) ([]ExternalVideo, error)
 }
 
+// SignalSink tells the ranker what a member's account says they like.
+//
+// Separate from the Library on purpose, because they are two different records
+// of the same fact and both have to be written. `catalog.subscriptions` is the
+// authoritative list the Subscriptions page shows; `recsys.signals` is what
+// ranking actually reads. Writing only the first is what made an imported
+// account's whole feed read "Suggested video": every channel it followed looked
+// unsubscribed to the thing doing the ranking.
+type SignalSink interface {
+	Subscribed(ctx context.Context, userID, channelID string, occurredAt time.Time) error
+	Liked(ctx context.Context, userID, videoID string, occurredAt time.Time) error
+}
+
 // How many authentication failures in a row before an account is left alone.
 //
 // Two. One is ordinary — YouTube refuses things in waves, and this library has
