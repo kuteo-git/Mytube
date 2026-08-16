@@ -281,9 +281,25 @@ func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[cat
 		return nil, toConnectErr(err)
 	}
 
+	return connect.NewResponse(&catalogv1.ListVideoFeaturesResponse{
+		Videos:        featuresToProto(fs),
+		NextPageToken: nextPageToken(offset, req.Msg.GetPageSize(), len(fs)),
+	}), nil
+}
+
+// featuresToProto is everything the ranker is told about a video.
+//
+// A named function rather than a loop inside the handler, so that a field can
+// be asserted to survive the crossing. `is_short` did not: the column existed,
+// the query selected it, the repository filled the struct and recsys read it
+// off the wire — and this mapping never copied it, so every video crossed as
+// "not a Short" and the feed kept showing them. Nothing failed anywhere. A
+// false bool is absent from proto3 JSON, so the wire looked exactly the same as
+// a field nobody had added yet.
+func featuresToProto(fs []domain.VideoFeatures) []*catalogv1.VideoFeatures {
 	out := make([]*catalogv1.VideoFeatures, 0, len(fs))
 	for _, f := range fs {
-		out = append(out, &catalogv1.VideoFeatures{
+		v := &catalogv1.VideoFeatures{
 			VideoId:         f.VideoID,
 			ChannelId:       f.ChannelID,
 			Topics:          f.Topics,
@@ -293,15 +309,16 @@ func (s *Server) ListVideoFeatures(ctx context.Context, req *connect.Request[cat
 			MediaState:      mediaStates[f.MediaState],
 			Language:        f.Language,
 			ViewCount:       f.ViewCount,
-		})
-		if !f.PublishedAt.IsZero() {
-			out[len(out)-1].PublishedAt = timestamppb.New(f.PublishedAt)
+			IsShort:         f.IsShort,
 		}
+		// Left unset rather than sent as the zero instant: the ranker excludes
+		// an undated video outright, and epoch zero is a date.
+		if !f.PublishedAt.IsZero() {
+			v.PublishedAt = timestamppb.New(f.PublishedAt)
+		}
+		out = append(out, v)
 	}
-	return connect.NewResponse(&catalogv1.ListVideoFeaturesResponse{
-		Videos:        out,
-		NextPageToken: nextPageToken(offset, req.Msg.GetPageSize(), len(fs)),
-	}), nil
+	return out
 }
 
 // ---------------------------------------------------------------------------
