@@ -34,6 +34,18 @@ const (
 	// resolving a stream, downloading it, its subtitles, its comments. These
 	// are what get refused, so these are what carry whatever helps.
 	purposeMedia
+	// purposeAccount is a household member's own feeds: their subscriptions,
+	// their playlists, their liked videos. Listings, like the first case — and
+	// carrying credentials, like the second.
+	//
+	// The rule above is about volume, not about listings. A scanner walking 93
+	// sources every hour with an account attached is how the account is lost;
+	// reading one person's own subscription feed once an hour is what a
+	// signed-in browser does anyway, and it cannot be done without saying who
+	// is asking. So the distinction is kept and made narrower rather than
+	// dropped: this carries cookies, purposeListing still carries none, and the
+	// anonymous scanner is never given an account.
+	purposeAccount
 )
 
 // ytdlpConfig is read once from the environment.
@@ -93,14 +105,33 @@ func readConfig(getenv func(string) string) ytdlpConfig {
 
 // newCommand starts a yt-dlp command carrying whatever this kind of request
 // should carry.
+//
+// The household-wide cookie file from YTDLP_COOKIES, where one is set. For a
+// particular person's own feeds, see newAccountCommand.
 func newCommand(p purpose) *ytdlp.Command {
+	return newCommandWithCookies(p, loadConfig().cookiesFile)
+}
+
+// newAccountCommand is a request made as one household member.
+//
+// The path comes from the account store rather than the environment, so two
+// people's feeds are read with two different sessions in the same pass.
+func newAccountCommand(cookiesFile string) *ytdlp.Command {
+	return newCommandWithCookies(purposeAccount, cookiesFile)
+}
+
+func newCommandWithCookies(p purpose, cookiesFile string) *ytdlp.Command {
 	cmd := ytdlp.New()
-	if p != purposeMedia {
+	cfg := loadConfig()
+
+	// The whole of the account-safety rule, in one condition. Listings are the
+	// high-volume traffic — 93 sources an hour — and they are never given a
+	// session, whoever asks and whatever is configured.
+	if p == purposeListing {
 		return cmd
 	}
-	cfg := loadConfig()
-	if cfg.cookiesFile != "" {
-		cmd = cmd.Cookies(cfg.cookiesFile)
+	if cookiesFile != "" {
+		cmd = cmd.Cookies(cookiesFile)
 	}
 	if cfg.playerClient != "" {
 		cmd = cmd.ExtractorArgs(fmt.Sprintf("youtube:player_client=%s", cfg.playerClient))
