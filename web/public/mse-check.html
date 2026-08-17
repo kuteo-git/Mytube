@@ -1,0 +1,56 @@
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MSE / HLS check</title>
+<style>
+  body { font: 16px/1.5 -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; background: #0f0f0f; color: #f1f1f1; }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 8px 4px; border-bottom: 1px solid #333; vertical-align: top; }
+  td:first-child { color: #aaa; }
+  td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .y { color: #4ade80; }
+  .n { color: #f87171; }
+  pre { margin: 16px 0 0; padding: 12px; background: #1b1b1b; border-radius: 8px; white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #9ca3af; }
+</style>
+<h1>Which media pipeline does this device have?</h1>
+<table id="out"></table>
+<pre id="ua"></pre>
+<script>
+  // Deliberately a static page, not part of the app: it must answer for the
+  // device rather than for the bundle, and it must keep working when the app
+  // does not. The three rows that decide the design are the first three.
+  const VIDEO_CODEC = 'video/mp4; codecs="avc1.640028"';  // itag 137 / 136
+  const AUDIO_CODEC = 'audio/mp4; codecs="mp4a.40.2"';    // itag 140
+
+  const rows = [];
+  const add = (label, value) => rows.push([label, value]);
+
+  const MS = window.MediaSource;
+  const MMS = window.ManagedMediaSource;
+
+  add('MediaSource', Boolean(MS));
+  add('ManagedMediaSource', Boolean(MMS));
+  add('HLS natively', document.createElement('video').canPlayType('application/vnd.apple.mpegurl') || false);
+
+  const supports = (impl, type) => {
+    if (!impl || typeof impl.isTypeSupported !== 'function') return 'n/a';
+    try { return impl.isTypeSupported(type); } catch { return 'n/a'; }
+  };
+
+  add('MSE · H.264 video', supports(MS, VIDEO_CODEC));
+  add('MSE · AAC audio', supports(MS, AUDIO_CODEC));
+  add('MMS · H.264 video', supports(MMS, VIDEO_CODEC));
+  add('MMS · AAC audio', supports(MMS, AUDIO_CODEC));
+
+  const table = document.getElementById('out');
+  for (const [label, value] of rows) {
+    const tr = table.insertRow();
+    tr.insertCell().textContent = label;
+    const cell = tr.insertCell();
+    if (value === true) { cell.textContent = 'YES'; cell.className = 'y'; }
+    else if (value === false) { cell.textContent = 'no'; cell.className = 'n'; }
+    else if (value === '' ) { cell.textContent = 'no'; cell.className = 'n'; }
+    else { cell.textContent = String(value); }
+  }
+
+  document.getElementById('ua').textContent = navigator.userAgent;
+</script>
