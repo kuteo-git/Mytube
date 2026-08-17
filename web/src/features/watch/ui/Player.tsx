@@ -1536,6 +1536,29 @@ export function Player({
       // 0:00 a stream that starts at 0:20, clock and all.
       if (within < -0.05) return false
       if (within <= 0.05) return true
+
+      // **A stream that cannot be seeked must not be seeked, not even inside
+      // what has arrived.** The muxed tier is reported `seekable: false` for a
+      // real reason: fragmented MP4 down a pipe carries no index. The parking
+      // step already respects that; this one did not, and it is the one that
+      // runs when the climb is late — which it usually is, because preparation
+      // takes about as long as the lead allows.
+      //
+      // Moving the playhead into it produced `PIPELINE_ERROR_DECODE` on the
+      // audio packet **at exactly the seek target**: 0.766259s on a stream
+      // whose offset was 18.936 with the viewer at 19.70, and the same
+      // coincidence on three other videos at three other marks. The number in
+      // the browser's error was the number this line had just written.
+      //
+      // So it is handed over where it stands. That repeats up to a second of
+      // video, which is the same trade `HANDOVER_OVERSHOOT_TOLERANCE` already
+      // makes; beyond that the climb is given up and tried again from a later
+      // mark, which is what happens today when a replacement cannot be caught
+      // up for any other reason.
+      if (pendingTierRef.current?.tier.seekable === false) {
+        return within <= HANDOVER_OVERSHOOT_TOLERANCE
+      }
+
       const ranges = next.buffered
       const filledTo = ranges.length > 0 ? ranges.end(ranges.length - 1) : 0
       // A margin, so the handover does not land on the very edge of what has
@@ -2411,7 +2434,13 @@ export function Player({
     }
   }, [playable, front])
 
-  const downloading = download?.state === 'RUNNING' || download?.state === 'QUEUED'
+  // A copy is coming either way, but only one of these two is moving bytes:
+  // there is a single worker, so a job still QUEUED is behind another video and
+  // has transferred nothing. Drawing it as a progress bar at 0% claims a file
+  // is filling when nothing has started — the same thing that made two videos
+  // look like they were downloading at once on the activity page.
+  const transferring = download?.state === 'RUNNING'
+  const queuedBehind = download?.state === 'QUEUED'
   const downloadPercent = Math.round((download?.progress ?? 0) * 100)
 
   return (
@@ -2492,7 +2521,13 @@ export function Player({
             {tierLabel}
             {tier.name === 'remux' && ' · live'}
           </span>
-          {downloading && (
+          {queuedBehind && (
+            <>
+              <span className="h-3 w-px bg-white/25" />
+              <span>Copy queued</span>
+            </>
+          )}
+          {transferring && (
             <>
               <span className="h-3 w-px bg-white/25" />
               <span className="flex items-center gap-1.5">
@@ -2876,6 +2911,27 @@ export function Player({
                   // here so the next attempt is made from where the viewer
                   // actually is.
                   dropClimb()
+
+                  // The tier in front of the viewer has failed, and that is a
+                  // statement about this source, not about the video. A muxed
+                  // stream can lose one of its two inputs part way through —
+                  // the picture keeps arriving, the sound stops, and the
+                  // browser rejects an audio packet — after which the element
+                  // is dead and nothing was moving the player off it.
+                  //
+                  // `targetTier` has always known how to retreat: once
+                  // `remuxFailed`, auto asks for the low rendition again. Only
+                  // an abandoned *climb* ever counted a remux failure though,
+                  // so a mux that broke after being handed over counted
+                  // nothing, and the player sat on a dead element with a
+                  // working 360p source one step away. The viewer's only way
+                  // out was reloading, which works by starting over.
+                  if (tierRef.current?.name === 'remux') {
+                    setRemuxAttempts(MAX_REMUX_ATTEMPTS)
+                    setClimbAttempt((n) => n + 1)
+                    return
+                  }
+
                   if (retriedRef.current) {
                     setLoadFailed(true)
                     return

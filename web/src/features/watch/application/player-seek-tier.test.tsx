@@ -186,8 +186,10 @@ async function loadHiddenLayer(videos: NodeListOf<HTMLVideoElement>) {
 async function climbToRemux(videos: NodeListOf<HTMLVideoElement>) {
   await waitFor(() => expect(hidden(videos).src).toContain('/remux'))
   // The handover waits for the playhead to reach the mark the replacement is
-  // parked on, and jsdom's clock never moves on its own.
-  visible(videos).currentTime = 30
+  // parked on, and jsdom's clock never moves on its own. Just past it, not far
+  // past it: the muxed stream cannot be seeked, so a viewer more than a second
+  // beyond its mark is no longer somewhere it can be handed over at.
+  visible(videos).currentTime = 18.5
   await loadHiddenLayer(videos)
   await waitFor(() => expect(visible(videos).src).toContain('/remux'))
 }
@@ -332,13 +334,19 @@ describe('seeking while the video is muxed live', () => {
     await waitFor(() => expect(hidden(videos).src).toContain('/remux'))
   })
 
-  it('catches the replacement up instead of throwing away a climb that ran late', async () => {
+  it('gives up a late climb rather than seeking a stream that has no index', async () => {
     const videos = await mounted()
 
-    // The climb opens the mux ahead of the playhead and hands over when the
-    // viewer reaches that mark. Here preparation runs late — as it does on long
-    // videos, where it takes about as long as the lead allows — and the playhead
-    // is already past the mark by the time the stream is ready.
+    // Preparation ran late and the playhead is well past the mark. Winding the
+    // replacement forward to meet it was the old answer, and it was wrong for
+    // this tier: a fragmented MP4 arriving down a pipe carries no index, which
+    // is exactly why the gateway reports it `seekable: false`.
+    //
+    // Seeking it anyway produced PIPELINE_ERROR_DECODE on the audio packet at
+    // precisely the seek target — 0.766259s on a stream offset 18.936 with the
+    // viewer at 19.70, and the same coincidence on three other videos. The
+    // number in the browser's error was the number the player had just written
+    // to currentTime.
     await waitFor(() => expect(hidden(videos).src).toContain('/remux'))
     const front = visible(videos)
     front.currentTime = 45
@@ -348,15 +356,10 @@ describe('seeking while the video is muxed live', () => {
     })
     await settle()
 
-    // Handed over anyway, wound forward to where the viewer actually is. The
-    // moment they have reached is inside the stream already, and moving within
-    // buffered data is something even an unindexed stream allows.
-    //
-    // Thrown away instead — which is what used to happen — the climb would be
-    // retried from a later mark and miss again, and three misses turned 1080p
-    // off for the rest of the video.
-    await waitFor(() => expect(visible(videos).src).toContain('/remux'))
-    expect(visible(videos).currentTime + 17.972).toBeCloseTo(45, 1)
+    // The low rendition keeps playing, and the climb is tried again from a
+    // later mark — which is what happens whenever a replacement cannot be used,
+    // and costs a mux rather than the sound.
+    expect(visible(videos).src).toContain(INSTANT_URL)
   })
 
   it('still gives up when the late replacement has nothing to catch up with', async () => {
