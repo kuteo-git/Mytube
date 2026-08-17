@@ -270,9 +270,24 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("live mux closed", "video", videoID, "bytes", written)
 }
 
+// How much of the mux to read before answering the request.
+//
+// It was 32 KiB, which only ever proved the stream *started*: enough for the
+// initialisation segment and a fraction of a second of content. That left the
+// case this is now sized for — a mux that opens perfectly and then loses one of
+// its two inputs — indistinguishable from a mux that works, because bytes had
+// flowed and the status was already committed as 200.
+//
+// About a second and a half of the 1080p stream at the bitrates seen here, so
+// ffmpeg has been reading both inputs for a second by the time the question is
+// asked. The delay is paid by a climb that happens out of sight while the viewer
+// watches the low rendition, which is why it is affordable at all.
+const remuxHeadBytes = 1536 * 1024
+
 // openRemuxWithHead starts a mux and reads its first bytes, so that a stream
-// which never produces any is reported as a failure to open rather than as an
-// empty but successful response.
+// which never produces any — or which produces some and then breaks — is
+// reported as a failure to open rather than as a successful response the browser
+// has to discover the truth about.
 //
 // The bytes are handed back rather than discarded: they are the start of the
 // fMP4, and the initialisation segment is exactly the part a player cannot do
@@ -285,9 +300,23 @@ func (h *Handler) openRemuxWithHead(
 		return nil, nil, err
 	}
 
-	head := make([]byte, 32*1024)
+	head := make([]byte, remuxHeadBytes)
 	n, err := io.ReadFull(stream, head)
 	if n > 0 {
+		// ffmpeg runs at `-loglevel error`, so anything it has written is a
+		// fault rather than chatter — and by now it has been reading both inputs
+		// for about a second, which is where the faults worth catching appear.
+		// An input that dies here leaves a stream whose picture runs for a minute
+		// and whose sound stops after 0.8s; the browser can only report that as
+		// PIPELINE_ERROR_DECODE, long after this handler said 200.
+		//
+		// Returned as an error so it takes the path that already exists for a
+		// mux that would not open: drop the cached URLs, resolve again, open
+		// again — all before a single byte has reached the browser.
+		if said := stderrOf(stream); said != "" {
+			_ = stream.Close()
+			return nil, nil, fmt.Errorf("mux complained while producing its first bytes: %s", said)
+		}
 		return stream, head[:n], nil
 	}
 	_ = stream.Close()
