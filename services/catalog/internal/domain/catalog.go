@@ -16,7 +16,7 @@ var (
 type MediaState string
 
 const (
-	MediaQueued      MediaState = "QUEUED"
+	MediaAbsent      MediaState = "ABSENT"
 	MediaDownloading MediaState = "DOWNLOADING"
 	MediaReady       MediaState = "READY"
 	MediaEvicted     MediaState = "EVICTED"

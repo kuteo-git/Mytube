@@ -28,7 +28,11 @@ type MediaState int32
 
 const (
 	MediaState_MEDIA_STATE_UNSPECIFIED MediaState = 0
-	MediaState_MEDIA_STATE_QUEUED      MediaState = 1
+	// No file on this disk, and there has never been one. The column's default,
+	// so it is what every video the scanner inserts starts as — which is why it
+	// must not be called QUEUED, as it was: nothing is queued, and a queue is a
+	// question about ingest.jobs, which has a QUEUED of its own that means it.
+	MediaState_MEDIA_STATE_ABSENT      MediaState = 1
 	MediaState_MEDIA_STATE_DOWNLOADING MediaState = 2
 	MediaState_MEDIA_STATE_READY       MediaState = 3
 	MediaState_MEDIA_STATE_EVICTED     MediaState = 4
@@ -45,7 +49,7 @@ const (
 var (
 	MediaState_name = map[int32]string{
 		0: "MEDIA_STATE_UNSPECIFIED",
-		1: "MEDIA_STATE_QUEUED",
+		1: "MEDIA_STATE_ABSENT",
 		2: "MEDIA_STATE_DOWNLOADING",
 		3: "MEDIA_STATE_READY",
 		4: "MEDIA_STATE_EVICTED",
@@ -54,7 +58,7 @@ var (
 	}
 	MediaState_value = map[string]int32{
 		"MEDIA_STATE_UNSPECIFIED": 0,
-		"MEDIA_STATE_QUEUED":      1,
+		"MEDIA_STATE_ABSENT":      1,
 		"MEDIA_STATE_DOWNLOADING": 2,
 		"MEDIA_STATE_READY":       3,
 		"MEDIA_STATE_EVICTED":     4,
@@ -5427,7 +5431,7 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"MediaState\x12\x1b\n" +
 	"\x17MEDIA_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12MEDIA_STATE_QUEUED\x10\x01\x12\x1b\n" +
+	"\x12MEDIA_STATE_ABSENT\x10\x01\x12\x1b\n" +
 	"\x17MEDIA_STATE_DOWNLOADING\x10\x02\x12\x15\n" +
 	"\x11MEDIA_STATE_READY\x10\x03\x12\x17\n" +
 	"\x13MEDIA_STATE_EVICTED\x10\x04\x12\x16\n" +

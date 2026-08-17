@@ -31,7 +31,7 @@ func New(httpClient *http.Client, baseURL, userID string) *Library {
 }
 
 var mediaStates = map[string]catalogv1.MediaState{
-	"QUEUED":      catalogv1.MediaState_MEDIA_STATE_QUEUED,
+	"ABSENT":      catalogv1.MediaState_MEDIA_STATE_ABSENT,
 	"DOWNLOADING": catalogv1.MediaState_MEDIA_STATE_DOWNLOADING,
 	"READY":       catalogv1.MediaState_MEDIA_STATE_READY,
 	"EVICTED":     catalogv1.MediaState_MEDIA_STATE_EVICTED,

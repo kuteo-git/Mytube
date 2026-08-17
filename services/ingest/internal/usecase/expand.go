@@ -161,8 +161,9 @@ func (e *Expander) fromRelated(ctx context.Context, seedVideoIDs []string) int {
 // the feed can rank, and bytes are fetched later, if and when someone presses
 // play. That is what keeps an expansion cheap enough to run mid-scroll.
 //
-// "QUEUED" matches the state the topic scanner already uses for a metadata-only
-// row: known to the catalog, not yet on disk.
+// "ABSENT" matches the state the topic scanner already uses for a metadata-only
+// row: known to the catalog, never on disk. It is deliberately not a word about
+// downloading — nothing here queues one.
 //
 // Topics are whatever the caller already set: deepen files videos under the
 // curated source's topic, related and search leave them unfiled. YouTube's own
@@ -204,7 +205,7 @@ func (e *Expander) store(ctx context.Context, videos []domain.ExternalVideo, via
 			continue
 		}
 		v.DiscoveredVia = via
-		if err := e.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
+		if err := e.library.UpsertVideo(ctx, v, "ABSENT"); err != nil {
 			e.logger.Warn("upsert video", "video", v.ID, "error", err)
 			continue
 		}

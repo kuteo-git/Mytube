@@ -30,7 +30,7 @@ func (r *stateRecordingRepo) SetMediaState(
 // on offering the video as something that could still arrive.
 func TestEveryDeclaredMediaStateIsAccepted(t *testing.T) {
 	for _, state := range []domain.MediaState{
-		domain.MediaQueued,
+		domain.MediaAbsent,
 		domain.MediaDownloading,
 		domain.MediaReady,
 		domain.MediaEvicted,

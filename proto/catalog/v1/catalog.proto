@@ -111,7 +111,11 @@ service CatalogService {
 // reclaimed, so an EVICTED video still renders and can be re-ingested.
 enum MediaState {
   MEDIA_STATE_UNSPECIFIED = 0;
-  MEDIA_STATE_QUEUED = 1;
+  // No file on this disk, and there has never been one. The column's default,
+  // so it is what every video the scanner inserts starts as — which is why it
+  // must not be called QUEUED, as it was: nothing is queued, and a queue is a
+  // question about ingest.jobs, which has a QUEUED of its own that means it.
+  MEDIA_STATE_ABSENT = 1;
   MEDIA_STATE_DOWNLOADING = 2;
   MEDIA_STATE_READY = 3;
   MEDIA_STATE_EVICTED = 4;

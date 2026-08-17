@@ -134,7 +134,7 @@ func (i *Ingest) EnsureVideo(ctx context.Context, url string) (string, error) {
 	if err := i.library.UpsertChannel(ctx, meta); err != nil {
 		return "", err
 	}
-	if err := i.library.UpsertVideo(ctx, meta, "QUEUED"); err != nil {
+	if err := i.library.UpsertVideo(ctx, meta, "ABSENT"); err != nil {
 		return "", err
 	}
 	return meta.ID, nil

@@ -156,7 +156,7 @@ func (c *Catalog) UpsertVideo(ctx context.Context, v domain.Video) (domain.Video
 		return domain.Video{}, fmt.Errorf("%w: source url is required", domain.ErrInvalid)
 	}
 	if v.MediaState == "" {
-		v.MediaState = domain.MediaQueued
+		v.MediaState = domain.MediaAbsent
 	}
 	// PublishedAt stays zero when the caller does not know it; the repository
 	// stores NULL rather than inventing a date.
@@ -168,7 +168,7 @@ func (c *Catalog) SetMediaState(ctx context.Context, videoID string, state domai
 		return fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
 	}
 	switch state {
-	case domain.MediaQueued, domain.MediaDownloading, domain.MediaReady,
+	case domain.MediaAbsent, domain.MediaDownloading, domain.MediaReady,
 		domain.MediaEvicted, domain.MediaFailed, domain.MediaUnavailable:
 	default:
 		return fmt.Errorf("%w: unknown media state %q", domain.ErrInvalid, state)

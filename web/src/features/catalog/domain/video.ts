@@ -19,7 +19,10 @@ export interface Channel {
 
 /** State of the media file on disk. Tied to the LRU eviction policy. */
 export type MediaState =
-  | 'QUEUED'
+  // No file, and there has never been one — the state every scanned row starts
+  // in. It was called QUEUED, which named a download queue this has nothing to
+  // do with; ingest's job list has its own QUEUED and that one is real.
+  | 'ABSENT'
   | 'DOWNLOADING'
   | 'READY'
   | 'EVICTED'

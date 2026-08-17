@@ -370,7 +370,7 @@ func (s *AccountScanner) scanOne(ctx context.Context, userID, cookiePath string)
 				s.logger.Warn("upsert channel", "video", v.ID, "error", err)
 				continue
 			}
-			if err := s.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
+			if err := s.library.UpsertVideo(ctx, v, "ABSENT"); err != nil {
 				s.logger.Warn("upsert video", "video", v.ID, "error", err)
 				continue
 			}
@@ -590,7 +590,7 @@ func (s *AccountScanner) syncPlaylistItems(ctx context.Context, out *AccountScan
 				continue
 			}
 			v.DiscoveredVia = "SOURCE"
-			if err := s.library.UpsertVideo(ctx, v, "QUEUED"); err != nil {
+			if err := s.library.UpsertVideo(ctx, v, "ABSENT"); err != nil {
 				s.logger.Warn("upsert video", "video", v.ID, "error", err)
 				continue
 			}

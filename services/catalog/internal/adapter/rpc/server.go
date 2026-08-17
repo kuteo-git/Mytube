@@ -61,7 +61,7 @@ func nextPageToken(offset, pageSize int32, returned int) string {
 // ---------------------------------------------------------------------------
 
 var mediaStates = map[domain.MediaState]catalogv1.MediaState{
-	domain.MediaQueued:      catalogv1.MediaState_MEDIA_STATE_QUEUED,
+	domain.MediaAbsent:      catalogv1.MediaState_MEDIA_STATE_ABSENT,
 	domain.MediaDownloading: catalogv1.MediaState_MEDIA_STATE_DOWNLOADING,
 	domain.MediaReady:       catalogv1.MediaState_MEDIA_STATE_READY,
 	domain.MediaEvicted:     catalogv1.MediaState_MEDIA_STATE_EVICTED,
@@ -328,7 +328,7 @@ func featuresToProto(fs []domain.VideoFeatures) []*catalogv1.VideoFeatures {
 // ---------------------------------------------------------------------------
 
 var mediaStatesFromProto = map[catalogv1.MediaState]domain.MediaState{
-	catalogv1.MediaState_MEDIA_STATE_QUEUED:      domain.MediaQueued,
+	catalogv1.MediaState_MEDIA_STATE_ABSENT:      domain.MediaAbsent,
 	catalogv1.MediaState_MEDIA_STATE_DOWNLOADING: domain.MediaDownloading,
 	catalogv1.MediaState_MEDIA_STATE_READY:       domain.MediaReady,
 	catalogv1.MediaState_MEDIA_STATE_EVICTED:     domain.MediaEvicted,
