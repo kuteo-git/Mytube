@@ -251,6 +251,22 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	if err != nil && ctx.Err() == nil {
 		h.logger.Warn("remux stream ended early", "video", videoID, "error", err)
 	}
+	// Whatever ffmpeg complained about, even when it went on to produce a
+	// stream. One input can die while the other keeps muxing — an audio URL
+	// refused after a second of sound leaves a file whose picture runs for a
+	// minute and whose sound stops at 0.81s, which reaches the viewer as
+	// PIPELINE_ERROR_DECODE and reaches the log as nothing at all, because
+	// bytes flowed and this was called a success.
+	if complaint := stderrOf(stream); complaint != "" {
+		h.logger.Warn("live mux complained", "video", videoID, "bytes", written, "stderr", complaint)
+		// And do not hand the same pair of URLs to the next viewer. They are
+		// kept for 90 minutes, and `forget` was only reached when a mux failed
+		// to open at all — so a pair that opens and then loses an input stays in
+		// the cache, and every attempt at that video for the next hour and a
+		// half reproduces the same half-broken stream. Costs one resolve; the
+		// alternative costs the video.
+		h.remux.forget(sourceURL, height)
+	}
 	h.logger.Info("live mux closed", "video", videoID, "bytes", written)
 }
 
@@ -287,6 +303,15 @@ func (h *Handler) openRemuxWithHead(
 		}
 	}
 	return nil, nil, err
+}
+
+// stderrOf reads whatever ffmpeg wrote, from a stream that carries it. Empty
+// when the stream does not, which is every implementation but the real one.
+func stderrOf(stream io.ReadCloser) string {
+	if reporter, ok := stream.(interface{ Stderr() string }); ok {
+		return reporter.Stderr()
+	}
+	return ""
 }
 
 // refuse answers a permanent upstream refusal, and records it on the way.
