@@ -92,10 +92,29 @@ const remuxFormat = "bestvideo[height<=%d][vcodec^=avc1]+bestaudio[ext=m4a]/" +
 // EOF` followed by a 502, which the ingest log carried for **every video** —
 // the mux only ever opened when the retry happened to be let through.
 //
-// 2 MiB matches the instant tier's `instantChunkBytes` and the same warning
-// applies: 8 MiB tracked the open-ended request exactly, failing with it. Do not
-// raise it without measuring again.
-const httpRequestSizeBytes = "2097152"
+// **1 MiB, lowered from 2 MiB, because 2 MiB was sitting on the line rather
+// than under it.** The audio track is where this bites and the video track is
+// not, which is why the log read `in#1 … 403 Forbidden` — in#1 being the second
+// input — for every video while the picture would have opened perfectly.
+// Measured on four videos, both tracks, fresh URLs:
+//
+//	video track: 512 KiB, 1 MiB, 2 MiB, 4 MiB → 206 every time
+//	audio track: 512 KiB → 206, 1 MiB → 206, 2 MiB → 403, 4 MiB → 403  (8 of 8)
+//
+// And on the same URL, seconds apart: `ffprobe -request_size 2M` → refused,
+// `-request_size 1M` → the duration in a fraction of a second.
+//
+// The lower limit belongs to the same experiment that verify.go is about: the
+// audio track of a resolve marked `fexp=…51946838` refuses anything above a
+// megabyte, while a resolve marked `…51946837` serves 2 MiB happily. So this is
+// not a fixed property of googlevideo to be tuned up to — it is a line that
+// moves, and the number has to stay well below wherever it currently is.
+//
+// The same figure is the instant tier's `instantChunkBytes` and the size
+// verify.go probes with, deliberately: one number, and the probe asks upstream
+// exactly what the readers will go on to ask. Do not raise it without measuring
+// both tracks again.
+const httpRequestSizeBytes = "1048576"
 
 // bufferedHTTP is the option pair that bounds every request ffmpeg makes.
 // `initial_request_size` covers probing and header parsing, which happens before
@@ -110,7 +129,39 @@ func bufferedHTTP() []string {
 // ResolveRemuxURLs asks yt-dlp for the direct media URLs without downloading
 // anything. Two URLs mean adaptive streams to be muxed; one means the source
 // already offers a muxed file and no remux is needed.
+// Verified before being handed over, and resolved again when refused — the
+// same rule and the same measurements as the instant tier (verify.go). The mux
+// is where an unverified URL cost the most: ffmpeg opening a refused URL writes
+// no bytes, the caller can only report that as `EOF`, and the browser turns it
+// into DEMUXER_ERROR_COULD_NOT_OPEN. Every 502 the player logged for a remux
+// began here.
 func (d *Downloader) ResolveRemuxURLs(ctx context.Context, videoURL string, height int32) ([]string, error) {
+	var lastErr error
+	for range resolveAttempts {
+		urls, err := d.resolveRemuxURLsOnce(ctx, videoURL, height)
+		if err != nil {
+			return nil, err
+		}
+		// Every one of them, because the mux reads both tracks and one refused
+		// input fails the whole stream just as surely as two would.
+		lastErr = nil
+		for _, u := range urls {
+			if probeErr := verifyURL(ctx, u); probeErr != nil {
+				lastErr = probeErr
+				break
+			}
+		}
+		if lastErr == nil {
+			return urls, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+	return nil, fmt.Errorf("resolve remux urls %q: every resolved url was refused: %w", videoURL, lastErr)
+}
+
+func (d *Downloader) resolveRemuxURLsOnce(ctx context.Context, videoURL string, height int32) ([]string, error) {
 	if height <= 0 {
 		height = 1080
 	}
@@ -210,6 +261,20 @@ func remuxArgs(urls []string, startSeconds, audioStartSeconds float64) []string 
 		args = append(args,
 			"-reconnect", "1",
 			"-reconnect_streamed", "1",
+			// **A refusal is not a network error, and the flags above do not
+			// cover it.** `-reconnect` recovers from a dropped connection and an
+			// early EOF; a server that answers 403 has answered, so ffmpeg takes
+			// the answer and stops — which it reports as `partial file`, the
+			// exact words in the one captured failure, on both inputs at once.
+			//
+			// Every measurement today says that answer is worth asking again:
+			// the same URL has gone 206, then 403, then 206 inside an hour, and
+			// a chunk request part way through a file is no different from the
+			// first one. Without this, one refused chunk out of a hundred ends
+			// the input, and an input that ends early while the other carries on
+			// is a video whose sound stops after a second.
+			"-reconnect_on_http_error", "403,5xx",
+			"-reconnect_on_network_error", "1",
 			"-reconnect_delay_max", "5",
 			"-i", u)
 	}

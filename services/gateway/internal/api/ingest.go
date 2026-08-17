@@ -683,6 +683,15 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 			out.Unavailable = &unavailableDTO{
 				Reason: unavailableReason(resolveErr.Error()),
 			}
+		} else if connect.CodeOf(resolveErr) == connect.CodeFailedPrecondition {
+			// Upstream publishes nothing a bare video element can start now —
+			// either no progressive format at all, or (far more often) every URL
+			// it issued was refused when ingest checked it. Nothing is broken,
+			// and the file is on its way: the download is the one thing that has
+			// never failed here. So no tier and no error, which is what puts the
+			// player on the progress bar it already has rather than on a red
+			// message about a format.
+			g.logger.Info("no playable instant url", "video", videoID)
 		} else if out.Local == nil {
 			// Strip the gRPC framing ("internal: ") from the yt-dlp message
 			// so the player shows a readable reason instead of a stack trace.
@@ -996,9 +1005,18 @@ func copyStream(w http.ResponseWriter, body io.Reader) int64 {
 // that leads to a 403, so the size is the safeguard and it has to stay under
 // that line rather than near it.
 //
-// 2 MiB is around 40 seconds of the 360p rendition this tier serves, and the
-// player asks for the next piece the moment it needs one.
-const instantChunkBytes = 2 << 20
+// **Lowered from 2 MiB to 1 MiB**, because 2 MiB turned out to be on the line
+// rather than under it. Measured on adaptive audio URLs, four videos, fresh
+// each time: 1 MiB → 206 (8 of 8), 2 MiB → 403 (8 of 8), same URL, same second.
+// The progressive rendition this tier serves has not been seen to refuse 2 MiB,
+// but the line evidently moves — it belongs to the same YouTube experiment that
+// decides whether a resolved URL serves anything at all — and there is nothing
+// to be gained by sitting near it.
+//
+// 1 MiB is around 20 seconds of the 360p rendition, and the player asks for the
+// next piece the moment it needs one. It is also the size ingest probes a URL
+// with before handing it over, which only means anything while the two agree.
+const instantChunkBytes = 1 << 20
 
 // boundedRange turns whatever the browser asked for into a range with an end.
 //

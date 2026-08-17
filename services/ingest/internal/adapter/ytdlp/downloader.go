@@ -322,7 +322,33 @@ func (d *Downloader) ListPlaylist(ctx context.Context, url string, offset, limit
 // audio. Adaptive streams are excluded on purpose — a bare <video> element
 // cannot play separate tracks, and in practice this caps instant playback at
 // whatever muxed rendition upstream still publishes.
+// A resolved URL is verified before it is handed over, and refused ones are
+// resolved again: see verify.go for what is being guarded against and for the
+// measurements. Returning a URL that has just been measured as dead is what
+// made a video answer the player with a format error while its download
+// succeeded in the same second.
 func (d *Downloader) ResolveStream(ctx context.Context, videoURL string) (domain.StreamLocation, error) {
+	var lastErr error
+	for range resolveAttempts {
+		location, err := d.resolveStreamOnce(ctx, videoURL)
+		if err != nil {
+			return domain.StreamLocation{}, err
+		}
+		lastErr = verifyURL(ctx, location.URL)
+		if lastErr == nil {
+			return location, nil
+		}
+		if ctx.Err() != nil {
+			return domain.StreamLocation{}, ctx.Err()
+		}
+	}
+	// Nothing playable to offer. Deliberately the same answer as a video that
+	// publishes no progressive format at all: both mean "a bare video element
+	// cannot start this now", and both are answered by waiting for the file.
+	return domain.StreamLocation{}, fmt.Errorf("%w: every resolved url was refused (%v)", domain.ErrNoProgressiveFormat, lastErr)
+}
+
+func (d *Downloader) resolveStreamOnce(ctx context.Context, videoURL string) (domain.StreamLocation, error) {
 	result, err := newCommand(purposeMedia).
 		SkipDownload().
 		NoPlaylist().

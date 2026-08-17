@@ -120,12 +120,17 @@ func TestAnOpenEndedRangeIsBoundedBeforeItReachesUpstream(t *testing.T) {
 		from string
 		want string
 	}{
-		{"no range at all", "", "bytes=0-2097151"},
-		{"chrome opening a video", "bytes=0-", "bytes=0-2097151"},
-		{"seeking", "bytes=1000000-", "bytes=1000000-3097151"},
+		// Written against instantChunkBytes rather than the number it currently
+		// holds: the size is a measurement of where googlevideo starts refusing
+		// and it has already had to move once. What is being tested is that
+		// every open-ended ask comes back bounded to one chunk, whatever a
+		// chunk has become.
+		{"no range at all", "", fmt.Sprintf("bytes=0-%d", instantChunkBytes-1)},
+		{"chrome opening a video", "bytes=0-", fmt.Sprintf("bytes=0-%d", instantChunkBytes-1)},
+		{"seeking", "bytes=1000000-", fmt.Sprintf("bytes=1000000-%d", 1000000+instantChunkBytes-1)},
 		{"already bounded", "bytes=100-200", "bytes=100-200"},
 		{"a suffix range is bounded already", "bytes=-500", "bytes=-500"},
-		{"only the first of several", "bytes=0-, 900-", "bytes=0-2097151"},
+		{"only the first of several", "bytes=0-, 900-", fmt.Sprintf("bytes=0-%d", instantChunkBytes-1)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := boundedRange(c.from); got != c.want {
