@@ -20,6 +20,7 @@ import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { UnavailableReason } from '@/features/catalog/infrastructure/catalogRepository'
 import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
 import { resolveRemuxStart, useStream } from '@/features/catalog/application/queries'
+import { MAX_CLIMB_REOPENS, remuxLead } from '@/features/watch/application/remux-lead'
 import { useDownloadProgress } from '@/features/catalog/application/download'
 import type { QualityChoice } from '@/features/watch/application/autoplay'
 import {
@@ -130,34 +131,6 @@ const SEEK_STEP_SECONDS = 5
  * unmissable.
  */
 const SWAP_LEAD_SECONDS = 0.6
-
-/**
- * How far ahead of the playhead a muxed stream is opened.
- *
- * It begins wherever it is asked to and takes a while to get there, so the mark
- * has to be further ahead than the preparation takes — otherwise playback has
- * already passed it by the time the stream is ready, and the handover either
- * rewinds or never matches.
- *
- * How long it takes depends on the video, which is what made the first guess
- * wrong. Measured on this library: about 4.4s for a five-minute video, but
- * 10.8s for a seventy-eight-minute one — 2.8s of that resolving and the rest
- * inside ffmpeg. Twenty seconds clears the longest case measured with room to
- * spare, at the cost of the picture staying low for that long.
- */
-const REMUX_PREPARE_LEAD_SECONDS = 20
-
-/**
- * The same, for the climb back to full resolution after a seek.
- *
- * Shorter because by then the unknown is known. Twenty seconds covers the first
- * climb of a video whose network behaviour has not been seen yet; after a seek
- * the stream has already been opened at least once and the cost is measured —
- * about 3 seconds to reopen at a new mark, since the URLs are already resolved.
- * Five leaves room for that without asking the viewer to watch a third of a
- * minute of the low rendition every time they move the scrub bar.
- */
-const REMUX_SEEK_LEAD_SECONDS = 5
 
 /**
  * How long a muxed stream may take to become playable before auto gives up.
@@ -537,6 +510,16 @@ export function Player({
   // that cannot carry it, the local file on a disk that is not there.
   const [localAttempts, setLocalAttempts] = useState(0)
   const localFailed = localAttempts >= MAX_LOCAL_ATTEMPTS
+  // How long the last muxed stream took from being claimed to being ready, and
+  // how many times the current video's climb has been reopened for landing late.
+  //
+  // Kept in refs rather than state: nothing renders from either, and the lead is
+  // read inside the climb effect, which must not re-run because a measurement
+  // arrived. Cleared per video with everything else — a measurement belongs to
+  // one video's bitrate and length, not to the next one's.
+  const remuxPrepMsRef = useRef<number | undefined>(undefined)
+  const claimStartedAtRef = useRef(0)
+  const climbReopensRef = useRef(0)
   // Which tier the front element is playing, and where in the video that
   // element's zero is. Only the muxed stream has a non-zero offset.
   const [tier, setTier] = useState<Tier | undefined>(undefined)
@@ -1221,6 +1204,13 @@ export function Player({
     positionRef.current = initialPositionRef.current
     setRemuxAttempts(0)
     setLocalAttempts(0)
+    // A preparation time belongs to one video's length and bitrate, and the
+    // reopens belong to one video's climbs. Carried over, a short video would
+    // set the lead for a long one and arrive at the same lateness the adaptive
+    // lead exists to remove.
+    remuxPrepMsRef.current = undefined
+    claimStartedAtRef.current = 0
+    climbReopensRef.current = 0
     setSeeking(false)
   }, [videoId])
 
@@ -1295,10 +1285,15 @@ export function Player({
     // still waiting for autoplay on a fresh page — that playhead is about to
     // move, and taking its lead away would spend the climb catching up.
     const stalled = front()?.error != null
-    const lead = stalled ? 0 : postSeekRef.current ? REMUX_SEEK_LEAD_SECONDS : REMUX_PREPARE_LEAD_SECONDS
+    const lead = stalled ? 0 : remuxLead(remuxPrepMsRef.current, postSeekRef.current)
     const mark = positionRef.current + lead
     // Claim the attempt before asking anything, or the poll that re-runs this
     // effect a moment later would start a second mux for the same climb.
+    //
+    // The clock starts here rather than at `setBackSrc`, because everything from
+    // here on is preparation the lead has to cover: the round trip that asks
+    // where the mux will really begin, and then the mux itself.
+    claimStartedAtRef.current = Date.now()
     const provisional = sourceURL(wanted, mark)
     upgradingToRef.current = provisional
     const claim = { tier: wanted, offset: mark, url: provisional }
@@ -1340,6 +1335,30 @@ export function Player({
     else setSrcA(undefined)
     setClimbAttempt((n) => n + 1)
   }, [])
+
+  // Ask for the same tier again from a fresh mark, because the mark was wrong.
+  //
+  // A muxed stream cannot be moved once opened — it has no index — so a stream
+  // that turned out to be behind the viewer is not a stream that can be used,
+  // however good it is. That says nothing about the tier, and counting it
+  // against the three strikes was the trap: preparation takes about as long as
+  // the lead allows, so on a long video every climb landed late, three late
+  // climbs turned 1080p off for the rest of the video, and pinning it by hand
+  // was the only thing that worked.
+  //
+  // The reopen is cheap in the sense that matters — nothing on screen changes,
+  // the viewer stays on the rendition already playing — and it is not cheap in
+  // ffmpeg, hence the bound. It should rarely be reached: by now the lead is
+  // built from what the last attempt actually cost rather than from a guess.
+  //
+  // Returns false when the bound is spent, so the caller falls back to giving
+  // up properly rather than silently doing nothing.
+  const reopenClimb = useCallback(() => {
+    if (climbReopensRef.current >= MAX_CLIMB_REOPENS) return false
+    climbReopensRef.current += 1
+    dropClimb()
+    return true
+  }, [dropClimb])
 
   // Give up on an upgrade and keep playing what already works. Failing to
   // prepare a better source is not a playback failure — nothing on screen
@@ -1517,59 +1536,70 @@ export function Player({
     }
 
     /**
-     * Winds the replacement to where the viewer actually is.
+     * Decides whether the replacement can take over, and puts it where the
+     * viewer is when it can.
      *
      * A stream opened at a mark believes that mark is its zero, and the mark is
-     * rarely where the viewer has got to: ahead of them while the climb is
-     * being prepared, behind them if it ran late. Moving within data that has
-     * already arrived is allowed even without an index, so the difference is
-     * closed here rather than being suffered by the viewer.
+     * rarely exactly where the viewer has got to: ahead of them while the climb
+     * is being prepared, behind them if it ran late.
      *
-     * False means there is nothing arrived at that point to show.
+     * Three answers, because there are three different situations and only two
+     * of them used to be told apart:
+     *
+     *  - `'ready'`  — it is where it belongs, or has been moved there.
+     *  - `'late'`   — it begins behind the viewer and cannot be moved, so this
+     *                 mark is spent. Ask for another one.
+     *  - `'empty'`  — it could be moved, but nothing has arrived at that point.
      */
-    const catchUpToViewer = () => {
+    const catchUpToViewer = (): 'ready' | 'late' | 'empty' => {
       const within = current.currentTime + offsetRef.current - (pendingTierRef.current?.offset ?? 0)
-      // Negative means the replacement begins *after* the viewer, and there is
-      // nothing to be done about that here: a muxed stream calls its own mark
-      // zero, so there is no earlier moment inside it to wind back to. Reading
-      // it as "already in the right place" is what handed a viewer sitting at
-      // 0:00 a stream that starts at 0:20, clock and all.
-      if (within < -0.05) return false
-      if (within <= 0.05) return true
+      // Negative means the replacement begins *after* the viewer. Reading it as
+      // "already in the right place" is what handed a viewer sitting at 0:00 a
+      // stream that starts at 0:20, clock and all. There is nothing to wind back
+      // to — a muxed stream calls its own mark zero — so the mark is wrong and
+      // the answer is a new one.
+      if (within < -0.05) return 'late'
+      if (within <= 0.05) return 'ready'
 
       // **A stream that cannot be seeked must not be seeked, not even inside
       // what has arrived.** The muxed tier is reported `seekable: false` for a
       // real reason: fragmented MP4 down a pipe carries no index. The parking
-      // step already respects that; this one did not, and it is the one that
-      // runs when the climb is late — which it usually is, because preparation
+      // step already respected that; this one did not, and it is the one that
+      // runs when the climb is late — which it usually was, because preparation
       // takes about as long as the lead allows.
       //
-      // Moving the playhead into it produced `PIPELINE_ERROR_DECODE` on the
-      // audio packet **at exactly the seek target**: 0.766259s on a stream
-      // whose offset was 18.936 with the viewer at 19.70, and the same
-      // coincidence on three other videos at three other marks. The number in
-      // the browser's error was the number this line had just written.
+      // This is a rule about correctness rather than a fix for a known fault:
+      // the PIPELINE_ERROR_DECODE reports were *not* caused by it, since one of
+      // them arrived with the viewer behind the mark, where no seek happens at
+      // all. The matching numbers were arithmetic coincidence.
       //
-      // So it is handed over where it stands. That repeats up to a second of
-      // video, which is the same trade `HANDOVER_OVERSHOOT_TOLERANCE` already
-      // makes; beyond that the climb is given up and tried again from a later
-      // mark, which is what happens today when a replacement cannot be caught
-      // up for any other reason.
+      // Within the tolerance it is handed over where it stands, repeating under
+      // a second of video. Beyond it the mark is spent, and a fresh one costs a
+      // mux rather than the tier.
       if (pendingTierRef.current?.tier.seekable === false) {
-        return within <= HANDOVER_OVERSHOOT_TOLERANCE
+        return within <= HANDOVER_OVERSHOOT_TOLERANCE ? 'ready' : 'late'
       }
 
       const ranges = next.buffered
       const filledTo = ranges.length > 0 ? ranges.end(ranges.length - 1) : 0
       // A margin, so the handover does not land on the very edge of what has
       // arrived and stall on its first frame.
-      if (filledTo < within + HANDOVER_CATCHUP_MARGIN_SECONDS) return false
+      if (filledTo < within + HANDOVER_CATCHUP_MARGIN_SECONDS) return 'empty'
       try {
         next.currentTime = within
       } catch {
-        return false
+        return 'empty'
       }
-      return true
+      return 'ready'
+    }
+
+    /** Acts on a verdict that is not `'ready'`. */
+    const giveUpOn = (verdict: 'late' | 'empty') => {
+      // Late is about the mark, empty is about the stream, so only one of them
+      // is evidence against the tier. A reopen that has run out of goes falls
+      // through to abandoning, which is what counts a strike.
+      if (verdict === 'late' && reopenClimb()) return
+      abandonUpgrade()
     }
 
     // Paused: there is no mark to wait for, because the playhead is not going
@@ -1577,8 +1607,9 @@ export function Player({
     // replacement there first, or a stream opened at a keyframe behind them
     // would quietly wind the video back to it.
     if (current.paused) {
-      if (!catchUpToViewer()) {
-        abandonUpgrade()
+      const verdict = catchUpToViewer()
+      if (verdict !== 'ready') {
+        giveUpOn(verdict)
         return
       }
       commit()
@@ -1630,8 +1661,9 @@ export function Player({
         // up on the tier for the rest of the video, which is why pinning 1080p
         // by hand was the only thing that worked.
         if (frontAbsolute > backAbsolute + HANDOVER_OVERSHOOT_TOLERANCE) {
-          if (!catchUpToViewer()) {
-            abandonUpgrade()
+          const verdict = catchUpToViewer()
+          if (verdict !== 'ready') {
+            giveUpOn(verdict)
             return
           }
           commit()
@@ -1643,7 +1675,7 @@ export function Player({
       handoverFrameRef.current = window.requestAnimationFrame(waitForMark)
     }
     waitForMark()
-  }, [front, back, captions, abandonUpgrade])
+  }, [front, back, captions, abandonUpgrade, reopenClimb])
 
 
   // A pending handover must not outlive the video it belongs to.
@@ -2716,6 +2748,16 @@ export function Player({
                       pending && element.src === new URL(pending.url, window.location.href).href
                         ? pending
                         : undefined
+
+                    // What the preparation actually cost, for the next lead to
+                    // be built from rather than guessed at. Recorded here
+                    // because this is the moment the stream became usable, and
+                    // only for the claim this element belongs to — a stale
+                    // element reporting itself ready would otherwise time a
+                    // climb it was not part of.
+                    if (mine && mine.tier.name === 'remux' && claimStartedAtRef.current > 0) {
+                      remuxPrepMsRef.current = Date.now() - claimStartedAtRef.current
+                    }
 
                     if (mine?.startAt !== undefined) {
                       const within = mine.startAt - mine.offset

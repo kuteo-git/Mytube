@@ -352,14 +352,30 @@ describe('seeking while the video is muxed live', () => {
     front.currentTime = 45
     await act(async () => {
       fireEvent.play(front)
+      // The player learns where the viewer is from timeupdate, and the next mark
+      // is measured from that. Without it the reopen would compute a mark from a
+      // stale position — which is the same fault, one turn later.
+      fireEvent.timeUpdate(front)
       fireEvent.loadedMetadata(hidden(videos))
     })
     await settle()
 
-    // The low rendition keeps playing, and the climb is tried again from a
-    // later mark — which is what happens whenever a replacement cannot be used,
-    // and costs a mux rather than the sound.
+    // The low rendition keeps playing — nothing the viewer sees changes.
     expect(visible(videos).src).toContain(INSTANT_URL)
+
+    // And a fresh mark is asked for, ahead of where the viewer now is, because
+    // being late says the *mark* was wrong rather than that the tier is bad.
+    // Counting lateness against the tier was the trap: preparation takes about
+    // as long as the lead allows, so on a long video every climb landed late,
+    // three late climbs switched 1080p off for the rest of the video, and
+    // pinning it by hand was the only thing that worked.
+    //
+    // Not compared against the previous mark, which it may legitimately be below
+    // — once preparation has been measured the lead shrinks from the opening
+    // guess of twenty seconds to what it actually costs.
+    await waitFor(() => expect(getRemuxStart.mock.calls.length).toBeGreaterThan(1))
+    const asked = getRemuxStart.mock.calls.map((call) => call[1] as number)
+    expect(asked[asked.length - 1]).toBeGreaterThan(45)
   })
 
   it('still gives up when the late replacement has nothing to catch up with', async () => {
@@ -400,12 +416,18 @@ describe('seeking while the video is muxed live', () => {
     await settle()
 
     // Tried again, at once. This is the free attempt: the failure said nothing
-    // about the connection — the same stream was asked for from a mark it had
-    // not been asked for before — so it neither counts against the tier nor
-    // leaves the viewer parked on 360p waiting for something else to happen.
-    await waitFor(() =>
-      expect(getRemuxStart.mock.calls.map((call) => call[1])).toEqual([605, 620]),
-    )
+    // about the connection, so it neither counts against the tier nor leaves the
+    // viewer parked on 360p waiting for something else to happen.
+    //
+    // Asserted as a rule rather than as two numbers. The lead is no longer a
+    // constant — it is built from how long the previous mux actually took — so
+    // the exact mark depends on a measurement, and pinning it here would make
+    // this test a statement about jsdom's clock. What matters is that a second
+    // attempt is made and that it never asks for a mark behind the first.
+    await waitFor(() => expect(getRemuxStart.mock.calls.length).toBe(2))
+    const marks = getRemuxStart.mock.calls.map((call) => call[1] as number)
+    expect(marks[0]).toBeGreaterThanOrEqual(600)
+    expect(marks[1]).toBeGreaterThanOrEqual(marks[0])
     await waitFor(() => expect(hidden(videos).src).toContain('/remux'))
   })
 
