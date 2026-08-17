@@ -157,6 +157,27 @@ describe('ActivityPage', () => {
     expect(dismissJob).not.toHaveBeenCalled()
   })
 
+  // There is one worker slot, so a second video pressed at the same time waits
+  // its turn rather than transferring alongside the first. Both rows used to
+  // read "0%" under a spinning loader — one because it had just started and one
+  // because it had not started at all — which is how two videos appeared to be
+  // downloading at once on a system that downloads one at a time. A spinner
+  // over a percentage is a claim that bytes are moving.
+  it('tells a transfer apart from a video waiting its turn', async () => {
+    listJobs.mockResolvedValue([
+      job({ id: 'run1', state: 'RUNNING', title: 'Transferring', progress: 0 }),
+      job({ id: 'wait1', state: 'QUEUED', title: 'Second in line', progress: 0 }),
+    ])
+    renderPage()
+
+    await waitFor(() => expect(screen.getByText('Second in line')).toBeTruthy())
+
+    // The one actually moving bytes is the only one that may claim a share of
+    // the file, and it is the only one counted as a download.
+    expect(screen.getAllByText('0%')).toHaveLength(1)
+    expect(screen.getByText('Waiting its turn')).toBeTruthy()
+  })
+
   it('says so when nothing has been downloaded', async () => {
     renderPage()
     await waitFor(() => expect(screen.getByText(/Nothing has been downloaded yet/)).toBeTruthy())

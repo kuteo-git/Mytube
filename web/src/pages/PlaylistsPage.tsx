@@ -3,6 +3,7 @@ import { usePlaylists } from '@/features/catalog/application/queries'
 import { useAccountState } from '@/features/settings/application/account-state'
 import type { Playlist } from '@/features/catalog/domain/video'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
+import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 
 /**
@@ -35,7 +36,12 @@ export function PlaylistsPage() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-8 min-[700px]:grid-cols-3 min-[1000px]:grid-cols-4 min-[1600px]:grid-cols-5">
           {Array.from({ length: 8 }, (_, i) => (
             <div key={i}>
-              <ThumbnailSurface />
+              {/* A plain surface, the same shape `VideoCardSkeleton` uses, not a
+                  ThumbnailSurface. That one paints a gradient from a hue, and a
+                  skeleton has no id to derive one from — so eight of them would
+                  flash eight arbitrary colours for the moment before the real
+                  covers arrive. A placeholder should be quiet. */}
+              <div className="aspect-video w-full rounded-xl bg-surface" />
               <div className="mt-2 h-4 w-3/4 rounded bg-surface" />
             </div>
           ))}
@@ -61,7 +67,11 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
 
   return (
     <Link to={`/playlist/${playlist.id}`} className="block">
-      <ThumbnailSurface>
+      {/* Keyed on the playlist's own id, like every other card in the app. It
+          matters more here than elsewhere: a playlist whose contents have not
+          been read yet has no cover at all, so the gradient is the whole of what
+          distinguishes one from another. */}
+      <ThumbnailSurface hue={hueFromId(playlist.id)}>
         {cover ? (
           <img src={mediaURL(cover)} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : null}

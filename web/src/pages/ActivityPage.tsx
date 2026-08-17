@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react'
-import { AlertTriangle, CheckCircle, Loader2, RefreshCw, RotateCcw, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, Loader2, RefreshCw, RotateCcw, X } from 'lucide-react'
 import {
   useActivityJobs,
   useCancelJob,
@@ -225,11 +225,25 @@ function FailedRow({ job }: { job: IngestJob }) {
 
 function ActiveRow({ job }: { job: IngestJob }) {
   const cancel = useCancelJob()
+  // One video is transferred at a time — a single worker, claiming one job — so
+  // everything else in this group is standing in line, not downloading. Both
+  // states used to render the same spinner over the same "0%", which is how a
+  // system that downloads one video at a time appeared to be downloading two.
+  //
+  // A spinner is a claim that something is happening and a percentage is a
+  // claim about a file being filled; a job that has not started is entitled to
+  // neither. It says what it is instead, and keeps its Cancel — leaving the
+  // queue is exactly what someone reading this row wants to do.
+  const transferring = job.state === 'RUNNING'
   return (
     <li className="rounded-xl bg-surface p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
-          <Loader2 size={14} className="shrink-0 animate-spin" />
+          {transferring ? (
+            <Loader2 size={14} className="shrink-0 animate-spin" />
+          ) : (
+            <Clock size={14} className="shrink-0 text-text-2" />
+          )}
           <span className="truncate">{job.title || job.sourceUrl}</span>
         </p>
         {/* Same button, same place, different verb — told apart by its label
@@ -245,7 +259,9 @@ function ActiveRow({ job }: { job: IngestJob }) {
           <X size={16} />
         </IconButton>
       </div>
-      <p className="mt-1 text-xs text-text-2 tabular-nums">{Math.round(job.progress * 100)}%</p>
+      <p className="mt-1 text-xs text-text-2 tabular-nums">
+        {transferring ? `${Math.round(job.progress * 100)}%` : 'Waiting its turn'}
+      </p>
     </li>
   )
 }
