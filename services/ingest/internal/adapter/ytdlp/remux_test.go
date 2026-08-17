@@ -164,3 +164,27 @@ func TestRemuxArgsBoundsEveryRequest(t *testing.T) {
 		}
 	}
 }
+
+// A response body that ends early carries no error status, so neither
+// -reconnect (which covers a connection dropping *before* EOF) nor
+// -reconnect_on_http_error reaches it. Traced with -loglevel debug on a real
+// audio URL: ffmpeg asks for a megabyte, reads 16384 bytes, and in the failing
+// case has nothing more — reported as `partial file` at ~16.5 KB and again at
+// the ~163 KB it went on to seek to, the pair of offsets four captured failures
+// shared to within 200 bytes across four different videos. Sixteen kilobytes
+// less the container header is about 34 AAC frames, or 0.79 seconds, which is
+// the number the browser named every time.
+func TestRemuxArgsReconnectsWhenABodyEndsEarly(t *testing.T) {
+	args := remuxArgs([]string{videoURL, audioURL}, 20, 18)
+
+	for _, u := range []string{videoURL, audioURL} {
+		if got := optionBeforeInput(t, args, "-reconnect_at_eof", u); got != "1" {
+			t.Errorf("reconnect_at_eof for %q = %q, want \"1\"", u, got)
+		}
+		// Bounded: at the true end of a finite file this would otherwise ask
+		// again for ever, and every ask is counted against this address.
+		if got := optionBeforeInput(t, args, "-reconnect_max_retries", u); got == "" {
+			t.Errorf("reconnect_max_retries for %q is unset — an unbounded retry at EOF", u)
+		}
+	}
+}

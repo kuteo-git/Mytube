@@ -275,6 +275,24 @@ func remuxArgs(urls []string, startSeconds, audioStartSeconds float64) []string 
 			// is a video whose sound stops after a second.
 			"-reconnect_on_http_error", "403,5xx",
 			"-reconnect_on_network_error", "1",
+			// **The body that ends early carries no error at all**, which is why
+			// neither of the two flags above reached it. Traced with
+			// `-loglevel debug` on a real audio URL: ffmpeg asks
+			// `Range: bytes=0-1048575`, reads **16384** bytes, and then — in the
+			// failing case — has nothing more. It reports that as `partial file`
+			// at ~16.5 KB and again at the offset it went on to seek to, ~163 KB,
+			// which is exactly the pair of offsets four captured failures had in
+			// common to within 200 bytes across four different videos.
+			//
+			// Sixteen kilobytes minus the container header is about 34 AAC frames,
+			// or **0.79 seconds** — the number the browser named every time.
+			//
+			// `-reconnect` covers a connection dropping *before* EOF; this is
+			// classified as EOF, so it needs its own flag. Bounded by
+			// `-reconnect_max_retries`, because at the true end of a finite file
+			// this would otherwise ask again for ever.
+			"-reconnect_at_eof", "1",
+			"-reconnect_max_retries", "5",
 			"-reconnect_delay_max", "5",
 			"-i", u)
 	}
