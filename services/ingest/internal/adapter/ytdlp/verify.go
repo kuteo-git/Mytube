@@ -43,9 +43,13 @@ import (
 // then followed by a refusal is worse than no probe, because it launders a dead
 // URL as a checked one.
 //
-// So the range here is the same megabyte that `httpRequestSizeBytes` gives
-// ffmpeg and `instantChunkBytes` gives the gateway's proxy. Whatever those
-// become, this follows them.
+// So the range here is the megabyte `httpRequestSizeBytes` gives ffmpeg, which
+// is the reader this probe most needs to stand in for: the adaptive audio track
+// is the one measured to answer ≤1 MiB and refuse ≥2 MiB, and it is ffmpeg that
+// asks it. The gateway's `instantChunkBytes` is deliberately larger, for a
+// different format with its own measurement — see the note there. A megabyte
+// covers that one too, because a progressive URL that is going to be refused
+// refuses a single byte just as readily (6 of 6).
 const probeRangeHeader = "bytes=0-1048575"
 
 // How long the probe may take before the URL is treated as no good. Generous

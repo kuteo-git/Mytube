@@ -1005,18 +1005,22 @@ func copyStream(w http.ResponseWriter, body io.Reader) int64 {
 // that leads to a 403, so the size is the safeguard and it has to stay under
 // that line rather than near it.
 //
-// **Lowered from 2 MiB to 1 MiB**, because 2 MiB turned out to be on the line
-// rather than under it. Measured on adaptive audio URLs, four videos, fresh
-// each time: 1 MiB → 206 (8 of 8), 2 MiB → 403 (8 of 8), same URL, same second.
-// The progressive rendition this tier serves has not been seen to refuse 2 MiB,
-// but the line evidently moves — it belongs to the same YouTube experiment that
-// decides whether a resolved URL serves anything at all — and there is nothing
-// to be gained by sitting near it.
+// **This is 2 MiB and ffmpeg's `-request_size` is 1 MiB, deliberately.** They
+// were briefly made equal, on the reasoning that one number is easier to keep
+// right than two. The reasoning was wrong, and worth recording so it is not
+// repeated: the measurement that lowered ffmpeg to 1 MiB was taken on the
+// **adaptive audio track** of the 1080p mux — 206 at ≤1 MiB, 403 at ≥2 MiB, 8
+// of 8 — and this tier does not serve that file. It serves itag 18, a
+// progressive 360p rendition, whose own measurement is the 10 of 10 above and
+// which has never once been seen to refuse 2 MiB.
 //
-// 1 MiB is around 20 seconds of the 360p rendition, and the player asks for the
-// next piece the moment it needs one. It is also the size ingest probes a URL
-// with before handing it over, which only means anything while the two agree.
-const instantChunkBytes = 1 << 20
+// Two formats, two measurements, two numbers. Carrying one format's evidence
+// across to another was the mistake; halving the chunk size doubled this tier's
+// request count to guard against something never observed in it.
+//
+// 2 MiB is around 40 seconds of the 360p rendition, and the player asks for the
+// next piece the moment it needs one.
+const instantChunkBytes = 2 << 20
 
 // boundedRange turns whatever the browser asked for into a range with an end.
 //
