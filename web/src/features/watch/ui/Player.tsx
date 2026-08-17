@@ -2968,7 +2968,16 @@ export function Player({
                   // nothing, and the player sat on a dead element with a
                   // working 360p source one step away. The viewer's only way
                   // out was reloading, which works by starting over.
-                  if (tierRef.current?.name === 'remux') {
+                  // Only where there is something to retreat *to*. Withholding
+                  // an unverified instant URL is ordinary now, so the muxed
+                  // stream is often the opening tier rather than a climb —
+                  // visible in the ingest log as `live mux opened ... from=0`.
+                  // Retreating from the only tier there is leads nowhere, and
+                  // returning here swallowed the retry and the failure report
+                  // with it: the video never started and never said why, which
+                  // from the sofa is a next button that does nothing.
+                  const retreatTo = tiers.find((t) => t.name !== 'remux')
+                  if (tierRef.current?.name === 'remux' && retreatTo) {
                     setRemuxAttempts(MAX_REMUX_ATTEMPTS)
                     setClimbAttempt((n) => n + 1)
                     return

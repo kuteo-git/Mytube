@@ -70,11 +70,15 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
   httpCatalogRepository: {
     getVideo: vi.fn(async () => video),
     getVideoEnsuring: vi.fn(async () => video),
-    getStream: vi.fn(async () => ({
-      local: null,
-      instant: { url: INSTANT_URL, height: 360, name: 'instant' },
-      remux: { url: REMUX_URL, height: 1080, name: 'remux' },
-    })),
+    getStream: vi.fn(async () =>
+      remuxOnly
+        ? { local: null, instant: null, remux: { url: REMUX_URL, height: 720, name: 'remux' } }
+        : {
+            local: null,
+            instant: { url: INSTANT_URL, height: 360, name: 'instant' },
+            remux: { url: REMUX_URL, height: 720, name: 'remux' },
+          },
+    ),
     getRemuxStart: vi.fn(async (_id: string, at: number) => Math.max(0, at - 2.028)),
     listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
     listPopular: vi.fn(async () => []),
@@ -92,9 +96,12 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
 const settle = (ms = 20) => act(async () => void (await new Promise((r) => setTimeout(r, ms))))
 
 let client: QueryClient
+/** Set by a test: upstream published no progressive rendition worth serving. */
+let remuxOnly = false
 
 beforeEach(() => {
   window.localStorage.clear()
+  remuxOnly = false
 })
 
 function givePlayheads(elements: NodeListOf<HTMLVideoElement>) {
@@ -218,5 +225,31 @@ describe('a tier that breaks after the viewer is already on it', () => {
       const back = hidden(videos)
       expect(front.src + back.src).toContain(INSTANT_URL)
     })
+  })
+})
+
+describe('a tier that fails with nothing underneath it', () => {
+  it('does not sit silent when the only tier is the one that broke', async () => {
+    // Withholding an unverified instant URL is now ordinary, so the muxed stream
+    // is often the *opening* tier rather than a climb — observed in the ingest
+    // log as `live mux opened ... from=0`. Retreating assumes there is something
+    // to retreat to; here there is not, and the retreat swallowed the retry and
+    // the failure report with it, leaving a video that never started and never
+    // said why.
+    remuxOnly = true
+    const videos = await mounted()
+    await waitFor(() => expect(visible(videos).src).toContain('/remux'))
+
+    const streamAsks = () =>
+      client.getQueryState(['stream', 'abc'])?.dataUpdateCount ?? 0
+    const before = streamAsks()
+
+    await act(async () => {
+      fireEvent.error(visible(videos))
+    })
+    await settle()
+
+    // The stream answer is asked for again rather than the player going quiet.
+    await waitFor(() => expect(streamAsks()).toBeGreaterThan(before))
   })
 })
