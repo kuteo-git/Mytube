@@ -40,22 +40,24 @@ type Refusals interface {
 }
 
 type Handler struct {
-	remux         *cachedRemuxURLs
-	sources       SourceLookup
-	refusals      Refusals
-	defaultHeight int32
-	logger        *slog.Logger
+	remux      *cachedRemuxURLs
+	sources    SourceLookup
+	refusals   Refusals
+	liveHeight int32
+	logger     *slog.Logger
 }
 
-func NewHandler(remux Remuxer, sources SourceLookup, refusals Refusals, defaultHeight int32, logger *slog.Logger) *Handler {
+// liveHeight is the rendition muxed on the fly, which is deliberately not the
+// rendition kept on disk — see the note in cmd/ingest.
+func NewHandler(remux Remuxer, sources SourceLookup, refusals Refusals, liveHeight int32, logger *slog.Logger) *Handler {
 	// Wrapped so that seeking — which reopens the mux, and may do so several
 	// times a minute — does not re-run yt-dlp each time.
 	return &Handler{
-		remux:         newCachedRemuxURLs(remux),
-		sources:       sources,
-		refusals:      refusals,
-		defaultHeight: defaultHeight,
-		logger:        logger,
+		remux:      newCachedRemuxURLs(remux),
+		sources:    sources,
+		refusals:   refusals,
+		liveHeight: liveHeight,
+		logger:     logger,
 	}
 }
 
@@ -91,7 +93,7 @@ func (h *Handler) handleStreamStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, h.defaultHeight)
+	urls, err := h.remux.ResolveRemuxURLs(ctx, sourceURL, h.liveHeight)
 	if err != nil || len(urls) == 0 {
 		h.logger.Warn("resolve remux urls for start", "video", videoID, "error", err)
 		if h.refuse(w, ctx, sourceURL, videoID, err) {
@@ -160,7 +162,7 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	height := h.defaultHeight
+	height := h.liveHeight
 	if raw := r.URL.Query().Get("height"); raw != "" {
 		if v, convErr := strconv.Atoi(raw); convErr == nil && v > 0 {
 			height = int32(v)
