@@ -75,6 +75,17 @@ func NewScanner(
 // deliberately does not do. Going much below an hour buys little, since uploads
 // do not arrive by the minute, and starts to look like a bot to the source.
 func (s *Scanner) Run(ctx context.Context) {
+	// Off means off, including the pass that used to run before the interval was
+	// ever consulted. Two things were wrong with starting regardless: a scan
+	// walks every source and takes minutes, so "switch the scanner off" left the
+	// heaviest traffic in the system running on every restart — and
+	// time.NewTicker panics on a non-positive interval, so the goroutine would
+	// then take the service down with it.
+	if s.interval <= 0 {
+		s.logger.Info("scanner off", "reason", "SCAN_INTERVAL is zero")
+		return
+	}
+
 	if _, err := s.ScanNow(ctx); err != nil {
 		s.logger.Error("initial scan", "error", err)
 	}

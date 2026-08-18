@@ -54,9 +54,15 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	parsed, err := time.ParseDuration(raw)
-	if err != nil || parsed <= 0 {
+	if err != nil || parsed < 0 {
 		return fallback
 	}
+	// Zero is passed through, because every caller already reads it as "off" —
+	// scanner.go, backfill.go, shorts.go and accounts.go all return early on a
+	// non-positive interval, and CLAUDE.md documents that. Lumping it in with a
+	// typo above meant the documented way to switch a timer off quietly left it
+	// running at its default, which is the worst of both: the operator believes
+	// the traffic has stopped and it has not.
 	return parsed
 }
 
