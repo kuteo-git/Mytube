@@ -33,18 +33,14 @@ export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
 export EVICTION_LOW_BYTES="${EVICTION_LOW_BYTES:-322122547200}"        # 300 GiB
 
-# Background traffic to YouTube. Zero switches a timer off entirely.
+# Background traffic to YouTube. Zero switches a timer off entirely — and now
+# really does, which it did not before (see cmd/ingest's envDuration).
 #
-# All off while this address is being refused: 254 log lines an hour with nobody
-# watching is exactly the volume CLAUDE.md §8 risk 6 is about, and continuing to
-# ask while blocked can only lengthen the block. The library needs none of it
-# right now — 26k videos are already in the catalogue and downloaded files play
-# without touching upstream at all.
-export SCAN_INTERVAL="${SCAN_INTERVAL:-0}"
-export SUBSCRIBED_SCAN_INTERVAL="${SUBSCRIBED_SCAN_INTERVAL:-0}"
-export BACKFILL_INTERVAL="${BACKFILL_INTERVAL:-0}"
-export SHORT_PROBE_INTERVAL="${SHORT_PROBE_INTERVAL:-0}"
-export ACCOUNT_SCAN_INTERVAL="${ACCOUNT_SCAN_INTERVAL:-0}"
+# Back on. They were switched off on the belief that this address had been
+# blocked, and that was wrong: metadata resolves normally and plenty of videos
+# still download. What is actually happening is that YouTube refuses the *bytes*
+# of some videos, stably and per video, which `unavailable_sources` already
+# exists to record.
 mkdir -p "$MEDIA_ROOT"
 
 pids=()
