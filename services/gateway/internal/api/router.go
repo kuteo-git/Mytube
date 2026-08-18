@@ -147,6 +147,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/videos/{id}/stream", g.handleStream)
 	mux.HandleFunc("GET /api/videos/{id}/instant", g.handleInstantStream)
 	mux.HandleFunc("GET /api/videos/{id}/remux", g.handleRemuxStream)
+	// The browser combines the two adaptive tracks itself; this only carries the
+	// playlists and the byte ranges they name. See ingest's httpapi/hls.go.
+	mux.HandleFunc("GET /api/videos/{id}/hls/{name}", g.handleHLS)
 	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
 
 	// Downloads are never requested directly: they are a side effect of asking

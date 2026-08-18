@@ -34,6 +34,27 @@ import (
 // Nothing here fetches. It is given the first bytes of a track and returns what
 // can be said about them, so the arithmetic can be tested without a network.
 
+// MediaTrack is one adaptive file as upstream describes it, before anything has
+// been read from it.
+//
+// The codec string is the part that cannot be guessed: a player reads CODECS in
+// the playlist to decide whether it can play a stream at all, and decides it
+// before fetching a byte.
+type MediaTrack struct {
+	URL     string
+	Codec   string
+	Width   int
+	Height  int
+	Bitrate int
+}
+
+// MediaTracks is the pair a playlist is built from. YouTube publishes nothing
+// above 360p carrying both, so there is always exactly one of each.
+type MediaTracks struct {
+	Video MediaTrack
+	Audio MediaTrack
+}
+
 // ErrNoSegmentIndex means the head handed over did not reach the `sidx` box.
 //
 // Recoverable by the caller, and it must be told apart from a malformed file:

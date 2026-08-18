@@ -40,7 +40,13 @@ type jobDTO struct {
 // The resolution the muxed stream is assembled at. Fixed rather than
 // negotiated: ingest has one configured height, and telling the client a
 // different number would put a wrong label on the picture.
-const remuxHeight = 1080
+//
+// 720 since ingest's LIVE_HEIGHT became 720 — this was left at 1080 in that
+// change and spent a release labelling the picture with a number nothing was
+// producing. It is a copy of a value that lives in another service, which is
+// why it went wrong; it stays a copy because the alternative is the gateway
+// asking ingest what height it uses on every stream request.
+const remuxHeight = 720
 
 // sourceDTO is one way of playing a video.
 type sourceDTO struct {
@@ -751,6 +757,41 @@ func (g *Gateway) handleRemuxStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// handleHLS passes the HLS routes through to ingest, which owns the signed
+// URLs these playlists point at.
+//
+// The Range header goes with it untouched: the player takes its ranges from a
+// playlist ingest wrote, so they are already exact, and rewriting them here
+// would only be a second place to get the arithmetic wrong.
+func (g *Gateway) handleHLS(w http.ResponseWriter, r *http.Request) {
+	target := g.ingestBaseURL + "/hls/" + url.PathEscape(r.PathValue("id")) + "/" + url.PathEscape(r.PathValue("name"))
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	if v := r.Header.Get("Range"); v != "" {
+		req.Header.Set("Range", v)
+	}
+
+	resp, err := g.streamClient.Do(req)
+	if err != nil {
+		g.logger.Warn("hls proxy", "video", r.PathValue("id"), "error", err)
+		http.Error(w, "cannot read media", http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	for _, name := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control"} {
+		if v := resp.Header.Get(name); v != "" {
+			w.Header().Set(name, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	copyStream(w, resp.Body)
 }
 
 // handleRemuxStream proxies the muxed stream from ingest, which owns yt-dlp and

@@ -45,6 +45,10 @@ type Handler struct {
 	refusals   Refusals
 	liveHeight int32
 	logger     *slog.Logger
+	// Resolved track pairs for the HLS routes, kept apart from the muxer's cache
+	// because they answer a different question and are dropped for different
+	// reasons.
+	hls hlsCache
 }
 
 // liveHeight is the rendition muxed on the fly, which is deliberately not the
@@ -64,6 +68,9 @@ func NewHandler(remux Remuxer, sources SourceLookup, refusals Refusals, liveHeig
 func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /stream/{videoId}", h.handleRemux)
 	mux.HandleFunc("GET /stream/{videoId}/start", h.handleStreamStart)
+	// The browser combines the two adaptive tracks itself, so these three serve
+	// a description and some bytes rather than a muxed stream. See hls.go.
+	mux.HandleFunc("GET /hls/{videoId}/{name}", h.handleHLS)
 }
 
 // handleStreamStart answers "if I ask for the stream at t, where will it really
