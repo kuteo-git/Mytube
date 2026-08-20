@@ -33,6 +33,24 @@ export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
 export EVICTION_LOW_BYTES="${EVICTION_LOW_BYTES:-322122547200}"        # 300 GiB
 
+# Debugging the streaming tiers: withhold the file on disk, so the player has to
+# use them. Off unless asked for, and passed through rather than defaulted here
+# so that leaving it on takes a deliberate act:
+#
+#   DEBUG_SKIP_LOCAL_TIER=1 ./scripts/dev.sh
+#
+# Why it is needed at all: a download lands in a median of thirteen seconds, and
+# every request after that answers `local` and plays from the disk. So a fault in
+# the mux or in HLS is observable for a few seconds, once, on a video nobody has
+# fetched — and the act of looking is what fetches it. A morning was spent
+# discovering that a stream request typed by hand had scheduled the download that
+# then hid the thing it was meant to show.
+#
+# The gateway warns at startup and on every request it changes, because a
+# forgotten flag here looks exactly like a serious bug: a library full of
+# downloaded videos that all insist on streaming.
+export DEBUG_SKIP_LOCAL_TIER="${DEBUG_SKIP_LOCAL_TIER:-}"
+
 # Which yt-dlp runs. A nightly was required for a stretch, because the stable
 # release of the day (2026.07.04) resolved URLs that no longer served bytes.
 # That is over: 2026.8.19 is stable and postdates the nightly this was pinned

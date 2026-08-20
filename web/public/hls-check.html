@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HLS check</title>
+    <style>
+      body {
+        font: 15px/1.5 -apple-system, system-ui, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #0f0f0f;
+        color: #f1f1f1;
+      }
+      video {
+        width: 100%;
+        background: #000;
+        border-radius: 8px;
+      }
+      button {
+        font: inherit;
+        padding: 10px 16px;
+        margin: 8px 8px 0 0;
+        border: 0;
+        border-radius: 999px;
+        background: #272727;
+        color: #f1f1f1;
+      }
+      #log {
+        margin-top: 12px;
+        padding: 10px;
+        background: #181818;
+        border-radius: 8px;
+        white-space: pre-wrap;
+        word-break: break-all;
+        font: 12px/1.45 ui-monospace, Menlo, monospace;
+      }
+      .ok {
+        color: #6ee787;
+      }
+      .bad {
+        color: #ff7b72;
+      }
+      .note {
+        color: #aaa;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Does this device play the HLS the ingest service already serves?
+
+      Everything the player will eventually do rests on the answer, and on iOS
+      it cannot be answered any other way: iPhone has no console, no MediaSource
+      to fall back on, and `canPlayType('application/vnd.apple.mpegurl')` has
+      already been measured to lie — it returns "maybe" in a Chrome that then
+      fails with MEDIA_ERR_SRC_NOT_SUPPORTED. So this asks the only question
+      that counts, by playing the real playlist, and prints the answer on the
+      screen where the device can show it.
+
+      Deliberately no framework, no imports and no build step: it must run on a
+      device whose whole problem might be that the app does not.
+    -->
+    <h3 style="margin: 0 0 12px">HLS check</h3>
+    <video id="v" playsinline controls></video>
+    <div>
+      <button id="play">Play</button>
+      <button id="seek">Seek +120s</button>
+      <button id="back">Seek −60s</button>
+      <button id="speed">Đo tốc độ</button>
+    </div>
+    <div id="log">starting…</div>
+
+    <script>
+      const params = new URLSearchParams(location.search)
+      const id = params.get('v') || '7FpKoP1e-OQ'
+      const url = `/api/videos/${id}/hls/master.m3u8`
+      const v = document.getElementById('v')
+      const out = document.getElementById('log')
+
+      const lines = []
+      function say(text, cls = '') {
+        const at = ((performance.now() / 1000).toFixed(1) + 's').padStart(6)
+        lines.push(`<span class="${cls}">${at}  ${text}</span>`)
+        out.innerHTML = lines.slice(-40).join('\n')
+      }
+
+      say(`device: ${navigator.userAgent.slice(0, 60)}`, 'note')
+      say(`native HLS claim: ${JSON.stringify(v.canPlayType('application/vnd.apple.mpegurl'))}`, 'note')
+      say(`MediaSource: ${typeof MediaSource}  ManagedMediaSource: ${typeof ManagedMediaSource}`, 'note')
+      say(`url: ${url}`, 'note')
+
+      // The playlist is fetched by hand first. If this fails the fault is the
+      // network or the gateway, not the media pipeline, and the two look
+      // identical from inside a <video> element.
+      fetch(url)
+        .then((r) => r.text().then((t) => ({ status: r.status, t })))
+        .then(({ status, t }) => {
+          say(`playlist HTTP ${status}, ${t.length} bytes`, status === 200 ? 'ok' : 'bad')
+          const codecs = t.match(/CODECS="([^"]+)"/)
+          if (codecs) say(`CODECS ${codecs[1]}`, 'note')
+        })
+        .catch((e) => say(`playlist fetch failed: ${e}`, 'bad'))
+
+      for (const name of ['loadedmetadata', 'canplay', 'playing', 'waiting', 'stalled', 'ended']) {
+        v.addEventListener(name, () =>
+          say(`${name}  t=${v.currentTime.toFixed(1)}  dur=${Number.isFinite(v.duration) ? v.duration.toFixed(1) : v.duration}`, name === 'playing' ? 'ok' : ''),
+        )
+      }
+      v.addEventListener('error', () =>
+        say(`ERROR code ${v.error && v.error.code} — ${(v.error && v.error.message) || 'no message'}`, 'bad'),
+      )
+      v.addEventListener('seeked', () => say(`seeked to ${v.currentTime.toFixed(1)}`, 'ok'))
+
+      v.src = url
+      say('src set, loading…')
+
+      document.getElementById('play').onclick = () =>
+        v.play().then(
+          () => say('play() accepted', 'ok'),
+          (e) => say(`play() refused: ${e.name}`, 'bad'),
+        )
+      document.getElementById('seek').onclick = () => {
+        say(`asking for ${(v.currentTime + 120).toFixed(1)}`)
+        v.currentTime = v.currentTime + 120
+      }
+      document.getElementById('back').onclick = () => {
+        say(`asking for ${Math.max(0, v.currentTime - 60).toFixed(1)}`)
+        v.currentTime = Math.max(0, v.currentTime - 60)
+      }
+
+      /**
+       * How fast segments actually arrive *here*.
+       *
+       * The same fetches timed on the server take 12–510 ms for 3–7 seconds of
+       * video, whether asked of the gateway directly or through the Vite proxy.
+       * So if playback stalls on this device, what is left is the air between
+       * it and the Mac — and that is a number only this device can take.
+       *
+       * The verdict is a ratio, not a speed: a segment has to arrive faster
+       * than it plays, and by enough margin to survive one bad moment.
+       */
+      document.getElementById('speed').onclick = async () => {
+        say('đo tốc độ…')
+        try {
+          const list = await (await fetch(`/api/videos/${id}/hls/video.m3u8`)).text()
+          const lines = list.split('\n')
+          const segs = []
+          let dur = 0
+          for (const line of lines) {
+            if (line.startsWith('#EXTINF:')) dur = parseFloat(line.slice(8))
+            if (line.startsWith('#EXT-X-BYTERANGE:')) {
+              const [len, off] = line.slice(17).split('@').map(Number)
+              segs.push({ off, len, dur })
+            }
+          }
+          say(`playlist: ${segs.length} segment`, 'note')
+
+          let bytes = 0
+          let seconds = 0
+          let elapsed = 0
+          for (const s of segs.slice(0, 6)) {
+            const t0 = performance.now()
+            const r = await fetch(`/api/videos/${id}/hls/video`, {
+              headers: { Range: `bytes=${s.off}-${s.off + s.len - 1}` },
+            })
+            const buf = await r.arrayBuffer()
+            const took = (performance.now() - t0) / 1000
+            elapsed += took
+            bytes += buf.byteLength
+            seconds += s.dur
+            say(
+              `${(buf.byteLength / 1e6).toFixed(2)}MB cho ${s.dur.toFixed(1)}s hình — mất ${took.toFixed(2)}s`,
+              took < s.dur ? '' : 'bad',
+            )
+          }
+          const mbps = (bytes / 1e6 / elapsed) * 8
+          const ratio = seconds / elapsed
+          say(`tổng: ${mbps.toFixed(1)} Mbps, nhanh gấp ${ratio.toFixed(1)}× so với tốc độ phát`,
+            ratio > 3 ? 'ok' : 'bad')
+          if (ratio <= 3) say('→ mạng là chỗ nghẽn, không phải server', 'bad')
+        } catch (e) {
+          say(`đo hỏng: ${e}`, 'bad')
+        }
+      }
+    </script>
+  </body>
+</html>

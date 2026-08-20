@@ -241,6 +241,17 @@ export interface StreamSources {
    * no progressive format.
    */
   instant?: StreamSource
+  /**
+   * The same two adaptive tracks as `remux`, described as a playlist so the
+   * browser combines them itself — and, unlike the mux, **seekable**, because a
+   * media playlist is an index.
+   *
+   * Offered alongside `remux` rather than instead of it: what can play it
+   * differs by browser. Measured 2026-08-20 on iOS 18.7, same video minutes
+   * apart — the mux reached `play()` and never produced a picture, this played
+   * with a real duration and seeked twice. Chrome is the other way round.
+   */
+  hls?: StreamSource
   /** Full resolution, muxed live. Not seekable. Absent once `local` exists. */
   remux?: StreamSource
   /** The downloaded file. Present only once on disk, and best whenever it is. */

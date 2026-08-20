@@ -22,6 +22,7 @@ import type { StreamSources } from '@/features/catalog/infrastructure/catalogRep
 import { resolveRemuxStart, useStream } from '@/features/catalog/application/queries'
 import { MAX_CLIMB_REOPENS, remuxLead } from '@/features/watch/application/remux-lead'
 import { seekElement } from '@/features/watch/application/player-seek'
+import { hlsCapabilities, shouldUseHLS } from '@/features/watch/application/hls-source'
 import { useDownloadProgress } from '@/features/catalog/application/download'
 import type { QualityChoice } from '@/features/watch/application/autoplay'
 import {
@@ -249,7 +250,7 @@ const DEFAULT_LIVE_HEIGHT = 720
  */
 const LIVE_HEIGHTS = [1080, 720] as const
 
-type TierName = 'instant' | 'remux' | 'local'
+type TierName = 'instant' | 'hls' | 'remux' | 'local'
 
 interface Tier {
   name: TierName
@@ -312,6 +313,26 @@ function availableTiers(sources: StreamSources | undefined, choice: QualityChoic
   if (sources.local) {
     tiers.push({ name: 'local', url: sources.local.url, seekable: true })
   }
+  // Before the mux, and preferred over it wherever the browser can play it.
+  //
+  // Measured 2026-08-20 on iOS 18.7, the same video minutes apart: the mux
+  // reached `play()` and produced no picture at all, while this played,
+  // reported a duration of 641.8s and seeked twice. It is also seekable, which
+  // removes the reason the offset machinery exists — so a video on this tier
+  // needs no mark, no lead and no reopen.
+  //
+  // Offered to the browsers that need no help only. Chrome has `MediaSource`
+  // and no native HLS, and until hls.js is wired in the mux is what it uses —
+  // which works there, and is exactly why this fault stayed hidden: every
+  // measurement before the phone was taken on a desktop.
+  if (sources.hls && shouldUseHLS()) {
+    tiers.push({
+      name: 'hls',
+      url: sources.hls.url,
+      seekable: true,
+      height: choice === 'high' ? LIVE_HEIGHTS[0] : sources.hls.height,
+    })
+  }
   if (sources.remux) {
     tiers.push({
       name: 'remux',
@@ -338,16 +359,22 @@ function availableTiers(sources: StreamSources | undefined, choice: QualityChoic
 /**
  * The tier to open first.
  *
- * Always the one that starts fastest, which is the instant upstream — the whole
- * point of the design is that pressing play produces a picture immediately and
- * the quality arrives afterwards. The muxed stream is the opening move only for
- * videos that publish no progressive rendition at all, where there is nothing
- * faster to fall back to.
+ * The file on disk whenever there is one. Otherwise HLS wherever the browser
+ * plays it, because it is the only upstream tier that behaves like a file: it
+ * carries an index, so it seeks, so a video resumed part way through simply
+ * starts there. The muxed stream is what is left — and on iOS it is not even
+ * that, having been measured to produce no picture at all.
+ *
+ * The progressive tier is listed last and is no longer offered by the server;
+ * see the note on itag 18 in CLAUDE.md §4. It stays in the ordering so that a
+ * client talking to an older gateway still behaves.
  */
 function openingTier(tiers: Tier[], choice: QualityChoice): Tier | undefined {
   if (tiers.length === 0) return undefined
   const local = tiers.find((t) => t.name === 'local')
   if (local) return local
+  const hls = tiers.find((t) => t.name === 'hls')
+  if (hls) return hls
   if (choice === 'high') {
     return tiers.find((t) => t.name === 'remux') ?? tiers[0]
   }
@@ -373,14 +400,21 @@ function targetTier(
       wanted = tiers.find((t) => t.name === 'instant') ?? tiers.find((t) => t.name === 'local')
       break
     case 'high':
-      wanted = tiers.find((t) => t.name === 'local') ?? tiers.find((t) => t.name === 'remux')
-      break
-    default:
-      // Auto: the local file whenever it exists, otherwise full resolution
-      // muxed live — unless that has already been tried and could not keep up,
-      // in which case a smooth low rendition beats a stuttering high one.
       wanted =
         tiers.find((t) => t.name === 'local') ??
+        tiers.find((t) => t.name === 'hls') ??
+        tiers.find((t) => t.name === 'remux')
+      break
+    default:
+      // Auto: the local file whenever it exists, then HLS, then the mux.
+      //
+      // HLS sits above the mux for the same reason it opens: it is the same two
+      // tracks at the same height, and it seeks. `remuxFailed` does not hold it
+      // back — that flag records a muxed stream that could not keep up, which
+      // says nothing about a tier that does not go through ffmpeg at all.
+      wanted =
+        tiers.find((t) => t.name === 'local') ??
+        tiers.find((t) => t.name === 'hls') ??
         (remuxFailed ? undefined : tiers.find((t) => t.name === 'remux')) ??
         tiers.find((t) => t.name === 'instant')
   }
@@ -1276,6 +1310,19 @@ export function Player({
     console.info('[debug] tier', videoId, tier.name, `${tier.height ?? '?'}p`,
       'seekable', tier.seekable, 'quality', quality, 'offset', offsetSeconds, tier.url)
   }, [tier, videoId, quality, offsetSeconds])
+
+  // What this browser says it can play, said once.
+  //
+  // Every wrong turn in this area came from believing a capability check
+  // instead of an outcome: `canPlayType` answers "maybe" both on the browser
+  // that plays HLS and on the one that fails it with MEDIA_ERR_SRC_NOT_SUPPORTED.
+  // Printing the claim beside the decision is what makes the next disagreement
+  // visible from a device with no console worth the name.
+  useEffect(() => {
+    const caps = hlsCapabilities()
+    console.info('[debug] hls', 'native', caps.native, 'withLibrary', caps.withLibrary,
+      'canPlayType says', JSON.stringify(caps.claim))
+  }, [])
 
   // The local file landing unlocks a player that had given up.
   //
