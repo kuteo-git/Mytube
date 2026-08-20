@@ -300,7 +300,7 @@ describe('seeking while the video is muxed live', () => {
     expect(visible(videos).src).toContain('t=600.000')
   })
 
-  it('places the viewer at the mark, not at the keyframe before it', async () => {
+  it('lands at the keyframe rather than seeking the last two seconds of an unindexed stream', async () => {
     hasInstant = false
     const videos = await mounted()
     await waitFor(() => expect(visible(videos).src).toContain('/remux'))
@@ -309,10 +309,27 @@ describe('seeking while the video is muxed live', () => {
     await loadHiddenLayer(videos)
 
     // The stream really begins at 597.972 — ffmpeg cannot cut between keyframes
-    // without re-encoding, which this design will not do. So the element is
-    // moved the rest of the way, within what has already arrived, and the
-    // viewer lands where they asked rather than a couple of seconds early.
-    await waitFor(() => expect(visible(videos).currentTime).toBeCloseTo(2.028, 2))
+    // without re-encoding, which this design will not do.
+    //
+    // This used to close that gap by moving the element the remaining 2.028s,
+    // on the reasoning that a seek *within what has already arrived* is one
+    // even an unindexed stream allows. That reasoning is what CLAUDE.md §4 was
+    // later written against, and the measurement it records is this exact
+    // arithmetic: the browser failed on the audio packet at `0.766259` — which
+    // is 19.70 minus 18.936, a mark minus its keyframe — and reported
+    // `PIPELINE_ERROR_DECODE: Failed to send audio packet`, on four videos at
+    // four different marks. The number in the error was the number the player
+    // had just written. Buffered is not the same as seekable.
+    //
+    // The guard was added to `catchUpToViewer` at the time and not here, and
+    // the comment left behind claimed this case was safe. It is the same
+    // computation on the same kind of stream.
+    //
+    // So the viewer lands two seconds early. That is the cost §4 already chose
+    // — "costing a mux rather than the sound" — and it is not a lie: the
+    // position is read from the stream's own origin, so the bar says 597.972
+    // and means it.
+    await waitFor(() => expect(visible(videos).currentTime).toBe(0))
   })
 
   it('reads the position from one source, not from two added together', async () => {
