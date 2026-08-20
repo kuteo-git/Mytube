@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -49,6 +50,22 @@ type Gateway struct {
 	// downloadsAsked keeps the player's five-second poll from asking ingest to
 	// schedule the same download twelve times a minute. See ensureDownload.
 	downloadsAsked askedRecently
+	// skipLocalTier withholds the file on disk from the stream answer, so that
+	// the streaming tiers are what the player has to use. Debugging only.
+	//
+	// It exists because those tiers are almost impossible to observe otherwise:
+	// a download lands in a median of thirteen seconds, and from then on every
+	// request answers `local` and plays from the disk. A fault in the streaming
+	// path is therefore visible for a few seconds, once, on a video nobody has
+	// fetched yet — and testing the same video twice is impossible, because the
+	// first attempt fetched it. Half of one morning's evidence was lost that
+	// way: a stream request typed by hand scheduled the download that then hid
+	// what it was meant to show.
+	//
+	// Never on by default, and it says so at startup and on every request it
+	// changes, because a forgotten flag here looks exactly like a serious bug —
+	// a library full of downloaded videos that all insist on streaming.
+	skipLocalTier bool
 }
 
 func NewGateway(
@@ -61,6 +78,14 @@ func NewGateway(
 	mediaRoot string,
 	configDir string,
 ) *Gateway {
+	// Read here rather than threaded through the signature: this is a debugging
+	// switch with a deliberately short life, and it should be removable without
+	// touching how a gateway is built.
+	skipLocal := os.Getenv("DEBUG_SKIP_LOCAL_TIER") == "1"
+	if skipLocal {
+		logger.Warn("DEBUG_SKIP_LOCAL_TIER is set: downloaded files will not be offered, every video streams")
+	}
+
 	return &Gateway{
 		catalog:       catalog,
 		recsys:        recsys,
@@ -71,6 +96,7 @@ func NewGateway(
 		streamClient:  &http.Client{},
 		mediaRoot:     mediaRoot,
 		configDir:     configDir,
+		skipLocalTier: skipLocal,
 	}
 }
 

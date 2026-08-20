@@ -78,6 +78,21 @@ type streamDTO struct {
 	// the same JSON it always did — one tier fewer — rather than a shape it has
 	// never seen.
 	Instant *sourceDTO `json:"instant,omitempty"`
+	// The same two adaptive tracks the mux combines, described as HLS so the
+	// browser combines them instead.
+	//
+	// It is offered beside `remux`, not instead of it, because what can play it
+	// differs by device and nothing here should have to guess: iPhone and Safari
+	// play HLS natively, Chrome does not and needs a library. The player picks.
+	//
+	// Why it matters more than a second option usually would — measured
+	// 2026-08-20 on the household's iPhone (iOS 18.7), the same video minutes
+	// apart: the muxed stream reached `play()` and never produced a picture,
+	// while this played, reported a real duration (641.8s) and seeked twice.
+	// The mux is unindexed and Safari will not have it, and iOS has no
+	// MediaSource to put anything else behind it. So on a phone this is not a
+	// better tier, it is the only one that works before the file lands.
+	HLS *sourceDTO `json:"hls,omitempty"`
 	// Full resolution, muxed on the fly from the adaptive tracks. No index, so
 	// not seekable. Absent once the local file exists.
 	Remux *sourceDTO `json:"remux,omitempty"`
@@ -583,9 +598,24 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	// and it sits on the path somebody has just pressed play on, so the lie can
 	// be corrected in the request that found it.
 	repaired := false
+	// Set only by the debugging switch below: the file really is on the disk,
+	// it is simply not being offered. Without it the fall-through would treat a
+	// downloaded video as one that still needs fetching and re-download the
+	// library a video at a time.
+	onDisk := false
 	if v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_READY && v.GetMediaPath() != "" {
 		switch checkMedia(g.mediaRoot, v.GetMediaPath()) {
 		case mediaPresent:
+			// Debugging: pretend the file is not there, so the player has to
+			// use the streaming tiers. See Gateway.skipLocalTier — this is the
+			// only way to look at those tiers twice, because the first look
+			// downloads the video and every look after it answers `local`.
+			if g.skipLocalTier {
+				g.logger.Warn("withholding local tier (DEBUG_SKIP_LOCAL_TIER)",
+					"video", videoID, "path", v.GetMediaPath())
+				onDisk = true
+				break
+			}
 			// On disk: nothing upstream is worth offering beside it. Touching
 			// last_accessed_at happens through watch progress, so the eviction
 			// sweep sees actual viewing rather than mere resolution.
@@ -650,7 +680,7 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 
 	// Pressing play is what schedules a download. Enqueue is idempotent per
 	// source URL, so repeated resolves attach to the running job.
-	if !prefetch && v.GetSourceUrl() != "" {
+	if !prefetch && !onDisk && v.GetSourceUrl() != "" {
 		go g.ensureDownload(v.GetSourceUrl(), g.userID(r))
 	}
 
@@ -664,6 +694,16 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		// Full resolution before the copy lands means muxing YouTube's separate
 		// video and audio tracks ourselves. No index, so no seeking — which is
 		// why it is the fallback rather than the opening move.
+		// Seekable, because a media playlist is an index: the browser knows
+		// where every segment begins and asks for the one it wants. That single
+		// difference is what the mux's offsets, marks, leads and reopens all
+		// exist to work around.
+		HLS: &sourceDTO{
+			URL:      "/api/videos/" + url.PathEscape(videoID) + "/hls/master.m3u8",
+			Height:   remuxHeight,
+			MimeType: "application/vnd.apple.mpegurl",
+			Seekable: true,
+		},
 		Remux: &sourceDTO{
 			URL:    "/api/videos/" + url.PathEscape(videoID) + "/remux",
 			Height: remuxHeight,
@@ -729,6 +769,10 @@ func offeredTier(out streamDTO) string {
 		return "none:error"
 	case out.Local != nil:
 		return "local"
+	case out.HLS != nil && out.Remux != nil:
+		return "hls+remux"
+	case out.HLS != nil:
+		return "hls"
 	case out.Remux != nil:
 		return "remux"
 	default:

@@ -183,3 +183,49 @@ func TestMasterPlaylistOffersOneAudioGroupForEveryRendition(t *testing.T) {
 		t.Errorf("audio listed %d times, want once", n)
 	}
 }
+
+// A player decides whether it can play a stream from the CODECS attribute,
+// before it fetches a byte — so a wrong one is refused with no diagnosis at all.
+//
+// That matters more than it looks. On iPhone there is no MediaSource to fall
+// back to (measured 2026-08-20: `MediaSource: undefined`,
+// `ManagedMediaSource: function`), so native HLS is the only way a video plays
+// there before the download lands. A playlist Safari declines leaves the device
+// with nothing.
+//
+// The value comes straight from yt-dlp's `vcodec`/`acodec`, which is not
+// promised to be RFC 6381. Better to refuse to write the playlist and say why
+// than to serve one that fails silently on the one device that cannot recover.
+func TestValidCodecAcceptsRealValuesAndRejectsBareNames(t *testing.T) {
+	valid := []string{
+		"avc1.4d401f",     // H.264 Main, what this library serves
+		"avc1.64002a",     // H.264 High
+		"mp4a.40.2",       // AAC-LC
+		"mp4a.40.5",       // HE-AAC
+		"vp09.00.10.08",   // VP9, fully specified
+		"av01.0.04M.08",   // AV1
+		"hvc1.1.6.L93.B0", // HEVC
+	}
+	for _, c := range valid {
+		if !ValidCodec(c) {
+			t.Errorf("ValidCodec(%q) = false, want true", c)
+		}
+	}
+
+	invalid := []string{
+		"",      // nothing resolved
+		"avc1",  // the family with no profile: a player cannot decide from this
+		"vp9",   // yt-dlp's short name, not an RFC 6381 value
+		"none",  // yt-dlp says this for a track that does not exist
+		"h264",  // a name, not an identifier
+		"avc1.", // truncated
+		`avc1.4d401f"`, // would break out of the quoted attribute
+		"avc1 4d401f",  // a space ends the attribute early
+		"avc1,mp4a.40.2", // two codecs where one belongs
+	}
+	for _, c := range invalid {
+		if ValidCodec(c) {
+			t.Errorf("ValidCodec(%q) = true, want false", c)
+		}
+	}
+}

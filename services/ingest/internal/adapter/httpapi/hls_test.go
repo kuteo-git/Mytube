@@ -226,3 +226,84 @@ func TestTracksAreResolvedOnceForTheWholeVideo(t *testing.T) {
 		t.Fatalf("resolved %d times, want 1", remux.resolves)
 	}
 }
+
+// A signed URL that dies mid-video must not break the rest of it.
+//
+// The playlist is fetched once, at the start, and every segment afterwards is
+// fetched against the URLs resolved then — which googlevideo signs and expires.
+// Only the playlist path dropped the cache entry, so a URL refused an hour in
+// broke every remaining segment for the rest of the 90-minute TTL, and nothing
+// ever asked for the playlist again to trigger a re-resolve. The player could
+// report only a stream that stopped.
+func TestARefusedSegmentResolvesAgainAndServesTheBytes(t *testing.T) {
+	video := syntheticTrack([]uint32{1000, 2000, 3000})
+	audio := syntheticTrack([]uint32{500, 500, 500})
+
+	// Refuses once, exactly as an expired URL does, then serves normally — the
+	// stand-in for the fresh URL a second resolve hands back.
+	refusals := 0
+	dying := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if refusals == 0 {
+			refusals++
+			http.Error(w, "expired", http.StatusForbidden)
+			return
+		}
+		start, end, _ := parseByteRange(r.Header.Get("Range"))
+		if end >= int64(len(video)) {
+			end = int64(len(video)) - 1
+		}
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(video)))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(video[start : end+1])
+	}))
+	defer dying.Close()
+	as := trackServer(t, audio)
+	defer as.Close()
+
+	remux := &hlsRemuxer{tracks: domain.MediaTracks{
+		Video: domain.MediaTrack{URL: dying.URL, Codec: "avc1.4d401f", Width: 1280, Height: 720, Bitrate: 400_000},
+		Audio: domain.MediaTrack{URL: as.URL, Codec: "mp4a.40.2", Bitrate: 128_000},
+	}}
+	h := NewHandler(remux, fixedSource{url: "https://youtu.be/abc"}, nil, 720, discardLogger())
+
+	rec := serve(t, h, "/hls/abc/video", "bytes=0-99")
+
+	if rec.Code != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206 — a refused segment should be retried on a fresh URL", rec.Code)
+	}
+	if got := rec.Body.Len(); got != 100 {
+		t.Errorf("body = %d bytes, want 100", got)
+	}
+	// Twice: once to fill the cache for this request, once because the segment
+	// was refused. Never a third time — a second refusal is a real answer.
+	if remux.resolves != 2 {
+		t.Errorf("resolves = %d, want 2", remux.resolves)
+	}
+}
+
+// A codec yt-dlp could not name properly is refused rather than written into a
+// playlist that fails silently on the one device with nothing behind it.
+func TestAPlaylistIsNotWrittenWithACodecNoPlayerCanRead(t *testing.T) {
+	video := syntheticTrack([]uint32{1000})
+	audio := syntheticTrack([]uint32{500})
+	vs := trackServer(t, video)
+	defer vs.Close()
+	as := trackServer(t, audio)
+	defer as.Close()
+
+	remux := &hlsRemuxer{tracks: domain.MediaTracks{
+		// What yt-dlp says when it knows the family and nothing else.
+		Video: domain.MediaTrack{URL: vs.URL, Codec: "vp9", Width: 1280, Height: 720},
+		Audio: domain.MediaTrack{URL: as.URL, Codec: "mp4a.40.2"},
+	}}
+	h := NewHandler(remux, fixedSource{url: "https://youtu.be/abc"}, nil, 720, discardLogger())
+
+	rec := serve(t, h, "/hls/abc/master.m3u8", "")
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("served a playlist with CODECS=\"vp9\": %s", rec.Body.String())
+	}
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want 502", rec.Code)
+	}
+}

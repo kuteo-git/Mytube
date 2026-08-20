@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -137,15 +138,30 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case name == "master.m3u8":
-		h.writeMasterPlaylist(w, tracks)
+		h.writeMasterPlaylist(w, videoID, tracks)
 	case strings.HasSuffix(name, ".m3u8"):
 		h.writeMediaPlaylist(w, r, videoID, key, tracks, strings.TrimSuffix(name, ".m3u8"))
 	default:
-		h.proxyTrackBytes(w, r, videoID, tracks, name)
+		h.proxyTrackBytes(w, r, videoID, key, tracks, name, resolver, sourceURL)
 	}
 }
 
-func (h *Handler) writeMasterPlaylist(w http.ResponseWriter, tracks domain.MediaTracks) {
+func (h *Handler) writeMasterPlaylist(w http.ResponseWriter, videoID string, tracks domain.MediaTracks) {
+	// Refused rather than written wrong. A player reads CODECS to decide
+	// whether it can play this at all, so a value it does not understand is a
+	// silent refusal — no request, no log line, a generic element error — and
+	// on iPhone there is no MediaSource behind it to catch the fall. yt-dlp
+	// says "vp9" and "none" as readily as it says "avc1.4d401f", and neither of
+	// those is an RFC 6381 value.
+	for _, codec := range []string{tracks.Video.Codec, tracks.Audio.Codec} {
+		if !domain.ValidCodec(codec) {
+			h.logger.Warn("hls codec not usable in a playlist",
+				"video", videoID, "video_codec", tracks.Video.Codec, "audio_codec", tracks.Audio.Codec)
+			http.Error(w, "media codec cannot be described", http.StatusBadGateway)
+			return
+		}
+	}
+
 	body := domain.MasterPlaylist([]domain.Rendition{{
 		URI:       "video.m3u8",
 		Codecs:    tracks.Video.Codec,
@@ -205,7 +221,8 @@ func (h *Handler) indexTrack(ctx context.Context, url string) (domain.Track, err
 // googlevideo answers with a redirect to a host that then refuses, and a
 // playlist is not the only thing that can put a request here.
 func (h *Handler) proxyTrackBytes(
-	w http.ResponseWriter, r *http.Request, videoID string, tracks domain.MediaTracks, kind string,
+	w http.ResponseWriter, r *http.Request, videoID, key string, tracks domain.MediaTracks, kind string,
+	resolver TrackResolver, sourceURL string,
 ) {
 	track, ok := trackOf(tracks, kind)
 	if !ok {
@@ -220,6 +237,38 @@ func (h *Handler) proxyTrackBytes(
 	}
 
 	body, status, header, err := openRange(r.Context(), track.URL, start, end)
+
+	// A refused segment is almost always a signed URL that has expired, and the
+	// cache holds it for ninety minutes.
+	//
+	// Only the playlist path used to drop the entry, and a playlist is fetched
+	// once at the start — so a URL that died halfway through a video broke every
+	// remaining segment until the cache aged out, with the player reporting
+	// nothing but a stream that stopped. Nothing re-resolved, because nothing
+	// asked for the playlist again.
+	//
+	// Once, deliberately. A second refusal is a real answer — the wave §4
+	// documents refuses everything from this address for a few minutes — and
+	// asking a third time only adds to whatever count upstream is keeping.
+	if refusedUpstream(err) {
+		h.logger.Warn("hls segment refused, resolving again",
+			"video", videoID, "kind", kind, "error", err)
+		h.hls.forget(key)
+
+		fresh, resolveErr := resolver.ResolveTracks(r.Context(), sourceURL, h.liveHeight)
+		if resolveErr != nil {
+			h.logger.Warn("resolve hls tracks again", "video", videoID, "error", resolveErr)
+			http.Error(w, "cannot read media", http.StatusBadGateway)
+			return
+		}
+		h.hls.put(key, fresh)
+		if track, ok = trackOf(fresh, kind); !ok {
+			http.Error(w, "unknown track", http.StatusNotFound)
+			return
+		}
+		body, status, header, err = openRange(r.Context(), track.URL, start, end)
+	}
+
 	if err != nil {
 		h.logger.Warn("hls segment", "video", videoID, "kind", kind, "error", err)
 		http.Error(w, "cannot read media", http.StatusBadGateway)
@@ -254,7 +303,11 @@ func openRange(ctx context.Context, url string, start, end int64) (io.ReadCloser
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		_ = resp.Body.Close()
-		return nil, 0, nil, fmt.Errorf("upstream answered %d", resp.StatusCode)
+		// The status travels with the error rather than being flattened into
+		// its text. A refusal and a genuine fault arrive the same way here — a
+		// successful round trip carrying bad news — and only the caller knows
+		// that one of them is worth a fresh URL.
+		return nil, 0, nil, upstreamStatus{code: resp.StatusCode}
 	}
 	return resp.Body, resp.StatusCode, resp.Header, nil
 }
@@ -307,4 +360,27 @@ func parseByteRange(header string) (start, end int64, ok bool) {
 		return 0, 0, false
 	}
 	return start, end, true
+}
+
+// upstreamStatus is a status googlevideo answered with, kept as a value so the
+// caller can tell a refusal from a fault.
+type upstreamStatus struct{ code int }
+
+func (e upstreamStatus) Error() string { return fmt.Sprintf("upstream answered %d", e.code) }
+
+// refusedUpstream reports whether googlevideo turned this request away in a way
+// a freshly resolved URL might answer.
+//
+// 403 is the refusal §4 is about and by far the common one; 401 and 410 mean
+// the same thing here — the URL is no longer good — and cost nothing to cover.
+// Deliberately not 404 or 416: those are about what was asked for rather than
+// about the credential, and re-resolving would ask again identically.
+func refusedUpstream(err error) bool {
+	var status upstreamStatus
+	if !errors.As(err, &status) {
+		return false
+	}
+	return status.code == http.StatusUnauthorized ||
+		status.code == http.StatusForbidden ||
+		status.code == http.StatusGone
 }

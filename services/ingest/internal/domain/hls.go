@@ -288,3 +288,39 @@ func MasterPlaylist(video []Rendition, audioURI, audioCodec string) string {
 	}
 	return b.String()
 }
+
+// ValidCodec reports whether s is usable as an RFC 6381 CODECS value.
+//
+// A player reads CODECS to decide whether it can play a stream before fetching
+// a byte of it, so a value it does not understand is a refusal with no
+// diagnosis: no request is made, nothing is logged, and the element reports a
+// generic error. On iPhone that is the end of the road — measured 2026-08-20,
+// iOS has `ManagedMediaSource` but no `MediaSource`, so hls.js cannot stand
+// behind native HLS there the way it can on Chrome.
+//
+// The value arrives from yt-dlp's `vcodec`/`acodec`, which are not promised to
+// be RFC 6381 — "vp9" and "none" are both things it says. So this is checked
+// rather than trusted, and a playlist that cannot be written correctly is not
+// written at all.
+//
+// The test is deliberately shallow: a family, a dot, and at least one parameter,
+// made only of characters that survive a quoted attribute. Validating the
+// profile bits per family would be a codec registry, and getting *that* wrong
+// would reject streams that play.
+func ValidCodec(s string) bool {
+	family, params, found := strings.Cut(s, ".")
+	if !found || family == "" || params == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '-' || r == '_':
+		default:
+			// Anything else — a space, a comma, a quote — either ends the
+			// attribute early or breaks out of it.
+			return false
+		}
+	}
+	return true
+}
