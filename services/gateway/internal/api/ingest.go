@@ -70,8 +70,13 @@ type sourceDTO struct {
 // re-asked at every transition.
 type streamDTO struct {
 	// Progressive upstream, playable and seekable immediately but capped at
-	// 360p by what YouTube still publishes muxed. Absent when the video offers
-	// no progressive format at all.
+	// 360p by what YouTube still publishes muxed.
+	//
+	// **Never set since 2026-08-18.** The rendition it names stopped serving
+	// anything past the head of the file; see the note where it used to be
+	// filled in. The field stays so that a client from before this change reads
+	// the same JSON it always did — one tier fewer — rather than a shape it has
+	// never seen.
 	Instant *sourceDTO `json:"instant,omitempty"`
 	// Full resolution, muxed on the fly from the adaptive tracks. No index, so
 	// not seekable. Absent once the local file exists.
@@ -584,6 +589,8 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 			// On disk: nothing upstream is worth offering beside it. Touching
 			// last_accessed_at happens through watch progress, so the eviction
 			// sweep sees actual viewing rather than mere resolution.
+			g.logger.Info("stream offered",
+				"video", videoID, "tier", "local", "path", v.GetMediaPath(), "prefetch", prefetch)
 			writeJSON(w, http.StatusOK, streamDTO{
 				Local: &sourceDTO{
 					URL:      "/media/" + v.GetMediaPath(),
@@ -668,63 +675,72 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// The instant tier: a progressive upstream file the browser can range-request
-	// on its own. Resolution is capped at 360p, and it is offered first anyway —
-	// it starts in milliseconds and seeks properly, and the download that
-	// replaces it usually lands within seconds.
-	if resolved, resolveErr := g.ingest.ResolveStream(ctx, connect.NewRequest(&ingestv1.ResolveStreamRequest{
-		VideoId: videoID,
-	})); resolveErr != nil {
-		// Not every video publishes a progressive format. That is not an error
-		// worth failing the request over — it just means starting at the remux.
-		g.logger.Info("no instant source", "video", videoID, "error", resolveErr)
-		// When no local copy exists and the instant URL is gone, the
-		// remux is the only path. If ResolveStream failed because YouTube
-		// blocked access, the remux fails too. Tell the player why.
-		if connect.CodeOf(resolveErr) == connect.CodeAborted {
-			// Upstream refused for good. Not a stream error to be shown and
-			// retried — an answer, and the remux beside it could only produce
-			// the same one, so it is withdrawn rather than left as a button.
-			out.Remux = nil
-			out.Unavailable = &unavailableDTO{
-				Reason: unavailableReason(resolveErr.Error()),
-			}
-		} else if connect.CodeOf(resolveErr) == connect.CodeFailedPrecondition {
-			// Upstream publishes nothing a bare video element can start now —
-			// either no progressive format at all, or (far more often) every URL
-			// it issued was refused when ingest checked it. Nothing is broken,
-			// and the file is on its way: the download is the one thing that has
-			// never failed here. So no tier and no error, which is what puts the
-			// player on the progress bar it already has rather than on a red
-			// message about a format.
-			g.logger.Info("no playable instant url", "video", videoID)
-		} else if out.Local == nil {
-			// Strip the gRPC framing ("internal: ") from the yt-dlp message
-			// so the player shows a readable reason instead of a stack trace.
-			msg := resolveErr.Error()
-			if code := connect.CodeOf(resolveErr).String(); code != "" {
-				msg = strings.TrimPrefix(msg, code+": ")
-			}
-			out.StreamError = msg
-		}
-	} else {
-		out.Instant = &sourceDTO{
-			// Proxied through the gateway rather than handed to the browser
-			// directly. The upstream URL is signed to the IP that resolved it —
-			// the server's — and a viewer on a different public IP (any LAN
-			// behind CGNAT, which is the common case, not an edge case) gets a
-			// refused request the browser reports as a generic format error.
-			// Routing it through the same process that resolved it keeps the
-			// request on the IP the signature actually matches.
-			URL:       "/api/videos/" + url.PathEscape(videoID) + "/instant",
-			Height:    resolved.Msg.GetHeight(),
-			MimeType:  resolved.Msg.GetMimeType(),
-			Seekable:  true,
-			ExpiresAt: resolved.Msg.GetExpiresAt().AsTime().UTC().Format("2006-01-02T15:04:05Z"),
-		}
-	}
+	// The instant tier is no longer offered, and no longer resolved for.
+	//
+	// itag 18 — the one progressive rendition YouTube still publishes, and the
+	// tier every video used to open on — now serves the head of the file and
+	// refuses the middle. Measured 2026-08-18 across 16 videos of this library
+	// on freshly resolved URLs, one request each: a mid-file range answered
+	// **403 twelve times out of fourteen** and 206 not once, while the same
+	// videos' adaptive 720p video and AAC audio answered 206 at head and middle
+	// alike, 13 of 14.
+	//
+	// That is the whole of "pressing play does nothing": a video either would
+	// not open (`MEDIA_ELEMENT_ERROR: Format error`) or opened and lost its
+	// source a megabyte in (`PIPELINE_ERROR_READ`), and the player, standing on
+	// a dying tier, could not climb off it.
+	//
+	// The route and its proxy stay (see handleInstantStream). Nothing is broken
+	// about them; upstream simply stopped serving what they fetch, and §4's
+	// rule is that a tier measured to be dead is not offered — not that its
+	// code is burnt. The day progressive serves again, this becomes an offer
+	// again.
+	//
+	// Nor is ResolveStream called merely to learn whether a video is available.
+	// It costs a full metadata fetch, three times over (`resolveAttempts`),
+	// against the address §8 risk 6 is about, to ask a question the download
+	// scheduled a few lines above answers on its own — every path that meets
+	// upstream records an unavailable video, and the catalog check at the top
+	// of this handler is what the next poll reads.
+
+	// What this request actually offered, said once, on the way out.
+	//
+	// "Did the player even get a tier?" was answerable only from the browser,
+	// and the browser reports a missing tier as a blank picture — the same
+	// thing a refused one looks like. With the progressive tier withdrawn there
+	// is normally exactly one answer here, so a request that produced none is
+	// worth being able to see from the log alone.
+	g.logger.Info("stream offered",
+		"video", videoID,
+		"tier", offeredTier(out),
+		"height", remuxHeightOf(out),
+		"repaired", out.Repaired,
+		"prefetch", prefetch)
 
 	writeJSON(w, http.StatusOK, out)
+}
+
+// offeredTier names what a stream answer gives the player, for the log.
+func offeredTier(out streamDTO) string {
+	switch {
+	case out.Unavailable != nil:
+		return "none:unavailable"
+	case out.StreamError != "":
+		return "none:error"
+	case out.Local != nil:
+		return "local"
+	case out.Remux != nil:
+		return "remux"
+	default:
+		return "none"
+	}
+}
+
+func remuxHeightOf(out streamDTO) int32 {
+	if out.Remux == nil {
+		return 0
+	}
+	return out.Remux.Height
 }
 
 // handleRemuxStart asks ingest where a muxed stream opened at `t` will really

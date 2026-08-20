@@ -71,6 +71,21 @@ type ytdlpConfig struct {
 	// written. It is a lever to pull during the next wave, and it does nothing
 	// until it is set.
 	playerClient string
+	// binary is the yt-dlp executable to run, or "" to let go-ytdlp find one on
+	// PATH.
+	//
+	// This exists because which yt-dlp runs has had to be pinned, and the pin
+	// has had to move. The stable release of 2026.07.04 resolved URLs that no
+	// longer served — measured across 16 videos of this library, the
+	// progressive track answered a mid-file range 0 times out of 14 — so the
+	// pin went to a nightly, which is not a thing to install over the stable
+	// one.
+	//
+	// It is a release again: 2026.8.19 postdates that nightly and measured
+	// identical on every adaptive track, so the path now names it. What the
+	// variable is really for is the move itself, in either direction: the
+	// previous binary stays installed and switching back is one env var.
+	binary string
 }
 
 var (
@@ -90,6 +105,16 @@ func readConfig(getenv func(string) string) ytdlpConfig {
 	cfg := ytdlpConfig{
 		cookiesFile:  getenv("YTDLP_COOKIES"),
 		playerClient: getenv("YTDLP_PLAYER_CLIENT"),
+		binary:       getenv("YTDLP_PATH"),
+	}
+	// The same rule as the cookies file below, for the same reason: a path that
+	// is not there must fall back to whatever is on PATH rather than fail every
+	// request in the library. A typo here would otherwise stop the ingest
+	// service dead while telling nobody which env var caused it.
+	if cfg.binary != "" {
+		if _, err := os.Stat(cfg.binary); err != nil {
+			cfg.binary = ""
+		}
 	}
 	// A cookies file that is not there is worse than none: yt-dlp fails the
 	// request outright rather than carrying on without it, so a typo in an env
@@ -123,6 +148,14 @@ func newAccountCommand(cookiesFile string) *ytdlp.Command {
 func newCommandWithCookies(p purpose, cookiesFile string) *ytdlp.Command {
 	cmd := ytdlp.New()
 	cfg := loadConfig()
+
+	// Before the purposeListing return, deliberately. Which binary runs is not
+	// a question about credentials, and a listing resolved by a different
+	// yt-dlp than the one that fetches the bytes would be describing formats
+	// nothing here can play.
+	if cfg.binary != "" {
+		cmd = cmd.SetExecutable(cfg.binary)
+	}
 
 	// The whole of the account-safety rule, in one condition. Listings are the
 	// high-volume traffic — 93 sources an hour — and they are never given a

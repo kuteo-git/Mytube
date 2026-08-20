@@ -245,7 +245,11 @@ func (h *Handler) handleRemux(w http.ResponseWriter, r *http.Request) {
 	// be the question that could not be answered from the outside.
 	h.logger.Info("live mux opened",
 		"video", videoID, "height", height, "from", startSeconds, "audioFrom", audioStart,
-		"resolve", resolveTook.Truncate(time.Millisecond))
+		"resolve", resolveTook.Truncate(time.Millisecond),
+		// The head is what proves the stream is real rather than merely
+		// started: ffmpeg returns before it has read anything, so "opened" on
+		// its own has been true of a mux that produced no bytes at all.
+		"headBytes", len(head))
 
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Cache-Control", "no-store")
