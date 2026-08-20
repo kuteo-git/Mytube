@@ -48,10 +48,31 @@ A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **in
 | Source | What it is | Seek |
 |---|---|---|
 | `local` | File on disk | ✅ |
+| `hls` | The same two adaptive tracks, described as a playlist the browser combines. **720p** | ✅ |
 | `remux` | Two adaptive tracks muxed directly into fMP4, **720p** on auto, **1080p** when pinned | ⚠️ reopen stream |
 | ~~`instant`~~ | YouTube progressive file (itag 18, 360p). **No longer offered** — see below | — |
 
-The player opens on `remux` and climbs to `local` once the download lands. No transcoding, no HLS.
+The player opens on the best tier the browser can play — `local` if it is there, else `hls`, else `remux` — and climbs to `local` once the download lands. Still no transcoding: HLS here is a description of YouTube's own files, not a re-encoding of them.
+
+### The mux does not work on a phone, and HLS does (2026-08-20)
+
+**HLS is offered beside the mux, and it is the opening tier wherever the browser can play it.** Measured on the household's iPhone (iOS 18.7), the same video minutes apart, through the app:
+
+| | muxed stream | HLS |
+|---|---|---|
+| pressing play | **no picture, ever** | plays |
+| duration reported | none — no index | **641.8s** |
+| seeking | — | **works**, twice, native |
+
+- **This is not a preference, it is the only tier that works there.** iOS has `ManagedMediaSource` and **no `MediaSource`** (measured), so hls.js cannot stand behind native HLS the way it can on Chrome. A phone with no local copy and no HLS has nothing to play.
+- **Why it stayed hidden for a week**: the mux works fine in desktop Chrome, and every measurement before the phone was taken there. The reverse is also true — Chrome cannot play these playlists at all (`MEDIA_ERR_SRC_NOT_SUPPORTED`), so it keeps the mux until hls.js is wired in. Neither tier covers both.
+- **`canPlayType('application/vnd.apple.mpegurl')` must not be believed.** It answers `"maybe"` on Chrome, which fails, and `"maybe"` on iOS, which succeeds. `web/public/mse-check.html` asked exactly that, and the HLS work was built believing it. `hls-source.ts` reads the engine instead: `ManagedMediaSource` present, or Apple vendor and not Chromium.
+- **HLS is seekable because a media playlist *is* an index.** That one difference is what the mux's offsets, marks, leads, reopens and handover timing all exist to work around — so a video on this tier needs none of them. That is the whole argument for Phase 2.
+- **`remuxFailed` does not hold HLS back.** That flag records a muxed stream that could not keep up, which says nothing about a tier that never goes through ffmpeg.
+- **A `stalled` event is not a stall.** iOS fired one during linear playback with no `waiting` beside it — network idle after the buffer filled, not a starved picture. `waiting` is the one that means the picture stopped, and it appeared only at start-up and after seeks. Segments were measured at 12–510 ms for 3–7 s of video, through the gateway and through the Vite proxy alike, against 0.61 MB per 5.4 s needed.
+- **The codec string is now checked before a playlist is written** (`domain.ValidCodec`). It comes straight from yt-dlp, which says `vp9` and `none` as readily as `avc1.4d401f`, and a `CODECS` value a player cannot read is refused before a byte is fetched — no request, no log, a generic error. On the one device with nothing behind it, that is the end. A playlist that cannot be described correctly is not served at all.
+- **A refused segment drops the cached URLs and resolves once more.** Only the playlist path did that, and the playlist is fetched once at the start — so a signed URL dying mid-video broke every remaining segment for the rest of the 90-minute TTL while nothing re-resolved, and the player could report only a stream that stopped.
+- **Autoplay still does not happen on iOS, and that is §5's decision, not a fault.** Audible autoplay needs a gesture Safari has not been given; the first frame sits still rather than the video playing muted.
 
 ### itag 18 stopped serving, so it stopped being a tier (2026-08-18)
 

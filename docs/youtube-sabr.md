@@ -120,6 +120,54 @@ that the withdrawal is deliberate and not a passing refusal wave.
   (`pipx install --suffix=-stable` put the two side by side), so
   `YTDLP_PATH=$HOME/.local/bin/yt-dlp` restores the previous stack exactly.
 
+## HLS, and the device the mux never worked on (2026-08-20)
+
+This document had no HLS section, and the routes had been built and left
+unwired pending "proof it plays on the device it was measured for". Here is
+that measurement, plus one nobody had asked for.
+
+**iPhone, iOS 18.7, through the app, same video minutes apart:**
+
+| | muxed stream | HLS |
+|---|---|---|
+| pressing play | **no picture at all** | plays |
+| duration | none | 641.8s |
+| seeking | — | works, twice |
+
+The mux failing there was not suspected. It works in desktop Chrome, and every
+measurement in this document until now was taken in desktop Chrome. What the
+server saw was `live mux opened … headBytes=1572864` followed by
+`live mux closed bytes=3100144` **168 ms later**, with no
+`remux stream ended early` and no `live mux complained` — the client hung up,
+and the server had nothing to report.
+
+**And Chrome is the mirror image**, measured the same day: fed
+`master.m3u8` it fails with `MEDIA_ERR_SRC_NOT_SUPPORTED` (code 4). Neither
+tier covers both devices.
+
+**The capability probe was the trap.** `canPlayType('application/vnd.apple.mpegurl')`:
+
+| | says | does |
+|---|---|---|
+| Chrome, macOS | `"maybe"` | fails, code 4 |
+| Safari, iOS 18.7 | `"maybe"` | plays and seeks |
+
+`web/public/mse-check.html` asked exactly this, and the commit that built the
+HLS routes recorded `HLS natively maybe <- "" means no; "maybe" is a yes`. It
+is not. The engine is what separates them: iOS has `ManagedMediaSource` and
+**no `MediaSource` at all**, so hls.js could never have covered the iPhone —
+native HLS there is not a preference, it is the only path.
+
+**Delivery is not the constraint.** Segments average 0.61 MB per 5.39 s of
+video — about 113 KB/s to keep up. Timed through the gateway and through the
+Vite dev proxy, the path the phone actually takes:
+
+    12–510 ms per segment, for 3–7 s of video each
+
+Twenty to two hundred times faster than realtime. A `stalled` event seen on the
+phone during linear playback had no `waiting` beside it: that is the network
+going idle once the buffer filled, not a starved picture.
+
 ## What to watch
 
 - **The probe.** `verifyURL` reads the head only, which is what let dead
