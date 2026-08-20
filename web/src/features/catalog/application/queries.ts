@@ -207,22 +207,6 @@ const PREFETCH_HOVER_MS = 250
  * as much. The delay keeps a pointer sweeping across a grid from resolving
  * every card it crosses.
  */
-/**
- * Where a muxed stream opened at `at` will really begin.
- *
- * A plain function rather than a hook because the player asks in the middle of
- * a seek, not while rendering. Never rejects: without an answer the stream is
- * opened as before — sound a little adrift is worse than a picture that stays
- * where it was, but not worse than one that never arrives.
- */
-export async function resolveRemuxStart(videoId: string, at: number): Promise<number> {
-  try {
-    return await repo.getRemuxStart(videoId, at)
-  } catch {
-    return 0
-  }
-}
-
 export function useStreamPrefetch() {
   const queryClient = useQueryClient()
   const timer = useRef<number | undefined>(undefined)

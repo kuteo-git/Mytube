@@ -90,8 +90,6 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     getVideoEnsuring: vi.fn(async () => ({ ...baseVideo, subtitles })),
     getStream: vi.fn(async () => ({
       local: { url: '/media/abc/1080p.mp4', height: 1080, name: 'local' },
-      instant: null,
-      remux: null,
     })),
     getRemuxStart: vi.fn(async () => 0),
     listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),

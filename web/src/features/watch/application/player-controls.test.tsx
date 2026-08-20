@@ -36,9 +36,8 @@ import {
 
 const stream = {
   local: null,
-  instant: { url: 'blob:instant', height: 360, name: 'instant' },
-  remux: null,
-  sources: [{ name: 'instant', url: 'blob:instant', height: 360, seekable: true }],
+  hls: { url: '/api/videos/abc/hls/master.m3u8', height: 360, name: 'hls' },
+  sources: [{ name: 'hls', url: '/api/videos/abc/hls/master.m3u8', height: 360, seekable: true }],
 }
 
 const channel = {
@@ -180,6 +179,11 @@ function givePlayheads(front: HTMLVideoElement, back: HTMLVideoElement) {
       },
     })
     Object.defineProperty(el, 'duration', { configurable: true, get: () => 240 })
+    // HAVE_CURRENT_DATA: there is a frame at the playhead. The handover waits
+    // for this rather than for playback to reach a mark — the replacement is
+    // moved to where the viewer is, so the only question left is whether it has
+    // buffered anything there. jsdom reports 0 for everything.
+    Object.defineProperty(el, 'readyState', { configurable: true, get: () => 2 })
   }
   return clock
 }
@@ -258,7 +262,7 @@ describe('handing over to the downloaded file', () => {
    */
   it('still reports playback after the local file takes over', async () => {
     const { front, back } = await ready()
-    const clock = givePlayheads(front, back)
+    givePlayheads(front, back)
 
     await act(async () => {
       void front.play()
@@ -278,11 +282,10 @@ describe('handing over to the downloaded file', () => {
       fireEvent.seeked(back)
     })
 
-    // Playback reaches the mark the replacement is waiting on. This is the
-    // trigger for the exchange, and without it the handover simply never runs —
-    // which is how the first version of this test managed to pass against the
-    // very bug it was written for.
-    clock.front = clock.back
+    // The exchange happens once the replacement has a frame where the viewer
+    // is. There is no mark to reach any more: it used to be opened ahead of the
+    // playhead because a muxed stream could not be moved, and playback catching
+    // up was the trigger.
     await settle()
 
     // The exchange really happened: the prepared layer is the visible one now.

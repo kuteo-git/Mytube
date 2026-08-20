@@ -27,8 +27,7 @@ import { WatchPage } from '@/pages/WatchPage'
  * one worth holding onto: whatever loses a climb, the player must try again.
  */
 
-const REMUX_URL = '/api/videos/abc/remux'
-const INSTANT_URL = 'blob:instant'
+const STREAM_URL = '/api/videos/abc/hls/master.m3u8'
 const LOCAL_URL = '/media/abc/1080p.mp4'
 
 /** Flipped by a test the moment the download is meant to have finished. */
@@ -79,11 +78,11 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     // The answer a video still downloading gives, until it is not.
     getStream: vi.fn(async () =>
       localReady
-        ? { local: { url: LOCAL_URL, height: 1080, name: 'local' }, instant: null, remux: null }
+        ? { local: { url: LOCAL_URL, height: 1080, name: 'local' }, instant: null, hls: null }
         : {
             local: null,
-            instant: { url: INSTANT_URL, height: 360, name: 'instant' },
-            remux: { url: REMUX_URL, height: 1080, name: 'remux' },
+            // One upstream tier now, where there used to be two.
+            hls: { url: STREAM_URL, height: 720, name: 'hls' },
           },
     ),
     getRemuxStart: vi.fn(async (_id: string, at: number) => at - 2.028),
@@ -181,7 +180,7 @@ async function downloadLands() {
 describe('the download landing while the video is being watched', () => {
   it('climbs from the low rendition to the local file', async () => {
     const videos = await mounted()
-    await waitFor(() => expect(visible(videos).src).toContain(INSTANT_URL))
+    await waitFor(() => expect(visible(videos).src).toContain(STREAM_URL))
     visible(videos).currentTime = 30
 
     await downloadLands()
@@ -201,7 +200,7 @@ describe('the download landing while the video is being watched', () => {
 
   it('tries again when the climb to the local file is lost', async () => {
     const videos = await mounted()
-    await waitFor(() => expect(visible(videos).src).toContain(INSTANT_URL))
+    await waitFor(() => expect(visible(videos).src).toContain(STREAM_URL))
     visible(videos).currentTime = 30
 
     await downloadLands()
@@ -221,24 +220,27 @@ describe('the download landing while the video is being watched', () => {
 
   it('ignores a failure belonging to a stream it has already moved on from', async () => {
     const videos = await mounted()
-    await waitFor(() => expect(visible(videos).src).toContain(INSTANT_URL))
-    // The muxed stream is being prepared: this is the claim about to be
-    // replaced, and the 502 about to arrive is its.
-    await waitFor(() => expect(hidden(videos).src).toContain('/remux'))
+    await waitFor(() => expect(visible(videos).src).toContain(STREAM_URL))
     visible(videos).currentTime = 30
 
-    // The gateway answers the mux with a 502 — every video in the ingest log
-    // did — and the error lands after the local file has taken the claim.
+    // The download lands, so the hidden layer is now claimed for the file on
+    // disk — and only then does a failure arrive from the upstream stream that
+    // was in front a moment ago.
     localReady = true
     await act(async () => {
-      const stale = hidden(videos)
-      const climb = client.invalidateQueries({ queryKey: ['stream', 'abc'] })
-      fireEvent.error(stale)
-      await climb
+      await client.invalidateQueries({ queryKey: ['stream', 'abc'] })
+    })
+    await settle()
+    await waitFor(() => expect(hidden(videos).src).toContain(LOCAL_URL))
+
+    await act(async () => {
+      // The stale one: whatever was serving the picture before the file
+      // arrived. Its error has nothing to say about the climb now in flight.
+      fireEvent.error(visible(videos))
     })
     await settle()
 
     // The climb the error had nothing to do with is still standing.
-    await waitFor(() => expect(hidden(videos).src).toContain(LOCAL_URL))
+    expect(hidden(videos).src).toContain(LOCAL_URL)
   })
 })

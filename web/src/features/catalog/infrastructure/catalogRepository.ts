@@ -60,19 +60,6 @@ export interface CatalogRepository {
    * must not fill it.
    */
   getStream(videoId: string, prefetch?: boolean): Promise<StreamSources>
-  /**
-   * Where a muxed stream opened at `at` will really begin.
-   *
-   * ffmpeg seeks to the nearest keyframe at or before the mark, so the answer is
-   * up to a group of pictures — measured between 2 and 6 seconds — earlier than
-   * asked. The player needs it for two reasons: it is the zero of the stream it
-   * is about to be handed, and passing it back as `audioAt` is what stops the
-   * sound running ahead of the picture.
-   *
-   * Answers 0 when the question could not be settled, which means "seek both
-   * inputs alike", not "start at the beginning".
-   */
-  getRemuxStart(videoId: string, at: number): Promise<number>
   listJobs(activeOnly: boolean, options?: JobListOptions): Promise<IngestJob[]>
   /**
    * Stops the transfer for a video, if one is running.
@@ -462,13 +449,6 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<StreamSources>(
       `/videos/${encodeURIComponent(videoId)}/stream${prefetch ? '?prefetch=1' : ''}`,
     )
-  },
-
-  async getRemuxStart(videoId, at) {
-    const body = await request<{ start: number }>(
-      `/videos/${encodeURIComponent(videoId)}/remux/start?t=${at.toFixed(3)}`,
-    )
-    return body.start
   },
 
   async cancelDownload(videoId) {

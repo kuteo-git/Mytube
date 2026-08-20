@@ -22,7 +22,7 @@ import { WatchPage } from '@/pages/WatchPage'
  * a file that is already on the disk, and a reload as the only way out.
  */
 
-const REMUX_URL = '/api/videos/abc/remux'
+const REMUX_URL = '/api/videos/abc/hls/master.m3u8'
 const LOCAL_URL = '/media/abc/1080p.mp4'
 
 const channel = {
@@ -72,8 +72,8 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     getVideoEnsuring: vi.fn(async () => video),
     getStream: vi.fn(async () =>
       onDisk
-        ? { local: { url: LOCAL_URL, name: 'local' }, instant: null, remux: null }
-        : { local: null, instant: null, remux: { url: REMUX_URL, height: 720, name: 'remux' } },
+        ? { local: { url: LOCAL_URL, name: 'local' }, instant: null, hls: null }
+        : { local: null, instant: null, hls: { url: REMUX_URL, height: 720, name: 'hls' } },
     ),
     getRemuxStart: vi.fn(async (_id: string, at: number) => Math.max(0, at - 2.028)),
     listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
@@ -123,7 +123,7 @@ async function mounted() {
 
 it('plays the downloaded file after the only live tier was refused', async () => {
   const videos = await mounted()
-  await waitFor(() => expect(visible(videos).src).toContain('/remux'))
+  await waitFor(() => expect(visible(videos).src).toContain('/hls/'))
 
   // Upstream refuses the mux, twice: the first failure is retried by asking for
   // the stream again, and the second is the one that gives up.

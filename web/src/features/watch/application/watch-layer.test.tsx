@@ -52,9 +52,8 @@ const video = {
 
 const stream = {
   local: null,
-  instant: { url: 'blob:instant', height: 360, name: 'instant' },
-  remux: null,
-  sources: [{ name: 'instant', url: 'blob:instant', height: 360, seekable: true }],
+  hls: { url: '/api/videos/abc/hls/master.m3u8', height: 360, name: 'hls' },
+  sources: [{ name: 'hls', url: '/api/videos/abc/hls/master.m3u8', height: 360, seekable: true }],
 }
 
 vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
