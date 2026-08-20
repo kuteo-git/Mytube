@@ -73,12 +73,14 @@ export function canPlayHLSWithLibrary(): boolean {
 /**
  * Should the player open this video on HLS?
  *
- * Only when the browser can do it unaided, for now. Chrome keeps the muxed
- * stream until hls.js is wired in — it works there, which is exactly why it hid
- * this problem for a week: the tier was measured on a desktop where it plays.
+ * Anywhere it can be played at all — unaided on Safari and iOS, through hls.js
+ * on anything with `MediaSource`. That covers every browser this is built for
+ * (CLAUDE.md §2: phone browsers and desktop), and it is what makes the muxed
+ * tier removable: while one browser still needed it, none of the machinery
+ * built around an unindexed stream could go.
  */
 export function shouldUseHLS(): boolean {
-  return canPlayHLSNatively()
+  return canPlayHLSNatively() || canPlayHLSWithLibrary()
 }
 
 /**
@@ -103,5 +105,89 @@ export function hlsCapabilities(): {
     // Kept only to be disbelieved: "maybe" from both a browser that plays it
     // and one that does not.
     claim,
+  }
+}
+
+/**
+ * Is this URL an HLS playlist?
+ *
+ * Read from the address rather than carried alongside it, because the player's
+ * two layers hold a bare string and every comparison in the tier machinery is
+ * made against that string. Giving it a companion field would mean keeping the
+ * two in step at each of those sites.
+ */
+export function isHLSPlaylist(url: string | undefined): boolean {
+  return Boolean(url) && url!.includes('.m3u8')
+}
+
+/**
+ * Does this source have to be attached by hand rather than assigned to `src`?
+ *
+ * Only where the browser cannot play HLS unaided. Safari and iOS take the
+ * playlist as an ordinary `src`, and that path is left exactly as it is —
+ * it is the one measured working on the device with no fallback, and there is
+ * nothing to gain by routing it through a library instead.
+ */
+export function needsHLSLibrary(url: string | undefined): boolean {
+  return isHLSPlaylist(url) && !canPlayHLSNatively()
+}
+
+/** What an attachment hands back so the caller can undo it. */
+export type DetachHLS = () => void
+
+/**
+ * Play `url` on `el` using hls.js, and hand back the way to stop.
+ *
+ * The library is imported here and nowhere else, so it lands in its own chunk
+ * and the browsers with native HLS — every phone in this house — never download
+ * it.
+ *
+ * **It is 179 kB gzipped**, measured on the real build, not the ~40 kB this was
+ * planned at. Said plainly because the estimate was used to justify the
+ * dependency. It is still the right trade — it buys the removal of the mux and
+ * everything built around an unindexed stream — but it is four times the price
+ * quoted, and it is paid only by desktop browsers.
+ *
+ * The `hls.light` build is smaller (925 kB raw against 1448 kB) and **cannot be
+ * used here**: it drops alternate-audio support, and this master playlist
+ * describes audio as an `EXT-X-MEDIA` group precisely because YouTube publishes
+ * the two tracks separately. Dropping it would drop the sound.
+ *
+ * Errors are turned into an `error` event on the element rather than reported
+ * separately. The player already knows how to retreat from a source that will
+ * not load, and it decides that from the element; a second, parallel way of
+ * failing would be a second thing to keep in step with it.
+ */
+export async function attachHLS(el: HTMLVideoElement, url: string): Promise<DetachHLS> {
+  const { default: Hls } = await import('hls.js')
+
+  if (!Hls.isSupported()) {
+    // Nothing can play it here. Said the way the player already listens for.
+    el.dispatchEvent(new Event('error'))
+    return () => {}
+  }
+
+  const hls = new Hls({
+    // The playlist is VOD and the segments are byte ranges into two files that
+    // are already on the far side of a proxy; the defaults are tuned for a live
+    // edge that does not exist here.
+    enableWorker: true,
+    lowLatencyMode: false,
+  })
+
+  hls.on(Hls.Events.ERROR, (_event, data) => {
+    // Only a fatal error is the player's business. hls.js recovers from the
+    // rest on its own, and reporting those would retreat from a tier that is
+    // still working.
+    if (!data.fatal) return
+    console.error('[debug] hls.js fatal', data.type, data.details)
+    el.dispatchEvent(new Event('error'))
+  })
+
+  hls.loadSource(url)
+  hls.attachMedia(el)
+
+  return () => {
+    hls.destroy()
   }
 }

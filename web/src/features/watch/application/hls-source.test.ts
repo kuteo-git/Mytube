@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { canPlayHLSNatively, canPlayHLSWithLibrary, shouldUseHLS } from './hls-source'
+import {
+  canPlayHLSNatively,
+  canPlayHLSWithLibrary,
+  needsHLSLibrary,
+  shouldUseHLS,
+} from './hls-source'
 
 /**
  * The capability check that must not repeat the mistake it replaces.
@@ -117,14 +122,32 @@ describe('canPlayHLSNatively', () => {
 })
 
 describe('shouldUseHLS', () => {
-  it('opens on HLS only where the browser needs no help', () => {
+  it('opens on HLS anywhere it can be played at all', () => {
+    // Unaided here — and nothing behind it, which is what makes the server's
+    // codec check load-bearing.
     pretend(iPhone)
     expect(shouldUseHLS()).toBe(true)
 
-    // Chrome keeps the muxed stream until hls.js is wired in. It works there,
-    // which is exactly why the mux looked healthy for a week: every measurement
-    // was taken on a desktop.
+    // Through hls.js here. Chrome played the mux perfectly well, which is
+    // exactly why the mux looked healthy for a week — every measurement was
+    // taken on a desktop. Moving Chrome across is what makes the muxed tier
+    // removable, and with it everything built around an unindexed stream.
     pretend(macChrome)
-    expect(shouldUseHLS()).toBe(false)
+    expect(shouldUseHLS()).toBe(true)
+    expect(canPlayHLSNatively()).toBe(false)
+
+    pretend(firefox)
+    expect(shouldUseHLS()).toBe(true)
+  })
+
+  it('needs the library exactly where it cannot play HLS unaided', () => {
+    pretend(iPhone)
+    expect(needsHLSLibrary('/api/videos/a/hls/master.m3u8')).toBe(false)
+
+    pretend(macChrome)
+    expect(needsHLSLibrary('/api/videos/a/hls/master.m3u8')).toBe(true)
+    // An ordinary file is never routed through a library, on any browser.
+    expect(needsHLSLibrary('/media/a/1080p.mp4')).toBe(false)
+    expect(needsHLSLibrary(undefined)).toBe(false)
   })
 })

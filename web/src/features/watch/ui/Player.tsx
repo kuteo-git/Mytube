@@ -22,7 +22,13 @@ import type { StreamSources } from '@/features/catalog/infrastructure/catalogRep
 import { resolveRemuxStart, useStream } from '@/features/catalog/application/queries'
 import { MAX_CLIMB_REOPENS, remuxLead } from '@/features/watch/application/remux-lead'
 import { seekElement } from '@/features/watch/application/player-seek'
-import { hlsCapabilities, shouldUseHLS } from '@/features/watch/application/hls-source'
+import {
+  attachHLS,
+  type DetachHLS,
+  hlsCapabilities,
+  needsHLSLibrary,
+  shouldUseHLS,
+} from '@/features/watch/application/hls-source'
 import { useDownloadProgress } from '@/features/catalog/application/download'
 import type { QualityChoice } from '@/features/watch/application/autoplay'
 import {
@@ -250,6 +256,31 @@ const DEFAULT_LIVE_HEIGHT = 720
  */
 const LIVE_HEIGHTS = [1080, 720] as const
 
+/**
+ * Is `el` showing the source at `url`?
+ *
+ * The tier machinery identifies a layer by what it is playing, at three sites:
+ * the handover, the claim it acts on, and the failure that abandons it. Each
+ * compared `element.src` against the claim's URL.
+ *
+ * That stops working the moment a source is attached rather than assigned.
+ * hls.js hands the element a `blob:` URL of its own making, so `element.src` is
+ * no longer the address anybody asked for and every one of those comparisons
+ * says "not mine" — the layer becomes unreachable, and the symptom is a climb
+ * that silently never completes.
+ *
+ * So the logical source is written onto the element as `data-source` wherever
+ * the `src` is set, and identity is read from there, falling back to `src` for
+ * the layers that carry an ordinary file.
+ */
+function showsSource(el: HTMLVideoElement | null | undefined, url: string): boolean {
+  if (!el) return false
+  const absolute = new URL(url, window.location.href).href
+  const declared = el.dataset.source
+  if (declared) return new URL(declared, window.location.href).href === absolute
+  return el.src === absolute
+}
+
 type TierName = 'instant' | 'hls' | 'remux' | 'local'
 
 interface Tier {
@@ -467,6 +498,43 @@ const SYSTEM_LETGO_CEILING_MS = 1500
  *
  * `?fsdebug=0` turns it off again.
  */
+/**
+ * Keeps hls.js attached to one `<video>` layer for as long as it is showing a
+ * playlist that needs it.
+ *
+ * Written as a hook so the two layers get one implementation rather than two
+ * that must agree. The import inside `attachHLS` is dynamic, so a browser with
+ * native HLS never downloads the library at all.
+ */
+function useAttachedHLS(
+  ref: React.RefObject<HTMLVideoElement | null>,
+  src: string | undefined,
+) {
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !src || !needsHLSLibrary(src)) return
+
+    // The attachment is asynchronous — the library has to arrive first — so the
+    // source may already have moved on by the time it does. `cancelled` is what
+    // stops an attachment nobody wants any more from starting, and the detach
+    // below is what stops the one that did start.
+    let cancelled = false
+    let detach: DetachHLS | undefined
+    void attachHLS(el, src).then((teardown) => {
+      if (cancelled) {
+        teardown()
+        return
+      }
+      detach = teardown
+    })
+
+    return () => {
+      cancelled = true
+      detach?.()
+    }
+  }, [ref, src])
+}
+
 export function Player({
   videoId,
   hue,
@@ -1311,6 +1379,22 @@ export function Player({
       'seekable', tier.seekable, 'quality', quality, 'offset', offsetSeconds, tier.url)
   }, [tier, videoId, quality, offsetSeconds])
 
+  // Attach hls.js to whichever layer is carrying a playlist it cannot play alone.
+  //
+  // One effect per layer rather than one for both, so a climb — which loads the
+  // new source into the *hidden* layer while the front one keeps playing —
+  // tears down and rebuilds only the side that changed.
+  //
+  // Keyed on the URL: a new source means a new attachment, and the previous one
+  // has to be destroyed or its segment fetches carry on against an element that
+  // has moved to something else. The teardown also runs on unmount, which is
+  // what stops a page-away from leaving a worker fetching video.
+  //
+  // Nothing happens here on Safari or iOS. There the playlist is an ordinary
+  // `src` and the browser does all of this itself.
+  useAttachedHLS(videoARef, srcA)
+  useAttachedHLS(videoBRef, srcB)
+
   // What this browser says it can play, said once.
   //
   // Every wrong turn in this area came from believing a capability check
@@ -1625,9 +1709,7 @@ export function Player({
     const claimMatches = () => {
       const pending = pendingTierRef.current
       if (!pending) return false
-      // Compared against the resolved absolute URL the element reports, which is
-      // what `src` gives back once assigned.
-      return next.src === new URL(pending.url, window.location.href).href
+      return showsSource(next, pending.url)
     }
 
     const commit = () => {
@@ -2818,7 +2900,19 @@ export function Player({
               <video
                 key={isA ? 'a' : 'b'}
                 ref={isA ? setVideoA : setVideoB}
-                src={src}
+                // Withheld where hls.js has to attach the source itself.
+                // Assigning a playlist to `src` on a browser with no native HLS
+                // is an immediate MEDIA_ERR_SRC_NOT_SUPPORTED, which would
+                // count as a failed tier before the library had a chance.
+                //
+                // Safari and iOS take the playlist as an ordinary `src` and are
+                // left exactly as they are — that is the path measured working
+                // on the device with nothing behind it.
+                src={needsHLSLibrary(src) ? undefined : src}
+                // What this layer is *meant* to be playing, which is not always
+                // what `src` says: hls.js replaces it with a blob of its own.
+                // Every identity check in the tier machinery reads this.
+                data-source={src}
                 className={clsx(
                   'absolute top-0 left-0 h-full cursor-pointer',
                   // In the bar the picture is a thumbnail on the left rather than
@@ -2938,10 +3032,7 @@ export function Player({
                     // it. One written for a different one would place the
                     // element by arithmetic belonging to another stream.
                     const pending = pendingTierRef.current
-                    const mine =
-                      pending && element.src === new URL(pending.url, window.location.href).href
-                        ? pending
-                        : undefined
+                    const mine = pending && showsSource(element, pending.url) ? pending : undefined
 
                     // What the preparation actually cost, for the next lead to
                     // be built from rather than guessed at. Recorded here
@@ -3160,7 +3251,7 @@ export function Player({
                     // watches the rest at 360p. The same identity test the
                     // handover uses, for the same reason.
                     const claim = pendingTierRef.current
-                    if (claim && e.currentTarget.src !== new URL(claim.url, window.location.href).href) {
+                    if (claim && !showsSource(e.currentTarget, claim.url)) {
                       return
                     }
                     // An upgrade that will not load is not a failure worth
