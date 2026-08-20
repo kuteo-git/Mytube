@@ -33,6 +33,35 @@ export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
 export EVICTION_LOW_BYTES="${EVICTION_LOW_BYTES:-322122547200}"        # 300 GiB
 
+# Which yt-dlp runs. A nightly was required for a stretch, because the stable
+# release of the day (2026.07.04) resolved URLs that no longer served bytes.
+# That is over: 2026.8.19 is stable and postdates the nightly this was pinned
+# to, so the pin goes back to a release, which is where a pin belongs — a
+# nightly that upgrades itself is a stack that breaks on a morning nobody
+# changed anything.
+#
+#   pipx install "yt-dlp==2026.8.19"
+#
+# Measured 2026-08-20 before switching, both binaries in one sitting, five
+# videos, freshly resolved URLs, one request each at bytes=0-1048575 and
+# bytes=4194304-5242879:
+#
+#   itag 136/137/140   206 head and middle on both, wherever the video
+#                      publishes them at all — identical, video for video
+#   itag 18            nightly: 206 head, 403 middle, 5 of 5
+#                      stable:  not published at all, 5 of 5
+#   10s of 137+140     rc=0 in 9s on both, byte-identical output
+#
+# So stable is equal on everything the tiers rest on, and it stops offering the
+# progressive format that stopped serving — which is the answer §4 already
+# reached, arriving from upstream.
+#
+# The nightly stays installed as the way back, and this variable is the whole
+# of switching:  YTDLP_PATH=$HOME/.local/bin/yt-dlp ./scripts/dev.sh
+#
+# Unset, or a path that is not there, falls back to whatever is on PATH.
+export YTDLP_PATH="${YTDLP_PATH:-$HOME/.local/bin/yt-dlp-stable}"
+
 # Background traffic to YouTube. Zero switches a timer off entirely — and now
 # really does, which it did not before (see cmd/ingest's envDuration).
 #

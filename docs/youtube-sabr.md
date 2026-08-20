@@ -1,110 +1,139 @@
-# YouTube stopped handing over the bytes
+# YouTube stopped handing over the bytes — and then handed most of them back
 
-**Status: blocked upstream. Nothing in this repository can fix it.**
+**Status: playable again, on a pinned nightly yt-dlp.**
 Last measured 2026-08-18.
 
-## What happens
+This file used to say "blocked upstream, nothing in this repository can fix it".
+That was wrong, and wrong in an instructive way: the measurement behind it asked
+only about the one rendition that really had died, using a yt-dlp a month old.
 
-Pressing play on a video that is not already on disk gives a player that will
-not start, and the download queued behind it fails. The ingest log carries
-`HTTP Error 403: Forbidden` for the transfer.
+## What was actually broken
 
-## What was measured
+**itag 18 — the 360p progressive rendition, and the tier every video opened on.**
 
-24 videos from this library, downloaded one at a time with yt-dlp:
+Measured across 16 videos of this library, on URLs resolved seconds earlier, one
+request each:
 
-| | |
-|---|---|
-| downloaded | **1** |
-| refused with 403 | **23** |
+| track | head of file (`bytes=0-1048575`) | middle (`bytes=4194304-5242879`) |
+|---|---|---|
+| itag 18 — 360p progressive | 206 | **403, 12 of 14. 206 never** |
+| itag 136 — 720p H.264 | 206 | **206, 13 of 14** |
+| itag 137 — 1080p H.264 | 206 | **206** |
+| itag 140 — AAC audio | 206 | **206, 12 of 14** |
 
-Stable per video. The same videos fail on every retry and the same ones succeed,
-minutes or hours apart, so this is not one of googlevideo's passing refusal
-waves.
+The remaining cases are not refusals: one video publishes no 720p at all, and a
+`416` is a range past the end of a short file.
 
-**It is not an IP ban.** Metadata resolves perfectly — titles, durations, the
-full list of 23–27 formats, all of it. A ban would take that too. A handful of
-videos also still download, which a ban would not allow.
+**The head always serves.** That is the whole reason this was so hard to see —
+and it is what `verifyURL` probes. A dead progressive URL passes the probe, gets
+handed to the browser as a checked URL, and dies a megabyte in. The comment in
+`verify.go` warns about exactly this trap one level up; this is the same trap one
+level down.
 
-**The format list gives no warning.** A video that downloads and a video that
-refuses look identical beforehand: same number of formats, same `ANDROID_VR`
-client, same itag 140 audio track. The difference only appears when the bytes
-are asked for.
-
-## Why
-
-yt-dlp says it plainly in its own debug output:
+What the viewer got, both halves visible in one console:
 
 ```
-[youtube] Detected experiment to bind GVS PO Token to video ID for web_safari client
-[youtube] Some web_safari client https formats have been skipped as they are
-          missing a URL. YouTube is forcing SABR streaming for this client.
+/api/videos/9n4Ui1xT_Sg/instant  403 (Forbidden)
+  → MEDIA_ELEMENT_ERROR: Format error          (refused outright)
+/api/videos/b_5Z7D-g4fA/instant  403 (Forbidden)
+  → PIPELINE_ERROR_READ: FFmpegDemuxer: data source error   (died mid-file)
 ```
 
-See [yt-dlp#12482](https://github.com/yt-dlp/yt-dlp/issues/12482).
+## What the old measurement got wrong
 
-YouTube is moving playback onto **SABR**, its own streaming protocol, and
-withdrawing the per-format URLs that anything outside its player used to fetch.
-The URLs that still appear serve roughly the first two megabytes and then refuse
-the rest.
+- It used **yt-dlp 2026.07.04**, the current stable, which is a month old and
+  resolves URLs that no longer serve. A nightly resolves adaptive tracks that do.
+- It read the format list by exact id, so `140` was reported as "no URL" on
+  videos with more than one audio track — where it appears as `140-0`, `140-1`,
+  one per language. The audio was there the whole time.
+- It concluded "SABR has taken everything". SABR has taken **progressive**.
+  Adaptive H.264 and AAC still serve, at the head and the middle alike.
 
-**The trap:** the client that still yields URLs (`android_vr`) does not take a
-PO token, and the client that takes one (`web_safari`) yields no URLs. There is
-no combination of the two that works.
+The `android_vr` / `web_safari` PO-token trap it describes is real and unchanged.
+It just is not what was stopping playback here.
 
-## One cause, not four bugs
+## What changed as a result
 
-This explains everything chased during the week of 2026-08-16:
+- **yt-dlp is a pinned nightly.** `YTDLP_PATH` in `scripts/dev.sh`, read by
+  `ytdlp/session.go` and applied with `SetExecutable`. Pinned, not tracked: a
+  nightly that upgrades itself is a stack that breaks on a morning nobody
+  touched it. The stable install stays where it is as the way back.
 
-- a live mux whose audio stopped at 0.79s while the picture ran on — ffmpeg had
-  read one 16 KB buffer and could not get the next
-- resolved URLs "born dead", refusing every request
-- a depth limit around 2 MiB on URLs that did serve
-- HLS playing from the start but failing on a far seek
+  ```sh
+  pipx install --pip-args=--pre "yt-dlp==2026.8.17.73947.dev0"
+  ```
 
-Several fixes written before this was understood treat symptoms. They are not
-harmful, but they are not the cure either.
+- **The instant tier is no longer offered**, and no longer resolved for. The
+  route and its proxy stay: upstream stopped serving what they fetch, which is
+  not the same as the code being wrong.
+- **The muxed tier opens every video**, H.264 + AAC, `-c copy`, 720p on auto and
+  1080p when pinned.
+- **A player that gave up unlocks when the file lands.** `loadFailed` was never
+  cleared, so a refused mux ended the video for as long as the page stayed open
+  — while the download beside it finished in a median of thirteen seconds.
 
-## Everything tried
+## Measured on the running stack
 
-All measured, none worked.
-
-| attempt | result |
-|---|---|
-| Six InnerTube clients (`android`, `ios`, `web`, `tv_embedded`, `web_embedded`, `mweb`) | no URLs at all — SABR only |
-| YouTube.js | no URLs for any client, including `android_vr` — strictly less than yt-dlp |
-| ytdlp-nodejs | wraps the same yt-dlp binary, so it fails identically |
-| Invidious | a realtime proxy, a different model; its useful half (a manifest) is built here already |
-| bgutil PO token provider | installed and generating tokens — still 403 |
-| Request headers exactly as yt-dlp sends them | identical results with and without |
-| `&range=` query instead of the `Range` header | 403 |
-| One long open-ended read instead of many bounded ones | 403 immediately |
-| HLS instead of a server-side mux | same bytes, same refusal |
-
-The PO token provider is installed and left in place, because it is what a
-future SABR-capable yt-dlp will want:
-
-- provider: `~/.local/share/bgutil-pot`
-- plugin: `~/.config/yt-dlp/plugins/bgutil`
-
-## What still works
-
-- **Every video already on disk**, in full, with seeking.
-- Feed, ranking, search, history, watch progress.
-- Scanning and metadata: the library keeps learning about new videos. It simply
-  cannot fetch their bytes.
-
-## What to do
-
-```sh
-brew upgrade yt-dlp
-yt-dlp -f bestaudio -o /tmp/x.m4a "https://www.youtube.com/watch?v=<any-video>"
+```
+GET /api/videos/{id}/stream            → remux only, height 720
+GET /api/videos/{id}/remux             → 200, 102 MB in 40s
+    h264 720p + aac, video ends 2254.29s, audio 2253.91s   (full length, both tracks)
+GET /api/videos/{id}/remux?height=1080 → 200, 124 MB in 30s, h264 1080p + aac
+GET /api/videos/{id}/remux/start?t=600 → {"start":598.541667}
 ```
 
-Every few days. A file appearing means SABR support has landed; at that point
-the HLS work on `tier-ladder-smoothness` can be tested and wired in.
+The audio that used to stop at 0.79s runs the whole 37 minutes.
 
-Writing SABR here is not a realistic answer. It is a protobuf request format, a
-UMP-framed response, and a BotGuard attestation token — the yt-dlp project is
-working through it with many contributors, and a private implementation would
-break at YouTube's next change.
+## The pin went back to a release (2026-08-20)
+
+This section's first instruction used to be "check for a stable release carrying
+the same fix, then move to it". `2026.8.19` is that release — published
+2026-08-19T23:48Z, two days after the nightly this was pinned to, carrying the
+same YouTube player-client work (`#17261` player client maintenance, `#17185`
+client versions, `#17461` drop `android_vr`, `#17462` `web_embedded`
+fallbacks).
+
+Both binaries, one sitting, five videos of this library, freshly resolved URLs,
+one request each — the same probe as the table above:
+
+| track | nightly 2026.8.17.73947.dev0 | stable 2026.8.19 |
+|---|---|---|
+| itag 136 — 720p H.264 | 206 head, 206 middle | 206 head, 206 middle |
+| itag 137 — 1080p H.264 | 206 head, 206 middle | 206 head, 206 middle |
+| itag 140 — AAC audio | 206 head, 206 middle | 206 head, 206 middle |
+| itag 18 — 360p progressive | **206 head, 403 middle, 5 of 5** | **not published at all, 5 of 5** |
+| `-f 137+140`, first 10s | rc=0, 9s | rc=0, 9s, byte-identical file |
+
+Where a video published no 136/137/140 at all it published none on either
+binary — the same videos, the same gaps. Nothing regressed and nothing new
+appeared.
+
+**The interesting row is itag 18.** Upstream now declines to offer the format
+rather than offering one that dies a megabyte in. That is this document's own
+conclusion reached from the other side, and it is the strongest evidence yet
+that the withdrawal is deliberate and not a passing refusal wave.
+
+- **What did not change.** The scanner's `This channel does not have a videos
+  tab` failures are identical on both binaries; those channels publish no Videos
+  tab, and `#17386` is not about them. Recorded so nobody measures it twice.
+- **The way back is one variable.** The nightly is still installed beside it
+  (`pipx install --suffix=-stable` put the two side by side), so
+  `YTDLP_PATH=$HOME/.local/bin/yt-dlp` restores the previous stack exactly.
+
+## What to watch
+
+- **The probe.** `verifyURL` reads the head only, which is what let dead
+  progressive URLs through. It is not currently wrong for the adaptive tracks —
+  they answered consistently at both depths — but it is one measurement away
+  from being wrong again.
+- **A release is not a promise.** If playback breaks with no change here, roll
+  `YTDLP_PATH` back to the nightly and measure before changing anything else.
+
+## Still true from before
+
+- Writing SABR here is not a realistic answer: protobuf request format, UMP
+  framing, BotGuard attestation, and a private implementation would break at
+  YouTube's next change.
+- The bgutil PO token provider is installed and left in place for the day a
+  SABR-capable yt-dlp wants it — provider `~/.local/share/bgutil-pot`, plugin
+  `~/.config/yt-dlp/plugins/bgutil`.
