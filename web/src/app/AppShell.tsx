@@ -179,10 +179,6 @@ function AppShellInner() {
         <BackBar title={bareTitle(pathname) ?? ''} showTitle fallback="/" />
       )}
 
-      {/* Above everything, and only when a session has actually ended: the
-          household's subscriptions stop updating silently otherwise. */}
-      <CookieExpiryBanner />
-
       <TopBar
         opacity={chromeHidden ? fade : 1}
         onToggleSidebar={() => {
@@ -241,6 +237,24 @@ function AppShellInner() {
         )}
         style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >
+        {/* Only when a session has actually ended: the household's subscriptions
+            stop updating silently otherwise.
+
+            Inside the scroller, which is the one place that already reserves
+            room for the bar. It used to sit in the shell's flow above `<main>`,
+            "above everything" — but the bar is `absolute top-0` and moves for
+            nothing, so the banner took 44px at the very top and was then
+            painted over by it. Measured: the banner at top=0 h=44, the header
+            at top=0 h=56 over it, and `<main>` starting at 44.
+
+            Two faults from one placement. Every page began 44px low, which is
+            the gap a viewer sees under the search bar — on the phone and the
+            desktop alike, since it has nothing to do with the safe area. And
+            the warning was invisible: this household's session expired on
+            2026-08-16 and nothing said so for five days, which is precisely
+            what this component exists to prevent. */}
+        <CookieExpiryBanner />
+
         {/* The page underneath, and — when there is no layer over it — simply
             the page.
 
