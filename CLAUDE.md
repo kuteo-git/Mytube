@@ -376,6 +376,20 @@ video B → gainB ─┘                          └→ convolver → wet ─�
 - Bands are `lowshelf` 32 Hz, `peaking` 64 Hz–8 kHz at `Q = √2`, `highshelf` 16 kHz. Peaking at the extremes would leave the floor and ceiling unmoved. Preamp only ever **cuts** (−12…0 dB): it is the headroom the boosts are paid for, and every preset ships with its own.
 - "Off" is every filter at 0 dB, **not** a disconnected chain — a biquad at unity is transparent, so on and off cannot fail differently.
 - **On iOS, native fullscreen bypasses Web Audio entirely** and the EQ silently stops applying. The panel says "EQ off in fullscreen" while `webkitPresentationMode === 'fullscreen'` — a state-driven label, because this is a question that only occurs to someone at the moment the sound stops changing.
+- **On iOS, HLS never reaches Web Audio either — by any road** (2026-08-21). Measured on the household's iPhone (iOS 18.7) with one page, one graph, one `AnalyserNode`, changing only what the element was playing:
+
+  | source | signal in the graph |
+  |---|---|
+  | ordinary MP4 from disk | **0.0806** |
+  | HLS played natively | **0.0000** |
+  | HLS played through hls.js | **0.0000** |
+
+  - **The third reading is the one that settles it**, and it was nearly missed. A silent fall back to native playback would look identical, so the element was asked what it was actually reading: `blob (MSE)`. hls.js really was the source. So this is not a native-HLS limitation that a library routes around — it is HLS on this platform, and **nothing can fix it**. Desktop Chrome through hls.js reads 0.1378 on the same page, so the equaliser must not be switched off on the strength of another platform's fault.
+  - **`createMediaElementSource` still succeeds.** Nothing throws, `isAttached` says yes, and the gain node is wired to nothing — which is why the fallback that already existed for browsers without Web Audio never fired.
+  - **The consequence is wider than the equaliser**: every node in the graph is inert for that stretch, so the room, the master gain and narration's ducking are too. Volume moved off `element.volume` into a gain node deliberately, and on a phone mid-download that made the volume slider a dead control — unnoticed only because a phone has buttons of its own. `bypassesWebAudio(url)` is now asked per layer alongside `isAttached`, and volume falls back to `element.volume` when the graph carries nothing.
+  - **It lasts until the download lands** — a median of thirteen seconds — after which the local file plays and everything works again. The panel says "EQ off while the video is still downloading" meanwhile, for the same reason as the fullscreen label.
+  - **hls.js does run on iOS**, contrary to what this file said for a day: iOS has `ManagedMediaSource` and hls.js prefers it (`getMediaSource(preferManagedMediaSource = true)`). It plays, it seeks, it reads the ladder. It simply does not restore Web Audio, so there is no reason to spend 179 kB and the battery on it there.
+  - `web/public/hls-eq-check.html` is the page these numbers came from. Kept, because this question returns with every iOS release, and because reading a library's source is not the same as playing a video on the device — which is how the wrong answer was reached three times in one afternoon.
 - **Sound has its own button in the control bar, left of the gear** (`SlidersVertical`, `aria-label="Audio"`). The gear holds what belongs to *this video* — rendition, subtitles, reading them aloud; the equaliser and the room belong to the speakers the viewer is sitting in front of. They also outgrew a menu row: ten sliders, a preamp, four rooms and a mix pushed everything else on the gear below the fold on a phone. `SettingsMenu` takes `icon`/`label` and is no longer "the gear"; everything reusable in it is below the button (portal out of `overflow-hidden`, measured anchoring, dropdown-or-sheet, outside-press). The gear keeps its original condition — without it, moving the EQ out would leave it opening on nothing.
 
 #### Environment (reverb)

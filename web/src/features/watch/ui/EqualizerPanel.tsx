@@ -19,6 +19,7 @@ import {
   type ReverbSettings,
 } from '@/features/watch/application/reverb-presets'
 import type { AudioSettings } from '@/features/watch/application/audio-prefs'
+import { bypassesWebAudio } from '@/features/watch/application/hls-source'
 
 /**
  * The equaliser and the room, as they appear behind the player's Audio button.
@@ -32,13 +33,29 @@ export function EqualizerSetting({
   audio,
   onChange,
   element,
+  source,
 }: {
   audio: AudioSettings
   onChange: (next: AudioSettings) => void
   /** The video in front, watched only to know whether it went full screen. */
   element: HTMLVideoElement | null
+  /**
+   * What the front layer is playing, which decides whether the graph carries
+   * its sound at all. See `bypassesWebAudio`.
+   */
+  source?: string
 }) {
-  const bypassed = useNativeFullscreen(element)
+  // Two ways to end up shaping nothing, and the viewer needs telling either
+  // way: this panel is the one place where saying nothing is indistinguishable
+  // from being broken. Fullscreen is the old one; a phone streaming HLS is the
+  // one measured on 2026-08-21, and it lasts only until the download lands.
+  const inFullscreen = useNativeFullscreen(element)
+  const whileStreaming = bypassesWebAudio(source)
+  const bypassed = inFullscreen || whileStreaming
+  const bypassReason = inFullscreen
+    ? 'EQ off in fullscreen'
+    : 'EQ off while the video is still downloading'
+  const bypassAside = inFullscreen ? 'Also off in fullscreen' : 'Also off while downloading'
   const settings = audio.eq
   const reverb = audio.reverb
   const setEq = (next: EqSettings) => onChange({ ...audio, eq: next })
@@ -98,7 +115,7 @@ export function EqualizerSetting({
           */}
           {bypassed && (
             <p className="pb-2 text-xs text-brand" role="status">
-              EQ off in fullscreen
+              {bypassReason}
             </p>
           )}
 
@@ -268,7 +285,7 @@ export function EqualizerSetting({
         </div>
         {bypassed && (
           <p className="pt-1 text-[10px] text-brand" role="status">
-            Also off in fullscreen
+            {bypassAside}
           </p>
         )}
       </li>

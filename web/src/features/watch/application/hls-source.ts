@@ -246,3 +246,35 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
     },
   }
 }
+
+/**
+ * Does this browser leave the graph empty while playing this source?
+ *
+ * Measured on iPhone (iOS 18.7, 2026-08-21), one page, one audio graph, one
+ * analyser, three sources — the only thing changed between readings was what
+ * the element was playing:
+ *
+ *	ordinary MP4 from disk          signal in graph = 0.0806
+ *	HLS played natively             signal in graph = 0.0000
+ *	HLS played through hls.js       signal in graph = 0.0000
+ *
+ * The third reading is the one that settles it. `hls.js` genuinely was the
+ * source — the element reported `blob (MSE)`, checked precisely because a
+ * silent fall back to native playback would have looked identical and would
+ * have made this a measurement of native HLS twice over. So it is not native
+ * HLS that Web Audio cannot reach: it is HLS on this platform, by either road,
+ * and no library can fix it. `createMediaElementSource` still *succeeds* —
+ * nothing throws — which is why the player's existing fallback never fired.
+ *
+ * The consequence is wider than the equaliser, and worse: every node in the
+ * graph is inert for that stretch, so the room, the volume gain and narration's
+ * ducking are too. Volume moved off `element.volume` into a gain node
+ * deliberately (§5); on a phone mid-download that gain node is attached to
+ * nothing, and the slider is a dead control.
+ *
+ * Reads the URL rather than the tier so the two layers can be asked separately
+ * — during a handover they are playing different things.
+ */
+export function bypassesWebAudio(url: string | undefined): boolean {
+  return isHLSPlaylist(url) && canPlayHLSNatively()
+}

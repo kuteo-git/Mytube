@@ -33,6 +33,7 @@ import {
   type HLSAttachment,
   hlsCapabilities,
   canSelectHLSLevel,
+  bypassesWebAudio,
   needsHLSLibrary,
 } from '@/features/watch/application/hls-source'
 import { useDownloadProgress } from '@/features/catalog/application/download'
@@ -538,6 +539,10 @@ export function Player({
   const [srcA, setSrcA] = useState<string | undefined>(undefined)
   const [srcB, setSrcB] = useState<string | undefined>(undefined)
   const frontSrc = frontIsA ? srcA : srcB
+  // What the hidden layer is loading. Needed because whether the audio graph
+  // can carry a layer depends on what that layer is playing, and during a
+  // handover the two layers are playing different things.
+  const backSrcNow = frontIsA ? srcB : srcA
   const setBackSrc = frontIsA ? setSrcB : setSrcA
   const [playing, setPlaying] = useState(false)
   const [volume, setVolume] = useState(() => {
@@ -935,24 +940,34 @@ export function Player({
   useEffect(() => {
     const el = front()
     const hidden = back()
+    // Whether the graph is actually carrying each layer's sound, which is not
+    // the same as whether it was attached. On iOS an HLS source never reaches
+    // Web Audio — measured, through hls.js as much as natively — while
+    // `createMediaElementSource` still succeeds, so the attachment looks
+    // healthy and the gain node is wired to nothing. Asked per layer, because
+    // during a handover the two are playing different things.
+    const graphHasFront = isAttached(el) && !bypassesWebAudio(frontSrc)
+    const graphHasHidden = isAttached(hidden) && !bypassesWebAudio(backSrcNow)
+
     if (hidden) {
-      if (isAttached(hidden)) setElementGain(hidden, 0)
+      if (graphHasHidden) setElementGain(hidden, 0)
       else hidden.volume = 0
     }
     if (!el) return
     el.muted = muted
-    // The fallback is not decoration. A browser with no Web Audio — an older
-    // television, which is where this is headed — attaches nothing, and then a
-    // gain node nobody built would leave the volume slider inert and the video
-    // permanently at full. Whichever path this element is actually on is the one
-    // that gets the number.
-    if (isAttached(el)) setElementGain(el, levels.video)
+    // The fallback is not decoration, and it now covers two cases rather than
+    // one. A browser with no Web Audio — an older television, which is where
+    // this is headed — attaches nothing. And a phone streaming HLS attaches
+    // perfectly well and carries no signal, which left the volume slider inert
+    // on every iPhone for the seconds before a download landed: a dead control,
+    // unnoticed only because a phone has buttons of its own.
+    if (graphHasFront) setElementGain(el, levels.video)
     else el.volume = levels.video
     // `playable` is in here because it is what puts the two layers into the tree.
     // A freshly attached element's gain starts at zero — so that a hidden layer
     // is never heard on the way in — and if this did not run again after that,
     // the fresh element would be the one in front and permanently silent.
-  }, [levels.video, muted, front, back, frontSrc, frontIsA, playable])
+  }, [levels.video, muted, front, back, frontSrc, backSrcNow, frontIsA, playable])
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
@@ -2863,7 +2878,12 @@ export function Player({
               label="Audio"
               wide
             >
-              <EqualizerSetting audio={audio} onChange={setAudio} element={front()} />
+              <EqualizerSetting
+                audio={audio}
+                onChange={setAudio}
+                element={front()}
+                source={frontSrc}
+              />
             </SettingsMenu>
           )}
 

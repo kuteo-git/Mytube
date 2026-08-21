@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HLS + EQ check</title>
+    <style>
+      body {
+        font: 15px/1.5 -apple-system, system-ui, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #0f0f0f;
+        color: #f1f1f1;
+      }
+      video { width: 100%; background: #000; border-radius: 8px; }
+      h4 { margin: 18px 0 6px; }
+      button {
+        font: inherit; padding: 12px 18px; margin: 6px 6px 0 0; border: 0;
+        border-radius: 999px; background: #272727; color: #f1f1f1;
+      }
+      button.on { background: #3ea6ff; color: #0f0f0f; font-weight: 600; }
+      #log {
+        margin-top: 12px; padding: 10px; background: #181818; border-radius: 8px;
+        white-space: pre-wrap; word-break: break-all;
+        font: 12px/1.45 ui-monospace, Menlo, monospace;
+      }
+      .ok { color: #6ee787 } .bad { color: #ff7b72 } .note { color: #aaa }
+    </style>
+  </head>
+  <body>
+    <!--
+      Does the equaliser work on this device, and does it depend on how HLS is
+      being played?
+
+      The question this exists to settle: on iOS the app plays HLS natively, and
+      Safari does not route native HLS through Web Audio — so the equaliser,
+      the volume gain and narration's ducking all stop applying while a video is
+      streaming. The claim that nothing could be done about it rested on iOS
+      having no MediaSource. It has `ManagedMediaSource`, and hls.js prefers it:
+
+          const mms = (preferManagedMediaSource || !self.MediaSource)
+                      && self.ManagedMediaSource;
+
+      So hls.js should run here, the audio should go through MSE, and Web Audio
+      should get a signal. Should. That is what this page is for — the last
+      confident claim in this area was wrong, and reading a library's source is
+      not the same as playing a video on the device.
+
+      Two elements, because `createMediaElementSource` can be called once per
+      element and never undone. One is played natively, one through hls.js, and
+      both are routed through the same graph with the same filter.
+
+      The filter is deliberately crude: a lowpass at 320 Hz. A gentle shelf can
+      be argued about; a video that suddenly sounds like it is playing through a
+      wall cannot.
+    -->
+    <h3 style="margin: 0 0 4px">HLS + EQ check</h3>
+    <p class="note" style="margin: 0 0 12px">
+      Play one, then press <b>Muffle</b>. If the sound changes, Web Audio has the
+      signal and the equaliser can work. If it does not, it cannot.
+    </p>
+
+    <h4>1. Native HLS — how the app plays on iPhone today</h4>
+    <video id="native" playsinline controls></video>
+    <button id="playNative">Play native</button>
+
+    <h4>2. hls.js — through ManagedMediaSource</h4>
+    <video id="lib" playsinline controls></video>
+    <button id="playLib">Play with hls.js</button>
+
+    <h4>3. An ordinary file on disk — the case the equaliser is known to work in</h4>
+    <video id="file" playsinline controls></video>
+    <button id="playFile">Play the downloaded file</button>
+
+    <h4>4. The test</h4>
+    <button id="muffle">Muffle (lowpass 320 Hz)</button>
+    <button id="seek">Seek +90s</button>
+    <div id="road" style="margin-top:10px;font:13px ui-monospace,Menlo,monospace;color:#aaa">source road: —</div>
+    <div id="level" style="margin-top:10px;font:13px ui-monospace,Menlo,monospace">signal in graph: —</div>
+    <div id="log">ready</div>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search)
+      const id = params.get('v') || '6JSXvUV4Uns'
+      const url = `/api/videos/${id}/hls/master.m3u8`
+      const out = document.getElementById('log')
+      const lines = []
+      const say = (t, cls = '') => {
+        lines.push(`<span class="${cls}">${((performance.now() / 1000).toFixed(1) + 's').padStart(6)}  ${t}</span>`)
+        out.innerHTML = lines.slice(-30).join('\n')
+      }
+
+      say(`ManagedMediaSource: ${typeof ManagedMediaSource}  MediaSource: ${typeof MediaSource}`, 'note')
+      say(`url: ${url}`, 'note')
+
+      // One graph, both elements, exactly as the app builds it.
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'lowpass'
+      // Wide open until asked: a lowpass at 22 kHz is transparent, so "off" and
+      // "on" are the same chain rather than two different signal paths.
+      filter.frequency.value = 22050
+
+      // Whether any signal reaches the graph at all, as a number.
+      //
+      // The first version of this page asked the viewer to listen, and a
+      // listener cannot tell "the audio never entered the graph" from "the
+      // filter is wired wrong". Both sound like nothing changing. An analyser
+      // separates them: if the level is zero while a video is plainly audible,
+      // the sound is reaching the speaker by some other road and the graph is
+      // empty — which is a fact about the browser. If the level moves and the
+      // filter still does nothing, the fault is this page.
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      filter.connect(analyser)
+      analyser.connect(ctx.destination)
+      const buf = new Float32Array(analyser.fftSize)
+      let peak = 0
+      setInterval(() => {
+        analyser.getFloatTimeDomainData(buf)
+        let sum = 0
+        for (const v of buf) sum += v * v
+        const rms = Math.sqrt(sum / buf.length)
+        peak = Math.max(peak * 0.9, rms)
+        document.getElementById('level').textContent =
+          'signal in graph: ' + peak.toFixed(4) + (peak > 0.001 ? '  ← audio IS in the graph' : '  ← nothing')
+        if (params.get('report')) console.log('LVL', peak.toFixed(4), ctx.state)
+        // What each element is *actually* reading from.
+        //
+        // The controls look identical for both, because they are: `controls` on
+        // a <video> draws the browser's own, whichever road the bytes took. So
+        // the only way to tell hls.js from a silent fall back to native
+        // playback is the source itself — MSE hands the element a `blob:` URL
+        // or a MediaSource object, and native playback leaves the .m3u8 there.
+        //
+        // Worth measuring rather than assuming: if hls.js had quietly failed to
+        // attach and Safari had played the playlist natively, the reading taken
+        // from it would have been a second measurement of native HLS wearing
+        // the other one's name.
+        const road = (el) =>
+          el.srcObject ? 'MediaSource object' :
+          !el.currentSrc ? '—' :
+          el.currentSrc.startsWith('blob:') ? 'blob (MSE)' :
+          el.currentSrc.endsWith('.m3u8') ? 'the .m3u8 itself (NATIVE)' : 'a file'
+        const roads = 'hls.js element reads: ' + road(lib) + '   |   native element reads: ' + road(native)
+        document.getElementById('road').textContent = roads
+        if (params.get('report')) console.log('ROAD', roads.replace(/\|/g, '/'))
+      }, 200)
+
+      const attach = (el, name) => {
+        try {
+          const src = ctx.createMediaElementSource(el)
+          src.connect(filter)
+          say(`${name}: attached to the graph`, 'ok')
+        } catch (e) {
+          say(`${name}: could NOT attach — ${e.name}`, 'bad')
+        }
+      }
+      const native = document.getElementById('native')
+      const lib = document.getElementById('lib')
+      const file = document.getElementById('file')
+      attach(native, 'native element')
+      attach(lib, 'hls.js element')
+      attach(file, 'file element')
+
+      let current = null
+      const watch = (el, name) => {
+        for (const ev of ['playing', 'error', 'waiting']) {
+          el.addEventListener(ev, () =>
+            say(`${name} ${ev} t=${el.currentTime.toFixed(1)} dur=${Number.isFinite(el.duration) ? el.duration.toFixed(1) : el.duration}`,
+              ev === 'error' ? 'bad' : ev === 'playing' ? 'ok' : ''))
+        }
+      }
+      watch(native, 'native')
+      watch(lib, 'hls.js')
+      watch(file, 'file')
+
+      // The control. If this reads zero too, nothing about HLS is to blame and
+      // the graph has never carried video audio on this device at all — which
+      // would mean the volume slider, the room and narration's ducking have all
+      // been inert here as well, and only the equaliser was noticed.
+      document.getElementById('playFile').onclick = async () => {
+        await ctx.resume()
+        native.pause(); lib.pause()
+        current = file
+        file.src = `/media/${id}/1080p.mp4`
+        file.play().then(() => say('file play() accepted', 'ok'),
+          (e) => say(`file play() refused: ${e.name}`, 'bad'))
+      }
+
+      document.getElementById('playNative').onclick = async () => {
+        await ctx.resume()
+        lib.pause()
+        current = native
+        native.src = url
+        native.play().then(() => say('native play() accepted', 'ok'),
+          (e) => say(`native play() refused: ${e.name}`, 'bad'))
+      }
+
+      document.getElementById('playLib').onclick = async () => {
+        await ctx.resume()
+        native.pause()
+        current = lib
+        const { default: Hls } = await import('/node_modules/hls.js/dist/hls.mjs')
+        say(`Hls.isSupported() = ${Hls.isSupported()}`, Hls.isSupported() ? 'ok' : 'bad')
+        if (!Hls.isSupported()) return
+        const hls = new Hls()
+        hls.on(Hls.Events.ERROR, (_e, d) => say(`hls.js ${d.type} ${d.details} fatal=${d.fatal}`, d.fatal ? 'bad' : 'note'))
+        hls.on(Hls.Events.MANIFEST_PARSED, () =>
+          say(`hls.js levels: ${hls.levels.map((l) => l.height + 'p').join(', ')}`, 'ok'))
+        hls.loadSource(url)
+        hls.attachMedia(lib)
+        lib.play().then(() => say('hls.js play() accepted', 'ok'),
+          (e) => say(`hls.js play() refused: ${e.name}`, 'bad'))
+      }
+
+      // `?auto=lib` / `?auto=native` starts one without a press, so this page
+      // can be run headlessly on a desktop to check itself. The question there
+      // is not what it sounds like — it is whether the analyser sees anything,
+      // which is the same question this page asks on a phone.
+      const auto = params.get('auto')
+      if (auto) setTimeout(() => document.getElementById(auto === 'native' ? 'playNative' : 'playLib').click(), 800)
+
+      let muffled = false
+      const button = document.getElementById('muffle')
+      button.onclick = async () => {
+        await ctx.resume()
+        muffled = !muffled
+        filter.frequency.setTargetAtTime(muffled ? 320 : 22050, ctx.currentTime, 0.02)
+        button.classList.toggle('on', muffled)
+        button.textContent = muffled ? 'Muffled — press to clear' : 'Muffle (lowpass 320 Hz)'
+        say(`filter now ${muffled ? '320 Hz (should sound muffled)' : 'wide open'} | audio context ${ctx.state}`)
+      }
+
+      document.getElementById('seek').onclick = () => {
+        if (!current) return say('nothing playing yet')
+        current.currentTime += 90
+        say(`asked for ${current.currentTime.toFixed(1)}`)
+      }
+    </script>
+  </body>
+</html>
