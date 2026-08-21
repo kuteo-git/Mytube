@@ -48,6 +48,23 @@ const hlsHeadBytes = 64 * 1024
 // bounded, and still one request.
 const hlsHeadBytesWide = 512 * 1024
 
+// The top of the HLS ladder.
+//
+// Deliberately not `liveHeight`, which is the muxed tier's and is 720. That
+// number was chosen when a rendition cost an ffmpeg process and the height had
+// to be picked once, on the viewer's behalf, to keep preparation short enough
+// that the stream was ready before they reached its mark.
+//
+// Nothing is prepared here. The browser fetches segments from files YouTube
+// already published, so a second rendition costs one more URL to resolve and
+// the choice between them belongs to the player — which is the whole reason
+// CLAUDE.md §4 wanted HLS: "real ABR at ~0 CPU".
+//
+// 1080 because that is what goes on disk (`DEFAULT_HEIGHT`), so the stream and
+// the file it becomes are the same picture. Above it the disk budget is the
+// argument, not the bandwidth.
+const hlsMaxHeight = int32(1080)
+
 // How long a resolved pair of track URLs is reused.
 //
 // The same reasoning and the same window as the muxer's cache: the playlist is
@@ -63,6 +80,9 @@ type hlsEntry struct {
 type hlsCache struct {
 	mu      sync.Mutex
 	entries map[string]hlsEntry
+	// When this key was last re-resolved after a refusal. Separate from the
+	// entry itself, which is deleted by the re-resolve it is rate-limiting.
+	resolvedAt map[string]time.Time
 }
 
 func (c *hlsCache) get(key string) (domain.MediaTracks, bool) {
@@ -94,6 +114,22 @@ func (c *hlsCache) put(key string, tracks domain.MediaTracks) {
 	}
 }
 
+// mayResolve reports whether this key may be resolved again yet, and records
+// the attempt when it may. One caller wins per cooldown; everyone else reads
+// what it puts back in the cache.
+func (c *hlsCache) mayResolve(key string, cooldown time.Duration) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.resolvedAt == nil {
+		c.resolvedAt = map[string]time.Time{}
+	}
+	if at, ok := c.resolvedAt[key]; ok && time.Since(at) < cooldown {
+		return false
+	}
+	c.resolvedAt[key] = time.Now()
+	return true
+}
+
 func (c *hlsCache) forget(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -121,10 +157,10 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	key := sourceURL + "|" + strconv.Itoa(int(h.liveHeight))
+	key := sourceURL + "|hls|" + strconv.Itoa(int(hlsMaxHeight))
 	tracks, cached := h.hls.get(key)
 	if !cached {
-		tracks, err = resolver.ResolveTracks(ctx, sourceURL, h.liveHeight)
+		tracks, err = resolver.ResolveTracks(ctx, sourceURL, hlsMaxHeight)
 		if err != nil {
 			h.logger.Warn("resolve hls tracks", "video", videoID, "error", err)
 			if h.refuse(w, ctx, sourceURL, videoID, err) {
@@ -134,6 +170,21 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.hls.put(key, tracks)
+
+		// What the ladder came out as, said once per resolve.
+		//
+		// The audio language above all: YouTube auto-dubs, and one video of this
+		// library publishes twenty-one audio tracks at an identical bitrate. A
+		// wrong pick there is not subtly wrong — it is an English video playing
+		// in Arabic — and from the server side it looked exactly like a right
+		// one until this line existed.
+		heights := make([]int, 0, len(tracks.Videos))
+		for _, v := range tracks.Videos {
+			heights = append(heights, v.Height)
+		}
+		h.logger.Info("hls tracks resolved",
+			"video", videoID, "heights", heights,
+			"audio_language", tracks.Audio.Language, "audio_bitrate", tracks.Audio.Bitrate)
 	}
 
 	switch {
@@ -153,23 +204,38 @@ func (h *Handler) writeMasterPlaylist(w http.ResponseWriter, videoID string, tra
 	// on iPhone there is no MediaSource behind it to catch the fall. yt-dlp
 	// says "vp9" and "none" as readily as it says "avc1.4d401f", and neither of
 	// those is an RFC 6381 value.
-	for _, codec := range []string{tracks.Video.Codec, tracks.Audio.Codec} {
-		if !domain.ValidCodec(codec) {
-			h.logger.Warn("hls codec not usable in a playlist",
-				"video", videoID, "video_codec", tracks.Video.Codec, "audio_codec", tracks.Audio.Codec)
-			http.Error(w, "media codec cannot be described", http.StatusBadGateway)
-			return
-		}
+	if !domain.ValidCodec(tracks.Audio.Codec) {
+		h.logger.Warn("hls audio codec not usable in a playlist",
+			"video", videoID, "audio_codec", tracks.Audio.Codec)
+		http.Error(w, "media codec cannot be described", http.StatusBadGateway)
+		return
 	}
 
-	body := domain.MasterPlaylist([]domain.Rendition{{
-		URI:       "video.m3u8",
-		Codecs:    tracks.Video.Codec,
-		Bandwidth: tracks.Video.Bitrate + tracks.Audio.Bitrate,
-		Width:     tracks.Video.Width,
-		Height:    tracks.Video.Height,
-	}}, "audio.m3u8", tracks.Audio.Codec)
-	writePlaylist(w, body)
+	// A rung whose codec cannot be described is dropped rather than taking the
+	// playlist down with it. The ladder is a convenience; the top rung playing
+	// is the requirement.
+	renditions := make([]domain.Rendition, 0, len(tracks.Videos))
+	for _, v := range tracks.Videos {
+		if !domain.ValidCodec(v.Codec) {
+			h.logger.Warn("hls rendition dropped, codec not usable",
+				"video", videoID, "height", v.Height, "codec", v.Codec)
+			continue
+		}
+		renditions = append(renditions, domain.Rendition{
+			URI:       videoTrackName(v) + ".m3u8",
+			Codecs:    v.Codec,
+			Bandwidth: v.Bitrate + tracks.Audio.Bitrate,
+			Width:     v.Width,
+			Height:    v.Height,
+		})
+	}
+	if len(renditions) == 0 {
+		h.logger.Warn("hls no usable rendition", "video", videoID)
+		http.Error(w, "media codec cannot be described", http.StatusBadGateway)
+		return
+	}
+
+	writePlaylist(w, domain.MasterPlaylist(renditions, "audio.m3u8", tracks.Audio.Codec))
 }
 
 func (h *Handler) writeMediaPlaylist(
@@ -250,12 +316,12 @@ func (h *Handler) proxyTrackBytes(
 	// Once, deliberately. A second refusal is a real answer — the wave §4
 	// documents refuses everything from this address for a few minutes — and
 	// asking a third time only adds to whatever count upstream is keeping.
-	if refusedUpstream(err) {
+	if refusedUpstream(err) && h.hls.mayResolve(key, resolveCooldown) {
 		h.logger.Warn("hls segment refused, resolving again",
 			"video", videoID, "kind", kind, "error", err)
 		h.hls.forget(key)
 
-		fresh, resolveErr := resolver.ResolveTracks(r.Context(), sourceURL, h.liveHeight)
+		fresh, resolveErr := resolver.ResolveTracks(r.Context(), sourceURL, hlsMaxHeight)
 		if resolveErr != nil {
 			h.logger.Warn("resolve hls tracks again", "video", videoID, "error", resolveErr)
 			http.Error(w, "cannot read media", http.StatusBadGateway)
@@ -270,6 +336,13 @@ func (h *Handler) proxyTrackBytes(
 	}
 
 	if err != nil {
+		// A request the client abandoned is not a fault. hls.js cancels segment
+		// fetches routinely — on a seek, on a quality change, on tearing down —
+		// and answering those with a 502 filled the log with alarming lines
+		// about a player that was working perfectly.
+		if r.Context().Err() != nil {
+			return
+		}
 		h.logger.Warn("hls segment", "video", videoID, "kind", kind, "error", err)
 		http.Error(w, "cannot read media", http.StatusBadGateway)
 		return
@@ -321,14 +394,41 @@ func fetchRange(ctx context.Context, url string, start, end int64) ([]byte, erro
 	return io.ReadAll(body)
 }
 
+// trackOf resolves a playlist name to the track it stands for.
+//
+// "audio" is the shared sound. A video rung is named by its height —
+// "video-1080", "video-720" — because the master playlist has to point at each
+// one separately and the name is the only thing carrying which. Bare "video" is
+// still accepted and means the best rung: a player that fetched a master
+// playlist written before the ladder existed is still holding that URL.
 func trackOf(tracks domain.MediaTracks, kind string) (domain.MediaTrack, bool) {
-	switch kind {
-	case "video":
-		return tracks.Video, true
-	case "audio":
+	if kind == "audio" {
 		return tracks.Audio, true
 	}
+	if kind == "video" {
+		best := tracks.Best()
+		return best, best.URL != ""
+	}
+	height, ok := strings.CutPrefix(kind, "video-")
+	if !ok {
+		return domain.MediaTrack{}, false
+	}
+	want, err := strconv.Atoi(height)
+	if err != nil {
+		return domain.MediaTrack{}, false
+	}
+	for _, v := range tracks.Videos {
+		if v.Height == want {
+			return v, true
+		}
+	}
 	return domain.MediaTrack{}, false
+}
+
+// videoTrackName is the other direction, and the two must agree: this is what
+// the master playlist writes and `trackOf` reads back.
+func videoTrackName(t domain.MediaTrack) string {
+	return "video-" + strconv.Itoa(t.Height)
 }
 
 func writePlaylist(w http.ResponseWriter, body string) {
@@ -372,9 +472,17 @@ func (e upstreamStatus) Error() string { return fmt.Sprintf("upstream answered %
 // a freshly resolved URL might answer.
 //
 // 403 is the refusal §4 is about and by far the common one; 401 and 410 mean
-// the same thing here — the URL is no longer good — and cost nothing to cover.
+// the same thing here — the URL is no longer good.
+//
+// 5xx joins them on measurement rather than on principle. Observed while
+// watching through the app: `upstream answered 500` on a segment, which reached
+// the browser as a 502, stalled hls.js and paused the picture mid-video. A
+// fresh URL is usually on a different CDN host, which is exactly what a 500
+// from one host wants. Not free — see resolveCooldown — but a stall that fixes
+// itself only when the viewer reloads is not free either.
+//
 // Deliberately not 404 or 416: those are about what was asked for rather than
-// about the credential, and re-resolving would ask again identically.
+// about the URL, and re-resolving would ask again identically.
 func refusedUpstream(err error) bool {
 	var status upstreamStatus
 	if !errors.As(err, &status) {
@@ -382,5 +490,15 @@ func refusedUpstream(err error) bool {
 	}
 	return status.code == http.StatusUnauthorized ||
 		status.code == http.StatusForbidden ||
-		status.code == http.StatusGone
+		status.code == http.StatusGone ||
+		status.code >= http.StatusInternalServerError
 }
+
+// How long after a re-resolve another one is refused, per video.
+//
+// A player fetches a segment every few seconds, and a bad minute upstream
+// refuses all of them. Without this, each failing segment would start its own
+// yt-dlp process — a resolve per segment, against the address §8 risk 6 counts,
+// at the exact moment upstream is already unhappy. One re-resolve serves every
+// request that follows it, because they all read the same cache.
+const resolveCooldown = 15 * time.Second

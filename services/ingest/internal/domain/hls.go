@@ -46,13 +46,39 @@ type MediaTrack struct {
 	Width   int
 	Height  int
 	Bitrate int
+	// Language of the audio, as YouTube tags it ("en-US", "vi"). Empty on video
+	// tracks and on anything published without dubs.
+	//
+	// Carried so the log can say which of twenty-one audio tracks was chosen.
+	// It was not carried before, and the consequence was that a video playing in
+	// Arabic looked identical from the server side to one playing in English.
+	Language string
 }
 
-// MediaTracks is the pair a playlist is built from. YouTube publishes nothing
-// above 360p carrying both, so there is always exactly one of each.
+// MediaTracks is what a playlist is built from: the video renditions on offer,
+// highest first, and the one audio track they all share.
+//
+// One audio track, not one per rendition, because it is literally the same
+// file — YouTube publishes sound once and pairs it with every height. Saying so
+// in the playlist is what lets a player change quality without re-fetching a
+// note of it, and it is why the audio is an `EXT-X-MEDIA` group.
+//
+// `Videos` was a single `Video` while the ladder had one rung. That was
+// inherited from the muxed tier, where a second rendition meant a second ffmpeg
+// process and the height was chosen once, on the viewer's behalf, to keep
+// preparation short. Nothing is prepared here — the browser fetches segments —
+// so the choice can be the browser's, which is what HLS is for.
 type MediaTracks struct {
-	Video MediaTrack
-	Audio MediaTrack
+	Videos []MediaTrack
+	Audio  MediaTrack
+}
+
+// Best is the highest rendition on offer, or the zero track when there is none.
+func (t MediaTracks) Best() MediaTrack {
+	if len(t.Videos) == 0 {
+		return MediaTrack{}
+	}
+	return t.Videos[0]
 }
 
 // ErrNoSegmentIndex means the head handed over did not reach the `sidx` box.
