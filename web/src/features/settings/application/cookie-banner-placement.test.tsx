@@ -27,6 +27,11 @@ import { AppShell } from '@/app/AppShell'
  * So it moves inside the scroller, which is the one place that already reserves
  * room for the bar. CLAUDE.md's note on the chip row says it plainly: the top
  * bar's height belongs in exactly one place, and that place is the scroller.
+ *
+ * And it is narrowed to the settings screens by decision — a full-width bar on
+ * every page costs 44px of every screen to repeat one message. The cost of that
+ * narrowing is named in the last test here rather than left to be rediscovered:
+ * nobody meets this until they go looking.
  */
 
 let state: string
@@ -47,14 +52,16 @@ beforeEach(() => {
   window.localStorage.clear()
 })
 
-function renderShell() {
+function renderShell(at = '/settings') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={[at]}>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<div>a page</div>} />
+            <Route path="/settings" element={<div>settings</div>} />
+            <Route path="/settings/youtube-account" element={<div>account</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -105,6 +112,30 @@ describe('the expired-session banner', () => {
     await waitFor(() => expect(document.querySelector('main')).toBeTruthy())
     // A banner that is up while things work is a banner nobody reads on the day
     // they need to.
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('reaches every settings screen, not just the index', async () => {
+    renderShell('/settings/youtube-account')
+    expect(await screen.findByRole('status')).toBeInTheDocument()
+  })
+
+  /**
+   * The cost of narrowing it, written down rather than left to be found.
+   *
+   * App-wide is what §6b asked for, and the reason is that a dead session stops
+   * the household's subscriptions updating while nothing else says so. Confined
+   * to Settings, this is seen only by somebody already going there — which is
+   * how the previous placement went unnoticed for five days.
+   *
+   * If that turns out to matter, the answer is not to widen this back to a
+   * full-width bar on every page: it is a mark on the way in, on the avatar or
+   * on the Settings row, which costs no layout at all.
+   */
+  it('is not shown on an ordinary page, and that is the trade being made', async () => {
+    renderShell('/')
+
+    await waitFor(() => expect(document.querySelector('main')).toBeTruthy())
     expect(screen.queryByRole('status')).toBeNull()
   })
 })

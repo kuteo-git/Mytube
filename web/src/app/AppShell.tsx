@@ -237,23 +237,24 @@ function AppShellInner() {
         )}
         style={reservedBottom === undefined ? undefined : { paddingBottom: reservedBottom }}
       >
-        {/* Only when a session has actually ended: the household's subscriptions
-            stop updating silently otherwise.
+        {/* Only in the settings screens, and only when a session has actually
+            ended.
 
-            Inside the scroller, which is the one place that already reserves
-            room for the bar. It used to sit in the shell's flow above `<main>`,
-            "above everything" — but the bar is `absolute top-0` and moves for
-            nothing, so the banner took 44px at the very top and was then
-            painted over by it. Measured: the banner at top=0 h=44, the header
-            at top=0 h=56 over it, and `<main>` starting at 44.
+            It was app-wide, which is what §6b asked for and what the component
+            was written to do — a dead session stops the household's
+            subscriptions updating, and nothing else says so. It is narrowed
+            here by decision: a full-width bar on every page costs 44px of every
+            screen for a message that is the same one every time.
 
-            Two faults from one placement. Every page began 44px low, which is
-            the gap a viewer sees under the search bar — on the phone and the
-            desktop alike, since it has nothing to do with the safe area. And
-            the warning was invisible: this household's session expired on
-            2026-08-16 and nothing said so for five days, which is precisely
-            what this component exists to prevent. */}
-        <CookieExpiryBanner />
+            The cost is real and worth naming. Nobody meets this until they open
+            Settings, which is exactly how the last one went unnoticed for five
+            days — it was in the flow above `<main>`, under an `absolute` top
+            bar that painted over it, so it took the room and showed nothing.
+
+            Inside the scroller either way, which is the one place that reserves
+            room for the bar. The height belongs in exactly one place and that
+            place is the scroller; this is the fourth thing to learn it. */}
+        {pathname.startsWith('/settings') && <CookieExpiryBanner />}
 
         {/* The page underneath, and — when there is no layer over it — simply
             the page.
