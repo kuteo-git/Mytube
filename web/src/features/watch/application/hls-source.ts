@@ -132,8 +132,39 @@ export function needsHLSLibrary(url: string | undefined): boolean {
   return isHLSPlaylist(url) && !canPlayHLSNatively()
 }
 
-/** What an attachment hands back so the caller can undo it. */
-export type DetachHLS = () => void
+/**
+ * A live attachment: how to change what it is playing, and how to stop it.
+ *
+ * `selectHeight` is the quality menu made real. Without it the menu is what
+ * CLAUDE.md §5 forbids outright — a control that looks like it does something:
+ * the height was carried as a label on the tier while the URL it pointed at was
+ * the same master playlist either way, so pressing 1080p relabelled a 720p
+ * picture and changed nothing.
+ */
+export interface HLSAttachment {
+  detach: () => void
+  /**
+   * Pin a rendition by height, or `undefined` to let the player choose.
+   *
+   * A height that is not on the ladder falls back to automatic rather than to
+   * the nearest rung: the ladder is what the server resolved for this video,
+   * and silently substituting a different picture than the one asked for is how
+   * a control stops meaning what it says.
+   */
+  selectHeight: (height: number | undefined) => void
+}
+
+/**
+ * Can a rendition be chosen by hand on this browser?
+ *
+ * Only through hls.js. Native HLS gives a page no way to pin a level — Safari
+ * decides from its own bandwidth estimate and there is no standard API to
+ * override it — so on iPhone the honest menu is "Auto" alone. On a LAN that is
+ * no loss: the estimate lands on the top rung.
+ */
+export function canSelectHLSLevel(): boolean {
+  return !canPlayHLSNatively() && canPlayHLSWithLibrary()
+}
 
 /**
  * Play `url` on `el` using hls.js, and hand back the way to stop.
@@ -158,13 +189,13 @@ export type DetachHLS = () => void
  * not load, and it decides that from the element; a second, parallel way of
  * failing would be a second thing to keep in step with it.
  */
-export async function attachHLS(el: HTMLVideoElement, url: string): Promise<DetachHLS> {
+export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSAttachment> {
   const { default: Hls } = await import('hls.js')
 
   if (!Hls.isSupported()) {
     // Nothing can play it here. Said the way the player already listens for.
     el.dispatchEvent(new Event('error'))
-    return () => {}
+    return { detach: () => {}, selectHeight: () => {} }
   }
 
   const hls = new Hls({
@@ -184,10 +215,34 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<Deta
     el.dispatchEvent(new Event('error'))
   })
 
+  // What the viewer asked for, remembered until the levels are known.
+  //
+  // The ladder arrives with the master playlist, which is fetched after this
+  // returns — so a height chosen before then has nowhere to be applied yet, and
+  // applying it on arrival is the difference between the menu working and the
+  // menu working only if you press it twice.
+  let wanted: number | undefined
+  const apply = () => {
+    if (wanted === undefined) {
+      hls.currentLevel = -1
+      return
+    }
+    const index = hls.levels.findIndex((l) => l.height === wanted)
+    // -1 is automatic, which is the right answer for a height this video does
+    // not publish: better the player's own choice than a rendition nobody asked
+    // for wearing the label of one they did.
+    hls.currentLevel = index
+  }
+  hls.on(Hls.Events.MANIFEST_PARSED, apply)
+
   hls.loadSource(url)
   hls.attachMedia(el)
 
-  return () => {
-    hls.destroy()
+  return {
+    detach: () => hls.destroy(),
+    selectHeight: (height) => {
+      wanted = height
+      if (hls.levels.length > 0) apply()
+    },
   }
 }

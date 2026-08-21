@@ -30,8 +30,9 @@ import {
 } from '@/features/watch/application/player-source'
 import {
   attachHLS,
-  type DetachHLS,
+  type HLSAttachment,
   hlsCapabilities,
+  canSelectHLSLevel,
   needsHLSLibrary,
 } from '@/features/watch/application/hls-source'
 import { useDownloadProgress } from '@/features/catalog/application/download'
@@ -287,7 +288,10 @@ const SYSTEM_LETGO_CEILING_MS = 1500
 function useAttachedHLS(
   ref: React.RefObject<HTMLVideoElement | null>,
   src: string | undefined,
+  height: number | undefined,
 ) {
+  const attachment = useRef<HLSAttachment | undefined>(undefined)
+
   useEffect(() => {
     const el = ref.current
     if (!el || !src || !needsHLSLibrary(src)) return
@@ -297,20 +301,33 @@ function useAttachedHLS(
     // stops an attachment nobody wants any more from starting, and the detach
     // below is what stops the one that did start.
     let cancelled = false
-    let detach: DetachHLS | undefined
-    void attachHLS(el, src).then((teardown) => {
+    void attachHLS(el, src).then((handle) => {
       if (cancelled) {
-        teardown()
+        handle.detach()
         return
       }
-      detach = teardown
+      attachment.current = handle
+      // Apply whatever was already chosen. The viewer may have pinned a height
+      // on the previous video, and the menu is read before this resolves.
+      handle.selectHeight(heightRef.current)
     })
 
     return () => {
       cancelled = true
-      detach?.()
+      attachment.current?.detach()
+      attachment.current = undefined
     }
   }, [ref, src])
+
+  // Kept in a ref as well, so the attachment above can read the current choice
+  // without this effect being torn down and rebuilt every time it changes —
+  // which would drop the buffer and restart the video to change a rendition.
+  const heightRef = useRef(height)
+  heightRef.current = height
+
+  useEffect(() => {
+    attachment.current?.selectHeight(height)
+  }, [height])
 }
 
 export function Player({
@@ -416,6 +433,14 @@ export function Player({
   const queryClient = useQueryClient()
 
   const [quality, setQuality] = useQualityPreference()
+  // The rendition the viewer pinned, or undefined for "let the player choose".
+  //
+  // Only meaningful where a level can actually be selected — through hls.js.
+  // Native HLS offers a page no way to pin one, so on iPhone this stays
+  // undefined and the menu says so rather than offering a control that cannot
+  // act (CLAUDE.md §5).
+  const pinnedHeight =
+    quality === 'high' && canSelectHLSLevel() ? PINNED_HEIGHT : undefined
   // After the preference, which it now reads: pinning the high rendition
   // changes what the muxed tier asks the server for.
   const tiers = useMemo(() => availableTiers(sources, quality), [sources, quality])
@@ -1158,8 +1183,12 @@ export function Player({
   //
   // Nothing happens here on Safari or iOS. There the playlist is an ordinary
   // `src` and the browser does all of this itself.
-  useAttachedHLS(videoARef, srcA)
-  useAttachedHLS(videoBRef, srcB)
+  //
+  // The height is what the quality menu chose, or undefined for automatic.
+  // Changing it moves the ladder without reloading anything: hls.js switches
+  // rendition at the next segment boundary.
+  useAttachedHLS(videoARef, srcA, pinnedHeight)
+  useAttachedHLS(videoBRef, srcB, pinnedHeight)
 
   // What this browser says it can play, said once.
   //
@@ -1948,18 +1977,20 @@ export function Player({
   // be delivered is worse than one that is missing.
   const qualityOptions = useMemo(() => {
     const options: { value: QualityChoice; label: string }[] = [{ value: 'auto', label: 'Auto' }]
-    // Labelled with what pressing it delivers, not with what is on screen now:
-    // the streamed tier is served at the server's height under auto and at the
-    // top rendition once pinned, so reading the label off the current tier
-    // promised 720p and produced 1080p.
+    // Offered only where pressing it does something.
     //
-    // "Low" is gone with the progressive rendition it named. There is no
-    // smaller thing left to offer, and a menu entry that cannot be delivered is
-    // worse than one that is missing.
-    const high = tiers.find((t) => t.name === 'local' || t.name === 'hls')
-    if (high) {
-      const height = high.name === 'local' ? (high.height ?? remuxLabelHeight) : PINNED_HEIGHT
-      options.push({ value: 'high', label: `${height}p` })
+    // This was a dead button and it is worth saying how: the height was carried
+    // as a label on the tier, while the URL it pointed at was the same master
+    // playlist either way. Pressing 1080p relabelled a 720p picture. The
+    // playlist now describes a real ladder and hls.js can be told which rung —
+    // but only hls.js can. Native HLS gives a page no way to pin a level, so on
+    // Safari and iOS the honest menu is Auto alone, and on a LAN that costs
+    // nothing: the bandwidth estimate lands on the top rung anyway.
+    //
+    // "Low" is gone with the progressive rendition it named.
+    const streamed = tiers.find((t) => t.name === 'hls')
+    if (streamed && canSelectHLSLevel()) {
+      options.push({ value: 'high', label: `${PINNED_HEIGHT}p` })
     }
     return options
   }, [tiers])

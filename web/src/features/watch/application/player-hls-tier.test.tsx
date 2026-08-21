@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/AppShell'
@@ -31,13 +31,23 @@ const REMUX_URL = '/api/videos/abc/remux'
 const loadSource = vi.fn()
 const attachMedia = vi.fn()
 const destroy = vi.fn()
+/** The rung hls.js was told to play; -1 is automatic. */
+let currentLevel = -1
 
 vi.mock('hls.js', () => {
   class FakeHls {
     static isSupported() {
       return true
     }
-    static Events = { ERROR: 'hlsError' }
+    static Events = { ERROR: 'hlsError', MANIFEST_PARSED: 'hlsManifest' }
+    // The ladder the server resolved for this video, highest first.
+    levels = [{ height: 1080 }, { height: 720 }, { height: 480 }]
+    set currentLevel(v: number) {
+      currentLevel = v
+    }
+    get currentLevel() {
+      return currentLevel
+    }
     on() {}
     loadSource(url: string) {
       loadSource(url)
@@ -137,6 +147,7 @@ beforeEach(() => {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
   })
   ;(window as unknown as Record<string, unknown>).MediaSource = function () {}
+  currentLevel = -1
   loadSource.mockClear()
   attachMedia.mockClear()
   destroy.mockClear()
@@ -226,5 +237,33 @@ describe('the HLS tier where the browser needs hls.js', () => {
     // Otherwise a page-away leaves a worker fetching segments for a video
     // nobody is watching.
     await waitFor(() => expect(destroy).toHaveBeenCalled())
+  })
+})
+
+describe('the quality control where a rendition can actually be chosen', () => {
+  it('is offered, and moves the ladder rather than reloading the video', async () => {
+    await mounted()
+    await waitFor(() => expect(loadSource).toHaveBeenCalled())
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+
+    const resolution = screen
+      .getAllByRole('radiogroup')
+      .find((g) => g.getAttribute('aria-label') === 'Resolution')
+    expect(resolution).toBeTruthy()
+
+    await act(async () => {
+      fireEvent.click(within(resolution!).getByText('1080p'))
+    })
+    await settle()
+
+    // The rung changed on the running attachment. Nothing was re-attached and
+    // no source was reloaded: hls.js switches at the next segment boundary, so
+    // the picture does not restart to change quality.
+    expect(currentLevel).toBe(0)
+    expect(loadSource).toHaveBeenCalledTimes(1)
+    expect(destroy).not.toHaveBeenCalled()
   })
 })

@@ -661,9 +661,15 @@ describe('a bar sized for a thumb', () => {
   })
 
   it('puts the settings groups in a fixed order', async () => {
-    // Resolution, subtitles, read aloud, autoplay, then translation behind a
-    // rule. Translation is last because it is the only one describing work
-    // being done rather than a preference.
+    // Subtitles, read aloud, autoplay, then translation behind a rule.
+    // Translation is last because it is the only one describing work being done
+    // rather than a preference.
+    //
+    // No Resolution here, and its absence is the point: jsdom reports
+    // `navigator.vendor` as Apple, so this runs as a Safari — and native HLS
+    // gives a page no way to pin a rendition. A control that cannot act is the
+    // one thing CLAUDE.md §5 forbids outright, so it is not drawn. Where it can
+    // act, it is; see player-hls-tier.test.tsx, which runs as a desktop.
     //
     // No sound settings among them. The equaliser and the room have their own
     // button beside the gear: this menu is what belongs to the video, and those
@@ -676,7 +682,7 @@ describe('a bar sized for a thumb', () => {
     const groups = screen
       .getAllByRole('radiogroup')
       .map((g) => g.getAttribute('aria-label'))
-    expect(groups).toEqual(['Resolution', 'Subtitles'])
+    expect(groups).toEqual(['Subtitles'])
 
     const switches = screen.getAllByRole('switch').map((b) => b.textContent)
     expect(switches[0]).toContain('Vietnamese narration')
