@@ -2,6 +2,7 @@ import { useSaved } from '@/features/catalog/application/queries'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 export function SavedPage() {
   const { t } = useTranslation()
@@ -12,7 +13,7 @@ export function SavedPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">{t('pages.saved.title')}</h1>
+      <PageHeading>{t('pages.saved.title')}</PageHeading>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">

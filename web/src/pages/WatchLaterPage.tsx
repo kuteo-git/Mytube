@@ -4,6 +4,7 @@ import { watchLaterQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * The videos somebody put aside to watch next.
@@ -28,9 +29,7 @@ export function WatchLaterPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      {/* No heading here: on a phone the shell's back bar carries the name,
-          and on a desktop the sidebar row is already lit. Drawn in both it
-          appeared twice. */}
+      <PageHeading>{t('pages.watchLater.title')}</PageHeading>
       {/* No negative margin. It existed to pull this up under the heading's own
           padding, and with the heading gone it pulled the first line of the page
           up underneath the back bar instead — the bar is an overlay and reserves

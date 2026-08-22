@@ -6,6 +6,7 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { useTranslation } from 'react-i18next'
 import { BackBar } from '@/features/catalog/ui/BackBar'
 import { usePlayer } from '@/features/watch/application/player-context'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * One playlist, in its own order.
@@ -36,10 +37,7 @@ export function PlaylistPage() {
           fallback="/playlists"
         />
       )}
-      {/* Hidden on a phone, where the bar above has just said it. */}
-      <h1 className="hidden py-4 text-2xl font-bold min-[700px]:block">
-        {playlist?.title ?? t('ui.playlist')}
-      </h1>
+      <PageHeading>{playlist?.title ?? t('ui.playlist')}</PageHeading>
       {playlist && (
         <p className="pb-4 text-sm text-text-2 min-[700px]:-mt-2">
           {playlist.unavailable

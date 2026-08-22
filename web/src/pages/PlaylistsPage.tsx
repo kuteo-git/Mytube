@@ -7,6 +7,7 @@ import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useTranslation } from 'react-i18next'
 import { PageLink } from '@/shared/ui/PageLink'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * The member's playlists, as their YouTube account has them.
@@ -29,9 +30,7 @@ export function PlaylistsPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      {/* No heading here: on a phone the shell's back bar carries the name,
-          and on a desktop the sidebar row is already lit. Drawn in both it
-          appeared twice. */}
+      <PageHeading>{t('nav.playlists')}</PageHeading>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">

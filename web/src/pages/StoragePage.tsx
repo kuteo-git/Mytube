@@ -4,6 +4,7 @@ import { useStorage } from '@/features/catalog/application/queries'
 import { VideoCard } from '@/features/catalog/ui/VideoCard'
 import { formatBytes } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 export function StoragePage() {
   const { t } = useTranslation()
@@ -12,7 +13,7 @@ export function StoragePage() {
   if (isPending) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-        <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
+        <PageHeading spacer={false}>{t('nav.storage')}</PageHeading>
         <p className="mt-3 text-sm text-text-2">{t('common.loading')}</p>
       </div>
     )
@@ -21,7 +22,7 @@ export function StoragePage() {
   if (isError || !data) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-        <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
+        <PageHeading spacer={false}>{t('nav.storage')}</PageHeading>
         <p className="mt-3 text-sm text-text-2">
           {t('empty.couldNotLoad', { what: t('empty.what_storageUsage') })}
         </p>
@@ -33,7 +34,7 @@ export function StoragePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
+      <PageHeading spacer={false}>{t('nav.storage')}</PageHeading>
 
       {/* Above the figures, because the figures describe *that folder* under
           *that mode*. Read first, they are numbers without a subject. */}

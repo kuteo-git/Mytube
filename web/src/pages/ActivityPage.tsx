@@ -18,6 +18,7 @@ import type { IngestJob, ScanStatus } from '@/features/catalog/infrastructure/ca
 import { useToast } from '@/shared/ui/toast'
 import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * What the system has been doing, and what went wrong doing it.
@@ -70,7 +71,7 @@ export function ActivityPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-medium">{t('nav.activity')}</h1>
+      <PageHeading spacer={false}>{t('nav.activity')}</PageHeading>
 
       <ScanHistory
         refreshing={scanning || refresh.isPending}
