@@ -99,6 +99,17 @@ service IngestService {
   // limited to whatever a scan happened to bring in.
   rpc ListChannelUploads(ListChannelUploadsRequest) returns (ListChannelUploadsResponse);
 
+  // Who a channel address names, for a channel the library has never seen.
+  //
+  // A pasted channel link carries a handle far more often than an id, and a
+  // handle is not a key: the catalog is keyed by the `UC…` id, so a channel
+  // nobody here follows cannot be looked up, written down or opened without
+  // asking upstream once. This is that one ask.
+  //
+  // Only reached when the catalog has no such handle — 1626 of this library's
+  // 1690 channels carry one, so most pasted links never come here at all.
+  rpc ResolveChannel(ResolveChannelRequest) returns (ResolveChannelResponse);
+
   // Fetches comments for a video from YouTube via yt-dlp. Returns every comment
   // in one call — yt-dlp's --write-comments has no pagination — so the gateway
   // batches them into catalog and the frontend paginates from there.
@@ -128,6 +139,19 @@ message ListChannelUploadsResponse {
   // The channel's picture, taken from the same response rather than fetched.
   // Empty when the listing fell back to a flat playlist, which has no header.
   string avatar_url = 4;
+}
+
+message ResolveChannelRequest {
+  // A handle ("@mkbhd"), a bare channel id, or a full channel address.
+  string channel = 1;
+}
+
+message ResolveChannelResponse {
+  string channel_id = 1;
+  string name = 2;
+  string handle = 3;
+  string avatar_url = 4;
+  int64 subscriber_count = 5;
 }
 
 message SetAccountCookiesRequest {

@@ -253,7 +253,18 @@ func (s *Server) ListChannelVideos(ctx context.Context, req *connect.Request[cat
 }
 
 func (s *Server) GetChannel(ctx context.Context, req *connect.Request[catalogv1.GetChannelRequest]) (*connect.Response[catalogv1.GetChannelResponse], error) {
-	c, count, err := s.catalog.GetChannel(ctx, req.Msg.GetChannelId(), req.Msg.GetUserId())
+	// The id when there is one, the handle otherwise. An id needs no resolving
+	// and is the more reliable of the two, so it wins whenever both arrive.
+	var (
+		c     domain.Channel
+		count int32
+		err   error
+	)
+	if id := req.Msg.GetChannelId(); id != "" {
+		c, count, err = s.catalog.GetChannel(ctx, id, req.Msg.GetUserId())
+	} else {
+		c, count, err = s.catalog.GetChannelByHandle(ctx, req.Msg.GetHandle(), req.Msg.GetUserId())
+	}
 	if err != nil {
 		return nil, toConnectErr(err)
 	}

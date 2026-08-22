@@ -33,6 +33,18 @@ export interface CatalogRepository {
   search(query: string, pageToken?: string): Promise<Feed>
   suggest(query: string): Promise<Suggestion[]>
   discover(query: string, limit: number): Promise<ExternalVideo[]>
+  /**
+   * The channel a pasted address names, or null when it names none.
+   *
+   * Answered by the gateway rather than parsed here, because which channel an
+   * address names is one rule and lives in one place — the same reason the
+   * search page's own link check is deliberately cruder than the real parser.
+   *
+   * Null for an ordinary search term, which is most of what this is asked
+   * about, and free in that case: the gateway answers without touching the
+   * catalog or YouTube.
+   */
+  resolveChannel(query: string): Promise<string | null>
   ensureExternal(sourceUrl: string): Promise<string>
   getStorage(): Promise<StorageUsage>
   /** Videos the viewer has pinned as worth keeping. */
@@ -387,6 +399,14 @@ export const httpCatalogRepository: CatalogRepository = {
       `/suggest${query({ q })}`,
     )
     return suggestions
+  },
+
+  async resolveChannel(q) {
+    if (!q.trim()) return null
+    const { channel } = await request<{ channel: string | null }>(
+      `/channels/resolve${query({ q })}`,
+    )
+    return channel
   },
 
   async discover(q, limit) {

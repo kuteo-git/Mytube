@@ -154,6 +154,51 @@ const fallbackChannelPage = 30
 // that carries view counts, upload dates and the channel's own sort options. It
 // is undocumented, so any failure falls back to the flat playlist listing —
 // which always works but knows none of those three things.
+// ResolveChannel says who a channel address names.
+//
+// One upstream request, and only for a channel the library has never seen. A
+// pasted link usually carries a handle rather than an id, and the catalog is
+// keyed by the id — so without this, a channel nobody here follows cannot be
+// written down or opened at all.
+//
+// Reads through ChannelInfo, which is a flat listing of nothing (`PlaylistItems("0")`):
+// it asks for the channel's header and none of its videos, so this costs the
+// cheap kind of request rather than the counted kind (§8 risk 6).
+func (i *Ingest) ResolveChannel(ctx context.Context, channel string) (domain.ChannelMetadata, error) {
+	channel = strings.TrimSpace(channel)
+	if channel == "" {
+		return domain.ChannelMetadata{}, fmt.Errorf("%w: channel is required", domain.ErrInvalid)
+	}
+
+	meta, err := i.downloader.ChannelInfo(ctx, channelAddress(channel))
+	if err != nil {
+		return domain.ChannelMetadata{}, err
+	}
+	if meta.ID == "" {
+		// A listing that answered without an id is not an answer: the id is the
+		// catalog's key, and a row cannot be written without one.
+		return domain.ChannelMetadata{}, fmt.Errorf("%w: %s named no channel", domain.ErrNotFound, channel)
+	}
+	return meta, nil
+}
+
+// channelAddress turns whatever was pasted into something yt-dlp will take.
+//
+// A handle and an id are both valid on their own in this system's own APIs, and
+// neither is a URL. `/channel/<id>` for an id and `/<handle>` for a handle are
+// the two forms YouTube resolves without a redirect.
+func channelAddress(channel string) string {
+	switch {
+	case strings.HasPrefix(channel, "http://"), strings.HasPrefix(channel, "https://"):
+		return channel
+	case strings.HasPrefix(channel, "@"):
+		return "https://www.youtube.com/" + channel
+	case strings.HasPrefix(channel, "UC"):
+		return "https://www.youtube.com/channel/" + channel
+	}
+	return "https://www.youtube.com/" + channel
+}
+
 func (i *Ingest) ListChannelUploads(ctx context.Context, channel, pageToken string) (domain.ChannelUploads, error) {
 	channel = strings.TrimSpace(channel)
 	if channel == "" {

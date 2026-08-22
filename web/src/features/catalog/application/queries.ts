@@ -207,6 +207,23 @@ const PREFETCH_HOVER_MS = 250
  * as much. The delay keeps a pointer sweeping across a grid from resolving
  * every card it crosses.
  */
+/**
+ * Where a pasted channel address leads, if it leads anywhere.
+ *
+ * Asked for every search, because that is the only way a paste can be noticed
+ * without a second control to paste into. It costs nothing for ordinary terms —
+ * the gateway recognises an address before it looks anything up — and for a
+ * channel the household already follows it costs one local query.
+ */
+export function useChannelLink(query: string) {
+  return useQuery({
+    queryKey: ['channel-link', query],
+    queryFn: () => repo.resolveChannel(query),
+    enabled: query.trim().length > 0,
+    staleTime: 10 * 60 * 1000,
+  })
+}
+
 export function useStreamPrefetch() {
   const queryClient = useQueryClient()
   const timer = useRef<number | undefined>(undefined)

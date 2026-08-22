@@ -400,6 +400,20 @@ func (s *Server) ClearScans(ctx context.Context, req *connect.Request[ingestv1.C
 	return connect.NewResponse(&ingestv1.ClearScansResponse{}), nil
 }
 
+func (s *Server) ResolveChannel(ctx context.Context, req *connect.Request[ingestv1.ResolveChannelRequest]) (*connect.Response[ingestv1.ResolveChannelResponse], error) {
+	meta, err := s.ingest.ResolveChannel(ctx, req.Msg.GetChannel())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.ResolveChannelResponse{
+		ChannelId:       meta.ID,
+		Name:            meta.Name,
+		Handle:          meta.Handle,
+		AvatarUrl:       meta.AvatarURL,
+		SubscriberCount: meta.SubscriberCount,
+	}), nil
+}
+
 func (s *Server) ListChannelUploads(ctx context.Context, req *connect.Request[ingestv1.ListChannelUploadsRequest]) (*connect.Response[ingestv1.ListChannelUploadsResponse], error) {
 	uploads, err := s.ingest.ListChannelUploads(ctx, req.Msg.GetChannel(), req.Msg.GetPageToken())
 	if err != nil {

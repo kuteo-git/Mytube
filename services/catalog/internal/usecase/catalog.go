@@ -116,6 +116,18 @@ func (c *Catalog) GetChannel(ctx context.Context, channelID, userID string) (dom
 	return c.repo.GetChannel(ctx, channelID, userID)
 }
 
+// GetChannelByHandle finds a channel the way a pasted address names it.
+//
+// Separate from GetChannel rather than a second argument to it, because the two
+// take different keys and a single function taking either would have to decide
+// which one it was given — a decision the caller has already made.
+func (c *Catalog) GetChannelByHandle(ctx context.Context, handle, userID string) (domain.Channel, int32, error) {
+	if handle == "" {
+		return domain.Channel{}, 0, fmt.Errorf("%w: handle is required", domain.ErrInvalid)
+	}
+	return c.repo.GetChannelByHandle(ctx, handle, userID)
+}
+
 // ListTopics powers the home chip bar and the sidebar. A minimum count of one
 // keeps the UI from offering a filter that would produce an empty grid.
 func (c *Catalog) ListTopics(ctx context.Context, minVideoCount int32) ([]domain.Topic, error) {

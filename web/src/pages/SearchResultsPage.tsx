@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { useDiscover, useSearch } from '@/features/catalog/application/queries'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useChannelLink, useDiscover, useSearch } from '@/features/catalog/application/queries'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
@@ -32,6 +32,21 @@ function looksLikeLink(query: string): boolean {
 export function SearchResultsPage() {
   const [params] = useSearchParams()
   const query = params.get('q') ?? ''
+  const navigate = useNavigate()
+
+  // A pasted channel address is not a search, so it does not stay on this page.
+  //
+  // It used to: the query went to `ytsearch20:<the URL>`, which spends a
+  // counted upstream request hunting for the text of an address, and the page
+  // then said "Channel and playlist links cannot be opened here yet" — true,
+  // and the whole of what happened.
+  //
+  // `replace`, so the back button leaves the channel for wherever the viewer
+  // was rather than returning them to a search page that only ever redirects.
+  const { data: channelLink } = useChannelLink(query)
+  useEffect(() => {
+    if (channelLink) navigate(`/channel/${channelLink}`, { replace: true })
+  }, [channelLink, navigate])
 
   const {
     data: localPages,
@@ -83,7 +98,7 @@ export function SearchResultsPage() {
 
       {isLink && settled && local.length === 0 && remaining.length === 0 && (
         <p className="text-sm text-text-2">
-          That link does not lead to a video. Channel and playlist links cannot be opened here
+          That link does not lead to a video or a channel. Playlist links cannot be opened here
           yet.
         </p>
       )}

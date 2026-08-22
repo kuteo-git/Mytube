@@ -1499,9 +1499,19 @@ func (x *ListChannelVideosResponse) GetNextPageToken() string {
 }
 
 type GetChannelRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChannelId     string                 `protobuf:"bytes,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ChannelId string                 `protobuf:"bytes,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Look the channel up by its handle ("@mkbhd") when the id is not known.
+	//
+	// Added so a pasted channel address can be answered from the library without
+	// asking YouTube. 1626 of this library's 1690 channels carry a handle, so the
+	// lookup usually lands — and the request it saves is one counted against the
+	// address §8 risk 6 is about.
+	//
+	// Ignored when channel_id is set: an id needs no resolving and is the more
+	// reliable of the two (see the note on @tinhte in the gateway).
+	Handle        string `protobuf:"bytes,3,opt,name=handle,proto3" json:"handle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1546,6 +1556,13 @@ func (x *GetChannelRequest) GetChannelId() string {
 func (x *GetChannelRequest) GetUserId() string {
 	if x != nil {
 		return x.UserId
+	}
+	return ""
+}
+
+func (x *GetChannelRequest) GetHandle() string {
+	if x != nil {
+		return x.Handle
 	}
 	return ""
 }
@@ -5179,11 +5196,12 @@ const file_catalog_v1_catalog_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tR\tpageToken\"n\n" +
 	"\x19ListChannelVideosResponse\x12)\n" +
 	"\x06videos\x18\x01 \x03(\v2\x11.catalog.v1.VideoR\x06videos\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"K\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"c\n" +
 	"\x11GetChannelRequest\x12\x1d\n" +
 	"\n" +
 	"channel_id\x18\x01 \x01(\tR\tchannelId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"d\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x16\n" +
+	"\x06handle\x18\x03 \x01(\tR\x06handle\"d\n" +
 	"\x12GetChannelResponse\x12-\n" +
 	"\achannel\x18\x01 \x01(\v2\x13.catalog.v1.ChannelR\achannel\x12\x1f\n" +
 	"\vvideo_count\x18\x02 \x01(\x05R\n" +

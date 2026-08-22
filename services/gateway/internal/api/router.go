@@ -158,6 +158,8 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/collections/top-played", g.handleTopPlayed)
 	mux.HandleFunc("GET /api/collections/popular", g.handlePopular)
 
+	// Before the {id} route, or "resolve" would be read as a channel id.
+	mux.HandleFunc("GET /api/channels/resolve", g.handleResolveChannel)
 	mux.HandleFunc("GET /api/channels/{id}", g.handleGetChannel)
 	mux.HandleFunc("GET /api/channels/{id}/videos", g.handleChannelVideos)
 	mux.HandleFunc("POST /api/channels/{id}/subscription", g.handleSetSubscription)

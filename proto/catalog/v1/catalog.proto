@@ -314,6 +314,16 @@ message ListChannelVideosResponse {
 message GetChannelRequest {
   string channel_id = 1;
   string user_id = 2;
+  // Look the channel up by its handle ("@mkbhd") when the id is not known.
+  //
+  // Added so a pasted channel address can be answered from the library without
+  // asking YouTube. 1626 of this library's 1690 channels carry a handle, so the
+  // lookup usually lands — and the request it saves is one counted against the
+  // address §8 risk 6 is about.
+  //
+  // Ignored when channel_id is set: an id needs no resolving and is the more
+  // reliable of the two (see the note on @tinhte in the gateway).
+  string handle = 3;
 }
 
 message GetChannelResponse {

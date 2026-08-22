@@ -236,6 +236,8 @@ type Repository interface {
 	Suggest(ctx context.Context, query string, limit int32) ([]Suggestion, error)
 	ListChannelVideos(ctx context.Context, channelID, userID string, page Page) ([]Video, error)
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, int32, error)
+	// By the name a pasted address usually carries. See the note on the query.
+	GetChannelByHandle(ctx context.Context, handle, userID string) (Channel, int32, error)
 	ListTopics(ctx context.Context, minVideoCount int32) ([]Topic, error)
 	ListVideoFeatures(ctx context.Context, page Page) ([]VideoFeatures, error)
 

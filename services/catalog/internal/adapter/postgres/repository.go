@@ -287,6 +287,24 @@ func (r *Repository) ListPinnedVideos(ctx context.Context, userID string, page d
 }
 
 func (r *Repository) GetChannel(ctx context.Context, channelID, userID string) (domain.Channel, int32, error) {
+	return r.channelWhere(ctx, "c.id = $2", channelID, userID)
+}
+
+// GetChannelByHandle answers the same question from the other name.
+//
+// A pasted channel address usually carries a handle rather than an id, and 1626
+// of this library's 1690 channels have one — so this is what keeps opening such
+// an address from costing an upstream request against the address §8 risk 6 is
+// about. Case-insensitively, because a handle is written however the person
+// pasting it happened to see it.
+func (r *Repository) GetChannelByHandle(ctx context.Context, handle, userID string) (domain.Channel, int32, error) {
+	return r.channelWhere(ctx, "lower(c.handle) = lower($2)", handle, userID)
+}
+
+// One query, two ways in. Written once because the two differ by a single
+// predicate, and the columns — nine of them, one a correlated count — are
+// exactly the sort of thing that drifts when it is copied.
+func (r *Repository) channelWhere(ctx context.Context, predicate, key, userID string) (domain.Channel, int32, error) {
 	var (
 		c          domain.Channel
 		videoCount int32
@@ -297,13 +315,13 @@ func (r *Repository) GetChannel(ctx context.Context, channelID, userID string) (
 		       (SELECT count(*) FROM videos v WHERE v.channel_id = c.id) AS video_count
 		FROM channels c
 		LEFT JOIN subscriptions s ON s.channel_id = c.id AND s.user_id = $1
-		WHERE c.id = $2`,
-		userID, channelID,
+		WHERE `+predicate,
+		userID, key,
 	).Scan(&c.ID, &c.Name, &c.Handle, &c.AvatarPath, &c.BannerPath, &c.SubscriberCount, &c.Verified,
 		&c.Subscribed, &videoCount)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.Channel{}, 0, fmt.Errorf("channel %s: %w", channelID, domain.ErrNotFound)
+		return domain.Channel{}, 0, fmt.Errorf("channel %s: %w", key, domain.ErrNotFound)
 	}
 	return c, videoCount, err
 }
