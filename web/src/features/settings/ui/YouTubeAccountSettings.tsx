@@ -135,7 +135,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
         aria-label={t('youtubeAccount.cookiesFile')}
         rows={5}
         spellCheck={false}
-        className="mt-3 w-full rounded-lg bg-surface-input p-3 font-mono text-xs outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
+        className="mt-3 w-full rounded-lg bg-surface-input p-3 font-mono text-xs outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
       />
       {error && (
         <p className="pt-1 text-xs text-brand" role="alert">

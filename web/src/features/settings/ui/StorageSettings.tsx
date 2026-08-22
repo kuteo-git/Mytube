@@ -135,7 +135,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         onBlur={(e) => void verify(e.target.value)}
         spellCheck={false}
         placeholder="/Volumes/Data2/Youtube"
-        className="mt-1 w-full rounded-lg bg-surface-input p-3 font-mono text-sm outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
+        className="mt-1 w-full rounded-lg bg-surface-input p-3 font-mono text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
       />
 
       {/* Where the current value came from. Somebody who cannot tell a saved

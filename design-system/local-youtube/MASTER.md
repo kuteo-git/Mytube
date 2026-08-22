@@ -21,8 +21,8 @@
 | Surface raised | `#212121` | `--surface` | Menu dropdown, chip, tooltip, banner |
 | Surface hover | `#272727` | `--surface-hover` | Hover của sidebar item, icon button, chip |
 | Surface input | `#121212` | `--surface-input` | Ô search |
-| Border | `#303030` | `--border` | Viền search, divider sidebar |
-| Border subtle | `rgba(255,255,255,0.10)` | `--border-subtle` | Divider trong description/comment |
+| Border | `#303030` | `--line` | Viền search, divider sidebar |
+| Border subtle | `rgba(255,255,255,0.10)` | `--line-subtle` | Divider trong description/comment |
 | Text primary | `#F1F1F1` | `--text` | Tiêu đề video, tên kênh, nav label |
 | Text secondary | `#AAAAAA` | `--text-2` | Lượt xem, thời gian, mô tả phụ |
 | Link | `#3EA6FF` | `--link` | Hashtag, URL trong description, "Update" |
@@ -148,7 +148,7 @@ vùng cuộn đã mang sẵn `pt-14`. Ghi thêm chiều cao bar là đếm hai l
 **đẩy phần tử xuống** cho tới ngưỡng, nên hàng chip tụt đúng một header ngay cả khi chưa cuộn.
 Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
 
-**Search:** input nền `--surface-input`, border `--border`, radius full trái; nút search nền `--surface` radius full phải; focus → border `--ring`.
+**Search:** input nền `--surface-input`, border `--line`, radius full trái; nút search nền `--surface` radius full phải; focus → border `--ring`.
 
 **Chip:** mặc định nền `--surface` text `--text`; active nền `--invert-bg` text `--invert-text`. Thanh chip scroll ngang, có nút mũi tên 2 đầu, **ẩn scrollbar**.
 

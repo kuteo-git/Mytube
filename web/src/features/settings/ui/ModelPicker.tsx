@@ -43,7 +43,7 @@ export function ModelPicker({
     return (
       <>
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={value}
           placeholder={t('settings.model.name')}
           aria-label={t('ui.model')}

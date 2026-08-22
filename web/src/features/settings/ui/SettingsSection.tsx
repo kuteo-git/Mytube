@@ -24,7 +24,7 @@ export function SettingsSection({
   children: ReactNode
 }) {
   return (
-    <section className="mt-10 rounded-xl bg-surface p-4 ring-1 ring-transparent transition-shadow duration-150 ease-out hover:ring-border min-[700px]:p-5">
+    <section className="mt-10 rounded-xl bg-surface p-4 ring-1 ring-transparent transition-shadow duration-150 ease-out hover:ring-line min-[700px]:p-5">
       {!headless && (
         <div className="flex items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-hover text-text-2">

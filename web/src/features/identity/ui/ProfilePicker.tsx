@@ -139,7 +139,7 @@ export function ProfilePicker({
             placeholder={t('ui.name')}
             aria-label={t('profiles.newProfileName')}
             maxLength={40}
-            className="w-full rounded-lg bg-surface-input px-4 py-3 text-base outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
+            className="w-full rounded-lg bg-surface-input px-4 py-3 text-base outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
           />
           {error && <p className="text-xs text-brand">{error}</p>}
           <button

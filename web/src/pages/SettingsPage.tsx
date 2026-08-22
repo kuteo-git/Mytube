@@ -248,7 +248,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
           to balance and the sliders below are settings for nothing. */}
       <SettingRow label={t('narration.baseURL')} hint={t('narration.openaiFormat')}>
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={ttsBaseUrl}
           placeholder="https://api.openai.com/v1"
           aria-label={t('narration.baseURL')}
@@ -265,7 +265,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
         }
       >
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           type={showTTSKey ? 'text' : 'password'}
           value={ttsKey}
           placeholder={ttsConfig?.hasKey ? '••••••••' : 'sk-…'}
@@ -284,7 +284,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
 
       <SettingRow label={t('ui.model')} hint={t('narration.modelHint')}>
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={ttsModel}
           placeholder="gpt-4o-mini-tts"
           aria-label={t('ui.model')}
@@ -351,7 +351,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
               one house should be able to disagree about a voice. */}
           <SettingRow label={t('ui.voice')} hint={t('narration.voiceHint')}>
             <input
-              className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+              className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
               value={prefs.voice}
               placeholder={DEFAULT_VOICE}
               aria-label={t('ui.voice')}
@@ -414,7 +414,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
     >
       <SettingRow label={t('translationSettings.baseURL')}>
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={baseUrl}
           placeholder="http://host:port"
           aria-label={t('translationSettings.baseURL')}
@@ -431,7 +431,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         }
       >
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           type={showKey ? 'text' : 'password'}
           value={apiKey}
           placeholder={config?.hasKey ? '••••••••' : 'sk-…'}
