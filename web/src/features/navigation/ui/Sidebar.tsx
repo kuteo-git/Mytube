@@ -1,4 +1,7 @@
 import clsx from 'clsx'
+import { useTranslation } from 'react-i18next'
+
+import type { Dictionary } from '@/shared/i18n/en'
 import {
   Activity,
   Bookmark,
@@ -23,7 +26,15 @@ type Icon = ComponentType<{ size?: number }>
 
 interface Item {
   icon: Icon
-  label: string
+  /**
+   * A translation key, not a word — see Row for why.
+   *
+   * Typed as the key rather than as `string`, which is what caught a typo the
+   * first time this was compiled: `string` is wide enough to hold "nav.acount"
+   * and t() would have rendered the key itself on screen, in both languages,
+   * reported by nothing.
+   */
+  label: `nav.${keyof Dictionary['nav']}`
   to: string
 }
 
@@ -40,12 +51,12 @@ interface Item {
  * for everybody.
  */
 const PRIMARY: Item[] = [
-  { icon: Home, label: 'Home', to: '/' },
-  { icon: Bookmark, label: 'Saved', to: '/saved' },
-  { icon: History, label: 'History', to: '/history' },
-  { icon: HardDrive, label: 'Storage', to: '/storage' },
-  { icon: Settings, label: 'Settings', to: '/settings' },
-  { icon: Activity, label: 'Activity', to: '/activity' },
+  { icon: Home, label: 'nav.home', to: '/' },
+  { icon: Bookmark, label: 'nav.saved', to: '/saved' },
+  { icon: History, label: 'nav.history', to: '/history' },
+  { icon: HardDrive, label: 'nav.storage', to: '/storage' },
+  { icon: Settings, label: 'nav.settings', to: '/settings' },
+  { icon: Activity, label: 'nav.activity', to: '/activity' },
 ]
 
 /**
@@ -64,9 +75,9 @@ const PRIMARY: Item[] = [
  * heading above them.
  */
 const ACCOUNT: Item[] = [
-  { icon: KeyRound, label: 'YouTube account', to: '/account' },
-  { icon: Clock, label: 'Watch later', to: '/watch-later' },
-  { icon: ListVideo, label: 'Playlists', to: '/playlists' },
+  { icon: KeyRound, label: 'nav.youtubeAccount', to: '/account' },
+  { icon: Clock, label: 'nav.watchLater', to: '/watch-later' },
+  { icon: ListVideo, label: 'nav.playlists', to: '/playlists' },
 ]
 
 /**
@@ -81,6 +92,10 @@ export const SIDEBAR_ROUTES = [...PRIMARY, ...ACCOUNT, { to: '/profile' }].map((
 
 function Row({ item, mini }: { item: Item; mini: boolean }) {
   const { icon: Icon, label, to } = item
+  // The arrays above are module-level constants, so they carry keys rather than
+  // words — a hook cannot be called where they are declared, and text baked in
+  // there would never change language.
+  const { t } = useTranslation()
   return (
     <NavLink
       to={to}
@@ -95,13 +110,14 @@ function Row({ item, mini }: { item: Item; mini: boolean }) {
     >
       <Icon size={24} />
       <span className={mini ? 'text-[10px] leading-tight' : 'text-sm whitespace-nowrap'}>
-        {label}
+        {t(label)}
       </span>
     </NavLink>
   )
 }
 
 export function Sidebar({ mini }: { mini: boolean }) {
+  const { t } = useTranslation()
   const { data: topics } = useTopics()
   const { data: subscriptions } = useSubscriptions()
   const { data: profiles } = useProfiles()
@@ -137,7 +153,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
 
       <hr className="my-3 border-0 border-t border-line" />
       <section className="flex flex-col gap-0.5">
-        <h2 className="px-3 py-1.5 text-base font-medium">Account</h2>
+        <h2 className="px-3 py-1.5 text-base font-medium">{t('nav.account')}</h2>
         {/* Who is watching, said with the avatar rather than a generic icon —
             the rail answers it without spending a line on it. Same 40px row and
             24px slot as every other item (MASTER.md §4), the avatar simply
@@ -152,7 +168,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
           }
         >
           <Avatar hue={hueFromId(currentProfile?.id ?? '')} name={currentProfile?.name ?? '?'} size={24} />
-          <span className="clamp-1 text-sm">{currentProfile?.name ?? 'Profile'}</span>
+          <span className="clamp-1 text-sm">{currentProfile?.name ?? t('nav.profile')}</span>
         </NavLink>
         {ACCOUNT.map((item) => (
           <Row key={item.to} item={item} mini={false} />
@@ -163,7 +179,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
         <>
           <hr className="my-3 border-0 border-t border-line" />
           <section className="flex flex-col gap-0.5">
-            <h2 className="px-3 py-1.5 text-base font-medium">Subscriptions</h2>
+            <h2 className="px-3 py-1.5 text-base font-medium">{t('nav.subscriptions')}</h2>
             {subscriptions.map((channel) => (
               <NavLink
                 key={channel.id}
@@ -192,7 +208,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
         <>
           <hr className="my-3 border-0 border-t border-line" />
           <section className="flex flex-col gap-0.5">
-            <h2 className="px-3 py-1.5 text-base font-medium">Topics</h2>
+            <h2 className="px-3 py-1.5 text-base font-medium">{t('nav.topics')}</h2>
             {topics.map((topic) => (
               <NavLink
                 key={topic.name}

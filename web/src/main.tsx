@@ -5,6 +5,10 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AppShell } from "./app/AppShell";
 import { ProfileGate } from "./features/identity/ui/ProfileGate";
 import { pageRoutes } from "./app/routes";
+// Before anything renders, so the first paint is already in the right
+// language. Imported for its side effect — the module reads the saved choice
+// and initialises i18next at load.
+import "./shared/i18n";
 import "./index.css";
 
 const queryClient = new QueryClient({
