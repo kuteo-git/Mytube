@@ -8,11 +8,12 @@ import {
   useHistory,
   useStorage,
   useTopPlayed,
+  useLive,
   useTopics,
 } from '@/features/catalog/application/queries'
 import { isInProgress } from '@/features/catalog/domain/video'
 import { useHiddenVideos } from '@/features/catalog/application/hidden'
-import { ChipBar } from '@/features/catalog/ui/ChipBar'
+import { ChipBar, LIVE_CATEGORY } from '@/features/catalog/ui/ChipBar'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
@@ -92,6 +93,7 @@ export function HomePage() {
 
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useFeed(active)
+  const { data: live } = useLive()
   const { data: topics } = useTopics()
   const { data: storage } = useStorage()
   const { data: topPlayed } = useTopPlayed(25)
@@ -120,7 +122,7 @@ export function HomePage() {
     .slice(0, 12)
   // When browsing a topic, also show what YouTube has for it. The library is
   // what the topics chose to bring in; YouTube search stretches past that.
-  const isTopic = active !== 'All'
+  const isTopic = active !== 'All' && active !== LIVE_CATEGORY
   const { data: youtubeVideos } = useDiscover(isTopic ? active : '', 6)
 
   // Both extra rows belong to the unfiltered home. Under a topic the page is
@@ -132,7 +134,21 @@ export function HomePage() {
 
   // "All" leads; the rest are topics that actually have videos, so a chip can
   // never produce an empty grid.
-  const chips = ['All', ...(topics ?? []).map((t) => t.name)]
+  //
+  // Live sits second, and only while something is actually on air. A chip that
+  // is always there and usually empty would be worse than none: a red dot is a
+  // claim that something is happening, and one that is lit over an empty grid
+  // teaches people to stop believing it.
+  const chips = [
+    'All',
+    ...(live && live.length > 0 ? [LIVE_CATEGORY] : []),
+    ...(topics ?? []).map((t) => t.name),
+  ]
+
+  // The Live chip shows a list, not a ranking — so it does not go through the
+  // feed query at all. Nothing here is scored, sampled or diversity-capped:
+  // "everything on air" is a promise the ranker has no way to keep.
+  const showingLive = active === LIVE_CATEGORY
 
   return (
     // `relative` so the indicator has something to be positioned against, and
@@ -212,9 +228,13 @@ export function HomePage() {
             {showCollections && visible(topPlayed).length > 1 && (
               <TopPlayedCard videos={visible(topPlayed)} />
             )}
-            {isPending
-              ? Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
-              : visible(videos).map((video) => <VideoCard key={video.id} video={video} />)}
+            {showingLive ? (
+              (live ?? []).map((video) => <VideoCard key={video.id} video={video} />)
+            ) : isPending ? (
+              Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
+            ) : (
+              visible(videos).map((video) => <VideoCard key={video.id} video={video} />)
+            )}
           </div>
 
           <InfiniteList

@@ -70,6 +70,18 @@ type Video struct {
 	// How this video reached the library: SOURCE, RELATED or SEARCH. Empty for
 	// anything ingested before the column existed, and never guessed at.
 	DiscoveredVia string
+	// LiveStatus is yt-dlp's own word: "is_live", "is_upcoming", "was_live",
+	// "post_live", "not_live", or empty where nobody has asked.
+	//
+	// IsLiveNow is that word weighed against when it was said — unlike every
+	// other field here, this answer expires. It is computed in SQL, in the
+	// expression the index serves, so there is exactly one definition of "on
+	// air now" and no reader gets to invent a second.
+	//
+	// A reader asking "was this ever a broadcast?" wants LiveStatus; a reader
+	// deciding whether to light a red dot wants IsLiveNow.
+	LiveStatus string
+	IsLiveNow  bool
 }
 
 // SubtitleTrack is a caption file on disk, fetched with the media.
@@ -162,6 +174,12 @@ type VideoFeatures struct {
 	IsShort bool
 	// How this video reached the library. Empty where it is not known.
 	DiscoveredVia string
+	// On air right now — confirmed live and confirmed recently. Ranking uses it
+	// for one thing: a broadcast is exempt from the 365-day age filter, because
+	// a 24/7 stream's publish date is the day it was switched on rather than
+	// the age of anything anybody would watch. Measured: ABC News Live was
+	// published 479 days ago and was dropped from Home outright.
+	IsLive bool
 }
 
 type StorageUsage struct {
@@ -252,6 +270,10 @@ type Repository interface {
 	SetShort(ctx context.Context, videoID string, isShort bool) error
 	// ListUncheckedShorts returns videos with no answer yet, newest first.
 	ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error)
+	// ListLive returns the broadcasts on air now from channels this user
+	// follows. Unbounded on purpose: the set is a few dozen at most, and a
+	// truncated "everything on air" would be a list that quietly lies.
+	ListLive(ctx context.Context, userID string) ([]Video, error)
 	FindBySourceURL(ctx context.Context, sourceURL, userID string) (Video, error)
 
 	ListComments(ctx context.Context, videoID string, sort CommentSort, page Page) ([]Comment, int32, error)

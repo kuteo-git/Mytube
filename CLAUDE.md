@@ -74,6 +74,53 @@ The player opens on the best tier the browser can play — `local` if it is ther
 - **A refused segment drops the cached URLs and resolves once more.** Only the playlist path did that, and the playlist is fetched once at the start — so a signed URL dying mid-video broke every remaining segment for the rest of the 90-minute TTL while nothing re-resolved, and the player could report only a stream that stopped.
 - **Autoplay still does not happen on iOS, and that is §5's decision, not a fault.** Audible autoplay needs a gesture Safari has not been given; the first frame sits still rather than the video playing muted.
 
+### A broadcast still on air is its own tier (2026-08-22)
+
+**A live video publishes no file, so nothing else here can play it.** Measured on `iipR5yUp36o` (ABC News Live, `is_live`, `duration: None`): **all seven formats are `m3u8_native`** — five video-only avc1 rungs from 144p to 720p, two audio-only — and **not one plain https URL among them**. `resolveTracksOnce` filters on https, so live resolved to nothing at all; the local, HLS and remux tiers all begin from a file with an index, and there is no file.
+
+Measured end to end through this server, Chrome and hls.js:
+
+| | |
+|---|---|
+| ladder | **144p, 240p, 360p, 480p, 720p** |
+| opens at | `t=3589.7` — the live edge, not zero |
+| `seekable` | **0..3605** — an hour of rewind |
+| rewinding 60s | `playing` again **0.4s** later |
+
+Confirmed on the household's iPhone as well, which is the reading that mattered: Safari plays it natively.
+
+- **The segments are MPEG-TS, and that was the open question.** Every other tier serves fragmented MP4. Reading the code could not answer whether Safari and hls.js accept `.ts` through a proxy, so it was measured rather than assumed.
+- **The proxy is not a preference.** googlevideo answers a browser's request with **200 and no `access-control-allow-origin` at all**, so a page cannot fetch these playlists directly whatever the URL says. `/api/live/{id}/master.m3u8` builds the master, `/playlist.m3u8` rewrites the media playlist's segment URLs, and `/segment` carries the bytes — the same reason `/instant` was proxied, arriving from CORS instead of from signing.
+- **The signed URL travels base64'd in the query, behind a `.googlevideo.com` host allowlist.** Without the allowlist the segment route is an open proxy to anywhere on the internet, reachable by anyone on the LAN.
+- **Rewinding is YouTube's window, not ours.** `playlist_duration/3600` is where the hour comes from; there is nothing on this side to extend it.
+- **`expire` is about six hours out**, so a playlist held open longer than that stops serving and has to be resolved again. Not yet measured, and recorded as unmeasured.
+- **Nothing about this tier downloads.** §4 already refuses a live broadcast as a download job — it has no end to download to, and one occupied the single worker slot for hours. That rule is untouched and is exactly why watching one needs a tier of its own.
+- `web/public/live-check.html` is the page these numbers came from, kept for the same reason as `hls-eq-check.html`: the question returns with every browser release, and reading a library's source is not the same as playing a broadcast on the device.
+
+### Finding the broadcasts, and the chip that gathers them (2026-08-22)
+
+**Nothing here could see a live broadcast, and the reason was the tab.** The hourly scan walks `/videos`; measured on ABC News, one request each: `/videos` carried `live_status` on **0 of 40** entries and listed no broadcast at all, while `/streams` carried it on **40 of 40** — 1 `is_live`, 39 `was_live`. RSS is worse than useless for it: no live marker of any kind, and it answered **404** for that channel outright.
+
+- **A flat listing reports liveness perfectly well.** `domain/ingest.go` said only a full metadata fetch does, for a release. That was wrong, and believing it is why nobody looked: yt-dlp fills `live_status`, not `is_live`, and `isStillBroadcasting` has always read that field first. So this costs nothing that §8 risk 6 counts — **0.6s per channel** at `--playlist-end 5`, measured across ABC News, NASA, LofiGirl and MKBHD.
+- **`ScanLive` runs on its own ten-minute timer** (`LIVE_SCAN_INTERVAL`, zero disables), over subscribed channels only. A pass is ~3.5 minutes over 375 of them, so five minutes would never rest and an hour would let most of a broadcast finish before anyone was told. **Measured on the real stack: 375 channels, 18 on air.**
+- **It must not go through `listSource`.** That prefers the browse API for channels, and browse carries view counts and upload dates but no live status — a pass through it would run, cost the requests, log cheerfully and find nothing, which is the worst kind of failure because it looks like an answer.
+- **`is_upcoming` is not Live.** It genuinely comes back — NASA had one sorted *above* two `is_live` — and pressing it plays nothing. A dead control is bad; one wearing a red dot is worse.
+- **The answer expires, so it is stored with the moment it was given.** `live_status` (yt-dlp's own word, not a boolean — `was_live` is what tells a broadcast from its recording) plus `live_checked_at`, and **one** definition of "on air now": `live_status = 'is_live' AND live_checked_at > now() - 30 min`, computed in SQL beside the index that serves it. Sending the timestamp to each reader would be a second definition, agreeing with the first until one of them changed.
+  - **`COALESCE` is not optional there.** A comparison against NULL is NULL, not false, and NULL is the ordinary case — nothing has asked about all but a few hundred rows. Without it every video in the library failed to scan into a bool.
+- **A broadcast is exempt from the 365-day age filter.** ABC News Live was published **479 days ago**, so Home dropped it for being stale while it was broadcasting. The filter measures a publish date as a proxy for how old the content is, and for a 24/7 stream that date is the day somebody switched the encoder on.
+- **The field had to be copied in *both* directions.** `featuresToProto` carries a note about `is_short` crossing the wire as a field nobody mapped; this went the same way on the way *in*, and it was caught only because a real pass found 18 broadcasts and wrote **none** of them. Nothing failed anywhere — an empty string is absent from proto3 JSON, so the wire looked exactly like a field that had not been added yet.
+- **The Live chip is a list, not a ranking.** `GET /api/live`, no page token: "everything on air" is the whole promise, the set is a few dozen, and `applyChannelDiversity` would hide some of it. Filtered to the member's own subscriptions — one member follows 8 channels and another 152.
+- **The chip is absent when nothing is on air.** A red dot is a claim that something is happening; one lit over an empty grid teaches people to stop believing it.
+- **The dot's ring animates, the dot does not.** A blinking dot takes the word beside it with it and reads as a fault light, in a row that is scanned rather than stared at. It is applied through `motion-safe:` and **not** the global reduced-motion rule at `index.css:270` — that rule shortens animations to `0.01ms`, which is right for a one-shot transition and a **strobe** for one that repeats for ever, the exact hazard the setting exists to prevent.
+- **`handleStream` answers a live video and goes no further.** Everything past that point is about a file — whether the disk has one, whether to schedule fetching one, which of two ways to describe one upstream — and a broadcast has none. It returns `live` alone, with `cacheDisabled` set so the player stops polling for a copy that is not coming. Offering `hls` beside it would have the player climb toward a playlist built from adaptive tracks the broadcast does not publish.
+- **Nothing else in the player needed changing.** The live URL ends `.m3u8`, so `isHLSPlaylist` routes it through hls.js on Chrome and straight to `src` on iOS, exactly as the ordinary HLS tier is routed. Measured through the running app on `4e0smSaUfhg`: 144p–720p, opening at the live edge (`t=1270`), `seekable 0..1285`, and playing again **0.2s** after rewinding 60s.
+- **A broadcast declares no duration, and the bar was drawn against it anyway.** `position / Math.max(duration, 1)` on a stream 26 minutes in is **155,700%** — a bar painted solid red from the first second, reading **"25:57 / 0:00"** beside it. Seen on the phone the first time a live video played.
+  - **What a live playlist does declare is `seekable`**, and that is the only honest statement of length here. Measured on two real broadcasts through this server: `0..3605` and `0..1285`. It is read on `progress` rather than once at metadata, because the window slides forward while the broadcast runs.
+  - **The bar is measured from the window's start, not from zero.** A broadcast has no zero that can still be played, and drawing from zero gives a bar whose filled part *shrinks* as the picture advances. `SeekBar` gained an `origin`, defaulting to 0 for everything with a beginning.
+  - **The readout is a LIVE button, not two numbers.** One of the two was always wrong, and what a viewer wants to know is whether they are watching what is happening — lit means yes, dimmed shows how far back they are and presses to return. Without it, rewinding is a one-way trip short of reloading.
+  - **The arithmetic lives in `application/live-timeline.ts`**, and `SeekBar` calls the same function for every tier. Written twice, the bar and the label would agree until one of them was fixed.
+- **The card's duration badge says LIVE.** A live row carries `duration_seconds` 0, so it read **"0:00"** — which a viewer reasonably reads as broken. Same corner, same box, so a grid holding both does not step.
+
 ### itag 18 stopped serving, so it stopped being a tier (2026-08-18)
 
 **The opening tier is the muxed stream.** This reverses the rule that stood here before it — that 480p/720p cannot be the *opening* tier because itag 18 is the only progressive format YouTube publishes. That was true and is now beside the point: itag 18 is published and does not play.

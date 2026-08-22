@@ -53,6 +53,12 @@ service CatalogService {
   rpc SetShort(SetShortRequest) returns (SetShortResponse);
   // The videos nobody has asked about yet, newest first.
   rpc ListUncheckedShorts(ListUncheckedShortsRequest) returns (ListUncheckedShortsResponse);
+  // Broadcasts on air right now, from channels this member follows.
+  //
+  // Not a feed: this is "everything that is happening", which is a list. There
+  // are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
+  // would actively hide some of them.
+  rpc ListLive(ListLiveRequest) returns (ListLiveResponse);
   // Resolves an external source URL to an existing library entry, so the same
   // video is never ingested twice.
   rpc FindBySourceURL(FindBySourceURLRequest) returns (FindBySourceURLResponse);
@@ -208,6 +214,26 @@ message Video {
   // Not derived from duration: a 14-second video measured as an ordinary clip
   // and a 40-second one measured as a Short.
   optional bool is_short = 21;
+  // Whether this is a broadcast still on air, in yt-dlp's own words:
+  // "is_live", "is_upcoming", "was_live", "post_live", "not_live", or empty
+  // where nobody has asked.
+  //
+  // A string rather than a bool because "was_live" is worth keeping — it is
+  // what tells a broadcast from its recording without asking YouTube again.
+  //
+  // Unlike is_short this answer expires, so it travels with the moment it was
+  // given: a reader asking "on air right now?" must weigh both. Thirty minutes
+  // is the cut the Live chip applies, three passes of the ten-minute scan.
+  string live_status = 23;
+  // On air *right now*: live when last asked, and asked recently enough to
+  // still mean something.
+  //
+  // A separate field rather than a timestamp for the client to judge, because
+  // "recently enough" is one rule and it belongs in one place. Sending
+  // live_checked_at and letting each reader apply its own cut is how two
+  // definitions of the same question start agreeing, and go on agreeing right
+  // up until one of them changes.
+  bool is_live_now = 24;
 }
 
 message SubtitleTrack {
@@ -387,6 +413,13 @@ message VideoFeatures {
   bool is_short = 11;
   // How this video reached the library. Empty where it is not known.
   string discovered_via = 12;
+  // On air right now — confirmed live, and confirmed inside the last thirty
+  // minutes. Ranking uses it for one thing: exempting a broadcast from the
+  // 365-day age filter, because a 24/7 stream's publish date is the day it was
+  // switched on rather than the age of anything anybody would watch.
+  // Same name as Video.is_live_now and the same fact, deliberately: one thing
+  // with two names on two messages is how two meanings start.
+  bool is_live_now = 13;
 }
 
 // ---------------------------------------------------------------------------
@@ -422,6 +455,17 @@ message DeleteUserDataResponse {
   int64 watch_later = 5;
   int64 playlists = 6;
   int64 comments = 7;
+}
+
+message ListLiveRequest {
+  // Whose subscriptions to read. Required: an empty user is refused rather than
+  // quietly answered with the whole household's, which is the guard that stops
+  // one browser being handed everybody's channels by omission.
+  string user_id = 1;
+}
+
+message ListLiveResponse {
+  repeated Video videos = 1;
 }
 
 message UpsertVideoRequest {

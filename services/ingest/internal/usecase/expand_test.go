@@ -136,6 +136,12 @@ func (d *deepenDownloader) FetchSubtitles(context.Context, string, string, int32
 func (d *deepenDownloader) Download(context.Context, string, string, int32, func(domain.Progress)) (domain.DownloadResult, error) {
 	return domain.DownloadResult{}, nil
 }
+// Live is refused as a download and resolved by its own path; nothing in
+// these tests goes near it, and "not broadcasting" is the honest stub.
+func (d *deepenDownloader) ResolveLive(context.Context, string, int32) (domain.LiveStream, error) {
+	return domain.LiveStream{}, nil
+}
+
 func (d *deepenDownloader) ChannelInfo(context.Context, string) (domain.ChannelMetadata, error) {
 	return domain.ChannelMetadata{}, nil
 }

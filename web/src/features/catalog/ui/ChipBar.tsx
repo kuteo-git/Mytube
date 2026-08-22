@@ -2,6 +2,36 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRememberedScrollX } from '@/features/navigation/application/use-remembered-scroll-x'
 import { Pill } from '@/shared/ui/primitives'
 
+/**
+ * The chip that means "on air".
+ *
+ * Named here rather than passed in, because the alternative — a prop carrying
+ * arbitrary content per chip — would let any caller put anything beside any
+ * label, and there is exactly one chip in this app that is not a topic name.
+ */
+export const LIVE_CATEGORY = 'Live'
+
+/**
+ * A lit dot with a ring leaving it.
+ *
+ * The dot itself never moves, dims, or blinks: this row is scanned at speed,
+ * and a dot that spends half its time faded is one you can miss entirely. The
+ * ring is a separate absolutely-positioned element so the dot's own box never
+ * changes size and the label beside it cannot be nudged.
+ *
+ * `motion-safe:` and not the global reduced-motion rule — that one shortens
+ * animations rather than removing them, which turns anything infinite into a
+ * strobe.
+ */
+function LiveDot() {
+  return (
+    <span className="relative grid h-2 w-2 shrink-0 place-items-center" aria-hidden>
+      <span className="absolute h-2 w-2 rounded-full bg-brand motion-safe:animate-[live-ring_1.8s_ease-out_infinite]" />
+      <span className="relative h-2 w-2 rounded-full bg-brand" />
+    </span>
+  )
+}
+
 /** Horizontally scrollable category filter, scrollbar hidden, arrows on both ends. */
 export function ChipBar({
   categories,
@@ -96,6 +126,7 @@ export function ChipBar({
             active={category === active}
             onClick={() => onSelect(category)}
           >
+            {category === LIVE_CATEGORY && <LiveDot />}
             {category}
           </Pill>
         ))}

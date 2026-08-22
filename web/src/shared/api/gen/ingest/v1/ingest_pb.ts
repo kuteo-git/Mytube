@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ingest/v1/ingest.proto.
  */
 export const file_ingest_v1_ingest: GenFile = /*@__PURE__*/
-  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEglpbmdlc3QudjEiQAoZTGlzdENoYW5uZWxVcGxvYWRzUmVxdWVzdBIPCgdjaGFubmVsGAEgASgJEhIKCnBhZ2VfdG9rZW4YAiABKAkiKgoKU29ydE9wdGlvbhINCgVsYWJlbBgBIAEoCRINCgV0b2tlbhgCIAEoCSKgAQoaTGlzdENoYW5uZWxVcGxvYWRzUmVzcG9uc2USKAoGdmlkZW9zGAEgAygLMhguaW5nZXN0LnYxLkV4dGVybmFsVmlkZW8SKwoMc29ydF9vcHRpb25zGAIgAygLMhUuaW5nZXN0LnYxLlNvcnRPcHRpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAMgASgJEhIKCmF2YXRhcl91cmwYBCABKAkiPgoVRmV0Y2hTdWJ0aXRsZXNSZXF1ZXN0EgsKA3VybBgBIAEoCRIYChBwcmVmZXJyZWRfaGVpZ2h0GAIgASgFIhgKFkZldGNoU3VidGl0bGVzUmVzcG9uc2UiKAoVUmVzb2x2ZUNoYW5uZWxSZXF1ZXN0Eg8KB2NoYW5uZWwYASABKAkieAoWUmVzb2x2ZUNoYW5uZWxSZXNwb25zZRISCgpjaGFubmVsX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGaGFuZGxlGAMgASgJEhIKCmF2YXRhcl91cmwYBCABKAkSGAoQc3Vic2NyaWJlcl9jb3VudBgFIAEoAyJLChhTZXRBY2NvdW50Q29va2llc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIPCgdjb29raWVzGAMgASgJIhsKGVNldEFjY291bnRDb29raWVzUmVzcG9uc2UiFQoTTGlzdEFjY291bnRzUmVxdWVzdCI8ChRMaXN0QWNjb3VudHNSZXNwb25zZRIkCghhY2NvdW50cxgBIAMoCzISLmluZ2VzdC52MS5BY2NvdW50Iq0BCgdBY2NvdW50Eg8KB3VzZXJfaWQYASABKAkSDQoFbGFiZWwYAiABKAkSLAoIYWRkZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3Rfc2Nhbl9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLbGFzdF9yZXN1bHQYBSABKAkSDQoFc3RhdGUYBiABKAkiJwoUUmVtb3ZlQWNjb3VudFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSIXChVSZW1vdmVBY2NvdW50UmVzcG9uc2UiJgoTU2NhbkFjY291bnRzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJIh0KG0dldEFjY291bnRTY2FuU3RhdHVzUmVxdWVzdCJMChxHZXRBY2NvdW50U2NhblN0YXR1c1Jlc3BvbnNlEiwKBnN0YXR1cxgBIAEoCzIcLmluZ2VzdC52MS5BY2NvdW50U2NhblN0YXR1cyKvAgoRQWNjb3VudFNjYW5TdGF0dXMSDwoHcnVubmluZxgBIAEoCBIuCgpzdGFydGVkX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9tcxgDIAEoAxINCgVwaGFzZRgEIAEoCRIWCg5wbGF5bGlzdHNfcmVhZBgFIAEoBRIXCg9wbGF5bGlzdHNfdG90YWwYBiABKAUSEAoIYWNjb3VudHMYByABKAUSFQoNc3Vic2NyaXB0aW9ucxgIIAEoBRIRCglwbGF5bGlzdHMYCSABKAUSDgoGdmlkZW9zGAogASgFEhcKD3BsYXlsaXN0X3ZpZGVvcxgLIAEoBRIPCgdleHBpcmVkGAwgASgFEg4KBmVycm9ycxgNIAMoCSKMAQoUU2NhbkFjY291bnRzUmVzcG9uc2USEAoIYWNjb3VudHMYASABKAUSFQoNc3Vic2NyaXB0aW9ucxgCIAEoBRIOCgZ2aWRlb3MYAyABKAUSDwoHZXhwaXJlZBgEIAEoBRIRCglwbGF5bGlzdHMYBSABKAUSFwoPcGxheWxpc3RfdmlkZW9zGAYgASgFIj0KFEV4cGFuZExpYnJhcnlSZXF1ZXN0Eg0KBXRvcGljGAEgASgJEhYKDnNlZWRfdmlkZW9faWRzGAIgAygJIi0KFUV4cGFuZExpYnJhcnlSZXNwb25zZRIUCgx2aWRlb3NfYWRkZWQYASABKAUiqgIKDUV4dGVybmFsVmlkZW8SCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSEgoKY2hhbm5lbF9pZBgDIAEoCRIUCgxjaGFubmVsX25hbWUYBCABKAkSGAoQZHVyYXRpb25fc2Vjb25kcxgFIAEoBRISCgp2aWV3X2NvdW50GAYgASgDEhUKDXRodW1ibmFpbF91cmwYByABKAkSEgoKc291cmNlX3VybBgIIAEoCRIwCgxwdWJsaXNoZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2Rlc2NyaXB0aW9uGAogASgJEg4KBnRvcGljcxgLIAMoCRIQCghoYXNodGFncxgMIAMoCRISCgppbl9saWJyYXJ5GA0gASgIIi0KDVNlYXJjaFJlcXVlc3QSDQoFcXVlcnkYASABKAkSDQoFbGltaXQYAiABKAUiOgoOU2VhcmNoUmVzcG9uc2USKAoGdmlkZW9zGAEgAygLMhguaW5nZXN0LnYxLkV4dGVybmFsVmlkZW8iIgoTUHJldmlld1ZpZGVvUmVxdWVzdBILCgN1cmwYASABKAkiPwoUUHJldmlld1ZpZGVvUmVzcG9uc2USJwoFdmlkZW8YASABKAsyGC5pbmdlc3QudjEuRXh0ZXJuYWxWaWRlbyIhChJFbnN1cmVWaWRlb1JlcXVlc3QSCwoDdXJsGAEgASgJIicKE0Vuc3VyZVZpZGVvUmVzcG9uc2USEAoIdmlkZW9faWQYASABKAkiJgoVQmFja2ZpbGxUb3BpY3NSZXF1ZXN0Eg0KBWxpbWl0GAEgASgFIhoKGEdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdCK1AQoOQmFja2ZpbGxTdGF0dXMSEAoIZXhhbWluZWQYASABKAUSDwoHdXBkYXRlZBgCIAEoBRIOCgZmYWlsZWQYAyABKAUSDwoHcnVubmluZxgEIAEoCBIuCgpzdGFydGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQwoWQmFja2ZpbGxUb3BpY3NSZXNwb25zZRIpCgZzdGF0dXMYASABKAsyGS5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiRgoZR2V0QmFja2ZpbGxTdGF0dXNSZXNwb25zZRIpCgZzdGF0dXMYASABKAsyGS5pbmdlc3QudjEuQmFja2ZpbGxTdGF0dXMiEAoOUmVmcmVzaFJlcXVlc3QiOAoPUmVmcmVzaFJlc3BvbnNlEiUKBnN0YXR1cxgBIAEoCzIVLmluZ2VzdC52MS5TY2FuU3RhdHVzIhYKFEdldFNjYW5TdGF0dXNSZXF1ZXN0Ij4KFUdldFNjYW5TdGF0dXNSZXNwb25zZRIlCgZzdGF0dXMYASABKAsyFS5pbmdlc3QudjEuU2NhblN0YXR1cyLOAQoKU2NhblN0YXR1cxIuCgpzdGFydGVkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9tcxgCIAEoAxIXCg9zb3VyY2VzX3NjYW5uZWQYAyABKAUSFgoOc291cmNlc19mYWlsZWQYBCABKAUSEwoLdmlkZW9zX3NlZW4YBSABKAUSFAoMdmlkZW9zX2FkZGVkGAYgASgFEg4KBmVycm9ycxgHIAMoCRIPCgdydW5uaW5nGAggASgIIjkKFFJlc29sdmVTdHJlYW1SZXF1ZXN0EhAKCHZpZGVvX2lkGAEgASgJEg8KB3JlZnJlc2gYAiABKAgidwoVUmVzb2x2ZVN0cmVhbVJlc3BvbnNlEgsKA3VybBgBIAEoCRIOCgZoZWlnaHQYAiABKAUSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJbWltZV90eXBlGAQgASgJIkwKDVN1Ym1pdFJlcXVlc3QSCwoDdXJsGAEgASgJEhQKDHJlcXVlc3RlZF9ieRgCIAEoCRIYChBwcmVmZXJyZWRfaGVpZ2h0GAMgASgFIi0KDlN1Ym1pdFJlc3BvbnNlEhsKA2pvYhgBIAEoCzIOLmluZ2VzdC52MS5Kb2IitQIKA0pvYhIKCgJpZBgBIAEoCRISCgpzb3VyY2VfdXJsGAIgASgJEhAKCHZpZGVvX2lkGAMgASgJEg0KBXRpdGxlGAQgASgJEiIKBXN0YXRlGAUgASgOMhMuaW5nZXN0LnYxLkpvYlN0YXRlEhAKCHByb2dyZXNzGAYgASgCEhgKEGRvd25sb2FkZWRfYnl0ZXMYByABKAMSEwoLdG90YWxfYnl0ZXMYCCABKAMSFQoNZXJyb3JfbWVzc2FnZRgJIAEoCRIQCghhdHRlbXB0cxgKIAEoBRIuCgpjcmVhdGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiHwoNR2V0Sm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkiLQoOR2V0Sm9iUmVzcG9uc2USGwoDam9iGAEgASgLMg4uaW5nZXN0LnYxLkpvYiJNCg9MaXN0Sm9ic1JlcXVlc3QSEwoLYWN0aXZlX29ubHkYASABKAgSDQoFbGltaXQYAiABKAUSFgoOaGlkZV9kaXNtaXNzZWQYAyABKAgiMAoQTGlzdEpvYnNSZXNwb25zZRIcCgRqb2JzGAEgAygLMg4uaW5nZXN0LnYxLkpvYiIiChBDYW5jZWxKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSITChFDYW5jZWxKb2JSZXNwb25zZSIjChFEaXNtaXNzSm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkiFAoSRGlzbWlzc0pvYlJlc3BvbnNlIiMKEkRpc21pc3NKb2JzUmVxdWVzdBINCgVzdGF0ZRgBIAEoCSIoChNEaXNtaXNzSm9ic1Jlc3BvbnNlEhEKCWRpc21pc3NlZBgBIAEoAyI3Cg9SZXRyeUpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJEhQKDHJlcXVlc3RlZF9ieRgCIAEoCSIvChBSZXRyeUpvYlJlc3BvbnNlEhsKA2pvYhgBIAEoCzIOLmluZ2VzdC52MS5Kb2IiMQoQTGlzdFNjYW5zUmVxdWVzdBINCgVsaW1pdBgBIAEoBRIOCgZvZmZzZXQYAiABKAUiSAoRTGlzdFNjYW5zUmVzcG9uc2USJAoFc2NhbnMYASADKAsyFS5pbmdlc3QudjEuU2NhblN0YXR1cxINCgV0b3RhbBgCIAEoBSITChFDbGVhclNjYW5zUmVxdWVzdCIUChJDbGVhclNjYW5zUmVzcG9uc2UiLgoaQ2FuY2VsVmlkZW9Eb3dubG9hZFJlcXVlc3QSEAoIdmlkZW9faWQYASABKAkiMAobQ2FuY2VsVmlkZW9Eb3dubG9hZFJlc3BvbnNlEhEKCWNhbmNlbGxlZBgBIAEoBSK1AQoOWW91VHViZUNvbW1lbnQSCgoCaWQYASABKAkSEQoJcGFyZW50X2lkGAIgASgJEg4KBmF1dGhvchgDIAEoCRIRCglhdXRob3JfaWQYBCABKAkSDAoEdGV4dBgFIAEoCRIZChFwdWJsaXNoZWRfYXRfdW5peBgGIAEoAxISCgpsaWtlX2NvdW50GAcgASgDEhYKCXBpbm5lZF9ieRgIIAEoCUgAiAEBQgwKCl9waW5uZWRfYnkiKAoURmV0Y2hDb21tZW50c1JlcXVlc3QSEAoIdmlkZW9faWQYASABKAkiRAoVRmV0Y2hDb21tZW50c1Jlc3BvbnNlEisKCGNvbW1lbnRzGAEgAygLMhkuaW5nZXN0LnYxLllvdVR1YmVDb21tZW50KpoBCghKb2JTdGF0ZRIZChVKT0JfU1RBVEVfVU5TUEVDSUZJRUQQABIUChBKT0JfU1RBVEVfUVVFVUVEEAESFQoRSk9CX1NUQVRFX1JVTk5JTkcQAhIXChNKT0JfU1RBVEVfU1VDQ0VFREVEEAMSFAoQSk9CX1NUQVRFX0ZBSUxFRBAEEhcKE0pPQl9TVEFURV9DQU5DRUxMRUQQBTLoEQoNSW5nZXN0U2VydmljZRI9CgZTZWFyY2gSGC5pbmdlc3QudjEuU2VhcmNoUmVxdWVzdBoZLmluZ2VzdC52MS5TZWFyY2hSZXNwb25zZRJMCgtFbnN1cmVWaWRlbxIdLmluZ2VzdC52MS5FbnN1cmVWaWRlb1JlcXVlc3QaHi5pbmdlc3QudjEuRW5zdXJlVmlkZW9SZXNwb25zZRJPCgxQcmV2aWV3VmlkZW8SHi5pbmdlc3QudjEuUHJldmlld1ZpZGVvUmVxdWVzdBofLmluZ2VzdC52MS5QcmV2aWV3VmlkZW9SZXNwb25zZRJACgdSZWZyZXNoEhkuaW5nZXN0LnYxLlJlZnJlc2hSZXF1ZXN0GhouaW5nZXN0LnYxLlJlZnJlc2hSZXNwb25zZRJVCg5CYWNrZmlsbFRvcGljcxIgLmluZ2VzdC52MS5CYWNrZmlsbFRvcGljc1JlcXVlc3QaIS5pbmdlc3QudjEuQmFja2ZpbGxUb3BpY3NSZXNwb25zZRJeChFHZXRCYWNrZmlsbFN0YXR1cxIjLmluZ2VzdC52MS5HZXRCYWNrZmlsbFN0YXR1c1JlcXVlc3QaJC5pbmdlc3QudjEuR2V0QmFja2ZpbGxTdGF0dXNSZXNwb25zZRJSCg1HZXRTY2FuU3RhdHVzEh8uaW5nZXN0LnYxLkdldFNjYW5TdGF0dXNSZXF1ZXN0GiAuaW5nZXN0LnYxLkdldFNjYW5TdGF0dXNSZXNwb25zZRJSCg1SZXNvbHZlU3RyZWFtEh8uaW5nZXN0LnYxLlJlc29sdmVTdHJlYW1SZXF1ZXN0GiAuaW5nZXN0LnYxLlJlc29sdmVTdHJlYW1SZXNwb25zZRI9CgZTdWJtaXQSGC5pbmdlc3QudjEuU3VibWl0UmVxdWVzdBoZLmluZ2VzdC52MS5TdWJtaXRSZXNwb25zZRI9CgZHZXRKb2ISGC5pbmdlc3QudjEuR2V0Sm9iUmVxdWVzdBoZLmluZ2VzdC52MS5HZXRKb2JSZXNwb25zZRJDCghMaXN0Sm9icxIaLmluZ2VzdC52MS5MaXN0Sm9ic1JlcXVlc3QaGy5pbmdlc3QudjEuTGlzdEpvYnNSZXNwb25zZRJGCglDYW5jZWxKb2ISGy5pbmdlc3QudjEuQ2FuY2VsSm9iUmVxdWVzdBocLmluZ2VzdC52MS5DYW5jZWxKb2JSZXNwb25zZRJJCgpEaXNtaXNzSm9iEhwuaW5nZXN0LnYxLkRpc21pc3NKb2JSZXF1ZXN0Gh0uaW5nZXN0LnYxLkRpc21pc3NKb2JSZXNwb25zZRJMCgtEaXNtaXNzSm9icxIdLmluZ2VzdC52MS5EaXNtaXNzSm9ic1JlcXVlc3QaHi5pbmdlc3QudjEuRGlzbWlzc0pvYnNSZXNwb25zZRJDCghSZXRyeUpvYhIaLmluZ2VzdC52MS5SZXRyeUpvYlJlcXVlc3QaGy5pbmdlc3QudjEuUmV0cnlKb2JSZXNwb25zZRJGCglMaXN0U2NhbnMSGy5pbmdlc3QudjEuTGlzdFNjYW5zUmVxdWVzdBocLmluZ2VzdC52MS5MaXN0U2NhbnNSZXNwb25zZRJJCgpDbGVhclNjYW5zEhwuaW5nZXN0LnYxLkNsZWFyU2NhbnNSZXF1ZXN0Gh0uaW5nZXN0LnYxLkNsZWFyU2NhbnNSZXNwb25zZRJkChNDYW5jZWxWaWRlb0Rvd25sb2FkEiUuaW5nZXN0LnYxLkNhbmNlbFZpZGVvRG93bmxvYWRSZXF1ZXN0GiYuaW5nZXN0LnYxLkNhbmNlbFZpZGVvRG93bmxvYWRSZXNwb25zZRJSCg1FeHBhbmRMaWJyYXJ5Eh8uaW5nZXN0LnYxLkV4cGFuZExpYnJhcnlSZXF1ZXN0GiAuaW5nZXN0LnYxLkV4cGFuZExpYnJhcnlSZXNwb25zZRJeChFTZXRBY2NvdW50Q29va2llcxIjLmluZ2VzdC52MS5TZXRBY2NvdW50Q29va2llc1JlcXVlc3QaJC5pbmdlc3QudjEuU2V0QWNjb3VudENvb2tpZXNSZXNwb25zZRJPCgxMaXN0QWNjb3VudHMSHi5pbmdlc3QudjEuTGlzdEFjY291bnRzUmVxdWVzdBofLmluZ2VzdC52MS5MaXN0QWNjb3VudHNSZXNwb25zZRJSCg1SZW1vdmVBY2NvdW50Eh8uaW5nZXN0LnYxLlJlbW92ZUFjY291bnRSZXF1ZXN0GiAuaW5nZXN0LnYxLlJlbW92ZUFjY291bnRSZXNwb25zZRJPCgxTY2FuQWNjb3VudHMSHi5pbmdlc3QudjEuU2NhbkFjY291bnRzUmVxdWVzdBofLmluZ2VzdC52MS5TY2FuQWNjb3VudHNSZXNwb25zZRJnChRHZXRBY2NvdW50U2NhblN0YXR1cxImLmluZ2VzdC52MS5HZXRBY2NvdW50U2NhblN0YXR1c1JlcXVlc3QaJy5pbmdlc3QudjEuR2V0QWNjb3VudFNjYW5TdGF0dXNSZXNwb25zZRJhChJMaXN0Q2hhbm5lbFVwbG9hZHMSJC5pbmdlc3QudjEuTGlzdENoYW5uZWxVcGxvYWRzUmVxdWVzdBolLmluZ2VzdC52MS5MaXN0Q2hhbm5lbFVwbG9hZHNSZXNwb25zZRJVCg5SZXNvbHZlQ2hhbm5lbBIgLmluZ2VzdC52MS5SZXNvbHZlQ2hhbm5lbFJlcXVlc3QaIS5pbmdlc3QudjEuUmVzb2x2ZUNoYW5uZWxSZXNwb25zZRJVCg5GZXRjaFN1YnRpdGxlcxIgLmluZ2VzdC52MS5GZXRjaFN1YnRpdGxlc1JlcXVlc3QaIS5pbmdlc3QudjEuRmV0Y2hTdWJ0aXRsZXNSZXNwb25zZRJSCg1GZXRjaENvbW1lbnRzEh8uaW5nZXN0LnYxLkZldGNoQ29tbWVudHNSZXF1ZXN0GiAuaW5nZXN0LnYxLkZldGNoQ29tbWVudHNSZXNwb25zZUKfAQoNY29tLmluZ2VzdC52MUILSW5nZXN0UHJvdG9QAVo8Z2l0aHViLmNvbS9sdWNuZ3V5ZW4vbG9jYWwteW91dHViZS9nZW4vZ28vaW5nZXN0L3YxO2luZ2VzdHYxogIDSVhYqgIJSW5nZXN0LlYxygIJSW5nZXN0XFYx4gIVSW5nZXN0XFYxXEdQQk1ldGFkYXRh6gIKSW5nZXN0OjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChZpbmdlc3QvdjEvaW5nZXN0LnByb3RvEglpbmdlc3QudjEiQAoZTGlzdENoYW5uZWxVcGxvYWRzUmVxdWVzdBIPCgdjaGFubmVsGAEgASgJEhIKCnBhZ2VfdG9rZW4YAiABKAkiKgoKU29ydE9wdGlvbhINCgVsYWJlbBgBIAEoCRINCgV0b2tlbhgCIAEoCSKgAQoaTGlzdENoYW5uZWxVcGxvYWRzUmVzcG9uc2USKAoGdmlkZW9zGAEgAygLMhguaW5nZXN0LnYxLkV4dGVybmFsVmlkZW8SKwoMc29ydF9vcHRpb25zGAIgAygLMhUuaW5nZXN0LnYxLlNvcnRPcHRpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAMgASgJEhIKCmF2YXRhcl91cmwYBCABKAkiPgoVRmV0Y2hTdWJ0aXRsZXNSZXF1ZXN0EgsKA3VybBgBIAEoCRIYChBwcmVmZXJyZWRfaGVpZ2h0GAIgASgFIhgKFkZldGNoU3VidGl0bGVzUmVzcG9uc2UiNQoSUmVzb2x2ZUxpdmVSZXF1ZXN0EgsKA3VybBgBIAEoCRISCgptYXhfaGVpZ2h0GAIgASgFIm8KDUxpdmVSZW5kaXRpb24SCwoDdXJsGAEgASgJEg0KBWNvZGVjGAIgASgJEg0KBXdpZHRoGAMgASgFEg4KBmhlaWdodBgEIAEoBRIPCgdiaXRyYXRlGAUgASgFEhIKCmF1ZGlvX29ubHkYBiABKAgiVAoTUmVzb2x2ZUxpdmVSZXNwb25zZRIPCgdpc19saXZlGAEgASgIEiwKCnJlbmRpdGlvbnMYAiADKAsyGC5pbmdlc3QudjEuTGl2ZVJlbmRpdGlvbiIoChVSZXNvbHZlQ2hhbm5lbFJlcXVlc3QSDwoHY2hhbm5lbBgBIAEoCSJ4ChZSZXNvbHZlQ2hhbm5lbFJlc3BvbnNlEhIKCmNoYW5uZWxfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZoYW5kbGUYAyABKAkSEgoKYXZhdGFyX3VybBgEIAEoCRIYChBzdWJzY3JpYmVyX2NvdW50GAUgASgDIksKGFNldEFjY291bnRDb29raWVzUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB2Nvb2tpZXMYAyABKAkiGwoZU2V0QWNjb3VudENvb2tpZXNSZXNwb25zZSIVChNMaXN0QWNjb3VudHNSZXF1ZXN0IjwKFExpc3RBY2NvdW50c1Jlc3BvbnNlEiQKCGFjY291bnRzGAEgAygLMhIuaW5nZXN0LnYxLkFjY291bnQirQEKB0FjY291bnQSDwoHdXNlcl9pZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIsCghhZGRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF9zY2FuX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtsYXN0X3Jlc3VsdBgFIAEoCRINCgVzdGF0ZRgGIAEoCSInChRSZW1vdmVBY2NvdW50UmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJIhcKFVJlbW92ZUFjY291bnRSZXNwb25zZSImChNTY2FuQWNjb3VudHNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiHQobR2V0QWNjb3VudFNjYW5TdGF0dXNSZXF1ZXN0IkwKHEdldEFjY291bnRTY2FuU3RhdHVzUmVzcG9uc2USLAoGc3RhdHVzGAEgASgLMhwuaW5nZXN0LnYxLkFjY291bnRTY2FuU3RhdHVzIq8CChFBY2NvdW50U2NhblN0YXR1cxIPCgdydW5uaW5nGAEgASgIEi4KCnN0YXJ0ZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2R1cmF0aW9uX21zGAMgASgDEg0KBXBoYXNlGAQgASgJEhYKDnBsYXlsaXN0c19yZWFkGAUgASgFEhcKD3BsYXlsaXN0c190b3RhbBgGIAEoBRIQCghhY2NvdW50cxgHIAEoBRIVCg1zdWJzY3JpcHRpb25zGAggASgFEhEKCXBsYXlsaXN0cxgJIAEoBRIOCgZ2aWRlb3MYCiABKAUSFwoPcGxheWxpc3RfdmlkZW9zGAsgASgFEg8KB2V4cGlyZWQYDCABKAUSDgoGZXJyb3JzGA0gAygJIowBChRTY2FuQWNjb3VudHNSZXNwb25zZRIQCghhY2NvdW50cxgBIAEoBRIVCg1zdWJzY3JpcHRpb25zGAIgASgFEg4KBnZpZGVvcxgDIAEoBRIPCgdleHBpcmVkGAQgASgFEhEKCXBsYXlsaXN0cxgFIAEoBRIXCg9wbGF5bGlzdF92aWRlb3MYBiABKAUiPQoURXhwYW5kTGlicmFyeVJlcXVlc3QSDQoFdG9waWMYASABKAkSFgoOc2VlZF92aWRlb19pZHMYAiADKAkiLQoVRXhwYW5kTGlicmFyeVJlc3BvbnNlEhQKDHZpZGVvc19hZGRlZBgBIAEoBSKqAgoNRXh0ZXJuYWxWaWRlbxIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRISCgpjaGFubmVsX2lkGAMgASgJEhQKDGNoYW5uZWxfbmFtZRgEIAEoCRIYChBkdXJhdGlvbl9zZWNvbmRzGAUgASgFEhIKCnZpZXdfY291bnQYBiABKAMSFQoNdGh1bWJuYWlsX3VybBgHIAEoCRISCgpzb3VyY2VfdXJsGAggASgJEjAKDHB1Ymxpc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGVzY3JpcHRpb24YCiABKAkSDgoGdG9waWNzGAsgAygJEhAKCGhhc2h0YWdzGAwgAygJEhIKCmluX2xpYnJhcnkYDSABKAgiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoBSI6Cg5TZWFyY2hSZXNwb25zZRIoCgZ2aWRlb3MYASADKAsyGC5pbmdlc3QudjEuRXh0ZXJuYWxWaWRlbyIiChNQcmV2aWV3VmlkZW9SZXF1ZXN0EgsKA3VybBgBIAEoCSI/ChRQcmV2aWV3VmlkZW9SZXNwb25zZRInCgV2aWRlbxgBIAEoCzIYLmluZ2VzdC52MS5FeHRlcm5hbFZpZGVvIiEKEkVuc3VyZVZpZGVvUmVxdWVzdBILCgN1cmwYASABKAkiJwoTRW5zdXJlVmlkZW9SZXNwb25zZRIQCgh2aWRlb19pZBgBIAEoCSImChVCYWNrZmlsbFRvcGljc1JlcXVlc3QSDQoFbGltaXQYASABKAUiGgoYR2V0QmFja2ZpbGxTdGF0dXNSZXF1ZXN0IrUBCg5CYWNrZmlsbFN0YXR1cxIQCghleGFtaW5lZBgBIAEoBRIPCgd1cGRhdGVkGAIgASgFEg4KBmZhaWxlZBgDIAEoBRIPCgdydW5uaW5nGAQgASgIEi4KCnN0YXJ0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJDChZCYWNrZmlsbFRvcGljc1Jlc3BvbnNlEikKBnN0YXR1cxgBIAEoCzIZLmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cyJGChlHZXRCYWNrZmlsbFN0YXR1c1Jlc3BvbnNlEikKBnN0YXR1cxgBIAEoCzIZLmluZ2VzdC52MS5CYWNrZmlsbFN0YXR1cyIQCg5SZWZyZXNoUmVxdWVzdCI4Cg9SZWZyZXNoUmVzcG9uc2USJQoGc3RhdHVzGAEgASgLMhUuaW5nZXN0LnYxLlNjYW5TdGF0dXMiFgoUR2V0U2NhblN0YXR1c1JlcXVlc3QiPgoVR2V0U2NhblN0YXR1c1Jlc3BvbnNlEiUKBnN0YXR1cxgBIAEoCzIVLmluZ2VzdC52MS5TY2FuU3RhdHVzIs4BCgpTY2FuU3RhdHVzEi4KCnN0YXJ0ZWRfYXQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2R1cmF0aW9uX21zGAIgASgDEhcKD3NvdXJjZXNfc2Nhbm5lZBgDIAEoBRIWCg5zb3VyY2VzX2ZhaWxlZBgEIAEoBRITCgt2aWRlb3Nfc2VlbhgFIAEoBRIUCgx2aWRlb3NfYWRkZWQYBiABKAUSDgoGZXJyb3JzGAcgAygJEg8KB3J1bm5pbmcYCCABKAgiOQoUUmVzb2x2ZVN0cmVhbVJlcXVlc3QSEAoIdmlkZW9faWQYASABKAkSDwoHcmVmcmVzaBgCIAEoCCJ3ChVSZXNvbHZlU3RyZWFtUmVzcG9uc2USCwoDdXJsGAEgASgJEg4KBmhlaWdodBgCIAEoBRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCgltaW1lX3R5cGUYBCABKAkiTAoNU3VibWl0UmVxdWVzdBILCgN1cmwYASABKAkSFAoMcmVxdWVzdGVkX2J5GAIgASgJEhgKEHByZWZlcnJlZF9oZWlnaHQYAyABKAUiLQoOU3VibWl0UmVzcG9uc2USGwoDam9iGAEgASgLMg4uaW5nZXN0LnYxLkpvYiK1AgoDSm9iEgoKAmlkGAEgASgJEhIKCnNvdXJjZV91cmwYAiABKAkSEAoIdmlkZW9faWQYAyABKAkSDQoFdGl0bGUYBCABKAkSIgoFc3RhdGUYBSABKA4yEy5pbmdlc3QudjEuSm9iU3RhdGUSEAoIcHJvZ3Jlc3MYBiABKAISGAoQZG93bmxvYWRlZF9ieXRlcxgHIAEoAxITCgt0b3RhbF9ieXRlcxgIIAEoAxIVCg1lcnJvcl9tZXNzYWdlGAkgASgJEhAKCGF0dGVtcHRzGAogASgFEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIfCg1HZXRKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSItCg5HZXRKb2JSZXNwb25zZRIbCgNqb2IYASABKAsyDi5pbmdlc3QudjEuSm9iIk0KD0xpc3RKb2JzUmVxdWVzdBITCgthY3RpdmVfb25seRgBIAEoCBINCgVsaW1pdBgCIAEoBRIWCg5oaWRlX2Rpc21pc3NlZBgDIAEoCCIwChBMaXN0Sm9ic1Jlc3BvbnNlEhwKBGpvYnMYASADKAsyDi5pbmdlc3QudjEuSm9iIiIKEENhbmNlbEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJIhMKEUNhbmNlbEpvYlJlc3BvbnNlIiMKEURpc21pc3NKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSIUChJEaXNtaXNzSm9iUmVzcG9uc2UiIwoSRGlzbWlzc0pvYnNSZXF1ZXN0Eg0KBXN0YXRlGAEgASgJIigKE0Rpc21pc3NKb2JzUmVzcG9uc2USEQoJZGlzbWlzc2VkGAEgASgDIjcKD1JldHJ5Sm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSFAoMcmVxdWVzdGVkX2J5GAIgASgJIi8KEFJldHJ5Sm9iUmVzcG9uc2USGwoDam9iGAEgASgLMg4uaW5nZXN0LnYxLkpvYiIxChBMaXN0U2NhbnNSZXF1ZXN0Eg0KBWxpbWl0GAEgASgFEg4KBm9mZnNldBgCIAEoBSJIChFMaXN0U2NhbnNSZXNwb25zZRIkCgVzY2FucxgBIAMoCzIVLmluZ2VzdC52MS5TY2FuU3RhdHVzEg0KBXRvdGFsGAIgASgFIhMKEUNsZWFyU2NhbnNSZXF1ZXN0IhQKEkNsZWFyU2NhbnNSZXNwb25zZSIuChpDYW5jZWxWaWRlb0Rvd25sb2FkUmVxdWVzdBIQCgh2aWRlb19pZBgBIAEoCSIwChtDYW5jZWxWaWRlb0Rvd25sb2FkUmVzcG9uc2USEQoJY2FuY2VsbGVkGAEgASgFIrUBCg5Zb3VUdWJlQ29tbWVudBIKCgJpZBgBIAEoCRIRCglwYXJlbnRfaWQYAiABKAkSDgoGYXV0aG9yGAMgASgJEhEKCWF1dGhvcl9pZBgEIAEoCRIMCgR0ZXh0GAUgASgJEhkKEXB1Ymxpc2hlZF9hdF91bml4GAYgASgDEhIKCmxpa2VfY291bnQYByABKAMSFgoJcGlubmVkX2J5GAggASgJSACIAQFCDAoKX3Bpbm5lZF9ieSIoChRGZXRjaENvbW1lbnRzUmVxdWVzdBIQCgh2aWRlb19pZBgBIAEoCSJEChVGZXRjaENvbW1lbnRzUmVzcG9uc2USKwoIY29tbWVudHMYASADKAsyGS5pbmdlc3QudjEuWW91VHViZUNvbW1lbnQqmgEKCEpvYlN0YXRlEhkKFUpPQl9TVEFURV9VTlNQRUNJRklFRBAAEhQKEEpPQl9TVEFURV9RVUVVRUQQARIVChFKT0JfU1RBVEVfUlVOTklORxACEhcKE0pPQl9TVEFURV9TVUNDRUVERUQQAxIUChBKT0JfU1RBVEVfRkFJTEVEEAQSFwoTSk9CX1NUQVRFX0NBTkNFTExFRBAFMrYSCg1Jbmdlc3RTZXJ2aWNlEj0KBlNlYXJjaBIYLmluZ2VzdC52MS5TZWFyY2hSZXF1ZXN0GhkuaW5nZXN0LnYxLlNlYXJjaFJlc3BvbnNlEkwKC0Vuc3VyZVZpZGVvEh0uaW5nZXN0LnYxLkVuc3VyZVZpZGVvUmVxdWVzdBoeLmluZ2VzdC52MS5FbnN1cmVWaWRlb1Jlc3BvbnNlEk8KDFByZXZpZXdWaWRlbxIeLmluZ2VzdC52MS5QcmV2aWV3VmlkZW9SZXF1ZXN0Gh8uaW5nZXN0LnYxLlByZXZpZXdWaWRlb1Jlc3BvbnNlEkAKB1JlZnJlc2gSGS5pbmdlc3QudjEuUmVmcmVzaFJlcXVlc3QaGi5pbmdlc3QudjEuUmVmcmVzaFJlc3BvbnNlElUKDkJhY2tmaWxsVG9waWNzEiAuaW5nZXN0LnYxLkJhY2tmaWxsVG9waWNzUmVxdWVzdBohLmluZ2VzdC52MS5CYWNrZmlsbFRvcGljc1Jlc3BvbnNlEl4KEUdldEJhY2tmaWxsU3RhdHVzEiMuaW5nZXN0LnYxLkdldEJhY2tmaWxsU3RhdHVzUmVxdWVzdBokLmluZ2VzdC52MS5HZXRCYWNrZmlsbFN0YXR1c1Jlc3BvbnNlElIKDUdldFNjYW5TdGF0dXMSHy5pbmdlc3QudjEuR2V0U2NhblN0YXR1c1JlcXVlc3QaIC5pbmdlc3QudjEuR2V0U2NhblN0YXR1c1Jlc3BvbnNlElIKDVJlc29sdmVTdHJlYW0SHy5pbmdlc3QudjEuUmVzb2x2ZVN0cmVhbVJlcXVlc3QaIC5pbmdlc3QudjEuUmVzb2x2ZVN0cmVhbVJlc3BvbnNlEj0KBlN1Ym1pdBIYLmluZ2VzdC52MS5TdWJtaXRSZXF1ZXN0GhkuaW5nZXN0LnYxLlN1Ym1pdFJlc3BvbnNlEj0KBkdldEpvYhIYLmluZ2VzdC52MS5HZXRKb2JSZXF1ZXN0GhkuaW5nZXN0LnYxLkdldEpvYlJlc3BvbnNlEkMKCExpc3RKb2JzEhouaW5nZXN0LnYxLkxpc3RKb2JzUmVxdWVzdBobLmluZ2VzdC52MS5MaXN0Sm9ic1Jlc3BvbnNlEkYKCUNhbmNlbEpvYhIbLmluZ2VzdC52MS5DYW5jZWxKb2JSZXF1ZXN0GhwuaW5nZXN0LnYxLkNhbmNlbEpvYlJlc3BvbnNlEkkKCkRpc21pc3NKb2ISHC5pbmdlc3QudjEuRGlzbWlzc0pvYlJlcXVlc3QaHS5pbmdlc3QudjEuRGlzbWlzc0pvYlJlc3BvbnNlEkwKC0Rpc21pc3NKb2JzEh0uaW5nZXN0LnYxLkRpc21pc3NKb2JzUmVxdWVzdBoeLmluZ2VzdC52MS5EaXNtaXNzSm9ic1Jlc3BvbnNlEkMKCFJldHJ5Sm9iEhouaW5nZXN0LnYxLlJldHJ5Sm9iUmVxdWVzdBobLmluZ2VzdC52MS5SZXRyeUpvYlJlc3BvbnNlEkYKCUxpc3RTY2FucxIbLmluZ2VzdC52MS5MaXN0U2NhbnNSZXF1ZXN0GhwuaW5nZXN0LnYxLkxpc3RTY2Fuc1Jlc3BvbnNlEkkKCkNsZWFyU2NhbnMSHC5pbmdlc3QudjEuQ2xlYXJTY2Fuc1JlcXVlc3QaHS5pbmdlc3QudjEuQ2xlYXJTY2Fuc1Jlc3BvbnNlEmQKE0NhbmNlbFZpZGVvRG93bmxvYWQSJS5pbmdlc3QudjEuQ2FuY2VsVmlkZW9Eb3dubG9hZFJlcXVlc3QaJi5pbmdlc3QudjEuQ2FuY2VsVmlkZW9Eb3dubG9hZFJlc3BvbnNlElIKDUV4cGFuZExpYnJhcnkSHy5pbmdlc3QudjEuRXhwYW5kTGlicmFyeVJlcXVlc3QaIC5pbmdlc3QudjEuRXhwYW5kTGlicmFyeVJlc3BvbnNlEl4KEVNldEFjY291bnRDb29raWVzEiMuaW5nZXN0LnYxLlNldEFjY291bnRDb29raWVzUmVxdWVzdBokLmluZ2VzdC52MS5TZXRBY2NvdW50Q29va2llc1Jlc3BvbnNlEk8KDExpc3RBY2NvdW50cxIeLmluZ2VzdC52MS5MaXN0QWNjb3VudHNSZXF1ZXN0Gh8uaW5nZXN0LnYxLkxpc3RBY2NvdW50c1Jlc3BvbnNlElIKDVJlbW92ZUFjY291bnQSHy5pbmdlc3QudjEuUmVtb3ZlQWNjb3VudFJlcXVlc3QaIC5pbmdlc3QudjEuUmVtb3ZlQWNjb3VudFJlc3BvbnNlEk8KDFNjYW5BY2NvdW50cxIeLmluZ2VzdC52MS5TY2FuQWNjb3VudHNSZXF1ZXN0Gh8uaW5nZXN0LnYxLlNjYW5BY2NvdW50c1Jlc3BvbnNlEmcKFEdldEFjY291bnRTY2FuU3RhdHVzEiYuaW5nZXN0LnYxLkdldEFjY291bnRTY2FuU3RhdHVzUmVxdWVzdBonLmluZ2VzdC52MS5HZXRBY2NvdW50U2NhblN0YXR1c1Jlc3BvbnNlEmEKEkxpc3RDaGFubmVsVXBsb2FkcxIkLmluZ2VzdC52MS5MaXN0Q2hhbm5lbFVwbG9hZHNSZXF1ZXN0GiUuaW5nZXN0LnYxLkxpc3RDaGFubmVsVXBsb2Fkc1Jlc3BvbnNlElUKDlJlc29sdmVDaGFubmVsEiAuaW5nZXN0LnYxLlJlc29sdmVDaGFubmVsUmVxdWVzdBohLmluZ2VzdC52MS5SZXNvbHZlQ2hhbm5lbFJlc3BvbnNlElUKDkZldGNoU3VidGl0bGVzEiAuaW5nZXN0LnYxLkZldGNoU3VidGl0bGVzUmVxdWVzdBohLmluZ2VzdC52MS5GZXRjaFN1YnRpdGxlc1Jlc3BvbnNlEkwKC1Jlc29sdmVMaXZlEh0uaW5nZXN0LnYxLlJlc29sdmVMaXZlUmVxdWVzdBoeLmluZ2VzdC52MS5SZXNvbHZlTGl2ZVJlc3BvbnNlElIKDUZldGNoQ29tbWVudHMSHy5pbmdlc3QudjEuRmV0Y2hDb21tZW50c1JlcXVlc3QaIC5pbmdlc3QudjEuRmV0Y2hDb21tZW50c1Jlc3BvbnNlQp8BCg1jb20uaW5nZXN0LnYxQgtJbmdlc3RQcm90b1ABWjxnaXRodWIuY29tL2x1Y25ndXllbi9sb2NhbC15b3V0dWJlL2dlbi9nby9pbmdlc3QvdjE7aW5nZXN0djGiAgNJWFiqAglJbmdlc3QuVjHKAglJbmdlc3RcVjHiAhVJbmdlc3RcVjFcR1BCTWV0YWRhdGHqAgpJbmdlc3Q6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message ingest.v1.ListChannelUploadsRequest
@@ -144,6 +144,101 @@ export const FetchSubtitlesResponseSchema: GenMessage<FetchSubtitlesResponse> = 
   messageDesc(file_ingest_v1_ingest, 4);
 
 /**
+ * @generated from message ingest.v1.ResolveLiveRequest
+ */
+export type ResolveLiveRequest = Message<"ingest.v1.ResolveLiveRequest"> & {
+  /**
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * The tallest rendition to offer. Live is watched as it happens, so the
+   * ladder matters more here than for a file that will be on disk in seconds.
+   *
+   * @generated from field: int32 max_height = 2;
+   */
+  maxHeight: number;
+};
+
+/**
+ * Describes the message ingest.v1.ResolveLiveRequest.
+ * Use `create(ResolveLiveRequestSchema)` to create a new message.
+ */
+export const ResolveLiveRequestSchema: GenMessage<ResolveLiveRequest> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 5);
+
+/**
+ * LiveRendition is one of YouTube's own HLS playlists, handed over as it is.
+ *
+ * @generated from message ingest.v1.LiveRendition
+ */
+export type LiveRendition = Message<"ingest.v1.LiveRendition"> & {
+  /**
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * @generated from field: string codec = 2;
+   */
+  codec: string;
+
+  /**
+   * @generated from field: int32 width = 3;
+   */
+  width: number;
+
+  /**
+   * @generated from field: int32 height = 4;
+   */
+  height: number;
+
+  /**
+   * @generated from field: int32 bitrate = 5;
+   */
+  bitrate: number;
+
+  /**
+   * True for the sound-only playlists. YouTube publishes no combined rendition
+   * and no master, so the two have to be described together by whoever builds
+   * the playlist the browser sees.
+   *
+   * @generated from field: bool audio_only = 6;
+   */
+  audioOnly: boolean;
+};
+
+/**
+ * Describes the message ingest.v1.LiveRendition.
+ * Use `create(LiveRenditionSchema)` to create a new message.
+ */
+export const LiveRenditionSchema: GenMessage<LiveRendition> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 6);
+
+/**
+ * @generated from message ingest.v1.ResolveLiveResponse
+ */
+export type ResolveLiveResponse = Message<"ingest.v1.ResolveLiveResponse"> & {
+  /**
+   * @generated from field: bool is_live = 1;
+   */
+  isLive: boolean;
+
+  /**
+   * @generated from field: repeated ingest.v1.LiveRendition renditions = 2;
+   */
+  renditions: LiveRendition[];
+};
+
+/**
+ * Describes the message ingest.v1.ResolveLiveResponse.
+ * Use `create(ResolveLiveResponseSchema)` to create a new message.
+ */
+export const ResolveLiveResponseSchema: GenMessage<ResolveLiveResponse> = /*@__PURE__*/
+  messageDesc(file_ingest_v1_ingest, 7);
+
+/**
  * @generated from message ingest.v1.ResolveChannelRequest
  */
 export type ResolveChannelRequest = Message<"ingest.v1.ResolveChannelRequest"> & {
@@ -160,7 +255,7 @@ export type ResolveChannelRequest = Message<"ingest.v1.ResolveChannelRequest"> &
  * Use `create(ResolveChannelRequestSchema)` to create a new message.
  */
 export const ResolveChannelRequestSchema: GenMessage<ResolveChannelRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 5);
+  messageDesc(file_ingest_v1_ingest, 8);
 
 /**
  * @generated from message ingest.v1.ResolveChannelResponse
@@ -197,7 +292,7 @@ export type ResolveChannelResponse = Message<"ingest.v1.ResolveChannelResponse">
  * Use `create(ResolveChannelResponseSchema)` to create a new message.
  */
 export const ResolveChannelResponseSchema: GenMessage<ResolveChannelResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 6);
+  messageDesc(file_ingest_v1_ingest, 9);
 
 /**
  * @generated from message ingest.v1.SetAccountCookiesRequest
@@ -227,7 +322,7 @@ export type SetAccountCookiesRequest = Message<"ingest.v1.SetAccountCookiesReque
  * Use `create(SetAccountCookiesRequestSchema)` to create a new message.
  */
 export const SetAccountCookiesRequestSchema: GenMessage<SetAccountCookiesRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 7);
+  messageDesc(file_ingest_v1_ingest, 10);
 
 /**
  * @generated from message ingest.v1.SetAccountCookiesResponse
@@ -240,7 +335,7 @@ export type SetAccountCookiesResponse = Message<"ingest.v1.SetAccountCookiesResp
  * Use `create(SetAccountCookiesResponseSchema)` to create a new message.
  */
 export const SetAccountCookiesResponseSchema: GenMessage<SetAccountCookiesResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 8);
+  messageDesc(file_ingest_v1_ingest, 11);
 
 /**
  * @generated from message ingest.v1.ListAccountsRequest
@@ -253,7 +348,7 @@ export type ListAccountsRequest = Message<"ingest.v1.ListAccountsRequest"> & {
  * Use `create(ListAccountsRequestSchema)` to create a new message.
  */
 export const ListAccountsRequestSchema: GenMessage<ListAccountsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 9);
+  messageDesc(file_ingest_v1_ingest, 12);
 
 /**
  * @generated from message ingest.v1.ListAccountsResponse
@@ -270,7 +365,7 @@ export type ListAccountsResponse = Message<"ingest.v1.ListAccountsResponse"> & {
  * Use `create(ListAccountsResponseSchema)` to create a new message.
  */
 export const ListAccountsResponseSchema: GenMessage<ListAccountsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 10);
+  messageDesc(file_ingest_v1_ingest, 13);
 
 /**
  * Metadata about a stored session. Never the session.
@@ -319,7 +414,7 @@ export type Account = Message<"ingest.v1.Account"> & {
  * Use `create(AccountSchema)` to create a new message.
  */
 export const AccountSchema: GenMessage<Account> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 11);
+  messageDesc(file_ingest_v1_ingest, 14);
 
 /**
  * @generated from message ingest.v1.RemoveAccountRequest
@@ -336,7 +431,7 @@ export type RemoveAccountRequest = Message<"ingest.v1.RemoveAccountRequest"> & {
  * Use `create(RemoveAccountRequestSchema)` to create a new message.
  */
 export const RemoveAccountRequestSchema: GenMessage<RemoveAccountRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 12);
+  messageDesc(file_ingest_v1_ingest, 15);
 
 /**
  * @generated from message ingest.v1.RemoveAccountResponse
@@ -349,7 +444,7 @@ export type RemoveAccountResponse = Message<"ingest.v1.RemoveAccountResponse"> &
  * Use `create(RemoveAccountResponseSchema)` to create a new message.
  */
 export const RemoveAccountResponseSchema: GenMessage<RemoveAccountResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 13);
+  messageDesc(file_ingest_v1_ingest, 16);
 
 /**
  * @generated from message ingest.v1.ScanAccountsRequest
@@ -370,7 +465,7 @@ export type ScanAccountsRequest = Message<"ingest.v1.ScanAccountsRequest"> & {
  * Use `create(ScanAccountsRequestSchema)` to create a new message.
  */
 export const ScanAccountsRequestSchema: GenMessage<ScanAccountsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 14);
+  messageDesc(file_ingest_v1_ingest, 17);
 
 /**
  * @generated from message ingest.v1.GetAccountScanStatusRequest
@@ -383,7 +478,7 @@ export type GetAccountScanStatusRequest = Message<"ingest.v1.GetAccountScanStatu
  * Use `create(GetAccountScanStatusRequestSchema)` to create a new message.
  */
 export const GetAccountScanStatusRequestSchema: GenMessage<GetAccountScanStatusRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 15);
+  messageDesc(file_ingest_v1_ingest, 18);
 
 /**
  * @generated from message ingest.v1.GetAccountScanStatusResponse
@@ -400,7 +495,7 @@ export type GetAccountScanStatusResponse = Message<"ingest.v1.GetAccountScanStat
  * Use `create(GetAccountScanStatusResponseSchema)` to create a new message.
  */
 export const GetAccountScanStatusResponseSchema: GenMessage<GetAccountScanStatusResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 16);
+  messageDesc(file_ingest_v1_ingest, 19);
 
 /**
  * What the account pass in flight is doing.
@@ -488,7 +583,7 @@ export type AccountScanStatus = Message<"ingest.v1.AccountScanStatus"> & {
  * Use `create(AccountScanStatusSchema)` to create a new message.
  */
 export const AccountScanStatusSchema: GenMessage<AccountScanStatus> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 17);
+  messageDesc(file_ingest_v1_ingest, 20);
 
 /**
  * @generated from message ingest.v1.ScanAccountsResponse
@@ -534,7 +629,7 @@ export type ScanAccountsResponse = Message<"ingest.v1.ScanAccountsResponse"> & {
  * Use `create(ScanAccountsResponseSchema)` to create a new message.
  */
 export const ScanAccountsResponseSchema: GenMessage<ScanAccountsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 18);
+  messageDesc(file_ingest_v1_ingest, 21);
 
 /**
  * @generated from message ingest.v1.ExpandLibraryRequest
@@ -560,7 +655,7 @@ export type ExpandLibraryRequest = Message<"ingest.v1.ExpandLibraryRequest"> & {
  * Use `create(ExpandLibraryRequestSchema)` to create a new message.
  */
 export const ExpandLibraryRequestSchema: GenMessage<ExpandLibraryRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 19);
+  messageDesc(file_ingest_v1_ingest, 22);
 
 /**
  * @generated from message ingest.v1.ExpandLibraryResponse
@@ -577,7 +672,7 @@ export type ExpandLibraryResponse = Message<"ingest.v1.ExpandLibraryResponse"> &
  * Use `create(ExpandLibraryResponseSchema)` to create a new message.
  */
 export const ExpandLibraryResponseSchema: GenMessage<ExpandLibraryResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 20);
+  messageDesc(file_ingest_v1_ingest, 23);
 
 /**
  * A video discovered upstream but not necessarily present locally. Produced by
@@ -663,7 +758,7 @@ export type ExternalVideo = Message<"ingest.v1.ExternalVideo"> & {
  * Use `create(ExternalVideoSchema)` to create a new message.
  */
 export const ExternalVideoSchema: GenMessage<ExternalVideo> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 21);
+  messageDesc(file_ingest_v1_ingest, 24);
 
 /**
  * @generated from message ingest.v1.SearchRequest
@@ -685,7 +780,7 @@ export type SearchRequest = Message<"ingest.v1.SearchRequest"> & {
  * Use `create(SearchRequestSchema)` to create a new message.
  */
 export const SearchRequestSchema: GenMessage<SearchRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 22);
+  messageDesc(file_ingest_v1_ingest, 25);
 
 /**
  * @generated from message ingest.v1.SearchResponse
@@ -702,7 +797,7 @@ export type SearchResponse = Message<"ingest.v1.SearchResponse"> & {
  * Use `create(SearchResponseSchema)` to create a new message.
  */
 export const SearchResponseSchema: GenMessage<SearchResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 23);
+  messageDesc(file_ingest_v1_ingest, 26);
 
 /**
  * @generated from message ingest.v1.PreviewVideoRequest
@@ -719,7 +814,7 @@ export type PreviewVideoRequest = Message<"ingest.v1.PreviewVideoRequest"> & {
  * Use `create(PreviewVideoRequestSchema)` to create a new message.
  */
 export const PreviewVideoRequestSchema: GenMessage<PreviewVideoRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 24);
+  messageDesc(file_ingest_v1_ingest, 27);
 
 /**
  * @generated from message ingest.v1.PreviewVideoResponse
@@ -736,7 +831,7 @@ export type PreviewVideoResponse = Message<"ingest.v1.PreviewVideoResponse"> & {
  * Use `create(PreviewVideoResponseSchema)` to create a new message.
  */
 export const PreviewVideoResponseSchema: GenMessage<PreviewVideoResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 25);
+  messageDesc(file_ingest_v1_ingest, 28);
 
 /**
  * @generated from message ingest.v1.EnsureVideoRequest
@@ -753,7 +848,7 @@ export type EnsureVideoRequest = Message<"ingest.v1.EnsureVideoRequest"> & {
  * Use `create(EnsureVideoRequestSchema)` to create a new message.
  */
 export const EnsureVideoRequestSchema: GenMessage<EnsureVideoRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 26);
+  messageDesc(file_ingest_v1_ingest, 29);
 
 /**
  * @generated from message ingest.v1.EnsureVideoResponse
@@ -772,7 +867,7 @@ export type EnsureVideoResponse = Message<"ingest.v1.EnsureVideoResponse"> & {
  * Use `create(EnsureVideoResponseSchema)` to create a new message.
  */
 export const EnsureVideoResponseSchema: GenMessage<EnsureVideoResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 27);
+  messageDesc(file_ingest_v1_ingest, 30);
 
 /**
  * @generated from message ingest.v1.BackfillTopicsRequest
@@ -796,7 +891,7 @@ export type BackfillTopicsRequest = Message<"ingest.v1.BackfillTopicsRequest"> &
  * Use `create(BackfillTopicsRequestSchema)` to create a new message.
  */
 export const BackfillTopicsRequestSchema: GenMessage<BackfillTopicsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 28);
+  messageDesc(file_ingest_v1_ingest, 31);
 
 /**
  * @generated from message ingest.v1.GetBackfillStatusRequest
@@ -809,7 +904,7 @@ export type GetBackfillStatusRequest = Message<"ingest.v1.GetBackfillStatusReque
  * Use `create(GetBackfillStatusRequestSchema)` to create a new message.
  */
 export const GetBackfillStatusRequestSchema: GenMessage<GetBackfillStatusRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 29);
+  messageDesc(file_ingest_v1_ingest, 32);
 
 /**
  * BackfillStatus is the progress of a topic backfill pass, whether it is still
@@ -860,7 +955,7 @@ export type BackfillStatus = Message<"ingest.v1.BackfillStatus"> & {
  * Use `create(BackfillStatusSchema)` to create a new message.
  */
 export const BackfillStatusSchema: GenMessage<BackfillStatus> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 30);
+  messageDesc(file_ingest_v1_ingest, 33);
 
 /**
  * @generated from message ingest.v1.BackfillTopicsResponse
@@ -877,7 +972,7 @@ export type BackfillTopicsResponse = Message<"ingest.v1.BackfillTopicsResponse">
  * Use `create(BackfillTopicsResponseSchema)` to create a new message.
  */
 export const BackfillTopicsResponseSchema: GenMessage<BackfillTopicsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 31);
+  messageDesc(file_ingest_v1_ingest, 34);
 
 /**
  * @generated from message ingest.v1.GetBackfillStatusResponse
@@ -894,7 +989,7 @@ export type GetBackfillStatusResponse = Message<"ingest.v1.GetBackfillStatusResp
  * Use `create(GetBackfillStatusResponseSchema)` to create a new message.
  */
 export const GetBackfillStatusResponseSchema: GenMessage<GetBackfillStatusResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 32);
+  messageDesc(file_ingest_v1_ingest, 35);
 
 /**
  * @generated from message ingest.v1.RefreshRequest
@@ -907,7 +1002,7 @@ export type RefreshRequest = Message<"ingest.v1.RefreshRequest"> & {
  * Use `create(RefreshRequestSchema)` to create a new message.
  */
 export const RefreshRequestSchema: GenMessage<RefreshRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 33);
+  messageDesc(file_ingest_v1_ingest, 36);
 
 /**
  * @generated from message ingest.v1.RefreshResponse
@@ -924,7 +1019,7 @@ export type RefreshResponse = Message<"ingest.v1.RefreshResponse"> & {
  * Use `create(RefreshResponseSchema)` to create a new message.
  */
 export const RefreshResponseSchema: GenMessage<RefreshResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 34);
+  messageDesc(file_ingest_v1_ingest, 37);
 
 /**
  * @generated from message ingest.v1.GetScanStatusRequest
@@ -937,7 +1032,7 @@ export type GetScanStatusRequest = Message<"ingest.v1.GetScanStatusRequest"> & {
  * Use `create(GetScanStatusRequestSchema)` to create a new message.
  */
 export const GetScanStatusRequestSchema: GenMessage<GetScanStatusRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 35);
+  messageDesc(file_ingest_v1_ingest, 38);
 
 /**
  * @generated from message ingest.v1.GetScanStatusResponse
@@ -954,7 +1049,7 @@ export type GetScanStatusResponse = Message<"ingest.v1.GetScanStatusResponse"> &
  * Use `create(GetScanStatusResponseSchema)` to create a new message.
  */
 export const GetScanStatusResponseSchema: GenMessage<GetScanStatusResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 36);
+  messageDesc(file_ingest_v1_ingest, 39);
 
 /**
  * Reports the most recent scan, so the UI can show when the library last
@@ -1009,7 +1104,7 @@ export type ScanStatus = Message<"ingest.v1.ScanStatus"> & {
  * Use `create(ScanStatusSchema)` to create a new message.
  */
 export const ScanStatusSchema: GenMessage<ScanStatus> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 37);
+  messageDesc(file_ingest_v1_ingest, 40);
 
 /**
  * @generated from message ingest.v1.ResolveStreamRequest
@@ -1039,7 +1134,7 @@ export type ResolveStreamRequest = Message<"ingest.v1.ResolveStreamRequest"> & {
  * Use `create(ResolveStreamRequestSchema)` to create a new message.
  */
 export const ResolveStreamRequestSchema: GenMessage<ResolveStreamRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 38);
+  messageDesc(file_ingest_v1_ingest, 41);
 
 /**
  * @generated from message ingest.v1.ResolveStreamResponse
@@ -1077,7 +1172,7 @@ export type ResolveStreamResponse = Message<"ingest.v1.ResolveStreamResponse"> &
  * Use `create(ResolveStreamResponseSchema)` to create a new message.
  */
 export const ResolveStreamResponseSchema: GenMessage<ResolveStreamResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 39);
+  messageDesc(file_ingest_v1_ingest, 42);
 
 /**
  * @generated from message ingest.v1.SubmitRequest
@@ -1106,7 +1201,7 @@ export type SubmitRequest = Message<"ingest.v1.SubmitRequest"> & {
  * Use `create(SubmitRequestSchema)` to create a new message.
  */
 export const SubmitRequestSchema: GenMessage<SubmitRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 40);
+  messageDesc(file_ingest_v1_ingest, 43);
 
 /**
  * @generated from message ingest.v1.SubmitResponse
@@ -1123,7 +1218,7 @@ export type SubmitResponse = Message<"ingest.v1.SubmitResponse"> & {
  * Use `create(SubmitResponseSchema)` to create a new message.
  */
 export const SubmitResponseSchema: GenMessage<SubmitResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 41);
+  messageDesc(file_ingest_v1_ingest, 44);
 
 /**
  * @generated from message ingest.v1.Job
@@ -1199,7 +1294,7 @@ export type Job = Message<"ingest.v1.Job"> & {
  * Use `create(JobSchema)` to create a new message.
  */
 export const JobSchema: GenMessage<Job> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 42);
+  messageDesc(file_ingest_v1_ingest, 45);
 
 /**
  * @generated from message ingest.v1.GetJobRequest
@@ -1216,7 +1311,7 @@ export type GetJobRequest = Message<"ingest.v1.GetJobRequest"> & {
  * Use `create(GetJobRequestSchema)` to create a new message.
  */
 export const GetJobRequestSchema: GenMessage<GetJobRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 43);
+  messageDesc(file_ingest_v1_ingest, 46);
 
 /**
  * @generated from message ingest.v1.GetJobResponse
@@ -1233,7 +1328,7 @@ export type GetJobResponse = Message<"ingest.v1.GetJobResponse"> & {
  * Use `create(GetJobResponseSchema)` to create a new message.
  */
 export const GetJobResponseSchema: GenMessage<GetJobResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 44);
+  messageDesc(file_ingest_v1_ingest, 47);
 
 /**
  * @generated from message ingest.v1.ListJobsRequest
@@ -1268,7 +1363,7 @@ export type ListJobsRequest = Message<"ingest.v1.ListJobsRequest"> & {
  * Use `create(ListJobsRequestSchema)` to create a new message.
  */
 export const ListJobsRequestSchema: GenMessage<ListJobsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 45);
+  messageDesc(file_ingest_v1_ingest, 48);
 
 /**
  * @generated from message ingest.v1.ListJobsResponse
@@ -1285,7 +1380,7 @@ export type ListJobsResponse = Message<"ingest.v1.ListJobsResponse"> & {
  * Use `create(ListJobsResponseSchema)` to create a new message.
  */
 export const ListJobsResponseSchema: GenMessage<ListJobsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 46);
+  messageDesc(file_ingest_v1_ingest, 49);
 
 /**
  * @generated from message ingest.v1.CancelJobRequest
@@ -1302,7 +1397,7 @@ export type CancelJobRequest = Message<"ingest.v1.CancelJobRequest"> & {
  * Use `create(CancelJobRequestSchema)` to create a new message.
  */
 export const CancelJobRequestSchema: GenMessage<CancelJobRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 47);
+  messageDesc(file_ingest_v1_ingest, 50);
 
 /**
  * @generated from message ingest.v1.CancelJobResponse
@@ -1315,7 +1410,7 @@ export type CancelJobResponse = Message<"ingest.v1.CancelJobResponse"> & {
  * Use `create(CancelJobResponseSchema)` to create a new message.
  */
 export const CancelJobResponseSchema: GenMessage<CancelJobResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 48);
+  messageDesc(file_ingest_v1_ingest, 51);
 
 /**
  * @generated from message ingest.v1.DismissJobRequest
@@ -1332,7 +1427,7 @@ export type DismissJobRequest = Message<"ingest.v1.DismissJobRequest"> & {
  * Use `create(DismissJobRequestSchema)` to create a new message.
  */
 export const DismissJobRequestSchema: GenMessage<DismissJobRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 49);
+  messageDesc(file_ingest_v1_ingest, 52);
 
 /**
  * @generated from message ingest.v1.DismissJobResponse
@@ -1345,7 +1440,7 @@ export type DismissJobResponse = Message<"ingest.v1.DismissJobResponse"> & {
  * Use `create(DismissJobResponseSchema)` to create a new message.
  */
 export const DismissJobResponseSchema: GenMessage<DismissJobResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 50);
+  messageDesc(file_ingest_v1_ingest, 53);
 
 /**
  * @generated from message ingest.v1.DismissJobsRequest
@@ -1364,7 +1459,7 @@ export type DismissJobsRequest = Message<"ingest.v1.DismissJobsRequest"> & {
  * Use `create(DismissJobsRequestSchema)` to create a new message.
  */
 export const DismissJobsRequestSchema: GenMessage<DismissJobsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 51);
+  messageDesc(file_ingest_v1_ingest, 54);
 
 /**
  * @generated from message ingest.v1.DismissJobsResponse
@@ -1381,7 +1476,7 @@ export type DismissJobsResponse = Message<"ingest.v1.DismissJobsResponse"> & {
  * Use `create(DismissJobsResponseSchema)` to create a new message.
  */
 export const DismissJobsResponseSchema: GenMessage<DismissJobsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 52);
+  messageDesc(file_ingest_v1_ingest, 55);
 
 /**
  * @generated from message ingest.v1.RetryJobRequest
@@ -1403,7 +1498,7 @@ export type RetryJobRequest = Message<"ingest.v1.RetryJobRequest"> & {
  * Use `create(RetryJobRequestSchema)` to create a new message.
  */
 export const RetryJobRequestSchema: GenMessage<RetryJobRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 53);
+  messageDesc(file_ingest_v1_ingest, 56);
 
 /**
  * @generated from message ingest.v1.RetryJobResponse
@@ -1422,7 +1517,7 @@ export type RetryJobResponse = Message<"ingest.v1.RetryJobResponse"> & {
  * Use `create(RetryJobResponseSchema)` to create a new message.
  */
 export const RetryJobResponseSchema: GenMessage<RetryJobResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 54);
+  messageDesc(file_ingest_v1_ingest, 57);
 
 /**
  * @generated from message ingest.v1.ListScansRequest
@@ -1444,7 +1539,7 @@ export type ListScansRequest = Message<"ingest.v1.ListScansRequest"> & {
  * Use `create(ListScansRequestSchema)` to create a new message.
  */
 export const ListScansRequestSchema: GenMessage<ListScansRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 55);
+  messageDesc(file_ingest_v1_ingest, 58);
 
 /**
  * @generated from message ingest.v1.ListScansResponse
@@ -1468,7 +1563,7 @@ export type ListScansResponse = Message<"ingest.v1.ListScansResponse"> & {
  * Use `create(ListScansResponseSchema)` to create a new message.
  */
 export const ListScansResponseSchema: GenMessage<ListScansResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 56);
+  messageDesc(file_ingest_v1_ingest, 59);
 
 /**
  * @generated from message ingest.v1.ClearScansRequest
@@ -1481,7 +1576,7 @@ export type ClearScansRequest = Message<"ingest.v1.ClearScansRequest"> & {
  * Use `create(ClearScansRequestSchema)` to create a new message.
  */
 export const ClearScansRequestSchema: GenMessage<ClearScansRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 57);
+  messageDesc(file_ingest_v1_ingest, 60);
 
 /**
  * @generated from message ingest.v1.ClearScansResponse
@@ -1494,7 +1589,7 @@ export type ClearScansResponse = Message<"ingest.v1.ClearScansResponse"> & {
  * Use `create(ClearScansResponseSchema)` to create a new message.
  */
 export const ClearScansResponseSchema: GenMessage<ClearScansResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 58);
+  messageDesc(file_ingest_v1_ingest, 61);
 
 /**
  * @generated from message ingest.v1.CancelVideoDownloadRequest
@@ -1511,7 +1606,7 @@ export type CancelVideoDownloadRequest = Message<"ingest.v1.CancelVideoDownloadR
  * Use `create(CancelVideoDownloadRequestSchema)` to create a new message.
  */
 export const CancelVideoDownloadRequestSchema: GenMessage<CancelVideoDownloadRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 59);
+  messageDesc(file_ingest_v1_ingest, 62);
 
 /**
  * @generated from message ingest.v1.CancelVideoDownloadResponse
@@ -1530,7 +1625,7 @@ export type CancelVideoDownloadResponse = Message<"ingest.v1.CancelVideoDownload
  * Use `create(CancelVideoDownloadResponseSchema)` to create a new message.
  */
 export const CancelVideoDownloadResponseSchema: GenMessage<CancelVideoDownloadResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 60);
+  messageDesc(file_ingest_v1_ingest, 63);
 
 /**
  * A single YouTube comment as returned by yt-dlp's --write-comments.
@@ -1591,7 +1686,7 @@ export type YouTubeComment = Message<"ingest.v1.YouTubeComment"> & {
  * Use `create(YouTubeCommentSchema)` to create a new message.
  */
 export const YouTubeCommentSchema: GenMessage<YouTubeComment> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 61);
+  messageDesc(file_ingest_v1_ingest, 64);
 
 /**
  * @generated from message ingest.v1.FetchCommentsRequest
@@ -1608,7 +1703,7 @@ export type FetchCommentsRequest = Message<"ingest.v1.FetchCommentsRequest"> & {
  * Use `create(FetchCommentsRequestSchema)` to create a new message.
  */
 export const FetchCommentsRequestSchema: GenMessage<FetchCommentsRequest> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 62);
+  messageDesc(file_ingest_v1_ingest, 65);
 
 /**
  * @generated from message ingest.v1.FetchCommentsResponse
@@ -1625,7 +1720,7 @@ export type FetchCommentsResponse = Message<"ingest.v1.FetchCommentsResponse"> &
  * Use `create(FetchCommentsResponseSchema)` to create a new message.
  */
 export const FetchCommentsResponseSchema: GenMessage<FetchCommentsResponse> = /*@__PURE__*/
-  messageDesc(file_ingest_v1_ingest, 63);
+  messageDesc(file_ingest_v1_ingest, 66);
 
 /**
  * @generated from enum ingest.v1.JobState
@@ -1984,6 +2079,25 @@ export const IngestService: GenService<{
     methodKind: "unary";
     input: typeof FetchSubtitlesRequestSchema;
     output: typeof FetchSubtitlesResponseSchema;
+  },
+  /**
+   * The HLS renditions of a broadcast still in progress.
+   *
+   * A live video publishes nothing this system's other paths can use: every
+   * format is `m3u8_native`, so the adaptive resolve — which wants a fixed file
+   * with a segment index in it — finds nothing at all. What YouTube does
+   * publish is HLS, which is what the player already speaks.
+   *
+   * Separate from ResolveTracks because the two answer different questions from
+   * different shapes: one indexes a finished file, this hands over playlists
+   * that are being appended to.
+   *
+   * @generated from rpc ingest.v1.IngestService.ResolveLive
+   */
+  resolveLive: {
+    methodKind: "unary";
+    input: typeof ResolveLiveRequestSchema;
+    output: typeof ResolveLiveResponseSchema;
   },
   /**
    * Fetches comments for a video from YouTube via yt-dlp. Returns every comment

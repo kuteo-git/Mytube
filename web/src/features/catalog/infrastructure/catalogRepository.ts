@@ -15,6 +15,8 @@ import type {
  */
 export interface CatalogRepository {
   listFeed(topic: string, pageToken?: string): Promise<Feed>
+  /** Broadcasts on air now, from channels this member follows. */
+  listLive(): Promise<Video[]>
   getVideo(id: string): Promise<Video>
   /**
    * The video, creating its catalog row first if it has none.
@@ -251,6 +253,16 @@ export interface StreamSources {
    * with a real duration and seeked twice. Chrome is the other way round.
    */
   hls?: StreamSource
+  /**
+   * A broadcast still on air.
+   *
+   * Exclusive: when this is present nothing else is, and nothing else is
+   * coming. Every other source here begins from a finished file — `local` is
+   * one, `hls` describes one — and a live video publishes neither. Measured:
+   * all seven of its formats are m3u8_native and not one is a plain https
+   * file, which is why resolving one the ordinary way produced nothing at all.
+   */
+  live?: StreamSource
   /** Full resolution, muxed live. Not seekable. Absent once `local` exists. */
   remux?: StreamSource
   /** The downloaded file. Present only once on disk, and best whenever it is. */
@@ -348,6 +360,12 @@ export const httpCatalogRepository: CatalogRepository = {
     // "All" is the client-side label for no filter; the API takes an empty value.
     const value = topic === 'All' ? undefined : topic
     return request<Feed>(`/feed${query({ topic: value, pageToken })}`)
+  },
+
+  listLive() {
+    // No page token: "everything on air" is the whole promise, and the set is a
+    // few dozen at the outside.
+    return request<{ videos: Video[] }>('/live').then((r) => r.videos)
   },
 
   getVideo(id) {

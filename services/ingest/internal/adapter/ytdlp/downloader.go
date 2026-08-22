@@ -119,6 +119,26 @@ func isStillBroadcasting(info *ytdlp.ExtractedInfo) bool {
 	return deref(info.IsLive)
 }
 
+// liveStatus is yt-dlp's own word for what kind of thing this is, passed
+// through rather than reduced to a boolean.
+//
+// A flat listing fills it — that is the measurement the Live chip rests on — so
+// this costs nothing beyond the listing the scanner was making anyway. Empty
+// when yt-dlp said nothing, which is not the same as "not a broadcast" and must
+// not be recorded as one.
+func liveStatus(info *ytdlp.ExtractedInfo) string {
+	if info.LiveStatus != nil {
+		return string(*info.LiveStatus)
+	}
+	// The older field, still filled by some extractors. Only a true value is
+	// worth reading: false here means "no live_status either", which is silence
+	// rather than an answer.
+	if deref(info.IsLive) {
+		return "is_live"
+	}
+	return ""
+}
+
 func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 	v := domain.ExternalVideo{
 		ID:              info.ID,
@@ -131,6 +151,7 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		SourceURL:       deref(info.WebpageURL),
 		Description:     deref(info.Description),
 		IsLive:          isStillBroadcasting(info),
+		LiveStatus:      liveStatus(info),
 	}
 
 	// Flat listings carry no per-entry channel at all: yt-dlp reports the

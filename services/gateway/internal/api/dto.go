@@ -56,6 +56,14 @@ type videoDTO struct {
 	UserState       *userStateDTO `json:"userState,omitempty"`
 	// Why the recommendation service surfaced this video. Empty outside feeds.
 	Reason string `json:"reason,omitempty"`
+	// On air right now, as catalog decided it. Sent for every video, not only
+	// under the Live chip: a broadcast reaches Home through the ordinary
+	// recommendation too, and the card there has to know not to print "0:00"
+	// where a duration would go.
+	IsLiveNow bool `json:"isLiveNow"`
+	// yt-dlp's own word. Empty where nobody has asked — which is most of the
+	// library, since the live scan visits subscribed channels only.
+	LiveStatus string `json:"liveStatus,omitempty"`
 }
 
 type subtitleDTO struct {
@@ -164,6 +172,8 @@ func toVideoDTO(v *catalogv1.Video) videoDTO {
 		Pinned:          v.GetPinned(),
 		SourceURL:       v.GetSourceUrl(),
 		LikeCount:       v.GetLikeCount(),
+		IsLiveNow:       v.GetIsLiveNow(),
+		LiveStatus:      v.GetLiveStatus(),
 	}
 
 	dto.Subtitles = []subtitleDTO{}

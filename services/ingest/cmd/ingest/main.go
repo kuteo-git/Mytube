@@ -204,6 +204,9 @@ func main() {
 	// as often and bring the worst-case delay on a subscription's new upload down
 	// from an hour to five minutes.
 	go scanner.RunSubscribed(ctx, envDuration("SUBSCRIBED_SCAN_INTERVAL", 5*time.Minute))
+	// Its own timer, because a broadcast is the one fact here that is worthless
+	// an hour late and costs almost nothing to establish. Zero disables it.
+	go scanner.RunLive(ctx, envDuration("LIVE_SCAN_INTERVAL", 10*time.Minute))
 
 	// Fill in what the listings could not. A flat listing carries no publish
 	// date, so videos arrive undated and the feed excludes them outright — 1127

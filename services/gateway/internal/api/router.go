@@ -152,6 +152,8 @@ func (g *Gateway) Routes() http.Handler {
 	// here would offer an edit the next pass reverts, so there is none — the
 	// importer reaches catalog directly.
 	mux.HandleFunc("GET /api/watch-later", g.handleWatchLater)
+	// Broadcasts on air now. Not under /feed: it is a list, not a ranking.
+	mux.HandleFunc("GET /api/live", g.handleLiveList)
 	mux.HandleFunc("GET /api/playlists", g.handleListPlaylists)
 	mux.HandleFunc("GET /api/playlists/{id}", g.handleGetPlaylist)
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
@@ -186,6 +188,12 @@ func (g *Gateway) Routes() http.Handler {
 	// The browser combines the two adaptive tracks itself; this only carries the
 	// playlists and the byte ranges they name. See ingest's httpapi/hls.go.
 	mux.HandleFunc("GET /api/videos/{id}/hls/{name}", g.handleHLS)
+	// A broadcast still on air. Nothing here is built from a file: these are
+	// YouTube's own HLS playlists, proxied because their URLs are signed to
+	// this address and because googlevideo sends no CORS header.
+	mux.HandleFunc("GET /api/live/{id}/master.m3u8", g.handleLiveMaster)
+	mux.HandleFunc("GET /api/live/{id}/playlist.m3u8", g.handleLivePlaylist)
+	mux.HandleFunc("GET /api/live/{id}/segment", g.handleLiveSegment)
 	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
 
 	// Downloads are never requested directly: they are a side effect of asking
@@ -595,6 +603,29 @@ func (g *Gateway) handleHistory(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toVideoDTO(v))
 	}
 	writeJSON(w, http.StatusOK, feedResponse{Videos: out, NextPageToken: resp.Msg.GetNextPageToken()})
+}
+
+// handleLiveList answers with the broadcasts this member's channels have on
+// air, newest confirmation first.
+//
+// No paging, unlike every other list here. The set is a few dozen at the
+// outside, and "everything that is on air" is a promise a page token would
+// quietly break — the Live chip is meant to be the whole answer, not the first
+// screenful of it.
+func (g *Gateway) handleLiveList(w http.ResponseWriter, r *http.Request) {
+	resp, err := g.catalog.ListLive(r.Context(), connect.NewRequest(&catalogv1.ListLiveRequest{
+		UserId: g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	out := make([]videoDTO, 0, len(resp.Msg.GetVideos()))
+	for _, v := range resp.Msg.GetVideos() {
+		out = append(out, toVideoDTO(v))
+	}
+	writeJSON(w, http.StatusOK, feedResponse{Videos: out})
 }
 
 func (g *Gateway) handleWatchLater(w http.ResponseWriter, r *http.Request) {

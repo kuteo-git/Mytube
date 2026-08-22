@@ -400,6 +400,24 @@ func (s *Server) ClearScans(ctx context.Context, req *connect.Request[ingestv1.C
 	return connect.NewResponse(&ingestv1.ClearScansResponse{}), nil
 }
 
+func (s *Server) ResolveLive(ctx context.Context, req *connect.Request[ingestv1.ResolveLiveRequest]) (*connect.Response[ingestv1.ResolveLiveResponse], error) {
+	live, err := s.ingest.ResolveLive(ctx, req.Msg.GetUrl(), req.Msg.GetMaxHeight())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*ingestv1.LiveRendition, 0, len(live.Renditions))
+	for _, r := range live.Renditions {
+		out = append(out, &ingestv1.LiveRendition{
+			Url: r.URL, Codec: r.Codec,
+			Width: int32(r.Width), Height: int32(r.Height),
+			Bitrate: int32(r.Bitrate), AudioOnly: r.AudioOnly,
+		})
+	}
+	return connect.NewResponse(&ingestv1.ResolveLiveResponse{
+		IsLive: live.IsLive, Renditions: out,
+	}), nil
+}
+
 func (s *Server) FetchSubtitles(_ context.Context, req *connect.Request[ingestv1.FetchSubtitlesRequest]) (*connect.Response[ingestv1.FetchSubtitlesResponse], error) {
 	if err := s.ingest.FetchSubtitles(req.Msg.GetUrl(), req.Msg.GetPreferredHeight()); err != nil {
 		return nil, toConnectErr(err)

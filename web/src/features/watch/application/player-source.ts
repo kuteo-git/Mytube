@@ -42,7 +42,7 @@ import { shouldUseHLS } from '@/features/watch/application/hls-source'
  * above back for a browser nobody here owns.
  */
 
-export type TierName = 'hls' | 'local'
+export type TierName = 'hls' | 'local' | 'live'
 
 export interface Tier {
   name: TierName
@@ -71,6 +71,18 @@ export function availableTiers(
 ): Tier[] {
   if (!sources) return []
   const tiers: Tier[] = []
+
+  // A broadcast still on air is exclusive and is checked first.
+  //
+  // Every other tier here begins from a finished file: local is one, and HLS
+  // describes one. A live video publishes neither — measured, all seven of its
+  // formats are m3u8_native and not one is a plain https file — so there is
+  // nothing beneath this tier to fall back to and nothing above it to climb to.
+  // Returning it alone is what keeps the climb machinery from starting on a
+  // video whose local copy is never coming.
+  if (sources.live) {
+    return [{ name: 'live', url: sources.live.url }]
+  }
 
   if (sources.local) {
     tiers.push({ name: 'local', url: sources.local.url })

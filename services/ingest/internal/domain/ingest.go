@@ -81,9 +81,23 @@ type ExternalVideo struct {
 	// metadata fetch or detected from the title when yt-dlp did not carry one.
 	// Empty when neither source could determine it.
 	Language string
-	// IsLive marks a broadcast still in progress. Only a full metadata fetch
-	// reports it; a flat listing never does.
+	// IsLive marks a broadcast still in progress.
+	//
+	// A flat listing reports this perfectly well, contrary to what this comment
+	// said for a release. Measured on ABC News, one request each: the /streams
+	// tab carried live_status on 40 of 40 entries — 1 is_live, 39 was_live —
+	// while the /videos tab carried it on none and listed no broadcast at all.
+	// The field yt-dlp fills is `live_status`, not `is_live`, and
+	// isStillBroadcasting has always read that one first; believing the old
+	// comment is why nothing here ever looked.
 	IsLive bool
+	// LiveStatus is yt-dlp's own word, kept because "was_live" is worth having
+	// and a boolean collapses it into "not live".
+	//
+	// One of "is_live", "is_upcoming", "was_live", "post_live", "not_live", or
+	// empty where nobody asked. The player needs the difference: it is what
+	// tells a broadcast from its recording without going back to YouTube.
+	LiveStatus string
 }
 
 // ChannelMetadata is everything a channel page needs that a flat video listing
@@ -180,6 +194,10 @@ type Downloader interface {
 	// ChannelInfo reads a channel's own metadata — artwork, handle, subscriber
 	// count — none of which appears in a flat playlist listing.
 	ChannelInfo(ctx context.Context, channelURL string) (ChannelMetadata, error)
+	// ResolveLive lists the HLS playlists of a broadcast still in progress.
+	// Live publishes no https file at all, so the adaptive resolve finds
+	// nothing; what it does publish is HLS.
+	ResolveLive(ctx context.Context, videoURL string, maxHeight int32) (LiveStream, error)
 	// FetchChannelArtwork downloads the avatar and banner and returns their
 	// paths under the media root. A failure to fetch either is decoration lost,
 	// never an error: the returned path is simply empty.
@@ -433,4 +451,22 @@ type RelatedSource interface {
 type CursorStore interface {
 	NextOffset(ctx context.Context, sourceURL string) (int32, error)
 	AdvanceOffset(ctx context.Context, sourceURL string, by int32) error
+}
+
+// LiveRendition is one of YouTube's own HLS playlists for a broadcast in
+// progress, handed over as it stands rather than rebuilt.
+type LiveRendition struct {
+	URL       string
+	Codec     string
+	Width     int
+	Height    int
+	Bitrate   int
+	AudioOnly bool
+}
+
+// LiveStream is what a live video offers. Empty renditions with IsLive false is
+// the ordinary answer for a video that is not broadcasting.
+type LiveStream struct {
+	IsLive     bool
+	Renditions []LiveRendition
 }

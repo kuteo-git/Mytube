@@ -99,6 +99,12 @@ type streamDTO struct {
 	// Full resolution, muxed on the fly from the adaptive tracks. No index, so
 	// not seekable. Absent once the local file exists.
 	Remux *sourceDTO `json:"remux,omitempty"`
+	// A broadcast still on air.
+	//
+	// Exclusive: when this is set nothing else is. Every other source here
+	// begins from a finished file, and a live video publishes none — which is
+	// why resolving one the ordinary way produced nothing at all.
+	Live *sourceDTO `json:"live,omitempty"`
 	// The downloaded file. Present only once it is on disk; the best source
 	// whenever it is there.
 	Local *sourceDTO `json:"local,omitempty"`
@@ -594,6 +600,45 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 
 	v := video.Msg.GetVideo()
 
+	// A broadcast still on air answers here and goes no further.
+	//
+	// Everything below this point is about a file: whether the disk has one,
+	// whether to schedule fetching one, which of two ways to describe one that
+	// exists upstream. A live video has none and will never have one — §4
+	// refuses a broadcast as a download job, because it has no end to download
+	// to, and one that was allowed through held the single worker slot for
+	// hours while every later job sat queued at 0%.
+	//
+	// So this returns early rather than adding a fourth source beside the
+	// others. The player's live tier is exclusive for the same reason and it
+	// must be told so honestly: offering `hls` alongside would have it climb
+	// toward a playlist built from adaptive tracks the broadcast does not
+	// publish — measured, all seven of a live video's formats are m3u8_native
+	// and not one is a plain https file.
+	//
+	// No download is scheduled and no subtitles are fetched. Captions are
+	// generated after a broadcast ends, so asking now is asking for something
+	// that does not exist yet.
+	if v.GetIsLiveNow() {
+		g.logger.Info("stream offered", "video", videoID, "tier", "live")
+		writeJSON(w, http.StatusOK, streamDTO{
+			Live: &sourceDTO{
+				URL:      "/api/live/" + url.PathEscape(videoID) + "/master.m3u8",
+				MimeType: "application/vnd.apple.mpegurl",
+				// Seekable, and measured: the window is YouTube's own and ran
+				// 0..3605 — an hour of rewind — with playback resuming 0.4s
+				// after a seek back. It costs nothing to offer; it is already
+				// in the playlist.
+				Seekable: true,
+			},
+			// There is no copy coming, which is exactly what this flag means to
+			// the player: stop polling for one. Without it a broadcast would be
+			// asked about every five seconds for as long as somebody watched.
+			CacheDisabled: true,
+		})
+		return
+	}
+
 	// Whether the row is telling the truth about the disk.
 	//
 	// Repaired here rather than by a sweep because this is the one place that
@@ -793,6 +838,8 @@ func offeredTier(out streamDTO) string {
 		return "none:unavailable"
 	case out.StreamError != "":
 		return "none:error"
+	case out.Live != nil:
+		return "live"
 	case out.Local != nil:
 		return "local"
 	case out.HLS != nil && out.Remux != nil:

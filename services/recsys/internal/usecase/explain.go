@@ -264,7 +264,15 @@ func scoreVideo(f domain.VideoFeatures, in rankInputs) ScoreBreakdown {
 	// Music is where it showed: 170 of the library's music videos are over a
 	// year old against 148 under it, so the rule hid more than half of it, where
 	// an ordinary topic loses 7%.
-	if in.topic == "" && now.Sub(f.PublishedAt).Hours()/24 > in.tuning.maxPublishedAgeDays {
+	//
+	// A broadcast on air is exempt outright, chip or no chip. The rule measures
+	// a publish date as a proxy for how old the *content* is, and for a stream
+	// running 24/7 that date is the day somebody switched the encoder on:
+	// measured, ABC News Live was published 479 days ago and was dropped from
+	// Home for being stale while it was broadcasting. Nothing in this library
+	// is fresher than something happening now.
+	if in.topic == "" && !f.IsLive &&
+		now.Sub(f.PublishedAt).Hours()/24 > in.tuning.maxPublishedAgeDays {
 		out.Excluded = excludedTooOld
 		return out
 	}

@@ -80,8 +80,20 @@ export function VideoCard({
               Suggested
             </span>
           )}
-          <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">
-            {formatDuration(video.durationSeconds)}
+          {/* A broadcast has no duration, and printing one is not a cosmetic
+              fault: a live row carries durationSeconds 0, so this badge read
+              "0:00" — a video the viewer would reasonably read as broken.
+              Same corner and same box as the duration it replaces, so a grid
+              holding both does not step. */}
+          <span
+            className={clsx(
+              'absolute right-1.5 bottom-1.5 rounded px-1 py-0.5 text-xs font-medium',
+              video.isLiveNow
+                ? 'bg-brand text-white'
+                : 'bg-badge tabular-nums',
+            )}
+          >
+            {video.isLiveNow ? 'LIVE' : formatDuration(video.durationSeconds)}
           </span>
           {progress > 0 && (
             <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30">

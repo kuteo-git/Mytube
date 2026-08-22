@@ -32,6 +32,27 @@ export function useFeed(topic: string) {
 }
 
 /**
+ * What is on air, for this member.
+ *
+ * Refetched on a timer because it is the one list here that goes out of date on
+ * its own: the server confirms liveness every ten minutes and stops counting an
+ * answer after thirty, so a page left open would otherwise keep a red dot lit
+ * over a broadcast that ended an hour ago.
+ */
+export function useLive() {
+  const me = useProfileScope()
+  return useQuery({
+    queryKey: ['live', me],
+    queryFn: () => repo.listLive(),
+    // Half the scan interval, so a broadcast starting is noticed within about
+    // fifteen minutes end to end and one ending disappears well inside the
+    // thirty-minute staleness cut.
+    refetchInterval: 5 * 60_000,
+    staleTime: 60_000,
+  })
+}
+
+/**
  * Type-ahead. Debounced by staleTime plus the three-character floor enforced
  * server-side, so typing a sentence costs a handful of queries rather than one
  * per keystroke.
