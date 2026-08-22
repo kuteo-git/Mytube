@@ -2,6 +2,7 @@ import { Info, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatBytes } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Dismissible alert banner. On youtube.com this slot carries billing notices;
@@ -15,6 +16,7 @@ export function StorageBanner({
   usedBytes: number
   budgetBytes: number
 }) {
+  const { t } = useTranslation()
   const [dismissed, setDismissed] = useState(false)
   if (dismissed) return null
 
@@ -39,7 +41,7 @@ export function StorageBanner({
       </div>
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t('ui.dismiss')}
         onClick={() => setDismissed(true)}
         className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-surface-hover"
       >

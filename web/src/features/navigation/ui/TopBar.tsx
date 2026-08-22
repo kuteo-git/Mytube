@@ -88,7 +88,7 @@ export function TopBar({
             <Menu size={24} />
           </IconButton>
         </span>
-        <Link to="/" className="ml-1 flex items-center gap-1.5" aria-label="Home">
+        <Link to="/" className="ml-1 flex items-center gap-1.5" aria-label={t('nav.home')}>
           <svg viewBox="0 0 28 20" width={30} height={22} aria-hidden>
             <path
               d="M27.4 3.1a3.5 3.5 0 0 0-2.5-2.5C22.7 0 14 0 14 0S5.3 0 3.1.6A3.5 3.5 0 0 0 .6 3.1C0 5.3 0 10 0 10s0 4.7.6 6.9a3.5 3.5 0 0 0 2.5 2.5c2.2.6 10.9.6 10.9.6s8.7 0 10.9-.6a3.5 3.5 0 0 0 2.5-2.5c.6-2.2.6-6.9.6-6.9s0-4.7-.6-6.9Z"

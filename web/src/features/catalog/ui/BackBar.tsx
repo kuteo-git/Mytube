@@ -1,5 +1,6 @@
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The top of a screen you drilled into, on a phone.
@@ -24,6 +25,7 @@ export function BackBar({
   /** Where to go when there is no history to pop — a link opened cold. */
   fallback?: string
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   return (
@@ -33,7 +35,7 @@ export function BackBar({
     >
       <button
         type="button"
-        aria-label="Back"
+        aria-label={t('common.back')}
         onClick={() => {
           // `navigate(-1)` walks out of the app when this was opened cold —
           // a shared link, or a reload. Same reasoning as the watch layer.

@@ -42,21 +42,41 @@ export interface Straggler {
  * reading "Save" — is missed by this and has to be caught by review; that is
  * the deliberate trade, because the alternative is a guard nobody trusts.
  */
-const PROSE = /[A-Za-z]{2,}\s+[A-Za-z]/
+const PROSE = /[A-Za-z]{2,}/
 
 /**
- * A quoted string that is copy rather than anything else in this codebase.
+ * A quoted string that might be copy.
  *
- * The discriminator is the leading capital, and it is doing more work than it
- * looks. Most strings in a React file are Tailwind class lists, which have
- * plenty of spaces — `'flex h-9 shrink-0 items-center'` — and are entirely
- * lowercase. Copy begins with a capital because it is a sentence or a label.
+ * The leading capital does most of the work: Tailwind class lists have plenty
+ * of spaces — `'flex h-9 shrink-0 items-center'` — and are entirely lowercase.
  *
- * Measured over the whole app when this was written: 170 matches, every one of
- * them real copy and not one false positive. Widening it further was tried and
- * is what turns a guard into a list of exemptions.
+ * **This once also demanded a space, and that was the bug.** It read as a
+ * reasonable trade at the time and was written down as one: single words would
+ * be caught by review. They were not. Most of a user interface *is* single
+ * words — Home, Settings, Subscribe, Share, Search, Saved, Back — so the guard
+ * passed on an app that was half English, and the person who noticed was the
+ * one using it. That is precisely the failure it exists to prevent, and it is
+ * why the exclusions below are enumerated instead: it is better to name what
+ * is not copy than to guess at what is.
  */
-const LITERAL = /'([A-Z][^']*\s[^']*)'|"([A-Z][^"]*\s[^"]*)"/g
+const LITERAL = /'([A-Z][A-Za-z][^']*)'|"([A-Z][A-Za-z][^"]*)"/g
+
+/** SCREAMING_CASE and header names: a value, never something anybody reads. */
+const SHOUTED = /^[A-Z0-9_ -]+$/
+
+/** `TooFastError`, `MediaSource` — an identifier written as a string. */
+const IDENTIFIER = /^[A-Za-z]+([A-Z][a-z]+)+$/
+
+/** `Content-Type`, `Cache-Control`: hyphenated with no space. */
+const HEADER = /^[A-Za-z]+(-[A-Za-z]+)+$/
+
+/**
+ * A literal being compared or switched on is a value, not copy.
+ *
+ * `event.key === 'Escape'` and `case 'Saved'` are the shapes; translating
+ * either would break the code rather than the wording.
+ */
+const COMPARED = /(===|!==|==|!=|case|includes\(|startsWith\(|endsWith\()$/
 
 /**
  * Text that is English prose rather than markup, punctuation or an expression.
@@ -69,6 +89,10 @@ export function looksLikeCopy(text: string): boolean {
   if (!PROSE.test(trimmed)) return false
   // A line of prose that is entirely inside an expression is markup, not copy.
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return false
+  // The tail of a JSX expression that happens to span a `>`: `{count > 0 &&`
+  // leaves "0 && available" between a bracket and the next tag. Operators do
+  // not appear in copy, and copy that contains one is not worth the exemption.
+  if (/(&&|\|\||\?\?|=>|===|!==)/.test(trimmed)) return false
   return true
 }
 
@@ -118,6 +142,8 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // Comments are not copy. Checked before anything else, because this file's
     // own prose would otherwise flag every guard in the codebase.
     if (wasInBlock || code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) return
+    // A module path is not copy, and every file starts with a screenful.
+    if (code.startsWith('import ') || / from '/.test(code)) return
     if (code.startsWith('{/*') && code.endsWith('*/}')) return
 
     for (const [kind, pattern] of [
@@ -136,7 +162,11 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // JSX text: what sits between a closing bracket and an opening one, on the
     // same line. Text spanning several lines is caught by whichever of its
     // lines happens to hold two words, which is enough to point at it.
-    for (const match of line.matchAll(/>([^<>{}]+)</g)) {
+    //
+    // Only in .tsx. In a .ts file the same shape is a generic — `Promise<T>`,
+    // `(path: string): Promise<Response>` — and reading those as copy is how a
+    // guard starts reporting the language it is written in.
+    for (const match of file.endsWith('.tsx') ? line.matchAll(/>([^<>{}]+)</g) : []) {
       const text = match[1].trim()
       if (looksLikeCopy(match[1]) && !seen.has(text)) {
         seen.add(text)
@@ -150,10 +180,11 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // without it would have passed while two thirds of the app stayed English.
     for (const match of line.matchAll(LITERAL)) {
       const text = (match[1] ?? match[2]).trim()
-      if (PROSE.test(text) && !seen.has(text)) {
-        seen.add(text)
-        out.push({ file, line: at, text, kind: 'literal' })
-      }
+      if (seen.has(text)) continue
+      if (SHOUTED.test(text) || IDENTIFIER.test(text) || HEADER.test(text)) continue
+      if (COMPARED.test(line.slice(0, match.index).trimEnd())) continue
+      seen.add(text)
+      out.push({ file, line: at, text, kind: 'literal' })
     }
   })
 

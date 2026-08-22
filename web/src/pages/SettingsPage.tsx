@@ -49,6 +49,7 @@ import type { TranslationKey } from '@/shared/i18n/en'
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const { isMobile } = usePlayer()
 
   // A phone gets a list of rows, each opening a screen of its own; a desktop
@@ -61,7 +62,7 @@ export function SettingsPage() {
   if (isMobile) {
     return (
       <div className="px-4 py-6">
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-bold">{t('ui.settings')}</h1>
         <PhoneMenu />
       </div>
     )
@@ -69,7 +70,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-2xl font-bold">{t('ui.settings')}</h1>
       {/* First, because it decides whose every other setting on this page is. */}
       <ProfileSettings />
       <YouTubeAccountSettings />
@@ -147,7 +148,7 @@ interface MenuItem {
 function PhoneMenu() {
   const { t } = useTranslation()
   return (
-    <nav className="mt-4 flex flex-col gap-6" aria-label="Settings">
+    <nav className="mt-4 flex flex-col gap-6" aria-label={t('ui.settings')}>
       <MenuGroup label={t('phoneSettings.library')} items={PHONE_LIBRARY} />
       <MenuGroup label={t('phoneSettings.account')} items={PHONE_ACCOUNT} />
       <MenuGroup label={t('phoneSettings.preferences')} items={PHONE_PREFS} />
@@ -211,17 +212,17 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
     <SettingsSection
       headless={headless}
       icon={<Headphones size={18} />}
-      title="Narration"
+      title={t('ui.narration')}
       description={t('narration.tryIt')}
     >
       <div className="rounded-lg bg-surface-input p-3">
-        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">Audio</h3>
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">{t('ui.audio')}</h3>
         <div className="flex flex-col gap-4">
-          <SettingRow label="Voice">
+          <SettingRow label={t('ui.voice')}>
             <select
               className="min-w-0 flex-1 rounded-lg border border-line bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
               value={prefs.voice}
-              aria-label="Voice"
+              aria-label={t('ui.voice')}
               onChange={(e) => update({ voice: e.target.value })}
             >
               {/* The stored voice is listed even if the service did not answer, so
@@ -287,7 +288,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
     <SettingsSection
       headless={headless}
       icon={<Languages size={18} />}
-      title="Translation"
+      title={t('ui.translation')}
       description={t('translationSettings.description')}
     >
       <SettingRow label={t('translationSettings.baseURL')}>
@@ -326,7 +327,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         </button>
       </SettingRow>
 
-      <SettingRow label="Model">
+      <SettingRow label={t('ui.model')}>
         <ModelPicker
           value={model}
           models={models.data ?? []}
@@ -343,7 +344,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
           disabled={test.isPending}
           className="h-11 rounded-lg bg-surface-hover px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
         >
-          {test.isPending ? 'Testing…' : 'Test'}
+          {test.isPending ? t('ui.testing') : t('ui.test')}
         </button>
         <button
           type="button"
@@ -351,7 +352,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
           disabled={save.isPending}
           className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
         >
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('ui.saving') : t('common.save')}
         </button>
       </ActionBar>
 

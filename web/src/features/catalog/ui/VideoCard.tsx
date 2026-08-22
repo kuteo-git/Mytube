@@ -140,7 +140,7 @@ export function VideoCard({
             <Link to={`/channel/${video.channel.id}`} className="hover:text-text">
               {video.channel.name}
             </Link>
-            {video.channel.verified && <CheckCircle size={12} aria-label="Verified" />}
+            {video.channel.verified && <CheckCircle size={12} aria-label={t('ui.verified')} />}
           </p>
           <p className="text-xs text-text-2">{describeVideo(video, fmt)}</p>
         </div>
@@ -274,7 +274,7 @@ function CardMenu({
         type="button"
         onClick={() => {
           setPinned.mutate({ videoId: video.id, pinned: true })
-          toast('Saved')
+          toast(t('common.saved'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
@@ -291,7 +291,7 @@ function CardMenu({
         type="button"
         onClick={() => {
           setPinned.mutate({ videoId: video.id, pinned: false })
-          toast('Unsaved')
+          toast(t('ui.unsaved'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"

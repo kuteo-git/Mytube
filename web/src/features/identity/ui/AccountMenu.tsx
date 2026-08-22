@@ -56,7 +56,7 @@ export function AccountMenu() {
     <div ref={box} className="relative ml-1">
       <button
         type="button"
-        aria-label="Account"
+        aria-label={t('account.openMenu')}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

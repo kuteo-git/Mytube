@@ -4,6 +4,7 @@ import { useSubscriptions } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The channels you follow, as a page of their own.
@@ -18,6 +19,7 @@ import { mediaURL } from '@/shared/lib/media'
  * question actually asked: which channels, and take me to one.
  */
 export function SubscriptionsPage() {
+  const { t } = useTranslation()
   const { data: channels, isPending, isError } = useSubscriptions()
 
   if (isError) {
@@ -30,7 +32,7 @@ export function SubscriptionsPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Subscriptions</h1>
+      <h1 className="py-4 text-2xl font-bold">{t('nav.subscriptions')}</h1>
 
       {isPending ? (
         <ul className="flex flex-col">

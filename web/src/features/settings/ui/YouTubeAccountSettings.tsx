@@ -81,8 +81,8 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
     >
       <div className="pt-2">
         <p className="text-sm">
-          <span className="text-text-2">Status: </span>
-          {state === 'OK' && <span>Connected</span>}
+          <span className="text-text-2">{t('ui.status')} </span>
+          {state === 'OK' && <span>{t('ui.connected')}</span>}
           {state === 'EXPIRED' && (
             <span className="text-brand">{t('youtubeAccount.signedOut')}</span>
           )}
@@ -143,7 +143,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
           onClick={() => save.mutate()}
           className="min-h-11 rounded-lg bg-invert-bg px-4 text-sm font-medium text-invert-text disabled:opacity-50"
         >
-          {save.isPending ? 'Saving…' : 'Connect'}
+          {save.isPending ? t('ui.saving') : t('ui.connect')}
         </button>
         {state !== 'NEVER_SET' && (
           <>
@@ -153,7 +153,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
               onClick={() => scan.mutate()}
               className="min-h-11 rounded-lg bg-surface px-4 text-sm disabled:opacity-50"
             >
-              {running ? 'Scanning…' : t('youtubeAccount.scanNow')}
+              {running ? t('ui.scanning') : t('youtubeAccount.scanNow')}
             </button>
             <button
               type="button"

@@ -46,7 +46,7 @@ export function ModelPicker({
           className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           value={value}
           placeholder={t('settings.model.name')}
-          aria-label="Model"
+          aria-label={t('ui.model')}
           onChange={(e) => onChange(e.target.value)}
         />
         <IconButton label={t('settings.model.chooseFromList')} onClick={() => setManual(false)}>
@@ -63,7 +63,7 @@ export function ModelPicker({
           className="w-full rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           value={open ? filter : value}
           placeholder={models.length ? 'type to filter…' : 'refresh to load models'}
-          aria-label="Model"
+          aria-label={t('ui.model')}
           onFocus={() => {
             setFilter('')
             setOpen(true)

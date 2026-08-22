@@ -10,6 +10,14 @@ import { useTranslation } from 'react-i18next'
  * arbitrary content per chip — would let any caller put anything beside any
  * label, and there is exactly one chip in this app that is not a topic name.
  */
+/**
+ * The two chips this app adds to the topic list.
+ *
+ * Identities, not labels: they are compared against the active chip, so they
+ * must be the same string whatever language is on screen. What the viewer
+ * reads is looked up where the chip is drawn.
+ */
+export const ALL_CATEGORY = 'All'
 export const LIVE_CATEGORY = 'Live'
 
 /**
@@ -105,7 +113,7 @@ export function ChipBar({
       <div
         ref={attach}
         role="tablist"
-        aria-label="Categories"
+        aria-label={t('ui.categories')}
         // The inset lives on the scroller, not on the wrapper around it.
         //
         // On the wrapper it shortened the scrolling region itself, so a chip
@@ -129,7 +137,13 @@ export function ChipBar({
             onClick={() => onSelect(category)}
           >
             {category === LIVE_CATEGORY && <LiveDot />}
-            {category}
+            {/* Topic names are content and are shown as they come; the two
+                chips this app adds itself are looked up. */}
+            {category === LIVE_CATEGORY
+              ? t('chips.live')
+              : category === ALL_CATEGORY
+                ? t('chips.all')
+                : category}
           </Pill>
         ))}
       </div>

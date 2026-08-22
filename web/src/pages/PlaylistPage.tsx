@@ -23,7 +23,7 @@ export function PlaylistPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">{playlist?.title ?? 'Playlist'}</h1>
+      <h1 className="py-4 text-2xl font-bold">{playlist?.title ?? t('ui.playlist')}</h1>
       {playlist && (
         <p className="-mt-2 pb-4 text-sm text-text-2">
           {playlist.unavailable

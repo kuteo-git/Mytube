@@ -12,8 +12,8 @@ export function StoragePage() {
   if (isPending) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-        <h1 className="text-2xl font-bold">Storage</h1>
-        <p className="mt-3 text-sm text-text-2">Loading…</p>
+        <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
+        <p className="mt-3 text-sm text-text-2">{t('common.loading')}</p>
       </div>
     )
   }
@@ -21,7 +21,7 @@ export function StoragePage() {
   if (isError || !data) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-        <h1 className="text-2xl font-bold">Storage</h1>
+        <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
         <p className="mt-3 text-sm text-text-2">
           Could not load storage usage. Is the gateway running?
         </p>
@@ -33,7 +33,7 @@ export function StoragePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-bold">Storage</h1>
+      <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
 
       {/* Above the figures, because the figures describe *that folder* under
           *that mode*. Read first, they are numbers without a subject. */}
@@ -42,13 +42,13 @@ export function StoragePage() {
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           icon={<HardDrive size={20} />}
-          label="Used"
+          label={t('ui.used')}
           value={formatBytes(data.usedBytes)}
           detail={data.budgetBytes > 0 ? `${Math.round(ratio * 100)}% of budget` : undefined}
         />
         <StatCard
           icon={<HardDrive size={20} />}
-          label="Budget"
+          label={t('ui.budget')}
           value={formatBytes(data.budgetBytes)}
           detail={t('pages.storage.softCeiling')}
         />
@@ -58,13 +58,13 @@ export function StoragePage() {
           value={formatBytes(data.diskFreeBytes)}
         />
         <StatCard label={t('pages.storage.videosOnDisk')} value={String(data.videoCount)} />
-        <StatCard label="Evicted" value={String(data.evictedCount)} />
+        <StatCard label={t('ui.evicted')} value={String(data.evictedCount)} />
         {/* Saving is personal — each member has their own Saved page — but the
             disk is not, and this is the page where somebody asks why it is
             full. A saved video is one the sweep may not delete, whoever saved
             it. */}
         <StatCard
-          label="Kept"
+          label={t('ui.kept')}
           value={String(data.keptCount)}
           detail="saved by someone, never removed"
         />

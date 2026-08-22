@@ -1774,7 +1774,7 @@ export function Player({
 
   const autoplayRow = onPlayNext ? (
     <SettingRow
-      label="Autoplay"
+      label={t('ui.autoplay')}
       on={autoplayEnabled}
       onToggle={() => setAutoplayEnabled(!autoplayEnabled)}
     />
@@ -1789,11 +1789,11 @@ export function Player({
   const subtitleRows =
     captionOptions.length > 0 ? (
       <SegmentedSetting
-        label="Subtitles"
+        label={t('ui.subtitles')}
         value={captions ?? 'off'}
         onSelect={(v: string) => setCaptions(v === 'off' ? null : v)}
         tall={coarse}
-        options={[{ value: 'off', label: 'Off' }, ...captionOptions]}
+        options={[{ value: 'off', label: t('ui.off') }, ...captionOptions]}
       />
     ) : undefined
 
@@ -2029,7 +2029,7 @@ export function Player({
   // Only the choices this video can actually honour. A menu entry that cannot
   // be delivered is worse than one that is missing.
   const qualityOptions = useMemo(() => {
-    const options: { value: QualityChoice; label: string }[] = [{ value: 'auto', label: 'Auto' }]
+    const options: { value: QualityChoice; label: string }[] = [{ value: 'auto', label: t('ui.auto') }]
     // Offered only where pressing it does something.
     //
     // This was a dead button and it is worth saying how: the height was carried
@@ -2058,7 +2058,7 @@ export function Player({
   const resolutionRow =
     qualityOptions.length > 1 ? (
       <SegmentedSetting
-        label="Resolution"
+        label={t('ui.resolution')}
         value={quality}
         tall={coarse}
         onSelect={(next: QualityChoice) => {
@@ -2372,7 +2372,7 @@ export function Player({
           looks like it was ignored. */}
       {seeking && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-black/40">
-          <span className="rounded-lg bg-badge px-3 py-2 text-sm font-medium">Seeking…</span>
+          <span className="rounded-lg bg-badge px-3 py-2 text-sm font-medium">{t('ui.seeking')}</span>
         </div>
       )}
 
@@ -2857,7 +2857,7 @@ export function Player({
         <div className="flex items-center gap-2 py-1.5 text-white">
           <button
             type="button"
-            aria-label={playing ? 'Pause' : 'Play'}
+            aria-label={playing ? t('ui.pause') : t('ui.play')}
             onClick={toggle}
             disabled={!playable}
             className={controlButton}
@@ -2911,7 +2911,7 @@ export function Player({
                   type="button"
                   onClick={() => seekTo(duration)}
                   disabled={onLiveEdge}
-                  aria-label={onLiveEdge ? 'Live' : t('player.goToLive')}
+                  aria-label={onLiveEdge ? t('chips.live') : t('player.goToLive')}
                   className="flex items-center gap-1.5 rounded px-1 text-white transition-opacity duration-150 ease-out disabled:cursor-default"
                 >
                   <span
@@ -2974,7 +2974,7 @@ export function Player({
               sheet={coarse}
               onOpenChange={trackMenu}
               icon={<SlidersVertical size={22} />}
-              label="Audio"
+              label={t('ui.audio')}
               wide
             >
               <EqualizerSetting
@@ -3154,7 +3154,7 @@ export function Player({
               type="button"
               onClick={toggle}
               className="grid h-10 w-10 place-items-center rounded-full text-white"
-              aria-label={playing ? 'Pause' : 'Play'}
+              aria-label={playing ? t('ui.pause') : t('ui.play')}
             >
               {playing ? <Pause size={20} /> : <Play size={20} />}
             </button>
@@ -3209,7 +3209,7 @@ function SettingsMenu({
   children,
   sheet,
   icon,
-  label = 'Settings',
+  label,
   wide,
 }: {
   buttonClassName?: string
@@ -3231,6 +3231,11 @@ function SettingsMenu({
    */
   wide?: boolean
 }) {
+  const { t } = useTranslation()
+  // Resolved here, not as a default in the signature: a default is evaluated
+  // where the parameters are, which is outside the component body and so
+  // outside anywhere a hook may be called.
+  const menuLabel = label ?? t('ui.settings')
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -3284,7 +3289,7 @@ function SettingsMenu({
       <button
         ref={buttonRef}
         type="button"
-        aria-label={label}
+        aria-label={menuLabel}
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={
@@ -3476,8 +3481,8 @@ function NarrationStatus({
     hashing: t('player.translation.preparingCues'),
     'no-subtitles': t('player.translation.noSubtitles'),
     'not-needed': t('player.translation.alreadyVietnamese'),
-    translating: 'Translating…',
-    done: 'Translated',
+    translating: t('ui.translating'),
+    done: t('ui.translated'),
     failed: p.error
       ? `Translation failed: ${p.error}`
       : t('player.translation.failed'),
@@ -3647,6 +3652,7 @@ function CaptionMenu({
   /** Lets the player keep its chrome up while this is open. */
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -3674,7 +3680,7 @@ function CaptionMenu({
     <div ref={ref} className="relative">
       <button
         type="button"
-        aria-label="Subtitles"
+        aria-label={t('ui.subtitles')}
         aria-expanded={open}
         onClick={() => (tracks.length === 1 ? onSelect(active ? null : tracks[0].language) : setOpen((o) => !o))}
         className={
@@ -3758,6 +3764,7 @@ function SeekBar({
   /** Called once, when the handle is released or a key press lands. */
   onSeek: (next: number) => void
 }) {
+  const { t } = useTranslation()
   const safeDuration = Math.max(duration, origin + 1)
   // Everything is measured from the origin, and clamped.
   //
@@ -3795,7 +3802,7 @@ function SeekBar({
         onKeyUp={(e) => onSeek(Number(e.currentTarget.value))}
         onBlur={(e) => onSeek(Number(e.currentTarget.value))}
         disabled={disabled}
-        aria-label="Seek"
+        aria-label={t('ui.seek')}
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
     </div>
@@ -3816,13 +3823,14 @@ function VolumeControl({
   onToggleMute: () => void
   onChange: (next: number) => void
 }) {
+  const { t } = useTranslation()
   const Icon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
 
   return (
     <div className="group/volume flex items-center">
       <button
         type="button"
-        aria-label={muted ? 'Unmute' : 'Mute'}
+        aria-label={muted ? t('ui.unmute') : t('ui.mute')}
         onClick={onToggleMute}
         disabled={disabled}
         className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-white/10"
@@ -3837,7 +3845,7 @@ function VolumeControl({
         value={volume}
         onChange={(e) => onChange(Number(e.target.value))}
         disabled={disabled}
-        aria-label="Volume"
+        aria-label={t('ui.volume')}
         className={
           'h-1 cursor-pointer accent-white transition-[width,opacity] duration-150 ease-out ' +
           'w-0 opacity-0 group-hover/volume:w-20 group-hover/volume:opacity-100 ' +

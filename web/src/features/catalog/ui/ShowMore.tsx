@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 /**
  * The button under a list that has more in it.
  *
@@ -18,6 +20,7 @@ export function ShowMore({
   onClick: () => void
   busy?: boolean
 }) {
+  const { t } = useTranslation()
   if (remaining <= 0) return null
   return (
     <button
@@ -26,7 +29,7 @@ export function ShowMore({
       disabled={busy}
       className="mt-2 h-11 w-full rounded-xl bg-surface text-sm font-medium text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover hover:text-text disabled:opacity-50"
     >
-      {busy ? 'Loading…' : `View more (${remaining})`}
+      {busy ? t('common.loading') : `View more (${remaining})`}
     </button>
   )
 }

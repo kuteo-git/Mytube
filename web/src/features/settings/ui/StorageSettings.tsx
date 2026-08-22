@@ -83,7 +83,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       setSaved(
         next.restartRequired
           ? t('settings.storage.savedRestart')
-          : 'Saved.',
+          : t('ui.savedFull'),
       )
     } catch (e) {
       // The gateway answers 409 with the count when the old folder still holds
@@ -169,7 +169,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
           disabled={checking || !path.trim()}
           className="mt-3 rounded-full bg-surface-hover px-4 py-2 text-sm transition-colors duration-150 ease-out disabled:opacity-60"
         >
-          {checking ? 'Checking…' : 'Check'}
+          {checking ? t('ui.checking') : t('ui.check')}
         </button>
         <button
           type="button"

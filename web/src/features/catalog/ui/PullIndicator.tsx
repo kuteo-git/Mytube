@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { ArrowDown, Loader2 } from 'lucide-react'
 import { pullProgress } from '../application/pull-to-refresh'
+import { useTranslation } from 'react-i18next'
 
 /**
  * What a pull looks like while it is happening.
@@ -26,6 +27,7 @@ export function PullIndicator({
   distance: number
   refreshing: boolean
 }) {
+  const { t } = useTranslation()
   if (!refreshing && distance <= 0) return null
 
   const progress = pullProgress(distance)
@@ -36,7 +38,7 @@ export function PullIndicator({
       className="pointer-events-none absolute inset-x-0 top-0 z-20 flex -translate-y-full
                  justify-center pb-2"
       aria-live="polite"
-      aria-label={refreshing ? 'Refreshing' : undefined}
+      aria-label={refreshing ? t('ui.refreshing') : undefined}
     >
       <div className="grid h-9 w-9 place-items-center rounded-full bg-surface shadow-lg">
         {refreshing ? (

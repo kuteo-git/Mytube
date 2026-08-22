@@ -25,7 +25,7 @@
  */
 const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   [(p) => p.startsWith('/channel/'), null],
-  [(p) => p === '/saved', 'Saved'],
+  [(p) => p === '/saved', 'nav.saved'],
   // Watch later and Playlists are deliberately *not* here.
   //
   // A bare screen drops the tab bar for a back arrow, and a playlist's own page

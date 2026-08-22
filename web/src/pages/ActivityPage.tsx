@@ -70,7 +70,7 @@ export function ActivityPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-medium">Activity</h1>
+      <h1 className="text-2xl font-medium">{t('nav.activity')}</h1>
 
       <ScanHistory
         refreshing={scanning || refresh.isPending}
@@ -79,9 +79,9 @@ export function ActivityPage() {
       />
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium">Downloads</h2>
+        <h2 className="text-lg font-medium">{t('ui.downloads')}</h2>
 
-        {jobsPending && <p className="mt-3 text-sm text-text-2">Loading…</p>}
+        {jobsPending && <p className="mt-3 text-sm text-text-2">{t('common.loading')}</p>}
 
         {!jobsPending && failed.length === 0 && active.length === 0 && done.length === 0 && (
           <p className="mt-3 text-sm text-text-2">
@@ -90,7 +90,7 @@ export function ActivityPage() {
         )}
 
         <JobGroup
-          title="Failed"
+          title={t('ui.failed')}
           tone="error"
           jobs={failed}
           render={(job) => <FailedRow job={job} />}
@@ -104,7 +104,7 @@ export function ActivityPage() {
           render={(job) => <ActiveRow job={job} />}
         />
         <JobGroup
-          title="Completed"
+          title={t('ui.completed')}
           tone="done"
           jobs={done}
           render={(job) => <DoneRow job={job} />}
@@ -133,7 +133,7 @@ function ScanHistory({
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-medium">Scans</h2>
+        <h2 className="text-lg font-medium">{t('ui.scans')}</h2>
         <div className="flex items-center gap-2">
           {scans.length > 0 && (
             <button
@@ -151,12 +151,12 @@ function ScanHistory({
             className="flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-60"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
-            {refreshing ? 'Scanning…' : t('pages.activity.scanNow')}
+            {refreshing ? t('ui.scanning') : t('pages.activity.scanNow')}
           </button>
         </div>
       </div>
 
-      {isPending && <p className="mt-3 text-sm text-text-2">Loading…</p>}
+      {isPending && <p className="mt-3 text-sm text-text-2">{t('common.loading')}</p>}
 
       {!isPending && scans.length === 0 && (
         <p className="mt-3 text-sm text-text-2">{t('pages.activity.neverScanned')}</p>
@@ -287,9 +287,10 @@ function DoneRow({ job }: { job: IngestJob }) {
 }
 
 function DismissButton({ jobId }: { jobId: string }) {
+  const { t } = useTranslation()
   const dismiss = useDismissJob()
   return (
-    <IconButton label="Dismiss" onClick={() => dismiss.mutate(jobId)} disabled={dismiss.isPending}>
+    <IconButton label={t('ui.dismiss')} onClick={() => dismiss.mutate(jobId)} disabled={dismiss.isPending}>
       <X size={16} />
     </IconButton>
   )

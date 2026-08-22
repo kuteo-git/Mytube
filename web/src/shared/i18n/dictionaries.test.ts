@@ -62,6 +62,12 @@ describe('the dictionaries', () => {
       // rendering would be a word they then have to translate back.
       'translationSettings.baseURL',
       'translationSettings.apiKey',
+      // The equaliser's own vocabulary, which §4b's decision keeps in English:
+      // somebody who has opened this panel knows these words, and the
+      // Vietnamese renderings are longer than the controls they label.
+      'ui.preamp',
+      'ui.dryWet',
+      'ui.model',
     ])
 
     const untranslated = paths(en).filter(

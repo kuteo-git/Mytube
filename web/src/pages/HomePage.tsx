@@ -13,7 +13,7 @@ import {
 } from '@/features/catalog/application/queries'
 import { isInProgress } from '@/features/catalog/domain/video'
 import { useHiddenVideos } from '@/features/catalog/application/hidden'
-import { ChipBar, LIVE_CATEGORY } from '@/features/catalog/ui/ChipBar'
+import { ALL_CATEGORY, ChipBar, LIVE_CATEGORY } from '@/features/catalog/ui/ChipBar'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
@@ -32,7 +32,7 @@ import { useTranslation } from 'react-i18next'
 export function HomePage() {
   const { t } = useTranslation()
   const { topicName } = useParams()
-  const [selected, setSelected] = useState('All')
+  const [selected, setSelected] = useState<string>(ALL_CATEGORY)
   const active = topicName ?? selected
 
   // A different topic is a different grid, so it starts at its own beginning.
@@ -142,7 +142,7 @@ export function HomePage() {
   // claim that something is happening, and one that is lit over an empty grid
   // teaches people to stop believing it.
   const chips = [
-    'All',
+    ALL_CATEGORY,
     ...(live && live.length > 0 ? [LIVE_CATEGORY] : []),
     ...(topics ?? []).map((t) => t.name),
   ]

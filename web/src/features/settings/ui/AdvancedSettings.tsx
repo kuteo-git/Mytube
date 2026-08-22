@@ -50,7 +50,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
       <SettingsSection
         headless={headless}
         icon={<SlidersHorizontal size={18} />}
-        title="Advanced"
+        title={t('ui.advanced')}
         description={t('settings.advanced.couldNotRead')}
       >
         <button
@@ -69,8 +69,8 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
       <SettingsSection
         headless={headless}
         icon={<SlidersHorizontal size={18} />}
-        title="Advanced"
-        description="Loading…"
+        title={t('ui.advanced')}
+        description={t('common.loading')}
       >
         <div className="h-24 animate-pulse rounded-lg bg-surface-input" />
       </SettingsSection>
@@ -83,7 +83,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
     <SettingsSection
       headless={headless}
       icon={<SlidersHorizontal size={18} />}
-      title="Advanced"
+      title={t('ui.advanced')}
       description={t('settings.advanced.intro')}
     >
       {RANKING_FIELDS.map((field) => (
@@ -102,7 +102,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
           onClick={() => save.mutate(draft)}
           className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
         >
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('ui.saving') : t('common.save')}
         </button>
         {/* Clears every override rather than writing today's numbers in. A
             setting left unset follows the ranker; one pinned to the current

@@ -47,7 +47,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   // read by whoever is already looking at that one control — while the eye at
   // that moment is on the thing being shared.
   const announce = (outcome: ShareOutcome) => {
-    if (outcome === 'shared') toast('Shared')
+    if (outcome === 'shared') toast(t('ui.shared'))
     else if (outcome === 'copied') toast(t('actions.linkCopied'))
     else if (outcome === 'failed') toast(t('actions.couldNotCopy'))
     // A cancelled share sheet is the viewer's own answer, and reporting a
@@ -84,7 +84,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
               : 'bg-text text-bg hover:bg-text/90')
           }
         >
-          {video.channel.subscribed ? 'Subscribed' : 'Subscribe'}
+          {video.channel.subscribed ? t('ui.subscribed') : t('ui.subscribe')}
         </button>
       </div>
 
@@ -93,7 +93,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           <button
             type="button"
             aria-pressed={reaction === 'LIKE'}
-            aria-label="Like"
+            aria-label={t('ui.like')}
             disabled={setReaction.isPending}
             onClick={() => setReaction.mutate(reaction === 'LIKE' ? 'NONE' : 'LIKE')}
             className="flex h-full items-center gap-2 rounded-l-full px-4 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
@@ -105,7 +105,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           <button
             type="button"
             aria-pressed={reaction === 'DISLIKE'}
-            aria-label="Dislike"
+            aria-label={t('ui.dislike')}
             disabled={setReaction.isPending}
             onClick={() => setReaction.mutate(reaction === 'DISLIKE' ? 'NONE' : 'DISLIKE')}
             className="grid h-full w-12 place-items-center rounded-r-full transition-colors duration-150 ease-out hover:bg-surface-hover"
@@ -119,7 +119,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             reported twice. */}
         <ActionPill
           icon={<Share2 size={20} />}
-          label="Share"
+          label={t('ui.share')}
           onClick={() => {
             void shareVideo({
               url: shareURL(video),
@@ -133,7 +133,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             press here would be undone by the next pass. */}
         <ActionPill
           icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
-          label={video.pinned ? 'Saved' : 'Save'}
+          label={video.pinned ? t('common.saved') : t('common.save')}
           onClick={() => setPinned.mutate({ videoId: video.id, pinned: !video.pinned })}
         />
 

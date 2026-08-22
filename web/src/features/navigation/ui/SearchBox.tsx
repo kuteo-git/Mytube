@@ -85,7 +85,7 @@ export function SearchBox() {
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
-            placeholder="Search"
+            placeholder={t('ui.search')}
             aria-label={t('search.placeholder')}
             aria-expanded={items.length > 0}
             aria-controls="search-suggestions"
@@ -110,7 +110,7 @@ export function SearchBox() {
 
           <button
             type="button"
-            aria-label="Search"
+            aria-label={t('ui.search')}
             onClick={() => query.trim() && go(query.trim())}
             className="grid h-full w-16 place-items-center rounded-r-full border-l border-line bg-surface transition-colors duration-150 ease-out hover:bg-surface-hover"
           >

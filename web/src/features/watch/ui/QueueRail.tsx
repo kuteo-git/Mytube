@@ -38,7 +38,7 @@ export function QueueRail({
   }, [currentIndex])
 
   return (
-    <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label="Queue">
+    <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label={t('ui.queue')}>
       <div className="border-b border-line px-4 py-3">
         <p className="text-sm font-medium">{label ? `Playing from ${label}` : t('upNext.playingFromQueue')}</p>
         <p className="mt-0.5 text-xs text-text-2">

@@ -2,6 +2,8 @@ import clsx from 'clsx'
 import { Clock, Home, Settings, Users } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import type { TranslationKey } from '@/shared/i18n/en'
 
 /**
  * The mobile shell's navigation, replacing the sidebar rail below the breakpoint.
@@ -27,11 +29,11 @@ import { NavLink } from 'react-router-dom'
  * a poor way to answer "what has this channel posted", which is the question
  * following a channel is for.
  */
-const ITEMS: { icon: ComponentType<{ size?: number }>; label: string; to: string }[] = [
-  { icon: Home, label: 'Home', to: '/' },
-  { icon: Users, label: 'Subscriptions', to: '/subscriptions' },
-  { icon: Clock, label: 'History', to: '/history' },
-  { icon: Settings, label: 'Settings', to: '/settings' },
+const ITEMS: { icon: ComponentType<{ size?: number }>; label: TranslationKey; to: string }[] = [
+  { icon: Home, label: 'nav.home', to: '/' },
+  { icon: Users, label: 'nav.subscriptions', to: '/subscriptions' },
+  { icon: Clock, label: 'nav.history', to: '/history' },
+  { icon: Settings, label: 'nav.settings', to: '/settings' },
 ]
 
 /**
@@ -42,6 +44,7 @@ const ITEMS: { icon: ComponentType<{ size?: number }>; label: string; to: string
  * opacity is not yet a control.
  */
 export function BottomNav({ opacity = 1 }: { opacity?: number }) {
+  const { t } = useTranslation()
   const arriving = opacity < 1
   return (
     <nav
@@ -56,7 +59,7 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
         pointerEvents: arriving ? 'none' : undefined,
       }}
       aria-hidden={opacity === 0 ? true : undefined}
-      aria-label="Main"
+      aria-label={t('ui.main')}
     >
       {ITEMS.map(({ icon: Icon, label, to }) => (
         <NavLink
@@ -71,7 +74,7 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
           }
         >
           <Icon size={20} />
-          <span>{label}</span>
+          <span>{t(label)}</span>
         </NavLink>
       ))}
     </nav>

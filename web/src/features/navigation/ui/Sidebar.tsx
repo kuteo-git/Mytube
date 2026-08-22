@@ -130,7 +130,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
   if (mini) {
     return (
       <nav
-        aria-label="Main"
+        aria-label={t('ui.main')}
         className="fixed top-[var(--top-bar)] bottom-0 left-0 z-20 w-[72px] overflow-y-auto bg-bg py-1 no-scrollbar"
       >
         {[...PRIMARY, ...ACCOUNT].map((item) => (
@@ -142,7 +142,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
 
   return (
     <nav
-      aria-label="Main"
+      aria-label={t('ui.main')}
       className="fixed top-[var(--top-bar)] bottom-0 left-0 z-20 w-60 overflow-y-auto bg-bg px-3 py-3 no-scrollbar"
     >
       <section className="flex flex-col gap-0.5">

@@ -74,7 +74,7 @@ export function desiredTrackMode(input: {
   return 'disabled'
 }
 
-/** One row of the "Subtitles" setting, past the "Off" that always leads it. */
+/** One row of the t('ui.subtitles') setting, past the t('ui.off') that always leads it. */
 export type SubtitleOption = { value: string; label: string; hint: string }
 
 /**

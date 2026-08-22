@@ -121,7 +121,7 @@ export function ExternalVideoCard({
                     try {
                       const videoId = await open.mutateAsync(video.sourceUrl)
                       setPinned.mutate({ videoId, pinned: true })
-                      toast('Saved')
+                      toast(t('common.saved'))
                     } catch {
                       // Video may already exist; try standard save
                     }

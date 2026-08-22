@@ -22,7 +22,7 @@ export function ProfileSettings({ headless = false }: { headless?: boolean }) {
   return (
     <SettingsSection
       icon={<UserRound size={18} />}
-      title="Profile"
+      title={t('ui.profile')}
       description={t('profiles.whoIsThis')}
       headless={headless}
     >

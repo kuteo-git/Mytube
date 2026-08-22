@@ -5,6 +5,7 @@ import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Channel identity, matching the reference layout in Example/channel.png.
@@ -15,6 +16,7 @@ import { useFormat } from '@/shared/lib/useFormat'
  * would be decoration over nothing.
  */
 export function ChannelHeader({ channel, videoCount }: { channel: Channel; videoCount: number }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const setSubscription = useSetSubscription(channel.id)
 
@@ -65,7 +67,7 @@ export function ChannelHeader({ channel, videoCount }: { channel: Channel; video
                 : 'bg-text text-bg hover:bg-text/90')
             }
           >
-            {channel.subscribed ? 'Subscribed' : 'Subscribe'}
+            {channel.subscribed ? t('ui.subscribed') : t('ui.subscribe')}
           </button>
         </div>
       </div>

@@ -31,7 +31,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
   }, [data?.totalCount, isPending, autoFetched])
 
   return (
-    <section className="mt-6" aria-label="Comments">
+    <section className="mt-6" aria-label={t('ui.comments')}>
       <div className="flex items-center gap-8">
         <h2 className="text-xl font-bold">{data?.totalCount ?? 0} Comments</h2>
         <button

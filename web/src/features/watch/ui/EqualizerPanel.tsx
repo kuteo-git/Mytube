@@ -197,7 +197,7 @@ export function EqualizerSetting({
               width. Stacking gives every row in this panel the same two edges,
               and gives the slider back the 100px it was spending on text. */}
           <div className="flex items-baseline justify-between pt-5 text-xs text-text-2">
-            <span>Preamp</span>
+            <span>{t('ui.preamp')}</span>
             <span className="tabular-nums">{formatDb(settings.preamp)}</span>
           </div>
           {/* Pulled up against its own title.
@@ -209,7 +209,7 @@ export function EqualizerSetting({
               and what closes up is the emptiness above the track. */}
           <div className="-mt-2 flex">
             <LinearSlider
-              label="Preamp"
+              label={t('ui.preamp')}
               min={MIN_PREAMP_DB}
               max={MAX_PREAMP_DB}
               step={1}
@@ -241,14 +241,14 @@ export function EqualizerSetting({
         cannot do what its name says.
       */}
       <SettingRowLike
-        label="Environment"
+        label={t('ui.environment')}
         on={reverb.enabled}
         onToggle={() => setReverb({ ...reverb, enabled: !reverb.enabled })}
       />
 
       {reverb.enabled && (
       <li className="px-4 pb-3">
-        <div role="radiogroup" aria-label="Environment" className="grid grid-cols-4 gap-1">
+        <div role="radiogroup" aria-label={t('ui.environment')} className="grid grid-cols-4 gap-1">
           {REVERB_PRESETS.map((p) => {
             const on = reverb.preset === p.name
             return (
@@ -272,7 +272,7 @@ export function EqualizerSetting({
         </div>
 
         <div className="flex items-baseline justify-between pt-5 text-xs text-text-2">
-          <span>Dry/Wet</span>
+          <span>{t('ui.dryWet')}</span>
           <span className="tabular-nums">{Math.round(reverb.wet * 100)}%</span>
         </div>
         <div className="-mt-2 flex">

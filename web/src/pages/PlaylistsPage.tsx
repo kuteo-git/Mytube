@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
  * channels are the household's and what somebody assembled is theirs.
  */
 export function PlaylistsPage() {
+  const { t } = useTranslation()
   const { data: playlists, isPending, isError } = usePlaylists()
   // "Not read yet" becomes a lie the moment the session dies: nothing is coming
   // on the next pass, because there will not be one until somebody pastes a
@@ -27,7 +28,7 @@ export function PlaylistsPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Playlists</h1>
+      <h1 className="py-4 text-2xl font-bold">{t('nav.playlists')}</h1>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
