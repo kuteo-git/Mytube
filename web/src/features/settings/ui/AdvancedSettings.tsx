@@ -13,6 +13,7 @@ import {
 import { ActionBar } from '@/features/settings/ui/ActionBar'
 import { SettingsSection } from '@/features/settings/ui/SettingsSection'
 import { SliderRow } from '@/features/settings/ui/SliderRow'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The ranking constants, for a household that wants to move them.
@@ -34,6 +35,7 @@ import { SliderRow } from '@/features/settings/ui/SliderRow'
  * with a typo in it must still produce a feed.
  */
 export function AdvancedSettings({ headless = false }: { headless?: boolean } = {}) {
+  const { t } = useTranslation()
   const { data: stored, isError, isPending, refetch } = useRanking()
   const save = useSaveRanking()
   const [draft, setDraft] = useState<RankingSettings | null>(null)
@@ -49,7 +51,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
         headless={headless}
         icon={<SlidersHorizontal size={18} />}
         title="Advanced"
-        description="Could not read the ranking settings. The gateway may be running an older build that does not have them yet."
+        description={t('settings.advanced.couldNotRead')}
       >
         <button
           type="button"
@@ -82,7 +84,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
       headless={headless}
       icon={<SlidersHorizontal size={18} />}
       title="Advanced"
-      description="How the home feed ranks, rather than what it is made of. Anything you do not set here follows the built-in value, so a setting left alone keeps up if the ranker changes."
+      description={t('settings.advanced.intro')}
     >
       {RANKING_FIELDS.map((field) => (
         <RankingSlider
@@ -115,10 +117,10 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
           Use built-in values
         </button>
         {!dirty && save.isSuccess && (
-          <span className="text-sm text-text-2">Saved — your feed has been rebuilt.</span>
+          <span className="text-sm text-text-2">{t('settings.feedMix.savedRebuilt')}</span>
         )}
         {save.isError && (
-          <span className="text-sm text-brand">Could not save. Is the gateway running?</span>
+          <span className="text-sm text-brand">{t('settings.feedMix.couldNotSave')}</span>
         )}
       </ActionBar>
     </SettingsSection>
@@ -134,24 +136,31 @@ function RankingSlider({
   settings: RankingSettings
   onChange: (value: number | undefined) => void
 }) {
+  const { t } = useTranslation()
   const value = valueOf(settings, field)
   const overridden = settings[field.key] !== undefined
 
   return (
     <div>
       <SliderRow
-        label={field.label}
+        label={t(field.label)}
         value={value}
         min={field.min}
         max={field.max}
         step={field.step}
         onChange={onChange}
-        format={field.format}
-        hint={field.hint}
+        // The domain returns a key and a number; the words live in the
+        // dictionary, because that file cannot call a hook and must not hold
+        // English.
+        format={(v) => {
+          const [key, value] = field.format(v)
+          return t(key, { value })
+        }}
+        hint={t(field.hint)}
         trailing={
           field.risky ? (
             <span
-              title="Moving this far can visibly break the ordering."
+              title={t('settings.advanced.breaks')}
               className="flex items-center gap-1 text-xs text-text-2"
             >
               <AlertTriangle size={12} />
@@ -161,7 +170,14 @@ function RankingSlider({
         }
       />
       <div className="mt-1 flex items-baseline gap-3 text-xs text-text-2">
-        <span>Built in: {field.format(field.fallback)}</span>
+        <span>
+          {t('settings.advanced.builtIn', {
+            value: (() => {
+              const [key, value] = field.format(field.fallback)
+              return t(key, { value })
+            })(),
+          })}
+        </span>
         {overridden && (
           <button
             type="button"

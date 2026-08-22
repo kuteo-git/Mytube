@@ -1,5 +1,6 @@
 import { Pencil, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Choosing one model out of a couple of hundred.
@@ -26,6 +27,7 @@ export function ModelPicker({
   onChange: (v: string) => void
   onRefresh: () => void
 }) {
+  const { t } = useTranslation()
   const [filter, setFilter] = useState('')
   const [manual, setManual] = useState(false)
   const [open, setOpen] = useState(false)
@@ -47,7 +49,7 @@ export function ModelPicker({
           aria-label="Model"
           onChange={(e) => onChange(e.target.value)}
         />
-        <IconButton label="Choose from the list" onClick={() => setManual(false)}>
+        <IconButton label={t('settings.model.chooseFromList')} onClick={() => setManual(false)}>
           <RefreshCw size={16} />
         </IconButton>
       </>
@@ -100,10 +102,10 @@ export function ModelPicker({
           </ul>
         )}
       </div>
-      <IconButton label="Reload the model list" onClick={onRefresh} busy={loading}>
+      <IconButton label={t('settings.model.reload')} onClick={onRefresh} busy={loading}>
         <RefreshCw size={16} className={loading ? 'animate-spin' : undefined} />
       </IconButton>
-      <IconButton label="Type a model name" onClick={() => setManual(true)}>
+      <IconButton label={t('settings.model.type')} onClick={() => setManual(true)}>
         <Pencil size={16} />
       </IconButton>
     </>

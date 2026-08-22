@@ -11,6 +11,7 @@ import { hueFromId } from '@/shared/lib/hue'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * A video that lives upstream and may not have a catalog row yet.
@@ -31,6 +32,7 @@ export function ExternalVideoCard({
    */
   queueSearch?: string
 }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const navigate = useNavigate()
   const open = useOpenExternal()
@@ -95,7 +97,7 @@ export function ExternalVideoCard({
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            aria-label="More options"
+            aria-label={t('common.moreOptions')}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
             className={clsx(
@@ -137,7 +139,7 @@ export function ExternalVideoCard({
         </div>
       </div>
 
-      {open.isError && <p className="text-xs text-brand">Could not open that video.</p>}
+      {open.isError && <p className="text-xs text-brand">{t('card.couldNotOpen')}</p>}
     </article>
   )
 }

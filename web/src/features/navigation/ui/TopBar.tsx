@@ -4,6 +4,7 @@ import { useIngestJobs } from '@/features/catalog/application/queries'
 import { SearchBox } from './SearchBox'
 import { IconButton } from '@/shared/ui/primitives'
 import { AccountMenu } from '@/features/identity/ui/AccountMenu'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Top bar. Deviations from youtube.com follow the "no dead buttons" rule in
@@ -28,6 +29,7 @@ export function TopBar({
   onToggleSidebar: () => void
   opacity?: number
 }) {
+  const { t } = useTranslation()
 
   // The badge reports real ingest activity rather than imaginary social
   // notifications: downloads in flight, and failures that need attention.
@@ -82,7 +84,7 @@ export function TopBar({
             breakpoint the bottom bar carries navigation, so this is one more
             thing competing for a 390px-wide row. */}
         <span className="hidden min-[700px]:contents">
-          <IconButton label="Toggle sidebar" onClick={onToggleSidebar}>
+          <IconButton label={t('search.toggleSidebar')} onClick={onToggleSidebar}>
             <Menu size={24} />
           </IconButton>
         </span>

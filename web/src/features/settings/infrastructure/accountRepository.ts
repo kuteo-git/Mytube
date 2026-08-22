@@ -59,7 +59,7 @@ export const accountRepository = {
     })
     if (!response.ok) {
       const body = await response.json().catch(() => ({}) as { error?: string })
-      throw new HttpError(response.status, body.error || 'Could not save')
+      throw new HttpError(response.status, body.error || 'save failed')
     }
   },
 

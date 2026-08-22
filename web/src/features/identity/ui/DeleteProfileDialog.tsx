@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { httpProfileRepository, type ProfileUsage } from '../infrastructure/profileRepository'
 import type { Profile } from '../domain/profile'
+import { useTranslation } from 'react-i18next'
 
 /**
  * What deleting a profile takes with it, said in numbers before it happens.
@@ -28,6 +29,7 @@ export function DeleteProfileDialog({
   onClose: () => void
   onDeleted: () => void
 }) {
+  const { t } = useTranslation()
   const [usage, setUsage] = useState<ProfileUsage | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -40,7 +42,7 @@ export function DeleteProfileDialog({
         if (!gone) setUsage(u)
       })
       .catch(() => {
-        if (!gone) setError('Could not read what this profile holds.')
+        if (!gone) setError(t('profiles.couldNotRead'))
       })
     return () => {
       gone = true
@@ -64,7 +66,7 @@ export function DeleteProfileDialog({
     } catch (e) {
       // The gateway refuses two cases in words worth showing as they are: the
       // profile you are using, and the last one left.
-      setError(e instanceof Error && e.message ? e.message : 'Could not delete that profile.')
+      setError(e instanceof Error && e.message ? e.message : t('profiles.couldNotDelete'))
       setBusy(false)
     }
   }
@@ -74,13 +76,13 @@ export function DeleteProfileDialog({
   // needs to think about.
   const lines = usage
     ? ([
-        [usage.subscriptions, 'subscriptions'],
-        [usage.watched, 'videos watched'],
-        [usage.playlists, 'playlists'],
-        [usage.reactions, 'likes and dislikes'],
-        [usage.saved, 'saved videos'],
-        [usage.watchLater, 'in Watch later'],
-        [usage.comments, 'comments'],
+        [usage.subscriptions, t('profiles.counts.subscriptions')],
+        [usage.watched, t('profiles.counts.watched')],
+        [usage.playlists, t('profiles.counts.playlists')],
+        [usage.reactions, t('profiles.counts.reactions')],
+        [usage.saved, t('profiles.counts.saved')],
+        [usage.watchLater, t('profiles.counts.watchLater')],
+        [usage.comments, t('profiles.counts.comments')],
       ] as const).filter(([n]) => n > 0)
     : []
 
@@ -89,19 +91,19 @@ export function DeleteProfileDialog({
       className="fixed inset-0 z-[60] grid place-items-center bg-black/60 px-4"
       role="dialog"
       aria-modal="true"
-      aria-label={`Delete ${profile.name}`}
+      aria-label={t('profiles.deleteTitle', { name: profile.name })}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
       <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-5">
-        <h2 className="text-lg font-medium">Delete {profile.name}?</h2>
+        <h2 className="text-lg font-medium">{t('profiles.deleteTitle', { name: profile.name })}</h2>
 
         {usage === null && !error ? (
-          <p className="pt-2 text-sm text-text-2">Counting what this profile holds…</p>
+          <p className="pt-2 text-sm text-text-2">{t('profiles.counting')}</p>
         ) : lines.length > 0 ? (
           <>
-            <p className="pt-2 text-sm text-text-2">This removes, for {profile.name} only:</p>
+            <p className="pt-2 text-sm text-text-2">{t('profiles.removesFor', { name: profile.name })}</p>
             <ul className="pt-2 text-sm">
               {lines.map(([n, label]) => (
                 <li key={label} className="py-0.5">
@@ -111,17 +113,14 @@ export function DeleteProfileDialog({
             </ul>
           </>
         ) : (
-          <p className="pt-2 text-sm text-text-2">
-            This profile has not watched or saved anything yet.
-          </p>
+          <p className="pt-2 text-sm text-text-2">{t('profiles.nothingYet')}</p>
         )}
 
         {/* The reassurance is as important as the warning: people hesitate here
             because they think the videos go too. They do not — the library is
             shared, and only this person's side of it is being removed. */}
         <p className="pt-3 text-sm text-text-2">
-          The videos and channels themselves stay — they belong to the whole
-          household. This cannot be undone.
+          {t('profiles.librarySurvives')}
         </p>
 
         {error && <p className="pt-3 text-sm text-brand">{error}</p>}
@@ -131,16 +130,14 @@ export function DeleteProfileDialog({
             type="button"
             onClick={onClose}
             className="rounded-full px-4 py-2 text-sm transition-colors duration-150 ease-out hover:bg-surface-hover"
-          >
-            Cancel
-          </button>
+          >{t('common.cancel')}</button>
           <button
             type="button"
             onClick={() => void remove()}
             disabled={busy}
             className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-colors duration-150 ease-out disabled:opacity-60"
           >
-            {busy ? 'Deleting…' : 'Delete'}
+            {busy ? t('profiles.deleting') : t('common.delete')}
           </button>
         </div>
       </div>

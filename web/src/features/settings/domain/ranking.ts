@@ -1,3 +1,4 @@
+import type { Dictionary, TranslationKey } from '@/shared/i18n/en'
 /**
  * The ranking constants the household can move without a rebuild.
  *
@@ -34,44 +35,65 @@ export type RankingKey = keyof RankingSettings
  */
 export interface RankingField {
   key: RankingKey
-  label: string
-  hint: string
+  label: TranslationKey
+  hint: TranslationKey
   /** Fallback range, used only until the server publishes its own. */
   min: number
   max: number
   step: number
   /** Turns the stored number into what the slider reads out. */
-  format: (value: number) => string
+  /**
+   * How to say this value: a translation key and the number to put in it.
+   *
+   * Not a finished string. The unit words — hours, days, months, videos —
+   * belong in the dictionary, and returning them from here would mean this
+   * domain file holding English, which is also the file that cannot call a
+   * hook.
+   */
+  format: (value: number) => Formatted
   /** The built-in value, shown so a changed setting is recognisable as changed. */
   fallback: number
   risky?: boolean
 }
 
+/** A translation key and the number it interpolates. */
+/**
+ * A unit key and the number it interpolates.
+ *
+ * Narrowed to the unit keys rather than to every key that exists, and not for
+ * tidiness: `t` refuses a union whose members take different interpolation
+ * options, and every key here takes exactly `{{value}}`. Saying so is what
+ * makes the call compile without a cast.
+ */
+export type Formatted = [key: UnitKey, value: number]
+
+type UnitKey = `settings.ranking.unit.${keyof Dictionary['settings']['ranking']['unit']}`
+
 export const RANKING_FIELDS: RankingField[] = [
   {
     key: 'sessionBlend',
-    label: 'Follow what you are watching now',
-    hint: 'How much the last few videos of this sitting outweigh your whole watch history. At zero the page ignores today entirely; at the top it is almost the Next rail.',
+    label: 'settings.ranking.sessionBlend.label',
+    hint: 'settings.ranking.sessionBlend.hint',
     min: 0,
     max: 1,
     step: 0.05,
-    format: (v) => `${Math.round(v * 100)}% this sitting`,
+    format: (v) => ['settings.ranking.unit.thisSitting', Math.round(v * 100)],
     fallback: 0.5,
   },
   {
     key: 'freshSubscribedPercent',
-    label: 'Room kept for new uploads',
-    hint: 'A share of every page reserved for videos your channels published recently, so a new upload never has to win a place on score alone.',
+    label: 'settings.ranking.freshSubscribed.label',
+    hint: 'settings.ranking.freshSubscribed.hint',
     min: 0,
     max: 40,
     step: 1,
-    format: (v) => `${v}% of the page`,
+    format: (v) => ['settings.ranking.unit.ofPage', v],
     fallback: 10,
   },
   {
     key: 'freshnessWindowHours',
-    label: 'How long a video counts as new',
-    hint: 'Both the reserved share above and the boost that surfaces breaking news use this.',
+    label: 'settings.ranking.freshnessWindow.label',
+    hint: 'settings.ranking.freshnessWindow.hint',
     min: 1,
     max: 24 * 14,
     step: 1,
@@ -80,8 +102,8 @@ export const RANKING_FIELDS: RankingField[] = [
   },
   {
     key: 'maxPublishedAgeDays',
-    label: 'Oldest video the home page will show',
-    hint: 'Older videos stay reachable through search and on their channel; they just do not fill the grid.',
+    label: 'settings.ranking.maxAge.label',
+    hint: 'settings.ranking.maxAge.hint',
     min: 1,
     max: 3650,
     step: 1,
@@ -90,48 +112,52 @@ export const RANKING_FIELDS: RankingField[] = [
   },
   {
     key: 'recencyHalfLifeDays',
-    label: 'How fast newly added videos fade',
-    hint: 'A video the library has just fetched leads the grid, then settles. This is how long it takes to lose half of that lift.',
+    label: 'settings.ranking.recencyHalfLife.label',
+    hint: 'settings.ranking.recencyHalfLife.hint',
     min: 0.5,
     max: 365,
     step: 0.5,
-    format: (v) => `${v} day${v === 1 ? '' : 's'}`,
+    format: (v) => ['settings.ranking.unit.days', v],
     fallback: 5,
   },
   {
     key: 'softmaxTemperature',
-    label: 'How closely the order follows the score',
-    hint: 'Lower keeps the best videos at the top every time; higher lets close scores trade places between visits. Near zero the page looks identical on every refresh.',
+    label: 'settings.ranking.temperature.label',
+    hint: 'settings.ranking.temperature.hint',
     min: 0.05,
     max: 5,
     step: 0.05,
-    format: (v) => v.toFixed(2),
+    format: (v) => ['settings.ranking.unit.plain', v],
     fallback: 0.6,
     risky: true,
   },
   {
     key: 'samplePoolSize',
-    label: 'How many videos enter the draw',
-    hint: 'Only this many of each share are shuffled; the rest stay in score order. Raising it far is what let videos scoring below zero onto the first page.',
+    label: 'settings.ranking.poolSize.label',
+    hint: 'settings.ranking.poolSize.hint',
     min: 24,
     max: 480,
     step: 24,
-    format: (v) => `${v} videos`,
+    format: (v) => ['settings.ranking.unit.videos', v],
     fallback: 120,
     risky: true,
   },
 ]
 
-function formatHours(hours: number): string {
-  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`
-  const days = Math.round(hours / 24)
-  return `${days} days`
+// Which unit reads best at this magnitude, and the number to say it with.
+//
+// A key and a value rather than a finished string: the unit words live in the
+// dictionary, where "day"/"days" is data instead of a rule. Applied as a rule
+// to Vietnamese — which has no plural — it produces "5 ngàys".
+function formatHours(hours: number): Formatted {
+  if (hours < 48) return ['settings.ranking.unit.hours', hours]
+  return ['settings.ranking.unit.days', Math.round(hours / 24)]
 }
 
-function formatDays(days: number): string {
-  if (days < 60) return `${days} day${days === 1 ? '' : 's'}`
-  if (days < 730) return `${Math.round(days / 30)} months`
-  return `${(days / 365).toFixed(1)} years`
+function formatDays(days: number): Formatted {
+  if (days < 60) return ['settings.ranking.unit.days', days]
+  if (days < 730) return ['settings.ranking.unit.months', Math.round(days / 30)]
+  return ['settings.ranking.unit.years', Number((days / 365).toFixed(1))]
 }
 
 /** What a field reads when the household has not set it. */

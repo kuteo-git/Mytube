@@ -5,6 +5,7 @@ import { useCurrentProfile, useProfiles } from '../application/use-profile'
 import { httpProfileRepository } from '../infrastructure/profileRepository'
 import { validProfileName, type Profile } from '../domain/profile'
 import { DeleteProfileDialog } from './DeleteProfileDialog'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Who is watching.
@@ -31,6 +32,7 @@ export function ProfilePicker({
    */
   manage?: boolean
 }) {
+  const { t } = useTranslation()
   const { data: profiles = [], isLoading, refetch } = useProfiles()
   const { id: currentID, choose } = useCurrentProfile()
   const [adding, setAdding] = useState(false)
@@ -41,7 +43,7 @@ export function ProfilePicker({
 
   const add = async () => {
     if (!validProfileName(name)) {
-      setError('Enter a name')
+      setError(t('profiles.enterName'))
       return
     }
     setBusy(true)
@@ -52,7 +54,7 @@ export function ProfilePicker({
       choose(created)
       onDone?.()
     } catch {
-      setError('Could not add that name')
+      setError(t('profiles.couldNotAdd'))
     } finally {
       setBusy(false)
     }
@@ -136,7 +138,7 @@ export function ProfilePicker({
               if (e.key === 'Enter') void add()
             }}
             placeholder="Name"
-            aria-label="New profile name"
+            aria-label={t('profiles.newProfileName')}
             maxLength={40}
             className="w-full rounded-lg bg-surface-input px-4 py-3 text-base outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
           />

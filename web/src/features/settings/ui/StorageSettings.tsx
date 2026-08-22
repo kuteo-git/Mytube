@@ -6,6 +6,7 @@ import { apiJSON } from '@/shared/api/http'
 import { formatBytes } from '@/shared/lib/format'
 import { SettingsSection } from './SettingsSection'
 import { ActionBar } from './ActionBar'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Where the library lives, and whether it is kept at all.
@@ -35,6 +36,7 @@ interface RootCheck {
 }
 
 export function StorageSettings({ headless = false }: { headless?: boolean }) {
+  const { t } = useTranslation()
   const [state, setState] = useState<StorageSettingsState | null>(null)
   const [path, setPath] = useState('')
   const [check, setCheck] = useState<RootCheck | null>(null)
@@ -49,7 +51,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         setState(s)
         setPath(s.mediaRoot)
       })
-      .catch(() => setError('Could not read the storage settings.'))
+      .catch(() => setError(t('settings.storage.couldNotRead')))
   }, [])
 
   // Checked on leaving the field as well as on the button. Validating only when
@@ -62,7 +64,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
     try {
       setCheck(await apiJSON<RootCheck>(`/api/settings/storage/verify?path=${encodeURIComponent(candidate)}`))
     } catch {
-      setCheck({ ok: false, problem: 'Could not reach the server to check that folder.' })
+      setCheck({ ok: false, problem: t('settings.storage.couldNotReach') })
     } finally {
       setChecking(false)
     }
@@ -80,7 +82,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       setConfirming(null)
       setSaved(
         next.restartRequired
-          ? 'Saved. Restart the app for it to take effect — three services read this when they start.'
+          ? t('settings.storage.savedRestart')
           : 'Saved.',
       )
     } catch (e) {
@@ -92,7 +94,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         setConfirming({ videos: Number(match[1]), oldRoot: state?.mediaRoot ?? '' })
         return
       }
-      setError(body || 'Could not save that folder.')
+      setError(body || t('settings.storage.couldNotSaveFolder'))
     }
   }
 
@@ -106,7 +108,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         }),
       )
     } catch {
-      setError('Could not change that setting.')
+      setError(t('settings.storage.couldNotChange'))
     }
   }
 
@@ -115,8 +117,8 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       icon={<FolderOpen size={18} />}
       // Not "Storage": the page heading an inch above already says that word,
       // which is the fault SettingsSection's own note warns about.
-      title="Library folder"
-      description="Where downloaded videos are kept, and whether to keep them at all."
+      title={t('settings.storage.title')}
+      description={t('settings.storage.description')}
       headless={headless}
     >
       <label className="mt-4 block text-sm text-text-2" htmlFor="media-root">
@@ -143,7 +145,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       {state && (
         <p className="pt-1 text-xs text-text-2">
           {state.source === 'file'
-            ? 'Saved here.'
+            ? t('settings.storage.savedHere')
             : 'From the environment — nothing saved yet.'}
         </p>
       )}

@@ -18,6 +18,7 @@ import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 export type VideoCardVariant =
   | 'continueWatching'
@@ -45,6 +46,7 @@ export function VideoCard({
    */
   queueSearch?: string
 }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
@@ -146,7 +148,7 @@ export function VideoCard({
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            aria-label="More options"
+            aria-label={t('common.moreOptions')}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
             className={clsx(
@@ -223,6 +225,7 @@ function CardMenu({
   variant: VideoCardVariant
   close: () => void
 }) {
+  const { t } = useTranslation()
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
   const setPinned = useSetPinned()
@@ -239,7 +242,7 @@ function CardMenu({
             videoId: video.id,
             durationSeconds: video.durationSeconds,
           })
-          toast('Marked as watched')
+          toast(t('card.markedWatched'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
@@ -256,14 +259,12 @@ function CardMenu({
         type="button"
         onClick={() => {
           notInterested.mutate(video.id)
-          toast('Not interested')
+          toast(t('card.notInterested'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
-        <EyeOff size={16} />
-        Not interested
-      </button>
+        <EyeOff size={16} />{t('card.notInterested')}</button>
     </li>
   )
 

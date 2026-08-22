@@ -83,13 +83,33 @@ export function findStragglers(file: string, source: string): Straggler[] {
   const out: Straggler[] = []
   const lines = source.split('\n')
 
+  // Whether the scan is inside a block comment.
+  //
+  // Tracked as state rather than judged line by line, because this codebase's
+  // comments are long and their continuation lines are ordinary prose — a JSX
+  // comment's middle lines start with neither `//` nor `*`, and one of them
+  // reading "Always a `<Routes>`, never an `<Outlet/>`" was reported as
+  // untranslated copy on the first run.
+  let inBlock = false
+
   lines.forEach((line, index) => {
     const at = index + 1
+    const code = line.trim()
+
+    const wasInBlock = inBlock
+    if (inBlock) {
+      if (line.includes('*/')) inBlock = false
+      return
+    }
+    if ((code.includes('/*') || code.includes('{/*')) && !line.includes('*/')) {
+      inBlock = true
+      return
+    }
 
     // Comments are not copy. Checked before anything else, because this file's
     // own prose would otherwise flag every guard in the codebase.
-    const code = line.trim()
-    if (code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) return
+    if (wasInBlock || code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) return
+    if (code.startsWith('{/*') && code.endsWith('*/}')) return
 
     for (const [kind, pattern] of [
       ['aria-label', /aria-label="([^"]+)"/g],

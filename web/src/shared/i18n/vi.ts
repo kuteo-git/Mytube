@@ -64,6 +64,42 @@ export const vi: Dictionary = {
     scrollRight: 'Cuộn danh mục sang phải',
   },
 
+  search: {
+    placeholder: 'Tìm trong thư viện',
+    clear: 'Xoá ô tìm kiếm',
+    toggleSidebar: 'Ẩn/hiện menu',
+  },
+
+  profiles: {
+    // "Who this browser is" — a Vietnamese sentence would not start with a
+    // question word here; it states what the setting is for.
+    whoIsThis:
+      'Máy này đang là ai. Kênh đăng ký, lịch sử xem và gợi ý là của riêng từng người; kho video thì dùng chung.',
+    enterName: 'Nhập tên',
+    couldNotAdd: 'Không thêm được tên này',
+    newProfileName: 'Tên hồ sơ mới',
+    deleteTitle: 'Xoá {{name}}?',
+    counting: 'Đang đếm những gì thuộc về hồ sơ này…',
+    couldNotRead: 'Không đọc được những gì thuộc về hồ sơ này.',
+    couldNotDelete: 'Không xoá được hồ sơ này.',
+    removesFor: 'Sẽ xoá, chỉ của {{name}}:',
+    nothingYet: 'Hồ sơ này chưa xem hay lưu gì cả.',
+    // The reassurance matters as much as the warning, so it is written rather
+    // than converted: "video và kênh thì vẫn còn" is how somebody would say it.
+    librarySurvives:
+      'Video và kênh thì vẫn còn — chúng là của cả nhà. Xoá rồi không lấy lại được.',
+    deleting: 'Đang xoá…',
+    counts: {
+      subscriptions: 'kênh đăng ký',
+      watched: 'video đã xem',
+      playlists: 'danh sách phát',
+      reactions: 'lượt thích và không thích',
+      saved: 'video đã lưu',
+      watchLater: 'trong Xem sau',
+      comments: 'bình luận',
+    },
+  },
+
   card: {
     live: 'TRỰC TIẾP',
     suggested: 'Gợi ý',
@@ -132,6 +168,94 @@ export const vi: Dictionary = {
         'Danh sách này chưa được lấy về từ YouTube. Nó sẽ đầy dần ở một trong những lần quét tài khoản sắp tới.',
       emptyUpstream: 'Danh sách này trống trên YouTube.',
     },
+  },
+
+  settings: {
+    feedMix: {
+      title: 'Trang chủ',
+      couldNotRead:
+        'Không đọc được tỉ lệ hiện tại. Có thể gateway đang chạy bản cũ chưa có cài đặt này.',
+      // "add up to one page" — Vietnamese says it as sharing one page, which is
+      // clearer than the arithmetic image.
+      intro:
+        'Video mới trên trang chủ lấy từ đâu. Ba phần này chia nhau một trang, nên tăng phần này là giảm hai phần kia.',
+      subscribed: 'Kênh bạn theo dõi',
+      affinity: 'Thêm thứ bạn hay xem',
+      affinityHint: 'Kênh bạn chưa đăng ký, về những chủ đề bạn hay quay lại.',
+      discovery: 'Thứ gì đó mới',
+      discoveryHint: 'Ngoài những chủ đề quen thuộc. Để 0 thì không hiện cái nào.',
+      savedRebuilt: 'Đã lưu — trang chủ đã dựng lại.',
+      couldNotSave: 'Không lưu được. Gateway có đang chạy không?',
+      emptyBucket: 'Hiện thư viện không có gì hợp phần này, nên chỗ của nó dồn cho hai phần kia.',
+      thin: 'Chỉ có {{count}} video hợp phần này, nên để tỉ lệ lớn thì hoặc lặp lại chúng, hoặc phải với sâu xuống cuối danh sách.',
+    },    ranking: {
+      sessionBlend: {
+        label: 'Bám theo thứ bạn đang xem',
+        hint: 'Vài video trong buổi xem này nặng bao nhiêu so với cả lịch sử xem. Để 0 thì trang chủ bỏ qua hôm nay; kéo hết thì gần như thành thanh Xem tiếp.',
+      },
+      freshSubscribed: {
+        label: 'Chỗ dành cho video mới đăng',
+        hint: 'Một phần mỗi trang để dành cho video các kênh bạn theo dõi vừa đăng, để video mới không phải tranh chỗ bằng điểm số.',
+      },
+      freshnessWindow: {
+        label: 'Bao lâu thì một video còn được coi là mới',
+        hint: 'Cả phần để dành ở trên lẫn phần đẩy tin nóng lên đều dùng con số này.',
+      },
+      maxAge: {
+        label: 'Video cũ nhất mà trang chủ còn hiện',
+        hint: 'Video cũ hơn vẫn tìm được qua ô tìm kiếm và trang kênh; chỉ là không chiếm chỗ trên trang chủ.',
+      },
+      recencyHalfLife: {
+        label: 'Video mới tải về mờ đi nhanh cỡ nào',
+        hint: 'Video vừa tải về sẽ nằm đầu trang rồi lắng dần. Đây là thời gian để nó mất một nửa phần ưu tiên đó.',
+      },
+      temperature: {
+        label: 'Thứ tự bám sát điểm số cỡ nào',
+        hint: 'Thấp thì video điểm cao luôn nằm trên; cao thì mấy video điểm sát nhau đổi chỗ cho nhau giữa các lần vào. Gần 0 thì lần nào mở trang cũng y hệt.',
+      },
+      poolSize: {
+        label: 'Bao nhiêu video được đưa vào bốc',
+        hint: 'Chỉ chừng này video mỗi phần được xáo, phần còn lại giữ nguyên thứ tự điểm. Kéo lên cao chính là thứ từng để video điểm âm lọt lên trang đầu.',
+      },
+      unit: {
+        thisSitting: '{{value}}% buổi này',
+        ofPage: '{{value}}% mỗi trang',
+        hours: '{{value}} giờ',
+        days: '{{value}} ngày',
+        months: '{{value}} tháng',
+        years: '{{value}} năm',
+        videos: '{{value}} video',
+        plain: '{{value}}',
+      },
+    },
+
+    advanced: {
+      couldNotRead:
+        'Không đọc được cài đặt xếp hạng. Có thể gateway đang chạy bản cũ chưa có mấy cái này.',
+      intro:
+        'Cách trang chủ xếp hạng, chứ không phải nó gồm những gì. Cái nào bạn không đặt thì dùng giá trị mặc định, nên để nguyên là nó tự theo kịp khi bộ xếp hạng thay đổi.',
+      breaks: 'Kéo xa tới đây có thể làm thứ tự hỏng thấy rõ.',
+      builtIn: 'Mặc định: {{value}}',
+    },
+    storage: {
+      title: 'Thư mục thư viện',
+      description: 'Nơi lưu video đã tải, và có lưu hay không.',
+      couldNotRead: 'Không đọc được cài đặt ổ đĩa.',
+      couldNotReach: 'Không kết nối được máy chủ để kiểm thư mục đó.',
+      savedRestart:
+        'Đã lưu. Khởi động lại app thì mới có tác dụng — ba service đọc cái này lúc khởi động.',
+      couldNotSaveFolder: 'Không lưu được thư mục đó.',
+      couldNotChange: 'Không đổi được cài đặt này.',
+      savedHere: 'Đã lưu ở đây.',
+    },
+    model: {
+      name: 'tên model',
+      chooseFromList: 'Chọn từ danh sách',
+      noMatch: 'không khớp',
+      reload: 'Tải lại danh sách model',
+      type: 'Gõ tên model',
+    },
+    couldNotSave: 'Không lưu được',
   },
 
   account: {

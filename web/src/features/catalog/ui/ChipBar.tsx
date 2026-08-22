@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRememberedScrollX } from '@/features/navigation/application/use-remembered-scroll-x'
 import { Pill } from '@/shared/ui/primitives'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The chip that means "on air".
@@ -42,6 +43,7 @@ export function ChipBar({
   active: string
   onSelect: (category: string) => void
 }) {
+  const { t } = useTranslation()
   // Where this row was left, kept across the page being unmounted. Switching
   // tabs rebuilds Home, and without this the chips came back at the beginning —
   // losing exactly the one you had scrolled across to find.
@@ -92,7 +94,7 @@ export function ChipBar({
     >
       <button
         type="button"
-        aria-label="Scroll categories left"
+        aria-label={t('chips.scrollLeft')}
         onClick={() => scrollBy(-320)}
         // The arrows are for a mouse; a finger just drags the row.
         className="hidden h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-surface-hover min-[700px]:grid"
@@ -134,7 +136,7 @@ export function ChipBar({
 
       <button
         type="button"
-        aria-label="Scroll categories right"
+        aria-label={t('chips.scrollRight')}
         onClick={() => scrollBy(320)}
         className="hidden h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-surface-hover min-[700px]:grid"
       >

@@ -46,7 +46,12 @@ describe('the dictionaries', () => {
     // is a place the two languages agree, which is a thing to justify rather
     // than to assume — "Tài khoản YouTube" and "Ngôn ngữ" both looked like
     // candidates and both are translated perfectly well.
-    const sameInBoth = new Set<string>([])
+    const sameInBoth = new Set<string>([
+      // A bare number, with no word attached. There is nothing to translate,
+      // and it only exists so every slider's readout goes through the same
+      // path instead of one of them being a special case in the component.
+      'settings.ranking.unit.plain',
+    ])
 
     const untranslated = paths(en).filter(
       (path) => valueAt(en, path) === valueAt(vi, path) && !sameInBoth.has(path),

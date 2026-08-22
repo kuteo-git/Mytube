@@ -2,6 +2,7 @@ import { UserRound } from 'lucide-react'
 
 import { SettingsSection } from '@/features/settings/ui/SettingsSection'
 import { ProfilePicker } from './ProfilePicker'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Switching profile, from Settings.
@@ -17,11 +18,12 @@ import { ProfilePicker } from './ProfilePicker'
  * hazard.
  */
 export function ProfileSettings({ headless = false }: { headless?: boolean }) {
+  const { t } = useTranslation()
   return (
     <SettingsSection
       icon={<UserRound size={18} />}
       title="Profile"
-      description="Who this browser is. Subscriptions, history and recommendations are kept per person; the video library is shared."
+      description={t('profiles.whoIsThis')}
       headless={headless}
     >
       <ProfilePicker manage />
