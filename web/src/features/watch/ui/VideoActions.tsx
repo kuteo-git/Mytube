@@ -11,9 +11,10 @@ import {
   shareURL,
   shareVideo,
 } from '@/features/watch/application/share-link'
-import { formatCount, formatSubscribers } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useFormat } from '@/shared/lib/useFormat'
 
 /**
  * Channel row plus the action cluster.
@@ -25,6 +26,7 @@ import { mediaURL } from '@/shared/lib/media'
  * will never reclaim it.
  */
 export function VideoActions({ video, likeCount }: { video: Video; likeCount: number }) {
+  const fmt = useFormat()
   const reaction = video.userState?.reaction ?? 'NONE'
   const setReaction = useSetReaction(video.id)
   const setSubscription = useSetSubscription(video.channel.id)
@@ -66,7 +68,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             {video.channel.name}
             {video.channel.verified && <CheckCircle size={14} className="text-text-2" />}
           </Link>
-          <p className="text-xs text-text-2">{formatSubscribers(video.channel.subscriberCount)}</p>
+          <p className="text-xs text-text-2">{fmt.subscribers(video.channel.subscriberCount)}</p>
         </div>
         <button
           type="button"
@@ -95,7 +97,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             className="flex h-full items-center gap-2 rounded-l-full px-4 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
           >
             <ThumbsUp size={20} fill={reaction === 'LIKE' ? 'currentColor' : 'none'} />
-            {formatCount(likeCount)}
+            {fmt.count(likeCount)}
           </button>
           <span className="h-6 w-px bg-line-subtle" />
           <button

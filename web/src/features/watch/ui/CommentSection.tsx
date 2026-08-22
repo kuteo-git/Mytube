@@ -4,8 +4,9 @@ import type { Comment } from '@/features/catalog/domain/video'
 import { useAddComment, useComments, useFetchComments } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
-import { formatCount, formatRelative } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
+import { useFormat } from '@/shared/lib/useFormat'
 
 export function CommentSection({ videoId }: { videoId: string }) {
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useComments(videoId)
@@ -122,6 +123,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
 }
 
 function CommentThread({ comment }: { comment: Comment }) {
+  const fmt = useFormat()
   const [showReplies, setShowReplies] = useState(false)
   const replies = comment.replies ?? []
 
@@ -142,7 +144,7 @@ function CommentThread({ comment }: { comment: Comment }) {
         <p className="flex items-center gap-2 text-[13px] font-medium">
           {comment.authorHandle}
           <span className="text-xs font-normal text-text-2">
-            {formatRelative(comment.publishedAt)}
+            {fmt.relative(comment.publishedAt)}
           </span>
         </p>
         <p className="mt-1 text-sm whitespace-pre-line">{comment.text}</p>
@@ -155,7 +157,7 @@ function CommentThread({ comment }: { comment: Comment }) {
           >
             <ThumbsUp size={16} />
           </button>
-          <span className="text-xs">{formatCount(comment.likeCount)}</span>
+          <span className="text-xs">{fmt.count(comment.likeCount)}</span>
           <button
             type="button"
             aria-label="Dislike comment"

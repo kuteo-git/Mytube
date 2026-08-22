@@ -14,8 +14,9 @@ import {
 import { usePagedList } from '@/features/catalog/application/paged-list'
 import { ShowMore } from '@/features/catalog/ui/ShowMore'
 import type { IngestJob, ScanStatus } from '@/features/catalog/infrastructure/catalogRepository'
-import { formatRelative } from '@/shared/lib/format'
+
 import { useToast } from '@/shared/ui/toast'
+import { useFormat } from '@/shared/lib/useFormat'
 
 /**
  * What the system has been doing, and what went wrong doing it.
@@ -177,10 +178,11 @@ function ScanHistory({
 }
 
 function ScanRow({ scan }: { scan: ScanStatus }) {
+  const fmt = useFormat()
   return (
     <li className="rounded-xl bg-surface p-4 text-sm">
       <p className="text-text-2">
-        {formatRelative(scan.startedAt)} · {Math.round(scan.durationMs / 1000)}s ·{' '}
+        {fmt.relative(scan.startedAt)} · {Math.round(scan.durationMs / 1000)}s ·{' '}
         {scan.sourcesScanned} sources · {scan.videosSeen} videos seen · {scan.videosAdded} added
       </p>
       {scan.sourcesFailed > 0 && (
@@ -198,6 +200,7 @@ function ScanRow({ scan }: { scan: ScanStatus }) {
 }
 
 function FailedRow({ job }: { job: IngestJob }) {
+  const fmt = useFormat()
   const retry = useRetryJob()
   return (
     <li className="rounded-xl bg-surface p-4">
@@ -218,7 +221,7 @@ function FailedRow({ job }: { job: IngestJob }) {
         </div>
       </div>
       <p className="mt-1 text-xs break-words text-amber-400">{job.errorMessage}</p>
-      <p className="mt-1 text-xs text-text-2">{formatRelative(job.createdAt)}</p>
+      <p className="mt-1 text-xs text-text-2">{fmt.relative(job.createdAt)}</p>
     </li>
   )
 }
@@ -267,11 +270,12 @@ function ActiveRow({ job }: { job: IngestJob }) {
 }
 
 function DoneRow({ job }: { job: IngestJob }) {
+  const fmt = useFormat()
   return (
     <li className="flex items-center gap-2 rounded-xl bg-surface p-4 text-sm">
       <CheckCircle size={14} className="shrink-0 text-text-2" />
       <span className="clamp-1">{job.title || job.sourceUrl}</span>
-      <span className="ml-auto shrink-0 text-xs text-text-2">{formatRelative(job.createdAt)}</span>
+      <span className="ml-auto shrink-0 text-xs text-text-2">{fmt.relative(job.createdAt)}</span>
       <DismissButton jobId={job.id} />
     </li>
   )

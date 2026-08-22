@@ -12,11 +12,12 @@ import {
   useStreamPrefetch,
 } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
+import { useFormat } from '@/shared/lib/useFormat'
 
 export type VideoCardVariant =
   | 'continueWatching'
@@ -44,6 +45,7 @@ export function VideoCard({
    */
   queueSearch?: string
 }) {
+  const fmt = useFormat()
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -93,7 +95,7 @@ export function VideoCard({
                 : 'bg-badge tabular-nums',
             )}
           >
-            {video.isLiveNow ? 'LIVE' : formatDuration(video.durationSeconds)}
+            {video.isLiveNow ? 'LIVE' : fmt.duration(video.durationSeconds)}
           </span>
           {progress > 0 && (
             <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30">
@@ -138,7 +140,7 @@ export function VideoCard({
             </Link>
             {video.channel.verified && <CheckCircle size={12} aria-label="Verified" />}
           </p>
-          <p className="text-xs text-text-2">{describeVideo(video)}</p>
+          <p className="text-xs text-text-2">{describeVideo(video, fmt)}</p>
         </div>
 
         <div className="relative" ref={menuRef}>
@@ -182,10 +184,10 @@ export function VideoCard({
  * Printing "0 views • 1 minute ago" for all of them would be a plausible lie,
  * so each part appears only when it is actually known.
  */
-function describeVideo(video: Video): string {
+function describeVideo(video: Video, fmt: ReturnType<typeof useFormat>): string {
   const parts: string[] = []
-  if (video.viewCount > 0) parts.push(formatViews(video.viewCount))
-  if (video.publishedAt) parts.push(formatRelative(video.publishedAt))
+  if (video.viewCount > 0) parts.push(fmt.views(video.viewCount))
+  if (video.publishedAt) parts.push(fmt.relative(video.publishedAt))
   return parts.join(' • ')
 }
 

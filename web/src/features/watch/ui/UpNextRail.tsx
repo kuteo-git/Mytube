@@ -5,9 +5,10 @@ import type { Video } from '@/features/catalog/domain/video'
 import { useUpNext } from '@/features/catalog/application/queries'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { Pill, ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useFormat } from '@/shared/lib/useFormat'
 
 export function UpNextRail({
   current,
@@ -104,6 +105,7 @@ export function UpNextRail({
 }
 
 function SuggestionRow({ video }: { video: Video }) {
+  const fmt = useFormat()
   // "New" means recently ingested, not recently published — keep the window
   // tight so the badge stays meaningful instead of decorating every row.
   const isNew = Date.now() - new Date(video.addedAt).getTime() < 2 * 86_400_000
@@ -122,7 +124,7 @@ function SuggestionRow({ video }: { video: Video }) {
           rounded="rounded-lg"
         >
           <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">
-            {formatDuration(video.durationSeconds)}
+            {fmt.duration(video.durationSeconds)}
           </span>
         </ThumbnailSurface>
       </div>
@@ -131,8 +133,8 @@ function SuggestionRow({ video }: { video: Video }) {
         <p className="mt-1 text-xs text-text-2">{video.channel.name}</p>
         <p className="text-xs text-text-2">
           {[
-            video.viewCount > 0 ? formatViews(video.viewCount) : null,
-            video.publishedAt ? formatRelative(video.publishedAt) : null,
+            video.viewCount > 0 ? fmt.views(video.viewCount) : null,
+            video.publishedAt ? fmt.relative(video.publishedAt) : null,
           ]
             .filter(Boolean)
             .join(' • ')}

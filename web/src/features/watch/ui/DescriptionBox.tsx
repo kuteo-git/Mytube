@@ -1,10 +1,12 @@
 import clsx from 'clsx'
 import { useState } from 'react'
 import type { Video } from '@/features/catalog/domain/video'
-import { formatBytes, formatDate, formatViews } from '@/shared/lib/format'
+import { useFormat } from '@/shared/lib/useFormat'
+
 
 /** Collapsible description. Also surfaces local-only facts: disk size and media state. */
 export function DescriptionBox({ video }: { video: Video }) {
+  const fmt = useFormat()
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -17,8 +19,8 @@ export function DescriptionBox({ video }: { video: Video }) {
     >
       <p className="font-medium">
         {[
-          video.viewCount > 0 ? formatViews(video.viewCount) : null,
-          video.publishedAt ? formatDate(video.publishedAt) : null,
+          video.viewCount > 0 ? fmt.views(video.viewCount) : null,
+          video.publishedAt ? fmt.date(video.publishedAt) : null,
         ]
           .filter(Boolean)
           .join(' • ')}{' '}
@@ -36,9 +38,9 @@ export function DescriptionBox({ video }: { video: Video }) {
       {expanded && (
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 border-t border-line-subtle pt-3 text-text-2">
           <dt>On disk</dt>
-          <dd className="text-text">{formatBytes(video.sizeBytes)}</dd>
+          <dd className="text-text">{fmt.bytes(video.sizeBytes)}</dd>
           <dt>Added to library</dt>
-          <dd className="text-text">{formatDate(video.addedAt)}</dd>
+          <dd className="text-text">{fmt.date(video.addedAt)}</dd>
           <dt>Media state</dt>
           <dd className="text-text">{video.mediaState}</dd>
         </dl>
