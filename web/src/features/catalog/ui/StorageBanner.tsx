@@ -28,15 +28,17 @@ export function StorageBanner({
       <Info size={20} className="mt-0.5 shrink-0 text-text-2" />
       <div className="flex-1">
         <p className="text-sm">
-          Storage is {Math.round(ratio * 100)}% full ({formatBytes(usedBytes)} of{' '}
-          {formatBytes(budgetBytes)}). The least recently watched videos will be removed from
-          disk automatically; their metadata and history are kept.
+          {t('storagePage.bannerFull', {
+            percent: Math.round(ratio * 100),
+            used: formatBytes(usedBytes),
+            budget: formatBytes(budgetBytes),
+          })}
         </p>
         <Link
           to="/storage"
           className="mt-2 inline-block text-sm font-medium text-link hover:underline"
         >
-          Manage storage
+          {t('storagePage.manage')}
         </Link>
       </div>
       <button

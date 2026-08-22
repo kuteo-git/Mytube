@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { useAccountState } from '../application/account-state'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Says when a YouTube session has ended.
@@ -14,6 +15,7 @@ import { useAccountState } from '../application/account-state'
  * work is a banner nobody reads on the day they need to.
  */
 export function CookieExpiryBanner() {
+  const { t } = useTranslation()
   const { signedOut } = useAccountState()
 
   if (!signedOut) return null
@@ -24,13 +26,13 @@ export function CookieExpiryBanner() {
       className="flex items-center justify-between gap-3 bg-brand/15 px-4 py-2 text-sm"
     >
       <span className="min-w-0 truncate">
-        YouTube signed you out — subscriptions are no longer updating.
+        {t('more.signedOutBanner')}
       </span>
       <Link
         to="/settings/youtube-account"
         className="shrink-0 rounded-lg bg-invert-bg px-3 py-1.5 text-xs font-medium text-invert-text"
       >
-        Reconnect
+        {t('youtubeAccount.reconnect')}
       </Link>
     </div>
   )

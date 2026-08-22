@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { SettingsSection } from './SettingsSection'
 import { accountRepository } from '../infrastructure/accountRepository'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 /**
  * Connecting a household member's own YouTube account.
@@ -89,22 +90,29 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
           {state === 'NEVER_SET' && <span className="text-text-2">{t('youtubeAccount.notConnected')}</span>}
         </p>
         {account?.lastResult && (
-          <p className="pt-1 text-xs text-text-2">Last scan: {account.lastResult}</p>
+          <p className="pt-1 text-xs text-text-2">
+            {t('more.lastScanResult', { result: describeScan(account.lastResult, t) })}
+          </p>
         )}
       </div>
 
       <ol className="flex list-decimal flex-col gap-1 pl-5 pt-4 text-xs text-text-2">
         <li>
-          Install{' '}
-          <a
-            className="text-text underline"
-            href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Get cookies.txt LOCALLY
-          </a>{' '}
-          for Chrome — the one yt-dlp's own FAQ recommends.
+          {/* The extension's name stays inside the link and out of the
+              dictionary: it is a name, and the wrong one was pulled from the
+              store as malware. */}
+          <Trans
+            i18nKey="youtubeAccount.installStep"
+            components={[
+              <a
+                key="link"
+                className="text-text underline"
+                href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                target="_blank"
+                rel="noreferrer"
+              />,
+            ]}
+          />
         </li>
         <li>{t('youtubeAccount.howTo')}</li>
         <li>{t('youtubeAccount.pasteBelow')}</li>
@@ -117,8 +125,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
         hand one of them a live Google session.
       */}
       <p className="pt-2 text-xs text-brand">
-        Do not install "Get cookies.txt" without LOCALLY — that one was removed
-        from the store as malware.
+        {t('youtubeAccount.warning')}
       </p>
 
       <textarea
@@ -160,7 +167,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
               onClick={() => remove.mutate()}
               className="min-h-11 rounded-lg bg-surface px-4 text-sm text-text-2"
             >
-              Disconnect
+              {t('youtubeAccount.disconnect')}
             </button>
           </>
         )}
@@ -186,8 +193,11 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
             </>
           ) : (
             <p>
-              {status.subscriptions} subscriptions, {status.playlists} playlists,{' '}
-              {status.videos} videos.
+              {t('youtubeAccount.summary', {
+                subscriptions: status.subscriptions,
+                playlists: status.playlists,
+                videos: status.videos,
+              })}
             </p>
           )}
           {status.errors.length > 0 && (
@@ -201,4 +211,24 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
       )}
     </SettingsSection>
   )
+}
+
+/**
+ * What the last scan found, in words.
+ *
+ * The server reports `counts 305 27 192` or `signed_out` — numbers and a code,
+ * because it cannot know what language the person reads. This is where that
+ * becomes a sentence. Anything unrecognised is passed through rather than
+ * hidden: an older ingest still sending prose should be visible, not silently
+ * swallowed.
+ */
+function describeScan(result: string, t: TFunction): string {
+  if (result === 'signed_out') return t('youtubeAccount.signedOut')
+  const counts = /^counts (\d+) (\d+) (\d+)$/.exec(result)
+  if (!counts) return result
+  return t('youtubeAccount.summary', {
+    subscriptions: counts[1],
+    playlists: counts[2],
+    videos: counts[3],
+  })
 }

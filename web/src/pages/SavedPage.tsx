@@ -16,7 +16,7 @@ export function SavedPage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load saved videos. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_savedVideos') })}
         </p>
       ) : (
         <>
@@ -36,7 +36,7 @@ export function SavedPage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          No saved videos yet. Keep a video from its menu or the Storage page.
+          {t('empty.saved')}
         </p>
       )}
     </div>

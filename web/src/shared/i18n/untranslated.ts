@@ -122,6 +122,16 @@ export function looksLikeCopy(text: string): boolean {
   // Copy does not open with a closing bracket or a colon. Those are the tail
   // of an expression the scan cut through — `) : null`, `: PillProps)`.
   if (/^[)(:;,]/.test(trimmed)) return false
+  // Nor with a bare number followed by a ternary: `{count > 9 ? '9+' : n}`
+  // leaves "9 ? '9+' : n" between the brackets the scan cut between.
+  if (/^\d+\s*\?/.test(trimmed)) return false
+  // A lone type name in a generic position — `useState<string>(…)` in a .tsx
+  // file puts "string" between two angle brackets.
+  if (/^(string|number|boolean|unknown|never|any|void|object)(\[\])?$/.test(trimmed)) return false
+  // An optional property — `hint?: string` — which is what the `>` of an arrow
+  // return type leaves behind when the scan cuts to the next tag. `?:` never
+  // appears in a sentence.
+  if (/\?:/.test(trimmed)) return false
   return true
 }
 

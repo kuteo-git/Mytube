@@ -90,6 +90,9 @@ export const en = {
   },
 
   card: {
+    watched: 'Watched',
+    unsave: 'Unsave',
+    onYouTube: 'On YouTube',
     live: 'LIVE',
     suggested: 'Suggested',
     markWatched: 'Mark as watched',
@@ -159,6 +162,11 @@ export const en = {
 
   settings: {
     feedMix: {
+      explainer:
+        'These three divide {{adjustable}}% of the page. The rest is kept for videos you are part way through ({{continue}}%), ones you have finished and might want again ({{rewatch}}%), and new uploads from channels you follow ({{fresh}}%). None of those three is a taste — the first two are your watch history, and the last is how you find out a channel posted — so they are not divided here.',
+      resetToDefault: 'Reset to default',
+      defaults: 'Defaults',
+      ofWindow: '{{count}} of {{window}}',
       title: 'Home feed',
       couldNotRead:
         'Could not read the current mix. The gateway may be running an older build that does not have this setting yet.',
@@ -215,6 +223,8 @@ export const en = {
     },
 
     advanced: {
+      useBuiltIn: 'Use built-in values',
+      careful: 'careful',
       couldNotRead:
         'Could not read the ranking settings. The gateway may be running an older build that does not have them yet.',
       intro:
@@ -296,6 +306,7 @@ export const en = {
   },
 
   comments: {
+    count: '{{count}} Comments',
     placeholder: 'Add a comment...',
     label: 'Add a comment',
     noneReturned: 'YouTube did not return comments for this video.',
@@ -305,6 +316,15 @@ export const en = {
   },
 
   description: {
+    showMore: '…more',
+    state: {
+      ABSENT: 'Not downloaded',
+      DOWNLOADING: 'Downloading',
+      READY: 'On disk',
+      EVICTED: 'Removed to free space',
+      FAILED: 'Download failed',
+      UNAVAILABLE: 'YouTube will not hand it over',
+    },
     onDisk: 'On disk',
     addedToLibrary: 'Added to library',
     mediaState: 'Media state',
@@ -327,6 +347,11 @@ export const en = {
   },
 
   youtubeAccount: {
+    installStep: 'Install <0>Get cookies.txt LOCALLY</0> for Chrome — the one yt-dlp own FAQ recommends.',
+    warning: 'Do not install "Get cookies.txt" without LOCALLY — that one was removed from the store as malware.',
+    disconnect: 'Disconnect',
+    reconnect: 'Reconnect',
+    summary: '{{subscriptions}} subscriptions, {{playlists}} playlists, {{videos}} videos.',
     title: 'YouTube account',
     description:
       'Brings your own subscriptions, playlists and liked videos into the library. Your account, on this machine only.',
@@ -360,6 +385,9 @@ export const en = {
   },
 
   upNext: {
+    all: 'All',
+    fromChannel: 'From {{name}}',
+    nextIn: 'Next: {{title}}',
     title: 'Up next',
     nothingQueued: 'Nothing queued',
     expand: 'Expand up next',
@@ -461,6 +489,80 @@ export const en = {
     voice: 'Voice',
     volume: 'Volume',
     whosWatching: "Who's watching?",
+  },
+
+  empty: {
+    what_playlists: 'playlists',
+    what_history: 'history',
+    what_savedVideos: 'saved videos',
+    what_watchLater: 'Watch later',
+    what_storageUsage: 'storage usage',
+    history: 'No watch history yet. Videos will appear here after you watch them.',
+    saved: 'No saved videos yet. Keep a video from its menu or the Storage page.',
+    subscriptions: 'No subscriptions yet. Open a channel and press Subscribe to follow it.',
+    downloads: 'Nothing has been downloaded yet. Pressing play on a video schedules a copy.',
+    noEvictable:
+      'No videos are currently eligible for automatic removal. Every downloaded video is either pinned or recently watched.',
+    couldNotLoad: 'Could not load {{what}}. Is the gateway running?',
+    couldNotReachLibrary: 'Could not reach the library service. Is the gateway running?',
+  },
+
+  storagePage: {
+    fillsPast:
+      'When storage fills past {{budget}}, the least recently watched unpinned videos are removed from disk. Their metadata and history are kept.',
+    bannerFull:
+      'Storage is {{percent}}% full ({{used}} of {{budget}}). The least recently watched videos will be removed from disk automatically; their metadata and history are kept.',
+    manage: 'Manage storage',
+    addSomeone: 'Add someone',
+  },
+
+  more: {
+    linesProgress: '{{done}}/{{total}} lines',
+    etaLeft: '{{eta}} left',
+    tooFastLines: '{{count}} lines too long to speak in time',
+    milliseconds: '{{ms}} ms',
+    loadingMore: 'Loading more',
+    loadMore: 'Load more',
+    countInLibrary: '{{count}} in your library',
+    mixOf: 'Mix — the {{count}} you play most',
+    videoSuggestionCount: '{{count}} videos',
+    useBuiltInShort: 'use built-in',
+    pinnedByName: 'Pinned by {{name}}',
+    upNextInSeconds: 'Up next in {{seconds}}',
+    scanLine: '{{sources}} sources · {{seen}} videos seen · {{added}} added',
+    linesLeft: '{{done}}/{{total}} lines',
+    secondsLeft: '{{seconds}} left',
+    lineTooLong: 'line {{index}} too long to speak in time',
+    newBadgeShort: 'New',
+    savedByAnyone: 'saved by someone, never removed',
+    lastScanResult: 'Last scan: {{result}}',
+    inYourLibrary: 'in your library',
+    mix: 'Mix',
+    mixOfWhat: 'Mix — the {{count}} you play most',
+    folder: 'Folder',
+    videosAreAt: '{{total}} videos are at {{path}}. Changing the folder does not move them — they would have to be downloaded again.',
+    keepThemFirst: 'To keep them, move them yourself first, then change this.',
+    changeAnyway: 'Change anyway',
+    streamOnlyHint: 'Videos play from YouTube and are not downloaded. Subtitles still arrive, files already here still play, and Retry still works.',
+    lastScan: 'Last scan:',
+    signedOutBanner: 'YouTube signed you out — subscriptions are no longer updating.',
+    lowerPreamp: 'Lower the preamp if boosted bands distort.',
+    upNextIn: 'Up next in',
+    pinnedBy: 'Pinned by',
+    reply: 'Reply',
+    tryAgain: 'Try again',
+    clearAll: 'Clear all',
+    scanSummary: '{{sources}} sources · {{seen}} videos seen · {{added}} added',
+    everythingShown: 'That is everything your Home feed is set to show. <0>Adjust the mix</0> to widen it.',
+    nothingYetHome: 'Nothing here yet. Topics are scanned every 12 hours; use Refresh to scan now. <0>Check your Home feed mix</0> — a share set to 0% shows nothing at all.',
+    playlistUnopenable: 'That playlist could not be opened. It may have been deleted, or it belongs to another account.',
+    noPlaylistsYet: 'No playlists yet. Connect your YouTube account in Settings and they arrive on the next scan.',
+    linkNotVideo: 'That link does not lead to a video or a channel. Playlist links cannot be opened here yet.',
+    resultsFor: 'Results for',
+    onYouTube: 'On YouTube',
+    modelsAvailable: '{{count}} models available.',
+    videosCount: '{{count}} videos',
+    newBadge: 'New',
   },
 
   account: {

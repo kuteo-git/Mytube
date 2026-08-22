@@ -44,7 +44,11 @@ export function DescriptionBox({ video }: { video: Video }) {
           <dt>{t('description.addedToLibrary')}</dt>
           <dd className="text-text">{fmt.date(video.addedAt)}</dd>
           <dt>{t('description.mediaState')}</dt>
-          <dd className="text-text">{video.mediaState}</dd>
+          <dd className="text-text">
+            {/* The enum in words. It is a value in a database, and printing
+                it raw showed "DOWNLOADING" on a Vietnamese screen. */}
+            {t(`description.state.${video.mediaState}`)}
+          </dd>
         </dl>
       )}
 
@@ -56,7 +60,7 @@ export function DescriptionBox({ video }: { video: Video }) {
         }}
         className="mt-2 font-medium"
       >
-        {expanded ? t('description.showLess') : '…more'}
+        {expanded ? t('description.showLess') : t('description.showMore')}
       </button>
     </section>
   )

@@ -32,7 +32,7 @@ export function PlaylistsPage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load playlists. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_playlists') })}
         </p>
       ) : isPending ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-8 min-[700px]:grid-cols-3 min-[1000px]:grid-cols-4 min-[1600px]:grid-cols-5">
@@ -56,8 +56,7 @@ export function PlaylistsPage() {
         </div>
       ) : (
         <p className="py-16 text-center text-text-2">
-          No playlists yet. Connect your YouTube account in Settings and they arrive on
-          the next scan.
+          {t('more.noPlaylistsYet')}
         </p>
       )}
     </div>

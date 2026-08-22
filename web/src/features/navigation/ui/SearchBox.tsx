@@ -141,7 +141,7 @@ export function SearchBox() {
                   </span>
                   {suggestion.kind !== 'TITLE' && (
                     <span className="shrink-0 text-xs text-text-2">
-                      {suggestion.videoCount} videos
+                      {t('more.videoSuggestionCount', { count: suggestion.videoCount })}
                     </span>
                   )}
                 </button>

@@ -105,6 +105,9 @@ export const vi: Dictionary = {
   },
 
   card: {
+    watched: 'Đã xem',
+    unsave: 'Bỏ lưu',
+    onYouTube: 'Trên YouTube',
     live: 'TRỰC TIẾP',
     suggested: 'Gợi ý',
     markWatched: 'Đánh dấu đã xem',
@@ -176,6 +179,13 @@ export const vi: Dictionary = {
 
   settings: {
     feedMix: {
+      // Written as three sentences the way somebody would say it, not as one
+      // long clause with three parentheses hanging off it.
+      explainer:
+        'Ba phần này chia nhau {{adjustable}}% của trang. Phần còn lại để dành cho video bạn đang xem dở ({{continue}}%), video đã xem xong mà có thể muốn xem lại ({{rewatch}}%), và video mới của các kênh bạn theo dõi ({{fresh}}%). Ba cái đó không phải là sở thích — hai cái đầu là lịch sử xem của bạn, cái cuối là cách bạn biết một kênh vừa đăng bài — nên không chia ở đây.',
+      resetToDefault: 'Về mặc định',
+      defaults: 'Mặc định',
+      ofWindow: '{{count}} trên {{window}}',
       title: 'Trang chủ',
       couldNotRead:
         'Không đọc được tỉ lệ hiện tại. Có thể gateway đang chạy bản cũ chưa có cài đặt này.',
@@ -234,6 +244,8 @@ export const vi: Dictionary = {
     },
 
     advanced: {
+      useBuiltIn: 'Dùng giá trị mặc định',
+      careful: 'cẩn thận',
       couldNotRead:
         'Không đọc được cài đặt xếp hạng. Có thể gateway đang chạy bản cũ chưa có mấy cái này.',
       intro:
@@ -317,6 +329,7 @@ export const vi: Dictionary = {
   },
 
   comments: {
+    count: '{{count}} bình luận',
     placeholder: 'Viết bình luận...',
     label: 'Viết bình luận',
     noneReturned: 'YouTube không trả về bình luận nào cho video này.',
@@ -326,6 +339,17 @@ export const vi: Dictionary = {
   },
 
   description: {
+    showMore: '…thêm',
+    // The server's enum, shown to a person. Rendered as words rather than as
+    // the constant: "DOWNLOADING" is a value in a database, not a sentence.
+    state: {
+      ABSENT: 'Chưa tải',
+      DOWNLOADING: 'Đang tải',
+      READY: 'Đã có trên đĩa',
+      EVICTED: 'Đã xoá để lấy chỗ',
+      FAILED: 'Tải lỗi',
+      UNAVAILABLE: 'YouTube không cho lấy',
+    },
     onDisk: 'Trên đĩa',
     addedToLibrary: 'Thêm vào thư viện',
     mediaState: 'Trạng thái file',
@@ -348,6 +372,14 @@ export const vi: Dictionary = {
   },
 
   youtubeAccount: {
+    installStep: 'Cài <0>Get cookies.txt LOCALLY</0> cho Chrome — bản mà chính FAQ của yt-dlp khuyên dùng.',
+    // The name is left in English because it is a name: the wrong extension
+    // was pulled from the store as malware, and a translated name names
+    // nothing.
+    warning: 'Đừng cài "Get cookies.txt" mà thiếu chữ LOCALLY — bản đó đã bị gỡ khỏi store vì là mã độc.',
+    disconnect: 'Ngắt kết nối',
+    reconnect: 'Kết nối lại',
+    summary: '{{subscriptions}} kênh đăng ký, {{playlists}} danh sách phát, {{videos}} video.',
     title: 'Tài khoản YouTube',
     description:
       'Lấy kênh đăng ký, danh sách phát và video đã thích của bạn về thư viện. Tài khoản của bạn, chỉ nằm trên máy này.',
@@ -381,6 +413,9 @@ export const vi: Dictionary = {
   },
 
   upNext: {
+    all: 'Tất cả',
+    fromChannel: 'Từ {{name}}',
+    nextIn: 'Tiếp theo: {{title}}',
     title: 'Tiếp theo',
     nothingQueued: 'Chưa có gì trong hàng chờ',
     expand: 'Mở danh sách tiếp theo',
@@ -486,6 +521,81 @@ export const vi: Dictionary = {
     voice: 'Giọng đọc',
     volume: 'Âm lượng',
     whosWatching: 'Ai đang xem?',
+  },
+
+  empty: {
+    what_playlists: 'danh sách phát',
+    what_history: 'lịch sử xem',
+    what_savedVideos: 'video đã lưu',
+    what_watchLater: 'Xem sau',
+    what_storageUsage: 'dung lượng ổ đĩa',
+    history: 'Chưa xem video nào. Xem xong thì video sẽ hiện ở đây.',
+    saved: 'Chưa lưu video nào. Lưu từ menu của video hoặc từ trang Ổ đĩa.',
+    subscriptions: 'Chưa theo dõi kênh nào. Mở một kênh rồi bấm Đăng ký.',
+    downloads: 'Chưa tải video nào. Bấm phát một video là nó tự xếp hàng tải về.',
+    noEvictable:
+      'Hiện không có video nào thuộc diện tự xoá. Video đã tải hoặc đang được giữ, hoặc vừa xem gần đây.',
+    couldNotLoad: 'Không tải được {{what}}. Gateway có đang chạy không?',
+    couldNotReachLibrary: 'Không kết nối được dịch vụ thư viện. Gateway có đang chạy không?',
+  },
+
+  storagePage: {
+    fillsPast:
+      'Khi ổ đĩa đầy quá {{budget}}, những video lâu chưa xem và không được giữ sẽ bị xoá khỏi đĩa. Thông tin và lịch sử xem thì vẫn còn.',
+    bannerFull:
+      'Ổ đĩa đã đầy {{percent}}% ({{used}} trên {{budget}}). Những video lâu chưa xem sẽ tự bị xoá khỏi đĩa; thông tin và lịch sử xem thì vẫn còn.',
+    manage: 'Quản lý ổ đĩa',
+    addSomeone: 'Thêm người',
+  },
+
+  more: {
+    linesProgress: '{{done}}/{{total}} dòng',
+    etaLeft: 'còn {{eta}}',
+    // No plural: the English had `line${count === 1 ? '' : 's'}`.
+    tooFastLines: '{{count}} dòng dài quá, không đọc kịp',
+    milliseconds: '{{ms}} ms',
+    loadingMore: 'Đang tải thêm',
+    loadMore: 'Xem thêm',
+    countInLibrary: 'có {{count}} trong thư viện',
+    mixOf: 'Tuyển tập — {{count}} video bạn xem nhiều nhất',
+    videoSuggestionCount: '{{count}} video',
+    useBuiltInShort: 'dùng mặc định',
+    pinnedByName: 'Được ghim bởi {{name}}',
+    upNextInSeconds: 'Video tiếp theo sau {{seconds}}',
+    scanLine: '{{sources}} nguồn · thấy {{seen}} video · thêm {{added}}',
+    linesLeft: '{{done}}/{{total}} dòng',
+    secondsLeft: 'còn {{seconds}}',
+    lineTooLong: 'dòng {{index}} dài quá, không đọc kịp',
+    newBadgeShort: 'Mới',
+    savedByAnyone: 'có người lưu, không bao giờ bị xoá',
+    lastScanResult: 'Quét lần cuối: {{result}}',
+    inYourLibrary: 'trong thư viện',
+    mix: 'Tuyển tập',
+    mixOfWhat: 'Tuyển tập — {{count}} video bạn xem nhiều nhất',
+    folder: 'Thư mục',
+    videosAreAt: 'Có {{total}} video đang nằm ở {{path}}. Đổi thư mục không làm chúng chuyển theo — sẽ phải tải lại từ đầu.',
+    keepThemFirst: 'Muốn giữ thì tự chuyển chúng sang trước, rồi mới đổi ở đây.',
+    changeAnyway: 'Vẫn đổi',
+    streamOnlyHint: 'Video phát thẳng từ YouTube, không tải về. Phụ đề vẫn có, file đã tải vẫn xem được, và nút Thử lại vẫn chạy.',
+    lastScan: 'Quét lần cuối:',
+    signedOutBanner: 'YouTube đã đăng xuất bạn — kênh đăng ký không còn được cập nhật.',
+    lowerPreamp: 'Hạ preamp xuống nếu mấy dải được đẩy lên bị rè.',
+    upNextIn: 'Video tiếp theo sau',
+    pinnedBy: 'Được ghim bởi',
+    reply: 'Trả lời',
+    tryAgain: 'Thử lại',
+    clearAll: 'Xoá hết',
+    scanSummary: '{{sources}} nguồn · thấy {{seen}} video · thêm {{added}}',
+    everythingShown: 'Đó là tất cả những gì trang chủ được đặt để hiện. <0>Chỉnh tỉ lệ</0> để mở rộng thêm.',
+    nothingYetHome: 'Chưa có gì ở đây. Chủ đề được quét 12 tiếng một lần; bấm Làm mới để quét ngay. <0>Xem lại tỉ lệ trang chủ</0> — phần nào để 0% thì không hiện gì cả.',
+    playlistUnopenable: 'Không mở được danh sách phát này. Có thể nó đã bị xoá, hoặc thuộc về tài khoản khác.',
+    noPlaylistsYet: 'Chưa có danh sách phát nào. Kết nối tài khoản YouTube trong Cài đặt, lần quét sau chúng sẽ về.',
+    linkNotVideo: 'Đường dẫn này không dẫn tới video hay kênh nào. Link danh sách phát thì chưa mở được ở đây.',
+    resultsFor: 'Kết quả cho',
+    onYouTube: 'Trên YouTube',
+    modelsAvailable: 'Có {{count}} model.',
+    videosCount: '{{count}} video',
+    newBadge: 'Mới',
   },
 
   account: {

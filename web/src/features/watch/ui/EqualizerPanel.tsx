@@ -229,7 +229,7 @@ export function EqualizerSetting({
               the same negative margin the title's gap did, for the same reason
               and by the same amount. */}
           <p className="-mt-2 text-[10px] text-text-2">
-            Lower the preamp if boosted bands distort.
+            {t('more.lowerPreamp')}
           </p>
         </li>
       )}

@@ -2379,7 +2379,7 @@ export function Player({
       {countdown !== null && (
         <div className="absolute inset-0 z-20 grid place-items-center bg-black/75 px-6 text-center">
           <div>
-            <p className="text-sm text-text-2">Up next in {countdown}</p>
+            <p className="text-sm text-text-2">{t('more.upNextInSeconds', { seconds: countdown })}</p>
             {nextVideoTitle && <p className="mt-1 clamp-2 text-base font-medium">{nextVideoTitle}</p>}
             <button
               type="button"
@@ -2389,7 +2389,7 @@ export function Player({
               }}
               className="mt-4 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -2872,7 +2872,11 @@ export function Player({
             <button
               type="button"
               aria-label={t('player.nextVideo')}
-              title={nextVideoTitle ? `Next: ${nextVideoTitle}` : t('player.nextVideo')}
+              title={
+                nextVideoTitle
+                  ? t('upNext.nextIn', { title: nextVideoTitle })
+                  : t('player.nextVideo')
+              }
               onClick={() => {
                 resetAutoplayChain()
                 setCountdown(null)
@@ -3421,13 +3425,13 @@ function SpeechStatus({
         </span>
         {bar && (
           <span className="tabular-nums text-text-2">
-            {p.done}/{p.total} lines
+            {t('more.linesProgress', { done: p.done, total: p.total })}
           </span>
         )}
       </div>
       {p.etaSeconds !== null && (
         <div className="pb-1 text-xs text-text-2">
-          {formatEta(p.etaSeconds)} left
+          {t('more.etaLeft', { eta: formatEta(p.etaSeconds) })}
         </div>
       )}
       {/*
@@ -3440,7 +3444,7 @@ function SpeechStatus({
       */}
       {p.tooFast > 0 && (
         <div className="pb-1 text-xs text-text-2">
-          {p.tooFast} line{p.tooFast === 1 ? '' : 's'} too long to speak in time
+          {t('more.tooFastLines', { count: p.tooFast })}
         </div>
       )}
       {bar && (
@@ -3509,13 +3513,13 @@ function NarrationStatus({
         </span>
         {bar && (
           <span className="tabular-nums text-text-2">
-            {p.done}/{p.total} lines
+            {t('more.linesProgress', { done: p.done, total: p.total })}
           </span>
         )}
       </div>
       {p.etaSeconds !== null && (
         <div className="pb-1 text-xs text-text-2">
-          {formatEta(p.etaSeconds)} left
+          {t('more.etaLeft', { eta: formatEta(p.etaSeconds) })}
         </div>
       )}
       {bar && (
@@ -3705,7 +3709,7 @@ function CaptionMenu({
                 (active === null ? 'font-medium' : '')
               }
             >
-              Off
+              {t('ui.off')}
             </button>
           </li>
           {tracks.map((track) => (

@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Loads the next page when the end of the list comes into view, and also keeps
@@ -19,6 +20,7 @@ export function InfiniteList({
   isLoading: boolean
   onLoadMore: () => void
 }) {
+  const { t } = useTranslation()
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export function InfiniteList({
       {isLoading ? (
         <span className="flex items-center gap-2 text-sm text-text-2">
           <Loader2 size={18} className="animate-spin" />
-          Loading more
+          {t('more.loadingMore')}
         </span>
       ) : (
         <button
@@ -53,7 +55,7 @@ export function InfiniteList({
           onClick={onLoadMore}
           className="h-9 rounded-full bg-surface px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
         >
-          Load more
+          {t('more.loadMore')}
         </button>
       )}
     </div>

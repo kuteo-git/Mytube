@@ -23,7 +23,7 @@ import { usePlayer } from '@/features/watch/application/player-context'
 import { PullIndicator } from '@/features/catalog/ui/PullIndicator'
 import { usePullToRefresh } from '@/features/catalog/application/use-pull-to-refresh'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 
 /**
  * Serves both "/" and "/topic/:name". A topic route is the same grid with the
@@ -197,7 +197,7 @@ export function HomePage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not reach the library service. Is the gateway running?
+          {t('empty.couldNotReachLibrary')}
         </p>
       ) : (
         <>
@@ -253,11 +253,12 @@ export function HomePage() {
               thing that will change the answer. */}
           {!isPending && !hasNextPage && videos.length > 0 && (
             <p className="py-10 text-center text-sm text-text-2">
-              That is everything your Home feed is set to show.{' '}
-              <Link to="/settings/feed" className="underline hover:text-text">
-                Adjust the mix
-              </Link>{' '}
-              to widen it.
+              <Trans
+                i18nKey="more.everythingShown"
+                components={[
+                  <Link key="l" to="/settings/feed" className="underline hover:text-text" />,
+                ]}
+              />
             </p>
           )}
         </>
@@ -265,11 +266,12 @@ export function HomePage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          Nothing here yet. Topics are scanned every 12 hours; use Refresh to scan now.{' '}
-          <Link to="/settings/feed" className="underline hover:text-text">
-            Check your Home feed mix
-          </Link>{' '}
-          — a share set to 0% shows nothing at all.
+          <Trans
+            i18nKey="more.nothingYetHome"
+            components={[
+              <Link key="l" to="/settings/feed" className="underline hover:text-text" />,
+            ]}
+          />
         </p>
       )}
     </div>

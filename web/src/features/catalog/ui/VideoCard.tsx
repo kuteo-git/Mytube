@@ -81,7 +81,7 @@ export function VideoCard({
         <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title} channelName={video.channel.name}>
           {video.reason === 'DISCOVERY' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
-              Suggested
+              {t('card.suggested')}
             </span>
           )}
           {/* A broadcast has no duration, and printing one is not a cosmetic
@@ -248,7 +248,7 @@ function CardMenu({
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <CheckCircle size={16} />
-        Watched
+        {t('card.watched')}
       </button>
     </li>
   )
@@ -280,7 +280,7 @@ function CardMenu({
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <Bookmark size={16} />
-        Save
+        {t('common.save')}
       </button>
     </li>
   )
@@ -297,7 +297,7 @@ function CardMenu({
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <BookmarkMinus size={16} />
-        Unsave
+        {t('card.unsave')}
       </button>
     </li>
   )

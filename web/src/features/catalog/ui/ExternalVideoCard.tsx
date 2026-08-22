@@ -131,7 +131,7 @@ export function ExternalVideoCard({
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Bookmark size={16} />}
-                  Save
+                  {t('common.save')}
                 </button>
               </li>
             </ul>

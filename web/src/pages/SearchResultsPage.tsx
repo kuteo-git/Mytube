@@ -93,15 +93,14 @@ export function SearchResultsPage() {
           t('pages.search.fromLink')
         ) : (
           <>
-            Results for <span className="font-bold">{query}</span>
+            {t('more.resultsFor')} <span className="font-bold">{query}</span>
           </>
         )}
       </h1>
 
       {isLink && settled && local.length === 0 && remaining.length === 0 && (
         <p className="text-sm text-text-2">
-          That link does not lead to a video or a channel. Playlist links cannot be opened here
-          yet.
+          {t('more.linkNotVideo')}
         </p>
       )}
 
@@ -133,7 +132,7 @@ export function SearchResultsPage() {
 
       <section className="mt-12" hidden={isLink && settled && remaining.length === 0}>
         <h2 className="mb-4 flex items-center gap-2 text-base font-medium text-text-2">
-          On YouTube
+          {t('more.onYouTube')}
           {upstreamPending && <Loader2 size={16} className="animate-spin" />}
         </h2>
 

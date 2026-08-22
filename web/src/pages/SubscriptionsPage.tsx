@@ -25,7 +25,7 @@ export function SubscriptionsPage() {
   if (isError) {
     return (
       <p className="py-16 text-center text-text-2">
-        Could not reach the library service.
+        {t('empty.couldNotReachLibrary')}
       </p>
     )
   }
@@ -76,7 +76,7 @@ export function SubscriptionsPage() {
         // happens on a channel's own page, which is not somewhere you would
         // guess from here.
         <p className="py-16 text-center text-sm text-text-2">
-          No subscriptions yet. Open a channel and press Subscribe to follow it.
+          {t('empty.subscriptions')}
         </p>
       )}
     </div>

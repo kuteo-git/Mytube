@@ -119,7 +119,7 @@ export function ProfilePicker({
                   onClick={() => setDeleting(p)}
                   className="shrink-0 rounded-full px-3 py-2 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover hover:text-text"
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               )}
             </li>
@@ -157,7 +157,7 @@ export function ProfilePicker({
           onClick={() => setAdding(true)}
           className="mt-4 min-h-11 w-full rounded-xl bg-surface px-4 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover"
         >
-          Add someone
+          {t('storagePage.addSomeone')}
         </button>
       )}
     </div>

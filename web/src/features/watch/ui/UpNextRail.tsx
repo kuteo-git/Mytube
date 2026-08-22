@@ -41,7 +41,7 @@ export function UpNextRail({
       <div className="flex items-start gap-2 rounded-xl bg-surface px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="clamp-1 text-sm font-medium">
-            Next: {videos?.[0]?.title ?? t('upNext.nothingQueued')}
+            {t('upNext.nextIn', { title: videos?.[0]?.title ?? t('upNext.nothingQueued') })}
           </p>
           <p className="clamp-1 text-xs text-text-2">{videos?.[0]?.channel.name}</p>
         </div>
@@ -74,7 +74,7 @@ export function UpNextRail({
               onClick={() => setChannelFilter(undefined)}
               className="h-8 px-3 text-[13px]"
             >
-              All
+              {t('upNext.all')}
             </Pill>
             <Pill
               role="tab"
@@ -83,7 +83,7 @@ export function UpNextRail({
               onClick={() => setChannelFilter(current.channel.id)}
               className="h-8 px-3 text-[13px]"
             >
-              From {current.channel.name}
+              {t('upNext.fromChannel', { name: current.channel.name })}
             </Pill>
           </div>
 
@@ -107,6 +107,7 @@ export function UpNextRail({
 }
 
 function SuggestionRow({ video }: { video: Video }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   // "New" means recently ingested, not recently published — keep the window
   // tight so the badge stays meaningful instead of decorating every row.
@@ -143,7 +144,7 @@ function SuggestionRow({ video }: { video: Video }) {
         </p>
         {isNew && (
           <span className="mt-1 inline-block rounded bg-surface px-1.5 py-0.5 text-[11px] text-text-2">
-            New
+            {t('more.newBadgeShort')}
           </span>
         )}
       </div>

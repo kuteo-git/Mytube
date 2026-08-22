@@ -92,6 +92,8 @@ const EXEMPT_TEXT = new Map<string, string>([
   // Placeholders showing the shape of a value. Translating them would make
   // the example stop being an example.
   ['/Volumes/Data2/Youtube', 'an example path'],
+  // The name of the application.
+  ['MyTube', 'the name of this app'],
   ['http://host:port', 'an example URL'],
   // The equaliser's own name, kept in English with the rest of its vocabulary.
   ['Equalizer', 'kept in English by decision'],

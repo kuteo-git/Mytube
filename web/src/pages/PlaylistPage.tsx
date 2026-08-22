@@ -36,8 +36,7 @@ export function PlaylistPage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          That playlist could not be opened. It may have been deleted, or it belongs to
-          another profile.
+          {t('more.playlistUnopenable')}
         </p>
       ) : (
         <>

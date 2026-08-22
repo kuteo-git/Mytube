@@ -23,7 +23,7 @@ export function StoragePage() {
       <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
         <h1 className="text-2xl font-bold">{t('nav.storage')}</h1>
         <p className="mt-3 text-sm text-text-2">
-          Could not load storage usage. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_storageUsage') })}
         </p>
       </div>
     )
@@ -70,7 +70,7 @@ export function StoragePage() {
         <StatCard
           label={t('ui.kept')}
           value={String(data.keptCount)}
-          detail="saved by someone, never removed"
+          detail={t('more.savedByAnyone')}
         />
       </section>
 
@@ -78,8 +78,7 @@ export function StoragePage() {
         <section className="mt-8">
           <h2 className="text-lg font-medium">{t('pages.storage.nextRemoved')}</h2>
           <p className="mt-1 text-sm text-text-2">
-            When storage fills past {formatBytes(data.budgetBytes)}, the least recently watched
-            unpinned videos are removed from disk. Their metadata and history are kept.
+            {t('storagePage.fillsPast', { budget: formatBytes(data.budgetBytes) })}
           </p>
           <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3">
             {data.evictionCandidates.map((video) => (
@@ -93,8 +92,7 @@ export function StoragePage() {
         <section className="mt-8">
           <h2 className="text-lg font-medium">{t('pages.storage.nextRemoved')}</h2>
           <p className="mt-1 text-sm text-text-2">
-            No videos are currently eligible for automatic removal. Every downloaded
-            video is either pinned or has been watched recently.
+            {t('empty.noEvictable')}
           </p>
         </section>
       )}

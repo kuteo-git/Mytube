@@ -75,7 +75,7 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
           onClick={() => void refetch()}
           className="h-11 w-fit rounded-lg bg-surface-hover px-4 text-sm font-medium transition-opacity duration-150 ease-out hover:opacity-90"
         >
-          Try again
+          {t('more.tryAgain')}
         </button>
       </SettingsSection>
     )
@@ -156,7 +156,7 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
           className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-50"
         >
           <RotateCcw size={14} />
-          Reset to default
+          {t('settings.feedMix.resetToDefault')}
         </button>
         {/* Confirmation, not decoration: without it a save that changed nothing
             visible on this page is indistinguishable from a save that failed. */}
@@ -255,7 +255,7 @@ function DefaultsNote({ defaults, fixed }: { defaults: FeedMix; fixed: FixedShar
     <div className="rounded-lg bg-surface-input p-3 text-sm">
       <div className="flex items-center gap-2 font-medium">
         <Info size={15} className="text-text-2" />
-        Defaults
+        {t('settings.feedMix.defaults')}
       </div>
       <dl className="mt-2 space-y-1">
         {rows.map(([label, percent]) => (
@@ -264,19 +264,19 @@ function DefaultsNote({ defaults, fixed }: { defaults: FeedMix; fixed: FixedShar
             <dd className="tabular-nums">
               {percent}%{' '}
               <span className="text-text-2">
-                · {videosPerWindow(percent, fixed)} of {FEED_WINDOW}
+                · {t('settings.feedMix.ofWindow', { count: videosPerWindow(percent, fixed), window: FEED_WINDOW })}
               </span>
             </dd>
           </div>
         ))}
       </dl>
       <p className="mt-2 leading-relaxed text-text-2">
-        These three divide {adjustablePercent(fixed)}% of the page. The rest is kept
-        for videos you are part way through ({fixed.continueWatching}%), ones you have
-        finished and might want again ({fixed.rewatch}%), and new uploads from channels
-        you follow ({fixed.freshSubscribed}%). None of those three is a taste — the
-        first two are your watch history, and the last is how you find out a channel
-        posted — so they are not divided here.
+        {t('settings.feedMix.explainer', {
+          adjustable: adjustablePercent(fixed),
+          continue: fixed.continueWatching,
+          rewatch: fixed.rewatch,
+          fresh: fixed.freshSubscribed,
+        })}
       </p>
     </div>
   )

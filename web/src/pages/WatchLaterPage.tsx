@@ -37,7 +37,7 @@ export function WatchLaterPage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load Watch later. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_watchLater') })}
         </p>
       ) : (
         <>

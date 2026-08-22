@@ -93,7 +93,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
             className="flex items-center gap-2 rounded-lg bg-surface-hover px-4 py-2 text-sm font-medium transition-colors hover:bg-white/15"
           >
             <RefreshCw size={14} />
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -134,7 +134,7 @@ function CommentThread({ comment }: { comment: Comment }) {
       <div className="min-w-0 flex-1">
         {comment.pinnedBy && (
           <p className="mb-1 flex items-center gap-1.5 text-xs text-text-2">
-            <Pin size={14} /> Pinned by {comment.pinnedBy}
+            <Pin size={14} /> {t('more.pinnedByName', { name: comment.pinnedBy })}
           </p>
         )}
         <p className="flex items-center gap-2 text-[13px] font-medium">
@@ -165,7 +165,7 @@ function CommentThread({ comment }: { comment: Comment }) {
             type="button"
             className="ml-2 rounded-full px-3 py-1.5 text-xs font-medium hover:bg-surface-hover"
           >
-            Reply
+            {t('more.reply')}
           </button>
         </div>
 

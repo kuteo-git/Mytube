@@ -16,7 +16,7 @@ export function HistoryPage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load history. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_history') })}
         </p>
       ) : (
         <>
@@ -36,7 +36,7 @@ export function HistoryPage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          No watch history yet. Videos will appear here after you watch them.
+          {t('empty.history')}
         </p>
       )}
     </div>

@@ -360,7 +360,9 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         <p className="text-xs text-brand">{t('translationSettings.couldNotLoadModels')}</p>
       )}
       {models.data && (
-        <p className="text-xs text-text-2">{models.data.length} models available.</p>
+        <p className="text-xs text-text-2">
+          {t('more.modelsAvailable', { count: models.data.length })}
+        </p>
       )}
 
       {/* The same sentence every time, so pressing Test on one model and then
@@ -373,7 +375,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
             <>
               <p className="text-xs text-text-2">{result.sample}</p>
               <p className="mt-1">{result.translated}</p>
-              <p className="mt-1 text-xs text-text-2">{result.ms} ms</p>
+              <p className="mt-1 text-xs text-text-2">{t('more.milliseconds', { ms: result.ms ?? 0 })}</p>
             </>
           )}
         </div>

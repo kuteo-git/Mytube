@@ -58,7 +58,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
           onClick={() => void refetch()}
           className="h-11 w-fit rounded-lg bg-surface-hover px-4 text-sm font-medium transition-opacity duration-150 ease-out hover:opacity-90"
         >
-          Try again
+          {t('more.tryAgain')}
         </button>
       </SettingsSection>
     )
@@ -114,7 +114,7 @@ export function AdvancedSettings({ headless = false }: { headless?: boolean } = 
           className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-50"
         >
           <RotateCcw size={14} />
-          Use built-in values
+          {t('settings.advanced.useBuiltIn')}
         </button>
         {!dirty && save.isSuccess && (
           <span className="text-sm text-text-2">{t('settings.feedMix.savedRebuilt')}</span>
@@ -164,7 +164,7 @@ function RankingSlider({
               className="flex items-center gap-1 text-xs text-text-2"
             >
               <AlertTriangle size={12} />
-              careful
+              {t('settings.advanced.careful')}
             </span>
           ) : undefined
         }
@@ -184,7 +184,7 @@ function RankingSlider({
             onClick={() => onChange(undefined)}
             className="underline underline-offset-2 transition-opacity hover:opacity-80"
           >
-            use built-in
+            {t('more.useBuiltInShort')}
           </button>
         )}
       </div>

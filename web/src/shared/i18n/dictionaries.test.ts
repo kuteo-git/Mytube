@@ -68,6 +68,8 @@ describe('the dictionaries', () => {
       'ui.preamp',
       'ui.dryWet',
       'ui.model',
+      // "ms" is the SI symbol. It is the same in both, as "GB" and "%" are.
+      'more.milliseconds',
     ])
 
     const untranslated = paths(en).filter(

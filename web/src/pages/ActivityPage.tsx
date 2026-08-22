@@ -85,7 +85,7 @@ export function ActivityPage() {
 
         {!jobsPending && failed.length === 0 && active.length === 0 && done.length === 0 && (
           <p className="mt-3 text-sm text-text-2">
-            Nothing has been downloaded yet. Pressing play on a video schedules a copy.
+            {t('empty.downloads')}
           </p>
         )}
 
@@ -141,7 +141,7 @@ function ScanHistory({
               onClick={onClearAll}
               className="rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
             >
-              Clear all
+              {t('more.clearAll')}
             </button>
           )}
           <button
@@ -181,12 +181,17 @@ function ScanHistory({
 }
 
 function ScanRow({ scan }: { scan: ScanStatus }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   return (
     <li className="rounded-xl bg-surface p-4 text-sm">
       <p className="text-text-2">
         {fmt.relative(scan.startedAt)} · {Math.round(scan.durationMs / 1000)}s ·{' '}
-        {scan.sourcesScanned} sources · {scan.videosSeen} videos seen · {scan.videosAdded} added
+        {t('more.scanLine', {
+          sources: scan.sourcesScanned,
+          seen: scan.videosSeen,
+          added: scan.videosAdded,
+        })}
       </p>
       {scan.sourcesFailed > 0 && (
         <ul className="mt-3 space-y-1.5">
@@ -342,6 +347,7 @@ function JobGroup({
   onClearAll?: () => void
   canClear?: boolean
 }) {
+  const { t } = useTranslation()
   const { visible, remaining, showMore } = usePagedList(jobs)
   if (jobs.length === 0) return null
 
@@ -357,7 +363,7 @@ function JobGroup({
             onClick={onClearAll}
             className="rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
           >
-            Clear all
+            {t('more.clearAll')}
           </button>
         )}
       </div>

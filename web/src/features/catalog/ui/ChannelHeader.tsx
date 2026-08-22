@@ -52,7 +52,7 @@ export function ChannelHeader({ channel, videoCount }: { channel: Channel; video
             {channel.subscriberCount > 0 && (
               <span>{fmt.subscribers(channel.subscriberCount)} · </span>
             )}
-            {videoCount > 0 && <span>{videoCount} in your library</span>}
+            {videoCount > 0 && <span>{t('more.countInLibrary', { count: videoCount })}</span>}
           </p>
 
           <button

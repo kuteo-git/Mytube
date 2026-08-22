@@ -122,7 +122,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       headless={headless}
     >
       <label className="mt-4 block text-sm text-text-2" htmlFor="media-root">
-        Folder
+        {t('more.folder')}
       </label>
       <input
         id="media-root"
@@ -180,7 +180,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
           disabled={checking || !check?.ok}
           className="mt-3 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-colors duration-150 ease-out disabled:opacity-60"
         >
-          Save
+          {t('common.save')}
         </button>
         {saved && (
           <span role="status" className="mt-3 text-sm text-text-2">
@@ -197,12 +197,17 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       {confirming && (
         <div role="alert" className="mt-4 rounded-lg bg-surface-hover p-3 text-sm">
           <p>
-            <span className="font-medium">{confirming.videos.toLocaleString()}</span> videos are at{' '}
-            <span className="font-mono text-xs">{confirming.oldRoot}</span>. Changing the folder
-            does not move them — they would have to be downloaded again.
+            {t('more.videosAreAt', {
+              // Named `total`, not `count`: i18next reserves `count` for plural
+              // selection, so passing a formatted string there is a type error
+              // and, worse, would silently pick a plural form in a language
+              // that has none.
+              total: confirming.videos.toLocaleString(),
+              path: confirming.oldRoot,
+            })}
           </p>
           <p className="pt-2 text-text-2">
-            To keep them, move them yourself first, then change this.
+            {t('more.keepThemFirst')}
           </p>
           <div className="flex gap-2 pt-3">
             <button
@@ -210,14 +215,14 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
               onClick={() => setConfirming(null)}
               className="rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ease-out hover:bg-surface"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               onClick={() => void save(true)}
               className="rounded-full bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors duration-150 ease-out"
             >
-              Change anyway
+              {t('more.changeAnyway')}
             </button>
           </div>
         </div>
@@ -236,8 +241,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         <span>
           <span className="block text-sm">{t('storageMode.streamOnly')}</span>
           <span className="block pt-0.5 text-xs text-text-2">
-            Videos play from YouTube and are not downloaded. Subtitles still
-            arrive, files already here still play, and Retry still works.
+            {t('more.streamOnlyHint')}
           </span>
         </span>
         <span
