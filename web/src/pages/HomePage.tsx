@@ -23,12 +23,14 @@ import { usePlayer } from '@/features/watch/application/player-context'
 import { PullIndicator } from '@/features/catalog/ui/PullIndicator'
 import { usePullToRefresh } from '@/features/catalog/application/use-pull-to-refresh'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Serves both "/" and "/topic/:name". A topic route is the same grid with the
  * filter preselected, so the two cannot drift apart.
  */
 export function HomePage() {
+  const { t } = useTranslation()
   const { topicName } = useParams()
   const [selected, setSelected] = useState('All')
   const active = topicName ?? selected
@@ -205,7 +207,7 @@ export function HomePage() {
               it — four rows on a desktop and twelve on a phone. */}
           {railShown && (
             <section className="pt-3">
-              <h2 className="mb-3 text-lg font-medium">Continue watching</h2>
+              <h2 className="mb-3 text-lg font-medium">{t('pages.home.continueWatching')}</h2>
               <VideoRail videos={continueWatching} variant="continueWatching" />
               {/* Space below the rule belongs to the grid that follows, so it
                   is set there — matched to this margin. */}

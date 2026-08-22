@@ -3,8 +3,10 @@ import { StorageSettings } from '@/features/settings/ui/StorageSettings'
 import { useStorage } from '@/features/catalog/application/queries'
 import { VideoCard } from '@/features/catalog/ui/VideoCard'
 import { formatBytes } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
 
 export function StoragePage() {
+  const { t } = useTranslation()
   const { data, isPending, isError } = useStorage()
 
   if (isPending) {
@@ -48,14 +50,14 @@ export function StoragePage() {
           icon={<HardDrive size={20} />}
           label="Budget"
           value={formatBytes(data.budgetBytes)}
-          detail="Soft ceiling for autoremoval"
+          detail={t('pages.storage.softCeiling')}
         />
         <StatCard
           icon={<HardDrive size={20} />}
-          label="Free on disk"
+          label={t('pages.storage.freeOnDisk')}
           value={formatBytes(data.diskFreeBytes)}
         />
-        <StatCard label="Videos on disk" value={String(data.videoCount)} />
+        <StatCard label={t('pages.storage.videosOnDisk')} value={String(data.videoCount)} />
         <StatCard label="Evicted" value={String(data.evictedCount)} />
         {/* Saving is personal — each member has their own Saved page — but the
             disk is not, and this is the page where somebody asks why it is
@@ -70,7 +72,7 @@ export function StoragePage() {
 
       {data.evictionCandidates && data.evictionCandidates.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-lg font-medium">Next to be removed</h2>
+          <h2 className="text-lg font-medium">{t('pages.storage.nextRemoved')}</h2>
           <p className="mt-1 text-sm text-text-2">
             When storage fills past {formatBytes(data.budgetBytes)}, the least recently watched
             unpinned videos are removed from disk. Their metadata and history are kept.
@@ -85,7 +87,7 @@ export function StoragePage() {
 
       {data.evictionCandidates && data.evictionCandidates.length === 0 && (
         <section className="mt-8">
-          <h2 className="text-lg font-medium">Next to be removed</h2>
+          <h2 className="text-lg font-medium">{t('pages.storage.nextRemoved')}</h2>
           <p className="mt-1 text-sm text-text-2">
             No videos are currently eligible for automatic removal. Every downloaded
             video is either pinned or has been watched recently.

@@ -13,8 +13,10 @@ import { UpNextRail } from '@/features/watch/ui/UpNextRail'
 import { VideoActions } from '@/features/watch/ui/VideoActions'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useTranslation } from 'react-i18next'
 
 export function WatchPage() {
+  const { t } = useTranslation()
   const { videoId } = useParams()
   const { data: video, isPending, isError } = useVideo(videoId)
   const { data: upNext } = useUpNext(videoId)
@@ -113,7 +115,7 @@ export function WatchPage() {
   }
 
   if (isError || !video) {
-    return <p className="p-16 text-center text-text-2">Video not found.</p>
+    return <p className="p-16 text-center text-text-2">{t('pages.watch.notFound')}</p>
   }
 
   return (

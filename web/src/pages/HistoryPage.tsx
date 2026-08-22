@@ -1,8 +1,10 @@
 import { useHistory } from '@/features/catalog/application/queries'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
 
 export function HistoryPage() {
+  const { t } = useTranslation()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useHistory()
 
@@ -10,7 +12,7 @@ export function HistoryPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Watch history</h1>
+      <h1 className="py-4 text-2xl font-bold">{t('pages.history.title')}</h1>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">

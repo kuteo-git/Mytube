@@ -17,6 +17,7 @@ import type { IngestJob, ScanStatus } from '@/features/catalog/infrastructure/ca
 
 import { useToast } from '@/shared/ui/toast'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * What the system has been doing, and what went wrong doing it.
@@ -36,6 +37,7 @@ import { useFormat } from '@/shared/lib/useFormat'
  * place to look for anything underneath the job layer.
  */
 export function ActivityPage() {
+  const { t } = useTranslation()
   const { data: jobs, isPending: jobsPending } = useActivityJobs()
   const refresh = useRefreshTopics()
   const clearScans = useClearScans()
@@ -50,7 +52,7 @@ export function ActivityPage() {
 
   const handleClearScans = () => {
     clearScans.mutate(undefined, {
-      onSuccess: () => toast('Scan history cleared'),
+      onSuccess: () => toast(t('pages.activity.historyCleared')),
     })
   }
 
@@ -96,7 +98,7 @@ export function ActivityPage() {
           canClear={failed.length > 0}
         />
         <JobGroup
-          title="In progress"
+          title={t('pages.activity.inProgress')}
           tone="active"
           jobs={active}
           render={(job) => <ActiveRow job={job} />}
@@ -123,6 +125,7 @@ function ScanHistory({
   onRefresh: () => void
   onClearAll: () => void
 }) {
+  const { t } = useTranslation()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending } = useScans()
   const scans = data?.pages.flatMap((page) => page.scans) ?? []
   const total = data?.pages[0]?.total ?? 0
@@ -148,7 +151,7 @@ function ScanHistory({
             className="flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-60"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
-            {refreshing ? 'Scanning…' : 'Scan now'}
+            {refreshing ? 'Scanning…' : t('pages.activity.scanNow')}
           </button>
         </div>
       </div>
@@ -156,7 +159,7 @@ function ScanHistory({
       {isPending && <p className="mt-3 text-sm text-text-2">Loading…</p>}
 
       {!isPending && scans.length === 0 && (
-        <p className="mt-3 text-sm text-text-2">No scan has run yet.</p>
+        <p className="mt-3 text-sm text-text-2">{t('pages.activity.neverScanned')}</p>
       )}
 
       {scans.length > 0 && (
@@ -200,6 +203,7 @@ function ScanRow({ scan }: { scan: ScanStatus }) {
 }
 
 function FailedRow({ job }: { job: IngestJob }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const retry = useRetryJob()
   return (
@@ -211,7 +215,7 @@ function FailedRow({ job }: { job: IngestJob }) {
               most of them here are temporary. Without it, hiding would be the
               only thing anybody could do with a failure. */}
           <IconButton
-            label="Retry download"
+            label={t('pages.activity.retryDownload')}
             onClick={() => retry.mutate(job.id)}
             disabled={retry.isPending}
           >
@@ -227,6 +231,7 @@ function FailedRow({ job }: { job: IngestJob }) {
 }
 
 function ActiveRow({ job }: { job: IngestJob }) {
+  const { t } = useTranslation()
   const cancel = useCancelJob()
   // One video is transferred at a time — a single worker, claiming one job — so
   // everything else in this group is standing in line, not downloading. Both
@@ -255,7 +260,7 @@ function ActiveRow({ job }: { job: IngestJob }) {
             hidden: hiding work that carries on underneath is the one thing this
             must never do. */}
         <IconButton
-          label="Cancel download"
+          label={t('pages.activity.cancelDownload')}
           onClick={() => cancel.mutate(job.id)}
           disabled={cancel.isPending}
         >
@@ -263,7 +268,7 @@ function ActiveRow({ job }: { job: IngestJob }) {
         </IconButton>
       </div>
       <p className="mt-1 text-xs text-text-2 tabular-nums">
-        {transferring ? `${Math.round(job.progress * 100)}%` : 'Waiting its turn'}
+        {transferring ? `${Math.round(job.progress * 100)}%` : t('pages.activity.queued')}
       </p>
     </li>
   )

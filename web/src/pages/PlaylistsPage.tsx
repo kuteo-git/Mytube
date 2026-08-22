@@ -5,6 +5,7 @@ import type { Playlist } from '@/features/catalog/domain/video'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The member's playlists, as their YouTube account has them.
@@ -63,6 +64,7 @@ export function PlaylistsPage() {
 }
 
 function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: boolean }) {
+  const { t } = useTranslation()
   const cover = playlist.thumbnails[0]
 
   return (
@@ -86,12 +88,12 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
             hours, and saying so is the difference between "not yet" and
             "something is wrong". */}
         {playlist.unavailable
-          ? 'YouTube will not open this one'
+          ? t('pages.playlists.wontOpen')
           : playlist.itemsSynced
             ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
             : signedOut
-              ? 'Waiting for a YouTube session'
-              : 'Not read yet'}
+              ? t('pages.playlists.waitingSession')
+              : t('pages.playlists.notReadYet')}
       </p>
     </Link>
   )

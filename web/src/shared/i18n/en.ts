@@ -64,6 +64,67 @@ export const en = {
   language: {
     label: 'Language',
   },
+
+  pages: {
+    home: {
+      continueWatching: 'Continue watching',
+    },
+    history: { title: 'Watch history' },
+    saved: { title: 'Saved videos' },
+    watch: { notFound: 'Video not found.' },
+    channel: {
+      notFound: 'Channel not found.',
+      sort: 'Sort videos',
+      unreachable: 'Could not reach YouTube to list this channel.',
+      noUploads: 'This channel has no uploads.',
+    },
+    search: {
+      fromLink: 'Video from a link',
+      inLibrary: 'In your library',
+      noMatches: 'Nothing here matches.',
+      youtubeUnreachable: 'Could not reach YouTube.',
+      noMore: 'No further results.',
+    },
+    activity: {
+      historyCleared: 'Scan history cleared',
+      inProgress: 'In progress',
+      scanNow: 'Scan now',
+      neverScanned: 'No scan has run yet.',
+      retryDownload: 'Retry download',
+      cancelDownload: 'Cancel download',
+      queued: 'Waiting its turn',
+    },
+    storage: {
+      softCeiling: 'Soft ceiling for autoremoval',
+      freeOnDisk: 'Free on disk',
+      videosOnDisk: 'Videos on disk',
+      nextRemoved: 'Next to be removed',
+    },
+    watchLater: {
+      title: 'Watch later',
+      signedOut:
+        'YouTube signed you out, so this list is not being brought across. Paste your cookies again in Settings.',
+      empty:
+        'Nothing here yet. This list is a copy of your YouTube Watch later, brought across on each account scan.',
+    },
+    playlists: {
+      wontOpen: 'YouTube will not open this one',
+      waitingSession: 'Waiting for a YouTube session',
+      notReadYet: 'Not read yet',
+      wontOpenLong:
+        'YouTube lists this playlist but will not open it — it answers "the playlist does not exist". Nothing here can fix that; it is asked once and then left alone.',
+      notReadYetLong:
+        'This playlist has not been read from YouTube yet. It fills in on one of the next account scans.',
+      emptyUpstream: 'This playlist is empty on YouTube.',
+    },
+  },
+
+  account: {
+    openMenu: 'Account',
+    watching: 'Watching',
+    manageProfiles: 'Manage profiles',
+    youtubeAccount: 'YouTube account',
+  },
 } as const
 
 /**

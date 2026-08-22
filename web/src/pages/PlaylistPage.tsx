@@ -3,6 +3,7 @@ import { usePlaylist } from '@/features/catalog/application/queries'
 import { playlistQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
 
 /**
  * One playlist, in its own order.
@@ -12,6 +13,7 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
  * by date is a different list.
  */
 export function PlaylistPage() {
+  const { t } = useTranslation()
   const { playlistId = '' } = useParams()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     usePlaylist(playlistId)
@@ -25,10 +27,10 @@ export function PlaylistPage() {
       {playlist && (
         <p className="-mt-2 pb-4 text-sm text-text-2">
           {playlist.unavailable
-            ? 'YouTube will not open this one'
+            ? t('pages.playlists.wontOpen')
             : playlist.itemsSynced
               ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
-              : 'Not read yet'}
+              : t('pages.playlists.notReadYet')}
         </p>
       )}
 
@@ -67,10 +69,10 @@ export function PlaylistPage() {
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
           {playlist?.unavailable
-            ? 'YouTube lists this playlist but will not open it — it answers "the playlist does not exist". Nothing here can fix that; it is asked once and then left alone.'
+            ? t('pages.playlists.wontOpenLong')
             : playlist && !playlist.itemsSynced
-              ? 'This playlist has not been read from YouTube yet. It fills in on one of the next account scans.'
-              : 'This playlist is empty on YouTube.'}
+              ? t('pages.playlists.notReadYetLong')
+              : t('pages.playlists.emptyUpstream')}
         </p>
       )}
     </div>
