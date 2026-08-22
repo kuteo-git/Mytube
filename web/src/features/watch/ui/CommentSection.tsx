@@ -7,8 +7,10 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
 
 import { hueFromId } from '@/shared/lib/hue'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 export function CommentSection({ videoId }: { videoId: string }) {
+  const { t } = useTranslation()
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useComments(videoId)
   const addComment = useAddComment(videoId)
   const fetchComments = useFetchComments(videoId)
@@ -54,8 +56,8 @@ export function CommentSection({ videoId }: { videoId: string }) {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a comment..."
-          aria-label="Add a comment"
+          placeholder={t('comments.placeholder')}
+          aria-label={t('comments.label')}
           className="flex-1 border-b border-line bg-transparent pb-1 text-sm outline-none placeholder:text-text-2 focus:border-text"
         />
       </form>
@@ -89,8 +91,8 @@ export function CommentSection({ videoId }: { videoId: string }) {
         <div className="mt-6 flex flex-col items-start gap-3 rounded-lg bg-surface p-4">
           <p className="text-sm text-text-2">
             {fetchComments.data?.unavailable
-              ? 'YouTube did not return comments for this video.'
-              : 'Could not load YouTube comments.'}
+              ? t('comments.noneReturned')
+              : t('comments.couldNotLoad')}
           </p>
           <button
             type="button"
@@ -123,6 +125,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
 }
 
 function CommentThread({ comment }: { comment: Comment }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const [showReplies, setShowReplies] = useState(false)
   const replies = comment.replies ?? []
@@ -152,7 +155,7 @@ function CommentThread({ comment }: { comment: Comment }) {
         <div className="mt-1.5 flex items-center gap-2 text-text-2">
           <button
             type="button"
-            aria-label="Like comment"
+            aria-label={t('comments.like')}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-surface-hover"
           >
             <ThumbsUp size={16} />
@@ -160,7 +163,7 @@ function CommentThread({ comment }: { comment: Comment }) {
           <span className="text-xs">{fmt.count(comment.likeCount)}</span>
           <button
             type="button"
-            aria-label="Dislike comment"
+            aria-label={t('comments.dislike')}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-surface-hover"
           >
             <ThumbsDown size={16} />

@@ -15,6 +15,8 @@ import { BOTTOM_NAV_HEIGHT } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 import { dismissFade, layerOpacity } from '@/features/watch/application/watch-overlay'
 import { ToastProvider } from '@/shared/ui/toast'
+import { useTranslation } from 'react-i18next'
+import type { TranslationKey } from '@/shared/i18n/en'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -30,6 +32,7 @@ export function AppShell() {
 }
 
 function AppShellInner() {
+  const { t } = useTranslation()
   const location = useLocation()
   const { pathname } = location
   const isWatch = isWatchScreen(pathname)
@@ -176,7 +179,13 @@ function AppShellInner() {
           bar there fades its own copy in only once that has scrolled away —
           behaviour the page owns. */}
       {chromeHidden && !isWatch && bareTitle(pathname) !== null && (
-        <BackBar title={bareTitle(pathname) ?? ''} showTitle fallback="/" />
+        <BackBar
+          // bareTitle returns a key, not a word — the list is a module
+          // constant and cannot call a hook, so the shell translates it here.
+          title={t(bareTitle(pathname) as TranslationKey)}
+          showTitle
+          fallback="/"
+        />
       )}
 
       <TopBar

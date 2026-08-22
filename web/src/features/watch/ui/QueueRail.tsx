@@ -6,6 +6,7 @@ import { ThumbnailSurface } from '@/shared/ui/primitives'
 
 import { hueFromId } from '@/shared/lib/hue'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The list being played through, beside the player.
@@ -26,6 +27,7 @@ export function QueueRail({
   /** The list's own name. Empty falls back to the generic wording. */
   label?: string
 }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const activeRef = useRef<HTMLAnchorElement>(null)
 
@@ -38,7 +40,7 @@ export function QueueRail({
   return (
     <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label="Queue">
       <div className="border-b border-line px-4 py-3">
-        <p className="text-sm font-medium">{label ? `Playing from ${label}` : 'Playing from queue'}</p>
+        <p className="text-sm font-medium">{label ? `Playing from ${label}` : t('upNext.playingFromQueue')}</p>
         <p className="mt-0.5 text-xs text-text-2">
           {currentIndex >= 0 ? `${currentIndex + 1} / ${items.length}` : `${items.length} videos`}
         </p>

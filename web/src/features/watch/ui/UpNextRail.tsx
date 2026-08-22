@@ -9,6 +9,7 @@ import { Pill, ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 export function UpNextRail({
   current,
@@ -22,6 +23,7 @@ export function UpNextRail({
    */
   exclude: ReadonlySet<string>
 }) {
+  const { t } = useTranslation()
   const [channelFilter, setChannelFilter] = useState<string | undefined>(undefined)
   const [collapsed, setCollapsed] = useState(false)
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useUpNext(current.id, channelFilter)
@@ -35,17 +37,17 @@ export function UpNextRail({
   const videos = unseen && unseen.length > 0 ? unseen : data
 
   return (
-    <aside className="flex w-full flex-col gap-3" aria-label="Up next">
+    <aside className="flex w-full flex-col gap-3" aria-label={t('upNext.title')}>
       <div className="flex items-start gap-2 rounded-xl bg-surface px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="clamp-1 text-sm font-medium">
-            Next: {videos?.[0]?.title ?? 'Nothing queued'}
+            Next: {videos?.[0]?.title ?? t('upNext.nothingQueued')}
           </p>
           <p className="clamp-1 text-xs text-text-2">{videos?.[0]?.channel.name}</p>
         </div>
         <button
           type="button"
-          aria-label={collapsed ? 'Expand up next' : 'Collapse up next'}
+          aria-label={collapsed ? t('upNext.expand') : t('upNext.collapse')}
           aria-expanded={!collapsed}
           onClick={() => setCollapsed((c) => !c)}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-surface-hover"
@@ -62,7 +64,7 @@ export function UpNextRail({
         <>
           <div
             role="tablist"
-            aria-label="Filter suggestions"
+            aria-label={t('upNext.filter')}
             className="flex gap-2 overflow-x-auto overscroll-x-contain no-scrollbar"
           >
             <Pill

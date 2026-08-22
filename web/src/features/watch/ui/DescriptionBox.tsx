@@ -2,10 +2,12 @@ import clsx from 'clsx'
 import { useState } from 'react'
 import type { Video } from '@/features/catalog/domain/video'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 
 /** Collapsible description. Also surfaces local-only facts: disk size and media state. */
 export function DescriptionBox({ video }: { video: Video }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const [expanded, setExpanded] = useState(false)
 
@@ -37,11 +39,11 @@ export function DescriptionBox({ video }: { video: Video }) {
 
       {expanded && (
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 border-t border-line-subtle pt-3 text-text-2">
-          <dt>On disk</dt>
+          <dt>{t('description.onDisk')}</dt>
           <dd className="text-text">{fmt.bytes(video.sizeBytes)}</dd>
-          <dt>Added to library</dt>
+          <dt>{t('description.addedToLibrary')}</dt>
           <dd className="text-text">{fmt.date(video.addedAt)}</dd>
-          <dt>Media state</dt>
+          <dt>{t('description.mediaState')}</dt>
           <dd className="text-text">{video.mediaState}</dd>
         </dl>
       )}
@@ -54,7 +56,7 @@ export function DescriptionBox({ video }: { video: Video }) {
         }}
         className="mt-2 font-medium"
       >
-        {expanded ? 'Show less' : '…more'}
+        {expanded ? t('description.showLess') : '…more'}
       </button>
     </section>
   )

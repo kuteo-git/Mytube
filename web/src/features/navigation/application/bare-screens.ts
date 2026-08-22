@@ -33,12 +33,12 @@ const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   // which is the wrong way round however you argue it. They are lists you
   // browse, like Home, not a detour you back out of; each draws its own heading
   // already, so there is nothing a back bar would add.
-  [(p) => p === '/storage', 'Storage'],
-  [(p) => p === '/activity', 'Activity'],
-  [(p) => p === '/settings/feed', 'Home feed'],
-  [(p) => p === '/settings/advanced', 'Advanced'],
-  [(p) => p === '/settings/narration', 'Narration'],
-  [(p) => p === '/settings/translation', 'Translation'],
+  [(p) => p === '/storage', 'nav.storage'],
+  [(p) => p === '/activity', 'nav.activity'],
+  [(p) => p === '/settings/feed', 'settings.feedMix.title'],
+  [(p) => p === '/settings/advanced', 'phoneSettings.advanced'],
+  [(p) => p === '/settings/narration', 'phoneSettings.narration'],
+  [(p) => p === '/settings/translation', 'phoneSettings.translation'],
 ]
 
 /**

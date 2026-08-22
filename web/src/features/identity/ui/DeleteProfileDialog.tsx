@@ -64,9 +64,18 @@ export function DeleteProfileDialog({
       await httpProfileRepository.remove(profile.id)
       onDeleted()
     } catch (e) {
-      // The gateway refuses two cases in words worth showing as they are: the
-      // profile you are using, and the last one left.
-      setError(e instanceof Error && e.message ? e.message : t('profiles.couldNotDelete'))
+      // The gateway refuses two cases, and it sends a code rather than a
+      // sentence — it does not know what language the person reads. Anything
+      // it does not recognise falls back rather than being printed raw, so an
+      // older gateway's English prose never reaches a Vietnamese screen.
+      const code = e instanceof Error ? e.message : ''
+      setError(
+        code.includes('delete_self')
+          ? t('common.deleteSelf')
+          : code.includes('delete_last')
+            ? t('common.deleteLast')
+            : t('profiles.couldNotDelete'),
+      )
       setBusy(false)
     }
   }

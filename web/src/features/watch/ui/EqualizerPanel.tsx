@@ -20,6 +20,7 @@ import {
 } from '@/features/watch/application/reverb-presets'
 import type { AudioSettings } from '@/features/watch/application/audio-prefs'
 import { bypassesWebAudio } from '@/features/watch/application/hls-source'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The equaliser and the room, as they appear behind the player's Audio button.
@@ -45,6 +46,7 @@ export function EqualizerSetting({
    */
   source?: string
 }) {
+  const { t } = useTranslation()
   // Two ways to end up shaping nothing, and the viewer needs telling either
   // way: this panel is the one place where saying nothing is indistinguishable
   // from being broken. Fullscreen is the old one; a phone streaming HLS is the
@@ -53,9 +55,9 @@ export function EqualizerSetting({
   const whileStreaming = bypassesWebAudio(source)
   const bypassed = inFullscreen || whileStreaming
   const bypassReason = inFullscreen
-    ? 'EQ off in fullscreen'
-    : 'EQ off while the video is still downloading'
-  const bypassAside = inFullscreen ? 'Also off in fullscreen' : 'Also off while downloading'
+    ? t('equalizer.offInFullscreen')
+    : t('equalizer.offWhileDownloading')
+  const bypassAside = inFullscreen ? t('equalizer.alsoOffInFullscreen') : t('equalizer.alsoOffWhileDownloading')
   const settings = audio.eq
   const reverb = audio.reverb
   const setEq = (next: EqSettings) => onChange({ ...audio, eq: next })
@@ -128,7 +130,7 @@ export function EqualizerSetting({
               width when it is renamed. */}
           <div
             role="radiogroup"
-            aria-label="Equalizer preset"
+            aria-label={t('equalizer.preset')}
             className="grid grid-cols-5 gap-1 pb-3"
           >
             {PRESETS.map((p) => {
@@ -275,7 +277,7 @@ export function EqualizerSetting({
         </div>
         <div className="-mt-2 flex">
           <LinearSlider
-            label="Dry wet mix"
+            label={t('equalizer.dryWet')}
             min={0}
             max={100}
             step={1}

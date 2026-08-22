@@ -113,7 +113,7 @@ export function subtitleOptions(
       label: 'VI (auto)',
       // The track's own name is content, read in the language it is written in,
       // as the gateway's machineVTTLabel already is. The rest is UI copy.
-      hint: 'Tiếng Việt (dịch máy) — translated as you watch',
+      hint: 'queue.machineVietnamese',
     })
   }
   return options

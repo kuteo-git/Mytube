@@ -51,6 +51,17 @@ describe('the dictionaries', () => {
       // and it only exists so every slider's readout goes through the same
       // path instead of one of them being a special case in the component.
       'settings.ranking.unit.plain',
+      // What the control is called on every device somebody owns, and the
+      // Vietnamese phrase is longer than the button it labels. This is the
+      // "technical terms stay English" decision reaching one label; the
+      // sentences around it are translated.
+      'player.pictureInPicture',
+      // The two labels on the translation-model form. Somebody pasting an API
+      // key into a base URL field already knows both terms in English, and
+      // every provider's own documentation calls them this — a Vietnamese
+      // rendering would be a word they then have to translate back.
+      'translationSettings.baseURL',
+      'translationSettings.apiKey',
     ])
 
     const untranslated = paths(en).filter(

@@ -329,7 +329,32 @@ Also fetch the 720p rendition YouTube already publishes and remux `-c copy` into
 
 ## 4b. Code conventions
 
-- **All source code, identifiers, comments, commit messages and in-app UI copy MUST be in English.** Vietnamese is allowed only as *content data* (e.g. a genuine video title). Chat/discussion happens in Vietnamese; the artifacts do not.
+- **All source code, identifiers, comments and commit messages MUST be in English.** Chat happens in Vietnamese; the artifacts do not. That rule is unchanged and the reasoning behind it is untouched.
+- **In-app copy is a translation key, and the app speaks English and Tiếng Việt** (2026-08-22). This narrows the rule above, which used to include UI copy and so forbade the household reading their own library in their own language. English is still the source: every key's value is authored in it, and `vi.ts` is a translation kept beside it.
+
+### Half-translating is the failure, so it fails the build
+
+The ask was not "translate the app" but "do not leave English lying around", so the guards were built before the translating. **Three layers, because each sees something the others cannot:**
+
+1. **Typed keys** — `CustomTypeOptions` gives `t()` the key union, so `t('nav.acount')` does not compile. Proven by compiling it deliberately. It caught something real on the way: `Item.label` was typed `string`, wide enough to hold a typo that would then render the key itself on screen, in both languages, reported by nothing.
+2. **`dictionaries.test.ts`** — catches what the type cannot: an *extra* key left by a one-sided rename, and a value still in English. Its exemption list is four entries and each carries a sentence; two candidates it started with turned out to translate perfectly well.
+3. **`untranslated.guard.test.ts`** — a source scan, and **the only layer that can see the fault the request was about.** A string that was never extracted is not a missing key; it is a literal in a component that renders in English while nothing reports it. Proven by putting one back and watching the build fail with `pages/HistoryPage.tsx:15 [jsx-text] Watch history`.
+   - Narrow deliberately: JSX text, `aria-label`, `placeholder`, `title`, and quoted literals **starting with a capital** — which is what separates copy from Tailwind class lists, since those have plenty of spaces and no capitals. Measured over the whole app: 170 literal matches, every one real copy, no false positives.
+   - **It misses single words**, and that is the stated trade. "Save" on a button is copy; catching it means flagging every id, slug and unit in the codebase, and a guard drowning in false positives is one people switch off.
+
+### What the translation is, and is not
+
+- **Written, not converted.** Vietnamese drops the subject wherever the context carries it and English cannot, so "they belong to the whole household. This cannot be undone" is "chúng là của cả nhà. Xoá rồi không lấy lại được". Carrying every "they", "this" and "it" across is the surest sign of a machine.
+- **The formatters carried the most English and the least visibly** — not labels but return values on every card: "248 views", "3 days ago", "4.1M subscribers". They carried English *grammar* too: `formatRelative` appended an "s", which applied to a language with no plural gives "3 ngàys trước". Language is a parameter, the functions stay pure, and components reach them through `useFormat()`. English marks the past before the unit and Vietnamese after the phrase, so relative time is two shapes rather than one shape with a substituted word. Counts use N/Tr/T; dates go through ICU with `vi-VN` (`22 thg 8, 2026`) rather than a table of month names.
+- **Technical terms stay English** — Equalizer, HLS, Remux, Reverb, Preamp, Base URL, API key, Picture in picture. Somebody opening the equaliser already knows the word and "bộ chỉnh âm" teaches nobody anything; the sentences *around* them are translated.
+- **The server stopped writing prose.** It sends codes — `media_root_unavailable`, `delete_self`, `delete_last` — and the client maps them. It cannot know what language the viewer reads, and translating on both sides would be two sets of words that agree until one changes.
+- **A module constant cannot call a hook**, so the sidebar's items, the phone settings rows and `bare-screens.ts` carry *keys*, resolved where they are drawn. Likewise a pure helper: `describeVideo`, `supply`, `unavailableCopy` and `serverCopy` take the translator as an argument rather than becoming components.
+- **`infrastructure/` never translates.** A repository has no business knowing what language anybody reads; it throws, and the screen that catches decides what to say.
+- **The choice lives in `localStorage`, per device**, read at module load before the first paint — an effect would show English for a frame and swap. `navigator.language` decides for a machine nobody has set up, falling back to English.
+- **`documentElement.lang` follows the choice**, because that is what a screen reader picks a voice from: left at `en`, Vietnamese is read by an English voice, which is unintelligible rather than merely wrong.
+- **Each language is named in its own words** in the switcher, always. Somebody who pressed the wrong row is looking at an interface they cannot read, and "English" written in English is the way back out.
+- **Tests run in English**, pinned in `test/setup.ts`. The 179 assertions that read visible text describe behaviour, not translations; rewriting them to look up keys would make each require a trip to the dictionary and catch nothing the three layers miss.
+- **`logview` and the two probe pages stay English.** logview reads six services' English logs, and translating the frame around them is half a job; the probe pages are instruments, not the app.
 - Go: standard layout per service — `cmd/`, `internal/domain`, `internal/usecase`, `internal/adapter`.
 - Frontend: feature-sliced. `ui/` never calls `fetch` directly.
 

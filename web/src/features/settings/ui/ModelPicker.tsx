@@ -45,7 +45,7 @@ export function ModelPicker({
         <input
           className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           value={value}
-          placeholder="model name"
+          placeholder={t('settings.model.name')}
           aria-label="Model"
           onChange={(e) => onChange(e.target.value)}
         />
@@ -79,7 +79,7 @@ export function ModelPicker({
         {open && models.length > 0 && (
           <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg bg-surface py-1 text-sm shadow-lg">
             {matches.length === 0 && (
-              <li className="px-3 py-2 text-text-2">no match</li>
+              <li className="px-3 py-2 text-text-2">{t('settings.model.noMatch')}</li>
             )}
             {matches.map((m) => (
               <li key={m}>

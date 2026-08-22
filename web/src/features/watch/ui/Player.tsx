@@ -115,6 +115,8 @@ import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure
 import { formatDuration } from '@/shared/lib/format'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { rememberLastWatched } from '@/features/watch/application/last-watched'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 /**
  * Progressive MP4 in a plain <video> element, served over HTTP range requests.
@@ -410,6 +412,7 @@ export function Player({
    */
   autoplay?: boolean
 }) {
+  const { t } = useTranslation()
   const mini = variant !== 'full'
   const bar = variant === 'bar'
 
@@ -1804,14 +1807,14 @@ export function Player({
    */
   const narrationRows = narrationAvailable ? (
     <>
-      {/* Named for the one thing it does. "Read aloud" said nothing about which
+      {/* Named for the one thing it does. t('player.readAloud') said nothing about which
           language came out, and this reads the Vietnamese translation and
           nothing else — so a viewer could reasonably have expected it to speak
           the English they were already watching. Switching it on also brings
           the translation into being, which is a great deal to hide behind two
           words that do not mention Vietnamese at all. */}
       <SettingRow
-        label="Vietnamese narration"
+        label={t('player.vietnameseNarration')}
         on={narrationSpeaks}
         onToggle={toggleSpeak}
       />
@@ -2331,13 +2334,13 @@ export function Player({
               change: the opening source is deliberately a low one, and the
               downloaded file replaces it mid-playback. A viewer who sees a soft
               picture should be able to tell that it is temporary. */}
-          <span title="Streaming from upstream while the copy is fetched">
+          <span title={t('player.streaming')}>
             {tierLabel}
           </span>
           {queuedBehind && (
             <>
               <span className="h-3 w-px bg-white/25" />
-              <span>Copy queued</span>
+              <span>{t('player.copyQueued')}</span>
             </>
           )}
           {transferring && (
@@ -2347,7 +2350,7 @@ export function Player({
                 <span
                   className="h-1 w-16 overflow-hidden rounded-full bg-white/25"
                   role="progressbar"
-                  aria-label="Download progress"
+                  aria-label={t('player.downloadProgress')}
                   aria-valuenow={downloadPercent}
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -2757,7 +2760,7 @@ export function Player({
       ) : (
         <p className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-text-2">
           {resolvingStream
-            ? 'Finding a stream…'
+            ? t('player.findingStream')
             : loadFailed
               ? // A failed stream is not a failed video. Before the copy lands
                 // the muxed stream is the only source, and upstream refuses one
@@ -2769,8 +2772,8 @@ export function Player({
                 transferring
                 ? `Live streaming failed. Downloading instead — ${downloadPercent}%, it will start by itself.`
                 : queuedBehind
-                  ? 'Live streaming failed. The download is queued behind another video, and this will start by itself once it finishes.'
-                  : 'The stream could not be loaded.'
+                  ? t('player.streamFailedQueued')
+                  : t('player.streamFailed')
               : sources?.upcoming
                 ? // Nothing is wrong and nothing is missing: YouTube publishes
                   // nothing for a stream until it begins. Said plainly, because
@@ -2779,16 +2782,20 @@ export function Player({
                   //
                   // No retry button. The player already polls this answer, so
                   // the broadcast starting is picked up without being asked.
-                  'This broadcast has not started yet. It will begin playing on its own.'
+                  t('player.notStartedYet')
                 : unavailableReason
-                ? unavailableCopy(unavailableReason)
+                ? unavailableCopy(unavailableReason, t)
                 : mediaState === 'EVICTED'
-                ? 'The media file was removed to reclaim disk space, and upstream has nothing directly playable. Re-download it to watch again.'
+                ? t('player.evicted')
                 : sources?.streamError
-                  ? sources.streamError
+                  ? // A code from the gateway, mapped here. The server does not
+                    // know what language the viewer reads, and a sentence
+                    // written there would arrive in English on a Vietnamese
+                    // screen.
+                    serverCopy(sources.streamError, t)
                   : streamFailed
-                    ? 'Nothing playable is available yet. The download has to finish first.'
-                    : 'No media file available yet.'}
+                    ? t('player.nothingPlayable')
+                    : t('player.noFile')}
         </p>
       )}
 
@@ -2864,8 +2871,8 @@ export function Player({
           {onPlayNext && variant === 'full' && (
             <button
               type="button"
-              aria-label="Next video"
-              title={nextVideoTitle ? `Next: ${nextVideoTitle}` : 'Next video'}
+              aria-label={t('player.nextVideo')}
+              title={nextVideoTitle ? `Next: ${nextVideoTitle}` : t('player.nextVideo')}
               onClick={() => {
                 resetAutoplayChain()
                 setCountdown(null)
@@ -2904,7 +2911,7 @@ export function Player({
                   type="button"
                   onClick={() => seekTo(duration)}
                   disabled={onLiveEdge}
-                  aria-label={onLiveEdge ? 'Live' : 'Go to live'}
+                  aria-label={onLiveEdge ? 'Live' : t('player.goToLive')}
                   className="flex items-center gap-1.5 rounded px-1 text-white transition-opacity duration-150 ease-out disabled:cursor-default"
                 >
                   <span
@@ -3010,7 +3017,7 @@ export function Player({
           {variant === 'full' && pipAvailable && (
             <button
               type="button"
-              aria-label="Picture in picture"
+              aria-label={t('player.pictureInPicture')}
               onClick={() => enterPiP(front())}
               disabled={!playable}
               className={controlButton}
@@ -3022,7 +3029,7 @@ export function Player({
           {variant === 'full' && fullscreenAvailable && (
             <button
               type="button"
-              aria-label="Full screen"
+              aria-label={t('player.fullScreen')}
               onClick={() => goFullscreen(front())}
               disabled={!playable}
               className={controlButton}
@@ -3060,7 +3067,7 @@ export function Player({
             type="button"
             onClick={onExpand}
             className="absolute inset-x-0 top-0 bottom-14"
-            aria-label="Expand player"
+            aria-label={t('player.expand')}
           />
 
           {/* Close button — top-right, visible on hover */}
@@ -3072,7 +3079,7 @@ export function Player({
               'transition-opacity duration-150',
               controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
             )}
-            aria-label="Close player"
+            aria-label={t('player.closePlayer')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -3089,7 +3096,7 @@ export function Player({
               'transition-opacity duration-150',
               controlsVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
             )}
-            aria-label="Expand player"
+            aria-label={t('player.expand')}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
               <polyline points="15 3 21 3 21 9" />
@@ -3134,7 +3141,7 @@ export function Player({
             type="button"
             onClick={onExpand}
             className="absolute inset-0"
-            aria-label="Expand player"
+            aria-label={t('player.expand')}
           />
 
           <div className="min-w-0 flex-1 px-3">
@@ -3155,7 +3162,7 @@ export function Player({
               type="button"
               onClick={onClose}
               className="grid h-10 w-10 place-items-center rounded-full text-white"
-              aria-label="Close player"
+              aria-label={t('player.closePlayer')}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
@@ -3380,6 +3387,7 @@ function SpeechStatus({
 }: {
   progress: ReturnType<typeof pregenProgress>
 }) {
+  const { t } = useTranslation()
   // Every phase gets its own words, for the reason recorded on the translation
   // status below: several distinct states behind one hopeful label is how
   // "stuck on preparing" gets reported. In particular a sweep waiting on the
@@ -3389,11 +3397,11 @@ function SpeechStatus({
     // Every label names its subject. The row above reports translation and this
     // one reports speech, and a bare "Not started" on both left two identical
     // lines stacked on each other with nothing to say which was which.
-    idle: 'Speech not started',
-    sweeping: 'Preparing speech…',
-    'awaiting-translation': 'Waiting for translation…',
-    'backing-off': 'Speech service unavailable — retrying',
-    done: 'Speech ready',
+    idle: t('player.speech.notStarted'),
+    sweeping: t('player.speech.preparing'),
+    'awaiting-translation': t('player.speech.waitingTranslation'),
+    'backing-off': t('player.speech.unavailable'),
+    done: t('player.speech.ready'),
   }
   const bar = p.total > 0 && p.phase !== 'idle'
   const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0
@@ -3450,28 +3458,29 @@ function NarrationStatus({
 }: {
   progress: ReturnType<typeof narrationProgress>
 }) {
+  const { t } = useTranslation()
   // "Preparing" was true of a pass that had not started, one waiting on a
   // subtitle file, one whose subtitles never arrived, and one with nothing to
   // do because the cues were already Vietnamese. Four states behind one word is
   // no better than no status at all — it was reported as "stuck on preparing".
   const label: Record<typeof p.phase, string> = {
-    idle: 'Not started',
+    idle: t('player.translation.notStarted'),
     // Each step before the first batch says which step it is. One word over all
     // of them meant a pass held up by the translator settings — or by hashing a
     // long video's cues — claimed to be loading subtitles that were already on
     // screen, and there was no way to tell which from the outside.
-    'waiting-config': 'Waiting for translator settings…',
-    'no-translator': 'No translation model configured — set one in Settings',
-    'reading-cache': 'Reading saved translations…',
-    'waiting-subtitles': 'Loading subtitles…',
-    hashing: 'Preparing cues…',
-    'no-subtitles': 'No subtitles available',
-    'not-needed': 'Already Vietnamese — nothing to translate',
+    'waiting-config': t('player.translation.waitingSettings'),
+    'no-translator': t('player.translation.noModel'),
+    'reading-cache': t('player.translation.readingSaved'),
+    'waiting-subtitles': t('player.translation.loadingSubtitles'),
+    hashing: t('player.translation.preparingCues'),
+    'no-subtitles': t('player.translation.noSubtitles'),
+    'not-needed': t('player.translation.alreadyVietnamese'),
     translating: 'Translating…',
     done: 'Translated',
     failed: p.error
       ? `Translation failed: ${p.error}`
-      : 'Translation failed — nothing came back',
+      : t('player.translation.failed'),
   }
   const bar =
     p.phase === 'translating' || p.phase === 'done' || p.phase === 'failed'
@@ -3847,15 +3856,31 @@ function VolumeControl({
  * gone for everybody. "Could not be fetched" sends the viewer nowhere, which is
  * what the 500 it replaced did.
  */
-export function unavailableCopy(reason: UnavailableReason): string {
+/**
+ * A code the gateway sent, in the viewer's language.
+ *
+ * Unknown codes fall through to the generic stream failure rather than being
+ * printed raw: an older gateway sending prose would otherwise put an English
+ * sentence on screen, which is the thing this exists to stop.
+ */
+export function serverCopy(code: string, t: TFunction): string {
+  switch (code) {
+    case 'media_root_unavailable':
+      return t('common.mediaRootUnavailable')
+    default:
+      return t('player.streamFailed')
+  }
+}
+
+export function unavailableCopy(reason: UnavailableReason, t: TFunction): string {
   switch (reason) {
     case 'members_only':
-      return 'This video is members-only on YouTube. Join the channel there to watch it — it cannot be fetched into the library.'
+      return t('player.unavailable.membersOnly')
     case 'private':
-      return 'This video is private on YouTube, so it cannot be fetched.'
+      return t('player.unavailable.private')
     case 'removed':
-      return 'This video has been removed from YouTube, so it cannot be fetched.'
+      return t('player.unavailable.removed')
     default:
-      return 'YouTube will not hand this video over, so it cannot be fetched.'
+      return t('player.unavailable.generic')
   }
 }

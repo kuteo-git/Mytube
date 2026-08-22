@@ -13,6 +13,9 @@ import type { ParseKeys } from 'i18next'
  */
 export const en = {
   common: {
+    mediaRootUnavailable: 'The media drive is not available. Check that it is connected.',
+    deleteSelf: 'Switch to another profile before deleting this one.',
+    deleteLast: 'This is the only profile. Add another before deleting it.',
     cancel: 'Cancel',
     save: 'Save',
     saved: 'Saved',
@@ -237,6 +240,148 @@ export const en = {
       type: 'Type a model name',
     },
     couldNotSave: 'Could not save',
+  },
+
+  player: {
+    findingStream: 'Finding a stream…',
+    streamFailedQueued:
+      'Live streaming failed. The download is queued behind another video, and this will start by itself once it finishes.',
+    streamFailed: 'The stream could not be loaded.',
+    notStartedYet: 'This broadcast has not started yet. It will begin playing on its own.',
+    evicted:
+      'The media file was removed to reclaim disk space, and upstream has nothing directly playable. Re-download it to watch again.',
+    nothingPlayable: 'Nothing playable is available yet. The download has to finish first.',
+    noFile: 'No media file available yet.',
+    streaming: 'Streaming from upstream while the copy is fetched',
+    copyQueued: 'Copy queued',
+    downloadProgress: 'Download progress',
+    nextVideo: 'Next video',
+    goToLive: 'Go to live',
+    live: 'LIVE',
+    pictureInPicture: 'Picture in picture',
+    fullScreen: 'Full screen',
+    expand: 'Expand player',
+    closePlayer: 'Close player',
+    readAloud: 'Read aloud',
+    vietnameseNarration: 'Vietnamese narration',
+    unavailable: {
+      membersOnly:
+        'This video is members-only on YouTube. Join the channel there to watch it — it cannot be fetched into the library.',
+      private: 'This video is private on YouTube, so it cannot be fetched.',
+      removed: 'This video has been removed from YouTube, so it cannot be fetched.',
+      generic: 'YouTube will not hand this video over, so it cannot be fetched.',
+    },
+    speech: {
+      notStarted: 'Speech not started',
+      preparing: 'Preparing speech…',
+      waitingTranslation: 'Waiting for translation…',
+      unavailable: 'Speech service unavailable — retrying',
+      ready: 'Speech ready',
+    },
+    translation: {
+      notStarted: 'Not started',
+      waitingSettings: 'Waiting for translator settings…',
+      noModel: 'No translation model configured — set one in Settings',
+      readingSaved: 'Reading saved translations…',
+      loadingSubtitles: 'Loading subtitles…',
+      preparingCues: 'Preparing cues…',
+      noSubtitles: 'No subtitles available',
+      alreadyVietnamese: 'Already Vietnamese — nothing to translate',
+      failed: 'Translation failed — nothing came back',
+    },
+  },
+
+  comments: {
+    placeholder: 'Add a comment...',
+    label: 'Add a comment',
+    noneReturned: 'YouTube did not return comments for this video.',
+    couldNotLoad: 'Could not load YouTube comments.',
+    like: 'Like comment',
+    dislike: 'Dislike comment',
+  },
+
+  description: {
+    onDisk: 'On disk',
+    addedToLibrary: 'Added to library',
+    mediaState: 'Media state',
+    showLess: 'Show less',
+  },
+
+  equalizer: {
+    offInFullscreen: 'EQ off in fullscreen',
+    offWhileDownloading: 'EQ off while the video is still downloading',
+    alsoOffInFullscreen: 'Also off in fullscreen',
+    alsoOffWhileDownloading: 'Also off while downloading',
+    preset: 'Equalizer preset',
+    dryWet: 'Dry wet mix',
+  },
+
+  queue: {
+    machineVietnamese: 'Tiếng Việt (dịch máy) — translated as you watch',
+    watchLater: 'Watch later',
+    topPlayed: 'Top played',
+  },
+
+  youtubeAccount: {
+    title: 'YouTube account',
+    description:
+      'Brings your own subscriptions, playlists and liked videos into the library. Your account, on this machine only.',
+    signedOut: 'Signed out — paste your cookies again',
+    notConnected: 'Not connected',
+    howTo: 'Open youtube.com signed in, click the extension, choose Netscape format.',
+    pasteBelow: 'Paste the whole file below.',
+    cookiesFile: 'Cookies file',
+    scanNow: 'Scan now',
+  },
+
+  narration: {
+    tryIt:
+      'Open a video and come back here to hear these against it — the player keeps going in the corner.',
+    voiceVolume: 'Voice volume',
+    voiceVolumeHint: 'Goes past 100% because synthesised speech is quieter than film audio.',
+    videoVolumeWhileSpeaking: 'Video volume while speaking',
+  },
+
+  translationSettings: {
+    description:
+      'Where subtitles are translated. Changing the model translates fresh — earlier translations are kept, so switching back costs nothing.',
+    baseURL: 'Base URL',
+    apiKey: 'API key',
+    noKeyStored: 'No key stored yet.',
+    hideKey: 'Hide the API key',
+    showKey: 'Show the API key',
+    couldNotLoadModels: 'Could not load the model list.',
+    testFailed: 'The test call did not get through.',
+    savedNextBatch: 'Saved. The next batch uses it.',
+  },
+
+  upNext: {
+    title: 'Up next',
+    nothingQueued: 'Nothing queued',
+    expand: 'Expand up next',
+    collapse: 'Collapse up next',
+    filter: 'Filter suggestions',
+    playingFromQueue: 'Playing from queue',
+  },
+
+  actions: {
+    linkCopied: 'YouTube link copied',
+    couldNotCopy: "Couldn't copy the link",
+  },
+
+  storageMode: {
+    fromEnvironment: 'From the environment — nothing saved yet.',
+    streamOnly: 'Stream only, keep nothing',
+  },
+
+  phoneSettings: {
+    library: 'Library',
+    account: 'Account',
+    preferences: 'Preferences',
+    settings: 'Settings',
+    narration: 'Narration',
+    translation: 'Translation',
+    advanced: 'Advanced',
   },
 
   account: {

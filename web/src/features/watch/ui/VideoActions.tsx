@@ -15,6 +15,7 @@ import {
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Channel row plus the action cluster.
@@ -26,6 +27,7 @@ import { useFormat } from '@/shared/lib/useFormat'
  * will never reclaim it.
  */
 export function VideoActions({ video, likeCount }: { video: Video; likeCount: number }) {
+  const { t } = useTranslation()
   const fmt = useFormat()
   const reaction = video.userState?.reaction ?? 'NONE'
   const setReaction = useSetReaction(video.id)
@@ -46,8 +48,8 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   // that moment is on the thing being shared.
   const announce = (outcome: ShareOutcome) => {
     if (outcome === 'shared') toast('Shared')
-    else if (outcome === 'copied') toast('YouTube link copied')
-    else if (outcome === 'failed') toast("Couldn't copy the link")
+    else if (outcome === 'copied') toast(t('actions.linkCopied'))
+    else if (outcome === 'failed') toast(t('actions.couldNotCopy'))
     // A cancelled share sheet is the viewer's own answer, and reporting a
     // decision back to the person who made it is noise.
   }
@@ -137,7 +139,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
 
         <button
           type="button"
-          aria-label="More actions"
+          aria-label={t('common.moreActions')}
           className="grid h-9 w-9 place-items-center rounded-full bg-surface transition-colors duration-150 ease-out hover:bg-surface-hover"
         >
           <MoreHorizontal size={20} />

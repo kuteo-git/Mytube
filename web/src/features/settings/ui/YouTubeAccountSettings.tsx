@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { SettingsSection } from './SettingsSection'
 import { accountRepository } from '../infrastructure/accountRepository'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Connecting a household member's own YouTube account.
@@ -19,6 +20,7 @@ import { accountRepository } from '../infrastructure/accountRepository'
  * the moment the server accepts it.
  */
 export function YouTubeAccountSettings({ headless = false }: { headless?: boolean }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: account } = useQuery({
     queryKey: ['youtube-account'],
@@ -69,12 +71,12 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
   return (
     <SettingsSection
       icon={<KeyRound size={18} />}
-      title="YouTube account"
+      title={t('youtubeAccount.title')}
       // Names what the import actually does. It said "playlists", which nothing
       // here has ever brought in — there is no playlist anywhere in this system.
       // §5's rule against a button that does nothing holds for a sentence that
       // promises something too.
-      description="Brings your own subscriptions, playlists and liked videos into the library. Your account, on this machine only."
+      description={t('youtubeAccount.description')}
       headless={headless}
     >
       <div className="pt-2">
@@ -82,9 +84,9 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
           <span className="text-text-2">Status: </span>
           {state === 'OK' && <span>Connected</span>}
           {state === 'EXPIRED' && (
-            <span className="text-brand">Signed out — paste your cookies again</span>
+            <span className="text-brand">{t('youtubeAccount.signedOut')}</span>
           )}
-          {state === 'NEVER_SET' && <span className="text-text-2">Not connected</span>}
+          {state === 'NEVER_SET' && <span className="text-text-2">{t('youtubeAccount.notConnected')}</span>}
         </p>
         {account?.lastResult && (
           <p className="pt-1 text-xs text-text-2">Last scan: {account.lastResult}</p>
@@ -104,8 +106,8 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
           </a>{' '}
           for Chrome — the one yt-dlp's own FAQ recommends.
         </li>
-        <li>Open youtube.com signed in, click the extension, choose Netscape format.</li>
-        <li>Paste the whole file below.</li>
+        <li>{t('youtubeAccount.howTo')}</li>
+        <li>{t('youtubeAccount.pasteBelow')}</li>
       </ol>
 
       {/*
@@ -123,7 +125,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
         value={cookies}
         onChange={(e) => setCookies(e.target.value)}
         placeholder="# Netscape HTTP Cookie File…"
-        aria-label="Cookies file"
+        aria-label={t('youtubeAccount.cookiesFile')}
         rows={5}
         spellCheck={false}
         className="mt-3 w-full rounded-lg bg-surface-input p-3 font-mono text-xs outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
@@ -151,7 +153,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
               onClick={() => scan.mutate()}
               className="min-h-11 rounded-lg bg-surface px-4 text-sm disabled:opacity-50"
             >
-              {running ? 'Scanning…' : 'Scan now'}
+              {running ? 'Scanning…' : t('youtubeAccount.scanNow')}
             </button>
             <button
               type="button"

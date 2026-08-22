@@ -744,7 +744,13 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 			// must not blank the whole catalog (CLAUDE.md §8, risk 1).
 			g.logger.Warn("media root unavailable", "root", g.mediaRoot, "video", videoID)
 			writeJSON(w, http.StatusOK, streamDTO{
-				StreamError: "The media drive is not available. Check that it is connected.",
+				// A code, not a sentence.
+				//
+				// The server does not know what language the person watching
+				// reads, and a message written here would arrive in English on
+				// a Vietnamese screen. The client already maps reasons to copy
+				// for `unavailable`; this joins it.
+				StreamError: "media_root_unavailable",
 			})
 			return
 		}

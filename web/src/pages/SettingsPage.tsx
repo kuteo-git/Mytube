@@ -43,6 +43,8 @@ import {
   SettingsSection,
 } from '@/features/settings/ui/SettingsSection'
 import { SliderRow } from '@/features/settings/ui/SliderRow'
+import { useTranslation } from 'react-i18next'
+import type { TranslationKey } from '@/shared/i18n/en'
 
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
@@ -96,10 +98,13 @@ export function SettingsPage() {
  * that is content; the rest are read when you have decided to change or check
  * something.
  */
-const PHONE_LIBRARY = [
-  { to: '/saved', icon: Bookmark, label: 'Saved' },
-  { to: '/storage', icon: HardDrive, label: 'Storage' },
-  { to: '/activity', icon: Activity, label: 'Activity' },
+// Keys, not words. These are module constants and cannot call a hook, so text
+// baked in here would never change language — the same rule the sidebar's
+// arrays follow, for the same reason.
+const PHONE_LIBRARY: MenuItem[] = [
+  { to: '/saved', icon: Bookmark, label: 'nav.saved' },
+  { to: '/storage', icon: HardDrive, label: 'nav.storage' },
+  { to: '/activity', icon: Activity, label: 'nav.activity' },
 ]
 
 /**
@@ -118,26 +123,34 @@ const PHONE_LIBRARY = [
  * a place there is what you move between while browsing. The avatar in the top
  * bar is the other door to the same room.
  */
-const PHONE_ACCOUNT = [
-  { to: '/profile', icon: UserRound, label: 'Profile' },
-  { to: '/account', icon: KeyRound, label: 'YouTube account' },
-  { to: '/watch-later', icon: Clock, label: 'Watch later' },
-  { to: '/playlists', icon: ListVideo, label: 'Playlists' },
+const PHONE_ACCOUNT: MenuItem[] = [
+  { to: '/profile', icon: UserRound, label: 'nav.profile' },
+  { to: '/account', icon: KeyRound, label: 'youtubeAccount.title' },
+  { to: '/watch-later', icon: Clock, label: 'nav.watchLater' },
+  { to: '/playlists', icon: ListVideo, label: 'nav.playlists' },
 ]
 
-const PHONE_PREFS = [
-  { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
-  { to: '/settings/narration', icon: Headphones, label: 'Narration' },
-  { to: '/settings/translation', icon: Languages, label: 'Translation' },
-  { to: '/settings/advanced', icon: SlidersHorizontal, label: 'Advanced' },
+const PHONE_PREFS: MenuItem[] = [
+  { to: '/settings/feed', icon: LayoutGrid, label: 'settings.feedMix.title' },
+  { to: '/settings/narration', icon: Headphones, label: 'phoneSettings.narration' },
+  { to: '/settings/translation', icon: Languages, label: 'phoneSettings.translation' },
+  { to: '/settings/advanced', icon: SlidersHorizontal, label: 'phoneSettings.advanced' },
 ]
+
+/** A row in the phone settings menu. `label` is a key — see the note above. */
+interface MenuItem {
+  to: string
+  icon: typeof Bookmark
+  label: TranslationKey
+}
 
 function PhoneMenu() {
+  const { t } = useTranslation()
   return (
     <nav className="mt-4 flex flex-col gap-6" aria-label="Settings">
-      <MenuGroup label="Library" items={PHONE_LIBRARY} />
-      <MenuGroup label="Account" items={PHONE_ACCOUNT} />
-      <MenuGroup label="Preferences" items={PHONE_PREFS} />
+      <MenuGroup label={t('phoneSettings.library')} items={PHONE_LIBRARY} />
+      <MenuGroup label={t('phoneSettings.account')} items={PHONE_ACCOUNT} />
+      <MenuGroup label={t('phoneSettings.preferences')} items={PHONE_PREFS} />
     </nav>
   )
 }
@@ -146,9 +159,12 @@ function MenuGroup({
   label,
   items,
 }: {
+  /** Already translated: the group headings are written at the call site. */
   label: string
-  items: Array<{ to: string; icon: typeof Bookmark; label: string }>
+  items: MenuItem[]
 }) {
+  const { t } = useTranslation()
+
   return (
     <div>
       <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-text-2">
@@ -163,7 +179,7 @@ function MenuGroup({
                        transition-colors hover:bg-surface-hover"
           >
             <Icon size={18} className="shrink-0 text-text-2" />
-            <span className="flex-1">{label}</span>
+            <span className="flex-1">{t(label)}</span>
             <ChevronRight size={18} className="shrink-0 text-text-2" />
           </Link>
         ))}
@@ -173,6 +189,7 @@ function MenuGroup({
 }
 
 export function NarrationSettings({ headless = false }: { headless?: boolean } = {}) {
+  const { t } = useTranslation()
   const { data: voices } = useVoices()
   const [prefs, setPrefs] = useState(loadNarrationAudioPrefs)
 
@@ -195,7 +212,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
       headless={headless}
       icon={<Headphones size={18} />}
       title="Narration"
-      description="Open a video and come back here to hear these against it — the player keeps going in the corner."
+      description={t('narration.tryIt')}
     >
       <div className="rounded-lg bg-surface-input p-3">
         <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">Audio</h3>
@@ -221,16 +238,16 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
           </SettingRow>
 
           <SliderRow
-            label="Voice volume"
+            label={t('narration.voiceVolume')}
             value={prefs.voiceLevel}
             max={MAX_VOICE_LEVEL}
             format={percent}
             onChange={(voiceLevel) => update({ voiceLevel })}
-            hint="Goes past 100% because synthesised speech is quieter than film audio."
+            hint={t('narration.voiceVolumeHint')}
           />
 
           <SliderRow
-            label="Video volume while speaking"
+            label={t('narration.videoVolumeWhileSpeaking')}
             value={prefs.duckLevel}
             max={1}
             format={percent}
@@ -243,6 +260,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
 }
 
 export function TranslationSettings({ headless = false }: { headless?: boolean } = {}) {
+  const { t } = useTranslation()
   const { data: config } = useTranslateConfig()
   const save = useSaveTranslateConfig()
   const models = useTranslateModels()
@@ -270,24 +288,24 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
       headless={headless}
       icon={<Languages size={18} />}
       title="Translation"
-      description="Where subtitles are translated. Changing the model translates fresh — earlier translations are kept, so switching back costs nothing."
+      description={t('translationSettings.description')}
     >
-      <SettingRow label="Base URL">
+      <SettingRow label={t('translationSettings.baseURL')}>
         <input
           className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           value={baseUrl}
           placeholder="http://host:port"
-          aria-label="Base URL"
+          aria-label={t('translationSettings.baseURL')}
           onChange={(e) => setBaseUrl(e.target.value)}
         />
       </SettingRow>
 
       <SettingRow
-        label="API key"
+        label={t('translationSettings.apiKey')}
         hint={
           config?.hasKey
             ? `A key ending ${config.keyHint} is stored. Leave blank to keep it.`
-            : 'No key stored yet.'
+            : t('translationSettings.noKeyStored')
         }
       >
         <input
@@ -295,12 +313,12 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
           type={showKey ? 'text' : 'password'}
           value={apiKey}
           placeholder={config?.hasKey ? '••••••••' : 'sk-…'}
-          aria-label="API key"
+          aria-label={t('translationSettings.apiKey')}
           onChange={(e) => setApiKey(e.target.value)}
         />
         <button
           type="button"
-          aria-label={showKey ? 'Hide the API key' : 'Show the API key'}
+          aria-label={showKey ? t('translationSettings.hideKey') : t('translationSettings.showKey')}
           onClick={() => setShowKey((v) => !v)}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-surface-hover text-text-2 transition-colors duration-150 ease-out hover:text-text"
         >
@@ -338,7 +356,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
       </ActionBar>
 
       {models.isError && (
-        <p className="text-xs text-brand">Could not load the model list.</p>
+        <p className="text-xs text-brand">{t('translationSettings.couldNotLoadModels')}</p>
       )}
       {models.data && (
         <p className="text-xs text-text-2">{models.data.length} models available.</p>
@@ -360,10 +378,10 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         </div>
       )}
       {test.isError && (
-        <p className="text-xs text-brand">The test call did not get through.</p>
+        <p className="text-xs text-brand">{t('translationSettings.testFailed')}</p>
       )}
       {save.isSuccess && !save.isPending && (
-        <p className="text-xs text-text-2">Saved. The next batch uses it.</p>
+        <p className="text-xs text-text-2">{t('translationSettings.savedNextBatch')}</p>
       )}
     </SettingsSection>
   )

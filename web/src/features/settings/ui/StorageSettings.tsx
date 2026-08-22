@@ -146,7 +146,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         <p className="pt-1 text-xs text-text-2">
           {state.source === 'file'
             ? t('settings.storage.savedHere')
-            : 'From the environment — nothing saved yet.'}
+            : t('storageMode.fromEnvironment')}
         </p>
       )}
 
@@ -231,7 +231,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         className="mt-6 flex w-full items-center justify-between gap-4 text-left"
       >
         <span>
-          <span className="block text-sm">Stream only, keep nothing</span>
+          <span className="block text-sm">{t('storageMode.streamOnly')}</span>
           <span className="block pt-0.5 text-xs text-text-2">
             Videos play from YouTube and are not downloaded. Subtitles still
             arrive, files already here still play, and Retry still works.

@@ -229,7 +229,7 @@ func (g *Gateway) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 	// answering for a ghost.
 	if g.userID(r) == target {
 		writeJSON(w, http.StatusConflict, map[string]any{
-			"error": "Switch to another profile before deleting this one."})
+			"error": "delete_self"})
 		return
 	}
 	// And the last one stays. DEV_USER_ID is where the history of every browser
@@ -237,7 +237,7 @@ func (g *Gateway) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 	// owns.
 	if len(list) <= 1 {
 		writeJSON(w, http.StatusConflict, map[string]any{
-			"error": "This is the only profile. Add another before deleting it."})
+			"error": "delete_last"})
 		return
 	}
 

@@ -9,6 +9,7 @@ import {
 } from '@/features/catalog/application/queries'
 import type { Video } from '@/features/catalog/domain/video'
 import { mediaURL } from '@/shared/lib/media'
+import { useTranslation } from 'react-i18next'
 
 /** A catalog video flattened into a queue row. */
 function fromCatalogVideo(v: Video): QueueItem {
@@ -104,6 +105,7 @@ export function watchLaterQueueSearch(): string {
 }
 
 export function useQueue(currentVideoId: string | undefined): Queue {
+  const { t } = useTranslation()
   const [params] = useSearchParams()
   const list = params.get('list') ?? ''
   const sort = params.get('sort') ?? undefined
@@ -176,11 +178,12 @@ export function useQueue(currentVideoId: string | undefined): Queue {
     let label = ''
     if (channelId) label = channelName
     else if (playlistId) label = playlistTitle
-    else if (list === WATCH_LATER_LIST) label = 'Watch later'
-    else if (list === TOP_PLAYED_LIST) label = 'Top played'
+    else if (list === WATCH_LATER_LIST) label = t('queue.watchLater')
+    else if (list === TOP_PLAYED_LIST) label = t('queue.topPlayed')
 
     return { items, currentIndex, next, search, label }
   }, [
+    t,
     channelId,
     channelName,
     list,

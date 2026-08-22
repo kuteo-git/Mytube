@@ -24,6 +24,9 @@ import type { Dictionary } from './en'
  */
 export const vi: Dictionary = {
   common: {
+    mediaRootUnavailable: 'Không thấy ổ đĩa chứa video. Kiểm tra xem đã cắm chưa.',
+    deleteSelf: 'Chuyển sang hồ sơ khác rồi mới xoá được hồ sơ này.',
+    deleteLast: 'Đây là hồ sơ duy nhất. Thêm một hồ sơ khác rồi mới xoá được.',
     cancel: 'Huỷ',
     save: 'Lưu',
     saved: 'Đã lưu',
@@ -256,6 +259,150 @@ export const vi: Dictionary = {
       type: 'Gõ tên model',
     },
     couldNotSave: 'Không lưu được',
+  },
+
+  player: {
+    findingStream: 'Đang tìm nguồn phát…',
+    streamFailedQueued:
+      'Phát trực tiếp không được. Video đang xếp hàng chờ tải sau một video khác, xong là tự chạy.',
+    streamFailed: 'Không tải được luồng phát.',
+    notStartedYet: 'Buổi phát chưa bắt đầu. Tới giờ là tự chạy.',
+    evicted:
+      'File đã bị xoá để lấy lại dung lượng, và trên mạng cũng không có nguồn nào phát thẳng được. Tải lại để xem.',
+    nothingPlayable: 'Chưa có gì phát được. Phải tải xong đã.',
+    noFile: 'Chưa có file nào.',
+    streaming: 'Đang phát trực tiếp trong lúc tải bản lưu',
+    copyQueued: 'Đã xếp hàng tải',
+    downloadProgress: 'Tiến độ tải',
+    nextVideo: 'Video tiếp theo',
+    goToLive: 'Về chỗ đang phát',
+    live: 'TRỰC TIẾP',
+    // Kept in English: it is what the button is called on every device, and
+    // the Vietnamese phrase is longer than the control it labels.
+    pictureInPicture: 'Picture in picture',
+    fullScreen: 'Toàn màn hình',
+    expand: 'Mở rộng trình phát',
+    closePlayer: 'Đóng trình phát',
+    readAloud: 'Đọc to',
+    vietnameseNarration: 'Lồng tiếng Việt',
+    unavailable: {
+      membersOnly:
+        'Video này chỉ dành cho thành viên trên YouTube. Muốn xem thì tham gia kênh bên đó — không tải về thư viện được.',
+      private: 'Video này để riêng tư trên YouTube nên không tải được.',
+      removed: 'Video này đã bị gỡ khỏi YouTube nên không tải được.',
+      generic: 'YouTube không cho lấy video này nên không tải được.',
+    },
+    speech: {
+      notStarted: 'Chưa đọc',
+      preparing: 'Đang chuẩn bị giọng đọc…',
+      waitingTranslation: 'Đang chờ dịch…',
+      unavailable: 'Dịch vụ đọc không phản hồi — đang thử lại',
+      ready: 'Giọng đọc đã sẵn sàng',
+    },
+    translation: {
+      notStarted: 'Chưa bắt đầu',
+      waitingSettings: 'Đang chờ cài đặt dịch…',
+      noModel: 'Chưa chọn model dịch — vào Cài đặt để chọn',
+      readingSaved: 'Đang đọc bản dịch đã lưu…',
+      loadingSubtitles: 'Đang tải phụ đề…',
+      preparingCues: 'Đang chuẩn bị phụ đề…',
+      noSubtitles: 'Không có phụ đề',
+      alreadyVietnamese: 'Vốn đã là tiếng Việt — không cần dịch',
+      failed: 'Dịch không thành — không nhận được gì',
+    },
+  },
+
+  comments: {
+    placeholder: 'Viết bình luận...',
+    label: 'Viết bình luận',
+    noneReturned: 'YouTube không trả về bình luận nào cho video này.',
+    couldNotLoad: 'Không tải được bình luận từ YouTube.',
+    like: 'Thích bình luận',
+    dislike: 'Không thích bình luận',
+  },
+
+  description: {
+    onDisk: 'Trên đĩa',
+    addedToLibrary: 'Thêm vào thư viện',
+    mediaState: 'Trạng thái file',
+    showLess: 'Thu gọn',
+  },
+
+  equalizer: {
+    offInFullscreen: 'EQ không chạy khi toàn màn hình',
+    offWhileDownloading: 'EQ không chạy khi video còn đang tải',
+    alsoOffInFullscreen: 'Cũng không chạy khi toàn màn hình',
+    alsoOffWhileDownloading: 'Cũng không chạy khi đang tải',
+    preset: 'Cấu hình Equalizer',
+    dryWet: 'Độ trộn khô/ướt',
+  },
+
+  queue: {
+    machineVietnamese: 'Tiếng Việt (dịch máy) — dịch trong lúc xem',
+    watchLater: 'Xem sau',
+    topPlayed: 'Xem nhiều nhất',
+  },
+
+  youtubeAccount: {
+    title: 'Tài khoản YouTube',
+    description:
+      'Lấy kênh đăng ký, danh sách phát và video đã thích của bạn về thư viện. Tài khoản của bạn, chỉ nằm trên máy này.',
+    signedOut: 'Đã đăng xuất — dán lại cookie',
+    notConnected: 'Chưa kết nối',
+    howTo: 'Mở youtube.com khi đã đăng nhập, bấm vào tiện ích, chọn định dạng Netscape.',
+    pasteBelow: 'Dán toàn bộ file xuống dưới.',
+    cookiesFile: 'File cookie',
+    scanNow: 'Quét ngay',
+  },
+
+  narration: {
+    tryIt:
+      'Mở một video rồi quay lại đây để nghe thử — trình phát vẫn chạy ở góc màn hình.',
+    voiceVolume: 'Âm lượng giọng đọc',
+    voiceVolumeHint: 'Vượt quá 100% được, vì giọng máy đọc nhỏ hơn tiếng phim.',
+    videoVolumeWhileSpeaking: 'Âm lượng video khi đang đọc',
+  },
+
+  translationSettings: {
+    description:
+      'Nơi dịch phụ đề. Đổi model thì dịch lại từ đầu — bản dịch cũ vẫn giữ, nên đổi qua đổi lại không mất gì.',
+    baseURL: 'Base URL',
+    apiKey: 'API key',
+    noKeyStored: 'Chưa lưu key nào.',
+    hideKey: 'Ẩn API key',
+    showKey: 'Hiện API key',
+    couldNotLoadModels: 'Không tải được danh sách model.',
+    testFailed: 'Gọi thử không tới nơi.',
+    savedNextBatch: 'Đã lưu. Lượt dịch tới sẽ dùng cái này.',
+  },
+
+  upNext: {
+    title: 'Tiếp theo',
+    nothingQueued: 'Chưa có gì trong hàng chờ',
+    expand: 'Mở danh sách tiếp theo',
+    collapse: 'Thu danh sách tiếp theo',
+    filter: 'Lọc gợi ý',
+    playingFromQueue: 'Đang phát từ hàng chờ',
+  },
+
+  actions: {
+    linkCopied: 'Đã chép link YouTube',
+    couldNotCopy: 'Không chép được link',
+  },
+
+  storageMode: {
+    fromEnvironment: 'Lấy từ biến môi trường — chưa lưu gì.',
+    streamOnly: 'Chỉ xem trực tiếp, không lưu',
+  },
+
+  phoneSettings: {
+    library: 'Thư viện',
+    account: 'Tài khoản',
+    preferences: 'Tuỳ chọn',
+    settings: 'Cài đặt',
+    narration: 'Lồng tiếng',
+    translation: 'Dịch',
+    advanced: 'Nâng cao',
   },
 
   account: {

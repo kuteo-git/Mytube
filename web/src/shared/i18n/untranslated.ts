@@ -96,6 +96,15 @@ export function findStragglers(file: string, source: string): Straggler[] {
     const at = index + 1
     const code = line.trim()
 
+    // What has already been reported on this line.
+    //
+    // An `aria-label="Close player"` matches the attribute rule and then the
+    // literal rule as well — it is, after all, a quoted string starting with a
+    // capital. Reported twice it doubles the length of every failure and makes
+    // the count meaningless, and the attribute name is the more useful of the
+    // two answers.
+    const seen = new Set<string>()
+
     const wasInBlock = inBlock
     if (inBlock) {
       if (line.includes('*/')) inBlock = false
@@ -117,7 +126,8 @@ export function findStragglers(file: string, source: string): Straggler[] {
       ['title', /\stitle="([^"]+)"/g],
     ] as const) {
       for (const match of line.matchAll(pattern)) {
-        if (looksLikeCopy(match[1])) {
+        if (looksLikeCopy(match[1]) && !seen.has(match[1])) {
+          seen.add(match[1])
           out.push({ file, line: at, text: match[1], kind })
         }
       }
@@ -127,8 +137,10 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // same line. Text spanning several lines is caught by whichever of its
     // lines happens to hold two words, which is enough to point at it.
     for (const match of line.matchAll(/>([^<>{}]+)</g)) {
-      if (looksLikeCopy(match[1])) {
-        out.push({ file, line: at, text: match[1].trim(), kind: 'jsx-text' })
+      const text = match[1].trim()
+      if (looksLikeCopy(match[1]) && !seen.has(text)) {
+        seen.add(text)
+        out.push({ file, line: at, text, kind: 'jsx-text' })
       }
     }
 
@@ -138,7 +150,8 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // without it would have passed while two thirds of the app stayed English.
     for (const match of line.matchAll(LITERAL)) {
       const text = (match[1] ?? match[2]).trim()
-      if (PROSE.test(text)) {
+      if (PROSE.test(text) && !seen.has(text)) {
+        seen.add(text)
         out.push({ file, line: at, text, kind: 'literal' })
       }
     }

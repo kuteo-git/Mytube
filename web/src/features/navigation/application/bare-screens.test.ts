@@ -55,8 +55,11 @@ describe('which screens carry their own chrome', () => {
 
 describe('what the back bar calls a screen', () => {
   it('names the ones the shell draws for', () => {
-    expect(bareTitle('/storage')).toBe('Storage')
-    expect(bareTitle('/settings/narration')).toBe('Narration')
+    // Keys, not words: this list is a module constant and cannot call a hook,
+    // so the shell translates what it returns. Asserting on the key is
+    // asserting on what this function actually promises.
+    expect(bareTitle('/storage')).toBe('nav.storage')
+    expect(bareTitle('/settings/narration')).toBe('phoneSettings.narration')
   })
 
   it('leaves a channel to name itself', () => {
