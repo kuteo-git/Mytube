@@ -263,6 +263,14 @@ export interface StreamSources {
    * file, which is why resolving one the ordinary way produced nothing at all.
    */
   live?: StreamSource
+  /**
+   * A broadcast that has not begun.
+   *
+   * No source, and none is missing — YouTube publishes nothing for a stream
+   * until it starts. The player says so rather than showing a failure; the poll
+   * it already runs picks up the change when it begins.
+   */
+  upcoming?: boolean
   /** Full resolution, muxed live. Not seekable. Absent once `local` exists. */
   remux?: StreamSource
   /** The downloaded file. Present only once on disk, and best whenever it is. */

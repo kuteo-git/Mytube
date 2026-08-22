@@ -72,14 +72,20 @@ func TestLiveScanAsksTheStreamsTab(t *testing.T) {
 	}
 }
 
-// Only "is_live" is on air.
+// A scheduled broadcast is recorded, and a finished or ordinary video is not.
 //
-// "is_upcoming" is a broadcast that has not started, and it really does come
-// back from this tab — measured on NASA, an is_upcoming sorted above two
-// is_live entries. Pressing it plays nothing, so listing it under a red dot
-// would be the dead control §5 forbids, wearing the one badge that promises
-// something is happening.
-func TestLiveScanCountsOnlyWhatIsOnAir(t *testing.T) {
+// Recording is not listing. "is_upcoming" never reaches the Live chip — that
+// query asks for is_live — because pressing it plays nothing, and an item that
+// does nothing when pressed is the dead control §5 forbids, here wearing the
+// one badge that promises something is happening.
+//
+// But it has to be *stored*, and not storing it was its own fault. A scheduled
+// broadcast appears in Home like any other video, and with nothing recorded the
+// stream route had no idea: measured on mYPF7KARk5Q, a subscribed channel's
+// stream, yt-dlp answers "This live event will begin in a few moments" while
+// the app offered HLS and a mux built from adaptive tracks that do not exist
+// yet, and the player showed a generic failure.
+func TestLiveScanRecordsWhatIsOnAirAndWhatIsComing(t *testing.T) {
 	fetch := &streamsDownloader{entries: []domain.ExternalVideo{
 		{ID: "upcoming", LiveStatus: "is_upcoming"},
 		{ID: "onair", LiveStatus: "is_live"},
@@ -96,8 +102,22 @@ func TestLiveScanCountsOnlyWhatIsOnAir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(lib.added) != 1 || lib.added[0] != "onair" {
-		t.Fatalf("wrote %v, want only the video that is on air", lib.added)
+	// A finished broadcast and an ordinary video are neither: the first is
+	// already an ordinary video with an ordinary recording, and the second was
+	// never anything else.
+	if len(lib.added) != 2 {
+		t.Fatalf("wrote %v, want the live one and the scheduled one only", lib.added)
+	}
+	got := map[string]string{}
+	for id, v := range lib.channels {
+		got[id] = v.LiveStatus
+	}
+	if got["onair"] != "is_live" {
+		t.Errorf("on air recorded as %q", got["onair"])
+	}
+	if got["upcoming"] != "is_upcoming" {
+		t.Errorf("scheduled recorded as %q — the stream route reads this to say\n"+
+			"\"not started yet\" instead of offering tiers that cannot work", got["upcoming"])
 	}
 }
 
