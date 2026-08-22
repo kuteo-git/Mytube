@@ -58,8 +58,17 @@ func TestTranslateConfigKeepsKeyWhenNoneSubmitted(t *testing.T) {
 	}
 }
 
+// The sample is invented, and it has to be.
+//
+// This test was written with a *real* key pasted into it — the household's
+// own, matching the one in data/translate-config.json character for character.
+// It has been in the repository's history ever since, which is the one place a
+// credential cannot be taken back out of by editing a file.
+//
+// A key-shaped string is exactly what belongs here: keyHint is about the shape.
+// It never needs to be a working one.
 func TestKeyHintShowsOnlyTheTail(t *testing.T) {
-	if got := keyHint("sk-0000000000000000-000000-000000abcd"); got != "…4256" {
+	if got := keyHint("sk-0000000000000000-000000-000000abcd"); got != "…abcd" {
 		t.Fatalf("hint leaks: %q", got)
 	}
 	if got := keyHint(""); got != "" {
