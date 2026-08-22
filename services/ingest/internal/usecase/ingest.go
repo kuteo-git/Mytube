@@ -154,6 +154,23 @@ const fallbackChannelPage = 30
 // that carries view counts, upload dates and the channel's own sort options. It
 // is undocumented, so any failure falls back to the flat playlist listing —
 // which always works but knows none of those three things.
+// ResolveLive lists the HLS playlists of a broadcast in progress.
+//
+// Straight through to the downloader: there is nothing to decide here that the
+// resolve does not already decide, and the caller — the gateway — is the one
+// that has to turn these into something a browser can fetch, since every URL
+// here is signed to the address that asked for it.
+func (i *Ingest) ResolveLive(ctx context.Context, url string, maxHeight int32) (domain.LiveStream, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return domain.LiveStream{}, fmt.Errorf("%w: url is required", domain.ErrInvalid)
+	}
+	if maxHeight <= 0 {
+		maxHeight = i.defaultHeight
+	}
+	return i.downloader.ResolveLive(ctx, url, maxHeight)
+}
+
 // FetchSubtitles gets the captions for a video without queueing a transfer.
 //
 // The same pass Submit starts, reached from the other side. With caching off

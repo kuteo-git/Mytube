@@ -122,6 +122,18 @@ service IngestService {
   // everyone who reads the call site afterwards.
   rpc FetchSubtitles(FetchSubtitlesRequest) returns (FetchSubtitlesResponse);
 
+  // The HLS renditions of a broadcast still in progress.
+  //
+  // A live video publishes nothing this system's other paths can use: every
+  // format is `m3u8_native`, so the adaptive resolve — which wants a fixed file
+  // with a segment index in it — finds nothing at all. What YouTube does
+  // publish is HLS, which is what the player already speaks.
+  //
+  // Separate from ResolveTracks because the two answer different questions from
+  // different shapes: one indexes a finished file, this hands over playlists
+  // that are being appended to.
+  rpc ResolveLive(ResolveLiveRequest) returns (ResolveLiveResponse);
+
   // Fetches comments for a video from YouTube via yt-dlp. Returns every comment
   // in one call — yt-dlp's --write-comments has no pagination — so the gateway
   // batches them into catalog and the frontend paginates from there.
@@ -163,6 +175,31 @@ message FetchSubtitlesRequest {
 // Empty: the fetch runs in the background and nothing waits on it. A video
 // without captions is a working video.
 message FetchSubtitlesResponse {}
+
+message ResolveLiveRequest {
+  string url = 1;
+  // The tallest rendition to offer. Live is watched as it happens, so the
+  // ladder matters more here than for a file that will be on disk in seconds.
+  int32 max_height = 2;
+}
+
+// LiveRendition is one of YouTube's own HLS playlists, handed over as it is.
+message LiveRendition {
+  string url = 1;
+  string codec = 2;
+  int32 width = 3;
+  int32 height = 4;
+  int32 bitrate = 5;
+  // True for the sound-only playlists. YouTube publishes no combined rendition
+  // and no master, so the two have to be described together by whoever builds
+  // the playlist the browser sees.
+  bool audio_only = 6;
+}
+
+message ResolveLiveResponse {
+  bool is_live = 1;
+  repeated LiveRendition renditions = 2;
+}
 
 message ResolveChannelRequest {
   // A handle ("@mkbhd"), a bare channel id, or a full channel address.

@@ -42,6 +42,12 @@ func (f *fakeDownloader) Download(context.Context, string, string, int32, func(d
 	return domain.DownloadResult{MediaPath: "vid1/1080p.mp4", SizeBytes: 1234}, nil
 }
 
+// Live is refused as a download and resolved by its own path; nothing in
+// these tests goes near it, and "not broadcasting" is the honest stub.
+func (f *fakeDownloader) ResolveLive(context.Context, string, int32) (domain.LiveStream, error) {
+	return domain.LiveStream{}, nil
+}
+
 func (f *fakeDownloader) ChannelInfo(context.Context, string) (domain.ChannelMetadata, error) {
 	return domain.ChannelMetadata{}, nil
 }

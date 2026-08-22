@@ -186,6 +186,12 @@ func (g *Gateway) Routes() http.Handler {
 	// The browser combines the two adaptive tracks itself; this only carries the
 	// playlists and the byte ranges they name. See ingest's httpapi/hls.go.
 	mux.HandleFunc("GET /api/videos/{id}/hls/{name}", g.handleHLS)
+	// A broadcast still on air. Nothing here is built from a file: these are
+	// YouTube's own HLS playlists, proxied because their URLs are signed to
+	// this address and because googlevideo sends no CORS header.
+	mux.HandleFunc("GET /api/live/{id}/master.m3u8", g.handleLiveMaster)
+	mux.HandleFunc("GET /api/live/{id}/playlist.m3u8", g.handleLivePlaylist)
+	mux.HandleFunc("GET /api/live/{id}/segment", g.handleLiveSegment)
 	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
 
 	// Downloads are never requested directly: they are a side effect of asking

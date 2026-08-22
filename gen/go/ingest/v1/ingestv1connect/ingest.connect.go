@@ -106,6 +106,9 @@ const (
 	// IngestServiceFetchSubtitlesProcedure is the fully-qualified name of the IngestService's
 	// FetchSubtitles RPC.
 	IngestServiceFetchSubtitlesProcedure = "/ingest.v1.IngestService/FetchSubtitles"
+	// IngestServiceResolveLiveProcedure is the fully-qualified name of the IngestService's ResolveLive
+	// RPC.
+	IngestServiceResolveLiveProcedure = "/ingest.v1.IngestService/ResolveLive"
 	// IngestServiceFetchCommentsProcedure is the fully-qualified name of the IngestService's
 	// FetchComments RPC.
 	IngestServiceFetchCommentsProcedure = "/ingest.v1.IngestService/FetchComments"
@@ -211,6 +214,17 @@ type IngestServiceClient interface {
 	// transfer, and a flag that stops it doing that is a name that lies to
 	// everyone who reads the call site afterwards.
 	FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error)
+	// The HLS renditions of a broadcast still in progress.
+	//
+	// A live video publishes nothing this system's other paths can use: every
+	// format is `m3u8_native`, so the adaptive resolve — which wants a fixed file
+	// with a segment index in it — finds nothing at all. What YouTube does
+	// publish is HLS, which is what the player already speaks.
+	//
+	// Separate from ResolveTracks because the two answer different questions from
+	// different shapes: one indexes a finished file, this hands over playlists
+	// that are being appended to.
+	ResolveLive(context.Context, *connect.Request[v1.ResolveLiveRequest]) (*connect.Response[v1.ResolveLiveResponse], error)
 	// Fetches comments for a video from YouTube via yt-dlp. Returns every comment
 	// in one call — yt-dlp's --write-comments has no pagination — so the gateway
 	// batches them into catalog and the frontend paginates from there.
@@ -390,6 +404,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("FetchSubtitles")),
 			connect.WithClientOptions(opts...),
 		),
+		resolveLive: connect.NewClient[v1.ResolveLiveRequest, v1.ResolveLiveResponse](
+			httpClient,
+			baseURL+IngestServiceResolveLiveProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("ResolveLive")),
+			connect.WithClientOptions(opts...),
+		),
 		fetchComments: connect.NewClient[v1.FetchCommentsRequest, v1.FetchCommentsResponse](
 			httpClient,
 			baseURL+IngestServiceFetchCommentsProcedure,
@@ -428,6 +448,7 @@ type ingestServiceClient struct {
 	listChannelUploads   *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
 	resolveChannel       *connect.Client[v1.ResolveChannelRequest, v1.ResolveChannelResponse]
 	fetchSubtitles       *connect.Client[v1.FetchSubtitlesRequest, v1.FetchSubtitlesResponse]
+	resolveLive          *connect.Client[v1.ResolveLiveRequest, v1.ResolveLiveResponse]
 	fetchComments        *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
 }
 
@@ -566,6 +587,11 @@ func (c *ingestServiceClient) FetchSubtitles(ctx context.Context, req *connect.R
 	return c.fetchSubtitles.CallUnary(ctx, req)
 }
 
+// ResolveLive calls ingest.v1.IngestService.ResolveLive.
+func (c *ingestServiceClient) ResolveLive(ctx context.Context, req *connect.Request[v1.ResolveLiveRequest]) (*connect.Response[v1.ResolveLiveResponse], error) {
+	return c.resolveLive.CallUnary(ctx, req)
+}
+
 // FetchComments calls ingest.v1.IngestService.FetchComments.
 func (c *ingestServiceClient) FetchComments(ctx context.Context, req *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error) {
 	return c.fetchComments.CallUnary(ctx, req)
@@ -671,6 +697,17 @@ type IngestServiceHandler interface {
 	// transfer, and a flag that stops it doing that is a name that lies to
 	// everyone who reads the call site afterwards.
 	FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error)
+	// The HLS renditions of a broadcast still in progress.
+	//
+	// A live video publishes nothing this system's other paths can use: every
+	// format is `m3u8_native`, so the adaptive resolve — which wants a fixed file
+	// with a segment index in it — finds nothing at all. What YouTube does
+	// publish is HLS, which is what the player already speaks.
+	//
+	// Separate from ResolveTracks because the two answer different questions from
+	// different shapes: one indexes a finished file, this hands over playlists
+	// that are being appended to.
+	ResolveLive(context.Context, *connect.Request[v1.ResolveLiveRequest]) (*connect.Response[v1.ResolveLiveResponse], error)
 	// Fetches comments for a video from YouTube via yt-dlp. Returns every comment
 	// in one call — yt-dlp's --write-comments has no pagination — so the gateway
 	// batches them into catalog and the frontend paginates from there.
@@ -846,6 +883,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("FetchSubtitles")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceResolveLiveHandler := connect.NewUnaryHandler(
+		IngestServiceResolveLiveProcedure,
+		svc.ResolveLive,
+		connect.WithSchema(ingestServiceMethods.ByName("ResolveLive")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceFetchCommentsHandler := connect.NewUnaryHandler(
 		IngestServiceFetchCommentsProcedure,
 		svc.FetchComments,
@@ -908,6 +951,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceResolveChannelHandler.ServeHTTP(w, r)
 		case IngestServiceFetchSubtitlesProcedure:
 			ingestServiceFetchSubtitlesHandler.ServeHTTP(w, r)
+		case IngestServiceResolveLiveProcedure:
+			ingestServiceResolveLiveHandler.ServeHTTP(w, r)
 		case IngestServiceFetchCommentsProcedure:
 			ingestServiceFetchCommentsHandler.ServeHTTP(w, r)
 		default:
@@ -1025,6 +1070,10 @@ func (UnimplementedIngestServiceHandler) ResolveChannel(context.Context, *connec
 
 func (UnimplementedIngestServiceHandler) FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.FetchSubtitles is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) ResolveLive(context.Context, *connect.Request[v1.ResolveLiveRequest]) (*connect.Response[v1.ResolveLiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ResolveLive is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) FetchComments(context.Context, *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error) {

@@ -1,0 +1,60 @@
+<!doctype html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font:15px -apple-system,system-ui,sans-serif;margin:0;padding:16px;background:#0f0f0f;color:#f1f1f1}
+video{width:100%;background:#000;border-radius:8px}button{font:inherit;padding:12px 18px;margin:6px 6px 0 0;border:0;border-radius:999px;background:#272727;color:#f1f1f1}
+#log{margin-top:12px;padding:10px;background:#181818;border-radius:8px;white-space:pre-wrap;word-break:break-all;font:12px/1.45 ui-monospace,Menlo,monospace}
+.ok{color:#6ee787}.bad{color:#ff7b72}.note{color:#aaa}</style>
+<!--
+  Can this device watch a broadcast that is still on air?
+
+  Everything else here is built from a finished file. A live video publishes no
+  such file — measured on a real broadcast, all seven formats were m3u8_native
+  and not one was a plain https file — so the tiers that index byte ranges have
+  nothing to work with. What YouTube does publish is HLS, proxied and rewritten
+  by /api/live because those URLs are signed to the server's address and because
+  googlevideo sends no CORS header at all.
+
+  What is still unknown, and what this page is for: the segments are MPEG-TS,
+  not the fragmented MP4 every other tier serves. Whether Safari and hls.js
+  accept them through a proxy is not something reading the code can answer.
+-->
+<h3 style="margin:0 0 4px">Live check</h3>
+<p class="note" style="margin:0 0 12px">A broadcast still on air, through this server.</p>
+<video id=v playsinline controls muted></video>
+<button id=play>Play</button>
+<button id=back>Back 60s</button>
+<div id=log>ready</div>
+<script type="module">
+const id = new URLSearchParams(location.search).get('v') || 'iipR5yUp36o'
+const url = `/api/live/${id}/master.m3u8`
+const out = document.getElementById('log'), v = document.getElementById('v')
+const lines = []
+const sink = new URLSearchParams(location.search).get('sink')
+const say = (t, c='') => { const line = `${(performance.now()/1000).toFixed(1)}s  ${t}`; lines.push(`<span class="${c}">${line}</span>`); out.innerHTML = lines.slice(-25).join('\n'); if (sink) fetch(sink, { method: 'POST', body: line, mode: 'no-cors' }).catch(() => {}) }
+
+say(`native HLS: ${JSON.stringify(v.canPlayType('application/vnd.apple.mpegurl'))} | MediaSource: ${typeof MediaSource} | ManagedMediaSource: ${typeof ManagedMediaSource}`, 'note')
+say(url, 'note')
+
+for (const e of ['loadedmetadata','playing','waiting','stalled','error'])
+  v.addEventListener(e, () => say(`${e} t=${v.currentTime.toFixed(1)} seekable=${v.seekable.length?`${v.seekable.start(0).toFixed(0)}..${v.seekable.end(0).toFixed(0)}`:'-'} ${v.error?`code ${v.error.code}`:''}`, e==='error'?'bad':e==='playing'?'ok':''))
+
+const native = 'ManagedMediaSource' in window || (navigator.vendor === 'Apple Computer, Inc.' && !/Chrome|Chromium|Edg\//.test(navigator.userAgent))
+if (native) {
+  say('using native HLS', 'note')
+  v.src = url
+} else {
+  const { default: Hls } = await import('/node_modules/hls.js/dist/hls.mjs')
+  say(`hls.js supported: ${Hls.isSupported()}`, Hls.isSupported() ? 'ok' : 'bad')
+  const hls = new Hls()
+  hls.on(Hls.Events.ERROR, (_e, d) => say(`hls.js ${d.type} ${d.details} fatal=${d.fatal}`, d.fatal ? 'bad' : 'note'))
+  hls.on(Hls.Events.MANIFEST_PARSED, () => say(`levels: ${hls.levels.map(l => l.height + 'p').join(', ')}`, 'ok'))
+  hls.loadSource(url); hls.attachMedia(v)
+}
+document.getElementById('play').onclick = () => v.play().then(() => say('play() accepted','ok'), e => say(`play() refused: ${e.name}`,'bad'))
+document.getElementById('back').onclick = () => { const t = Math.max(v.seekable.length ? v.seekable.start(0) : 0, v.currentTime - 60); say(`seeking back to ${t.toFixed(0)}`); v.currentTime = t }
+const q = new URLSearchParams(location.search)
+if (q.get('auto')) setTimeout(() => v.play().catch(() => {}), 1500)
+// Rewinding is the whole question for a broadcast: a live playlist keeps only a
+// window, and how far back it reaches is a property of YouTube's, not ours.
+if (q.get('back')) setTimeout(() => document.getElementById('back').click(), Number(q.get('back')))
+</script>

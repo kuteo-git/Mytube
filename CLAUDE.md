@@ -74,6 +74,29 @@ The player opens on the best tier the browser can play — `local` if it is ther
 - **A refused segment drops the cached URLs and resolves once more.** Only the playlist path did that, and the playlist is fetched once at the start — so a signed URL dying mid-video broke every remaining segment for the rest of the 90-minute TTL while nothing re-resolved, and the player could report only a stream that stopped.
 - **Autoplay still does not happen on iOS, and that is §5's decision, not a fault.** Audible autoplay needs a gesture Safari has not been given; the first frame sits still rather than the video playing muted.
 
+### A broadcast still on air is its own tier (2026-08-22)
+
+**A live video publishes no file, so nothing else here can play it.** Measured on `iipR5yUp36o` (ABC News Live, `is_live`, `duration: None`): **all seven formats are `m3u8_native`** — five video-only avc1 rungs from 144p to 720p, two audio-only — and **not one plain https URL among them**. `resolveTracksOnce` filters on https, so live resolved to nothing at all; the local, HLS and remux tiers all begin from a file with an index, and there is no file.
+
+Measured end to end through this server, Chrome and hls.js:
+
+| | |
+|---|---|
+| ladder | **144p, 240p, 360p, 480p, 720p** |
+| opens at | `t=3589.7` — the live edge, not zero |
+| `seekable` | **0..3605** — an hour of rewind |
+| rewinding 60s | `playing` again **0.4s** later |
+
+Confirmed on the household's iPhone as well, which is the reading that mattered: Safari plays it natively.
+
+- **The segments are MPEG-TS, and that was the open question.** Every other tier serves fragmented MP4. Reading the code could not answer whether Safari and hls.js accept `.ts` through a proxy, so it was measured rather than assumed.
+- **The proxy is not a preference.** googlevideo answers a browser's request with **200 and no `access-control-allow-origin` at all**, so a page cannot fetch these playlists directly whatever the URL says. `/api/live/{id}/master.m3u8` builds the master, `/playlist.m3u8` rewrites the media playlist's segment URLs, and `/segment` carries the bytes — the same reason `/instant` was proxied, arriving from CORS instead of from signing.
+- **The signed URL travels base64'd in the query, behind a `.googlevideo.com` host allowlist.** Without the allowlist the segment route is an open proxy to anywhere on the internet, reachable by anyone on the LAN.
+- **Rewinding is YouTube's window, not ours.** `playlist_duration/3600` is where the hour comes from; there is nothing on this side to extend it.
+- **`expire` is about six hours out**, so a playlist held open longer than that stops serving and has to be resolved again. Not yet measured, and recorded as unmeasured.
+- **Nothing about this tier downloads.** §4 already refuses a live broadcast as a download job — it has no end to download to, and one occupied the single worker slot for hours. That rule is untouched and is exactly why watching one needs a tier of its own.
+- `web/public/live-check.html` is the page these numbers came from, kept for the same reason as `hls-eq-check.html`: the question returns with every browser release, and reading a library's source is not the same as playing a broadcast on the device.
+
 ### itag 18 stopped serving, so it stopped being a tier (2026-08-18)
 
 **The opening tier is the muxed stream.** This reverses the rule that stood here before it — that 480p/720p cannot be the *opening* tier because itag 18 is the only progressive format YouTube publishes. That was true and is now beside the point: itag 18 is published and does not play.

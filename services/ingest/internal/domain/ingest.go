@@ -180,6 +180,10 @@ type Downloader interface {
 	// ChannelInfo reads a channel's own metadata — artwork, handle, subscriber
 	// count — none of which appears in a flat playlist listing.
 	ChannelInfo(ctx context.Context, channelURL string) (ChannelMetadata, error)
+	// ResolveLive lists the HLS playlists of a broadcast still in progress.
+	// Live publishes no https file at all, so the adaptive resolve finds
+	// nothing; what it does publish is HLS.
+	ResolveLive(ctx context.Context, videoURL string, maxHeight int32) (LiveStream, error)
 	// FetchChannelArtwork downloads the avatar and banner and returns their
 	// paths under the media root. A failure to fetch either is decoration lost,
 	// never an error: the returned path is simply empty.
@@ -433,4 +437,22 @@ type RelatedSource interface {
 type CursorStore interface {
 	NextOffset(ctx context.Context, sourceURL string) (int32, error)
 	AdvanceOffset(ctx context.Context, sourceURL string, by int32) error
+}
+
+// LiveRendition is one of YouTube's own HLS playlists for a broadcast in
+// progress, handed over as it stands rather than rebuilt.
+type LiveRendition struct {
+	URL       string
+	Codec     string
+	Width     int
+	Height    int
+	Bitrate   int
+	AudioOnly bool
+}
+
+// LiveStream is what a live video offers. Empty renditions with IsLive false is
+// the ordinary answer for a video that is not broadcasting.
+type LiveStream struct {
+	IsLive     bool
+	Renditions []LiveRendition
 }
