@@ -9,6 +9,18 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'localyoutube') \gexec
 
 \connect localyoutube
 
+-- Accent-insensitive search, needed by catalog migration 0005.
+--
+-- Here rather than in the migration that uses it, because creating an
+-- extension needs a privilege the service roles do not have and should not be
+-- given: 0005 runs as catalog_svc and fails with "permission denied to create
+-- extension". This file is the one that runs as a superuser.
+--
+-- It was missing, and the live database has the extension only because somebody
+-- created it by hand and never wrote it down — so every fresh install failed at
+-- 0005 and the instructions could not say why.
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
 DO $$
 DECLARE
   svc text;
