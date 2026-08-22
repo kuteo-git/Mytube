@@ -1526,3 +1526,90 @@ func (r *Repository) queryStalePlaylists(ctx context.Context, query string, limi
 	}
 	return out, rows.Err()
 }
+
+// DeleteUserData removes everything keyed to one member, or counts it without
+// removing anything when dryRun is set.
+//
+// One transaction, and one list of tables. A half-finished delete is worse than
+// none — it leaves a member who is gone from the picker and still present in
+// the ranker — and two lists, one for counting and one for deleting, would be
+// two definitions of "what belongs to this profile" that agree until the day
+// they do not.
+//
+// `videos` and `channels` are absent on purpose. They carry no user_id: the
+// library is the household's, and `videos.channel_id -> channels ON DELETE
+// CASCADE` would turn removing one channel into removing every video of it,
+// with every other member's history, reactions and playlists going down with
+// them. 621 of this library's 708 channels arrived through ExpandLibrary rather
+// than anyone's subscription, so "nobody is subscribed" is not "nobody wants
+// it".
+//
+// `playlist_items` is absent for the opposite reason: it is keyed by playlist,
+// and `playlist_items.playlist_id -> playlists ON DELETE CASCADE` already takes
+// it.
+func (r *Repository) DeleteUserData(
+	ctx context.Context, userID string, dryRun bool,
+) (domain.UserDataCounts, error) {
+	var counts domain.UserDataCounts
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return counts, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Counted first either way, so a dry run and a real one answer with the
+	// same numbers for the same member — the dialog shows these and then the
+	// delete reports them back.
+	tables := []struct {
+		name  string
+		into  *int64
+	}{
+		{"subscriptions", &counts.Subscriptions},
+		{"watch_progress", &counts.WatchProgress},
+		{"reactions", &counts.Reactions},
+		{"saved", &counts.Saved},
+		{"watch_later", &counts.WatchLater},
+		{"playlists", &counts.Playlists},
+		{"comments", &counts.Comments},
+	}
+	for _, t := range tables {
+		// The table name is a literal from the slice above, never from a
+		// caller: there is nothing here for a parameter to carry.
+		if err := tx.QueryRow(ctx,
+			`SELECT count(*) FROM `+t.name+` WHERE user_id = $1`, userID).Scan(t.into); err != nil {
+			return domain.UserDataCounts{}, err
+		}
+	}
+
+	if dryRun {
+		// Rolled back by the deferred call. Nothing was written, and the counts
+		// were read inside the same snapshot the real run would have used.
+		return counts, nil
+	}
+
+	for _, t := range tables {
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM `+t.name+` WHERE user_id = $1`, userID); err != nil {
+			return domain.UserDataCounts{}, err
+		}
+	}
+
+	// `pinned` is derived from `saved` (§6b), and the rows that derived it have
+	// just gone. Without this, a video kept only because this member saved it
+	// stays pinned for ever — invisible to the eviction sweep, holding disk
+	// against a 300 GiB budget with nobody left who wanted it.
+	//
+	// Narrowed to videos that were pinned, so this is not a full-table update on
+	// every profile deletion.
+	if _, err := tx.Exec(ctx, `
+		UPDATE videos v SET pinned = EXISTS (SELECT 1 FROM saved s WHERE s.video_id = v.id)
+		WHERE v.pinned`); err != nil {
+		return domain.UserDataCounts{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return domain.UserDataCounts{}, err
+	}
+	return counts, nil
+}

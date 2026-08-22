@@ -238,6 +238,9 @@ type Repository interface {
 	GetChannel(ctx context.Context, channelID, userID string) (Channel, int32, error)
 	// By the name a pasted address usually carries. See the note on the query.
 	GetChannelByHandle(ctx context.Context, handle, userID string) (Channel, int32, error)
+	// DeleteUserData removes everything keyed to one member, or counts it when
+	// dryRun is set. One method for both: see UserDataCounts.
+	DeleteUserData(ctx context.Context, userID string, dryRun bool) (UserDataCounts, error)
 	ListTopics(ctx context.Context, minVideoCount int32) ([]Topic, error)
 	ListVideoFeatures(ctx context.Context, page Page) ([]VideoFeatures, error)
 
@@ -291,4 +294,24 @@ type Repository interface {
 	GetStorageUsage(ctx context.Context, budgetBytes int64) (StorageUsage, error)
 	SetPinned(ctx context.Context, userID, videoID string, pinned bool) error
 	ListPinnedVideos(ctx context.Context, userID string, page Page) ([]Video, error)
+}
+
+// UserDataCounts is what one member owns in this catalog, table by table.
+//
+// Named per table rather than totalled, because these numbers are read out to
+// somebody deciding whether to delete a profile, and "889 videos watched" stops
+// a person in a way "1,354 rows" does not.
+//
+// What is absent from this list is the point of it: videos and channels. They
+// carry no user_id — they belong to the household — and `videos.channel_id ->
+// channels ON DELETE CASCADE` means removing a channel would take every video
+// of it, and with them every other member's history, reactions and playlists.
+type UserDataCounts struct {
+	Subscriptions int64
+	WatchProgress int64
+	Reactions     int64
+	Saved         int64
+	WatchLater    int64
+	Playlists     int64
+	Comments      int64
 }

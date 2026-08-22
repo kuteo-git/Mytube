@@ -903,6 +903,110 @@ func (*RecordImpressionsResponse) Descriptor() ([]byte, []int) {
 	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{11}
 }
 
+type DeleteUserDataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	DryRun        bool                   `protobuf:"varint,2,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserDataRequest) Reset() {
+	*x = DeleteUserDataRequest{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserDataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserDataRequest) ProtoMessage() {}
+
+func (x *DeleteUserDataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserDataRequest.ProtoReflect.Descriptor instead.
+func (*DeleteUserDataRequest) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *DeleteUserDataRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *DeleteUserDataRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+type DeleteUserDataResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Signals       int64                  `protobuf:"varint,1,opt,name=signals,proto3" json:"signals,omitempty"`
+	Impressions   int64                  `protobuf:"varint,2,opt,name=impressions,proto3" json:"impressions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserDataResponse) Reset() {
+	*x = DeleteUserDataResponse{}
+	mi := &file_recsys_v1_recsys_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserDataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserDataResponse) ProtoMessage() {}
+
+func (x *DeleteUserDataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_recsys_v1_recsys_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserDataResponse.ProtoReflect.Descriptor instead.
+func (*DeleteUserDataResponse) Descriptor() ([]byte, []int) {
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *DeleteUserDataResponse) GetSignals() int64 {
+	if x != nil {
+		return x.Signals
+	}
+	return 0
+}
+
+func (x *DeleteUserDataResponse) GetImpressions() int64 {
+	if x != nil {
+		return x.Impressions
+	}
+	return 0
+}
+
 type ExplainFeedRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -918,7 +1022,7 @@ type ExplainFeedRequest struct {
 
 func (x *ExplainFeedRequest) Reset() {
 	*x = ExplainFeedRequest{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[12]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -930,7 +1034,7 @@ func (x *ExplainFeedRequest) String() string {
 func (*ExplainFeedRequest) ProtoMessage() {}
 
 func (x *ExplainFeedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[12]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -943,7 +1047,7 @@ func (x *ExplainFeedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainFeedRequest.ProtoReflect.Descriptor instead.
 func (*ExplainFeedRequest) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{12}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ExplainFeedRequest) GetUserId() string {
@@ -1009,7 +1113,7 @@ type VideoExplanation struct {
 
 func (x *VideoExplanation) Reset() {
 	*x = VideoExplanation{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[13]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1021,7 +1125,7 @@ func (x *VideoExplanation) String() string {
 func (*VideoExplanation) ProtoMessage() {}
 
 func (x *VideoExplanation) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[13]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1034,7 +1138,7 @@ func (x *VideoExplanation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VideoExplanation.ProtoReflect.Descriptor instead.
 func (*VideoExplanation) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{13}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *VideoExplanation) GetVideoId() string {
@@ -1097,7 +1201,7 @@ type ExplainFeedResponse struct {
 
 func (x *ExplainFeedResponse) Reset() {
 	*x = ExplainFeedResponse{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[14]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1109,7 +1213,7 @@ func (x *ExplainFeedResponse) String() string {
 func (*ExplainFeedResponse) ProtoMessage() {}
 
 func (x *ExplainFeedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[14]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1122,7 +1226,7 @@ func (x *ExplainFeedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainFeedResponse.ProtoReflect.Descriptor instead.
 func (*ExplainFeedResponse) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{14}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ExplainFeedResponse) GetVideos() []*VideoExplanation {
@@ -1172,7 +1276,7 @@ type RankingTuning struct {
 
 func (x *RankingTuning) Reset() {
 	*x = RankingTuning{}
-	mi := &file_recsys_v1_recsys_proto_msgTypes[15]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1184,7 +1288,7 @@ func (x *RankingTuning) String() string {
 func (*RankingTuning) ProtoMessage() {}
 
 func (x *RankingTuning) ProtoReflect() protoreflect.Message {
-	mi := &file_recsys_v1_recsys_proto_msgTypes[15]
+	mi := &file_recsys_v1_recsys_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1197,7 +1301,7 @@ func (x *RankingTuning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RankingTuning.ProtoReflect.Descriptor instead.
 func (*RankingTuning) Descriptor() ([]byte, []int) {
-	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{15}
+	return file_recsys_v1_recsys_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RankingTuning) GetSessionBlend() float64 {
@@ -1304,7 +1408,13 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\x18RecordImpressionsRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tvideo_ids\x18\x02 \x03(\tR\bvideoIds\"\x1b\n" +
-	"\x19RecordImpressionsResponse\"\xbf\x01\n" +
+	"\x19RecordImpressionsResponse\"I\n" +
+	"\x15DeleteUserDataRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x17\n" +
+	"\adry_run\x18\x02 \x01(\bR\x06dryRun\"T\n" +
+	"\x16DeleteUserDataResponse\x12\x18\n" +
+	"\asignals\x18\x01 \x01(\x03R\asignals\x12 \n" +
+	"\vimpressions\x18\x02 \x01(\x03R\vimpressions\"\xbf\x01\n" +
 	"\x12ExplainFeedRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12$\n" +
@@ -1361,13 +1471,14 @@ const file_recsys_v1_recsys_proto_rawDesc = "" +
 	"\x15SIGNAL_TYPE_SUBSCRIBE\x10\x04\x12\x1b\n" +
 	"\x17SIGNAL_TYPE_UNSUBSCRIBE\x10\x05\x12\x16\n" +
 	"\x12SIGNAL_TYPE_SEARCH\x10\x06\x12\x14\n" +
-	"\x10SIGNAL_TYPE_SKIP\x10\a2\xf7\x03\n" +
+	"\x10SIGNAL_TYPE_SKIP\x10\a2\xce\x04\n" +
 	"\x15RecommendationService\x12@\n" +
 	"\aGetFeed\x12\x19.recsys.v1.GetFeedRequest\x1a\x1a.recsys.v1.GetFeedResponse\x12F\n" +
 	"\tGetUpNext\x12\x1b.recsys.v1.GetUpNextRequest\x1a\x1c.recsys.v1.GetUpNextResponse\x12U\n" +
 	"\x0eGetMostWatched\x12 .recsys.v1.GetMostWatchedRequest\x1a!.recsys.v1.GetMostWatchedResponse\x12O\n" +
 	"\fRecordSignal\x12\x1e.recsys.v1.RecordSignalRequest\x1a\x1f.recsys.v1.RecordSignalResponse\x12^\n" +
-	"\x11RecordImpressions\x12#.recsys.v1.RecordImpressionsRequest\x1a$.recsys.v1.RecordImpressionsResponse\x12L\n" +
+	"\x11RecordImpressions\x12#.recsys.v1.RecordImpressionsRequest\x1a$.recsys.v1.RecordImpressionsResponse\x12U\n" +
+	"\x0eDeleteUserData\x12 .recsys.v1.DeleteUserDataRequest\x1a!.recsys.v1.DeleteUserDataResponse\x12L\n" +
 	"\vExplainFeed\x12\x1d.recsys.v1.ExplainFeedRequest\x1a\x1e.recsys.v1.ExplainFeedResponseB\x9f\x01\n" +
 	"\rcom.recsys.v1B\vRecsysProtoP\x01Z<github.com/lucnguyen/local-youtube/gen/go/recsys/v1;recsysv1\xa2\x02\x03RXX\xaa\x02\tRecsys.V1\xca\x02\tRecsys\\V1\xe2\x02\x15Recsys\\V1\\GPBMetadata\xea\x02\n" +
 	"Recsys::V1b\x06proto3"
@@ -1385,7 +1496,7 @@ func file_recsys_v1_recsys_proto_rawDescGZIP() []byte {
 }
 
 var file_recsys_v1_recsys_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_recsys_v1_recsys_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_recsys_v1_recsys_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_recsys_v1_recsys_proto_goTypes = []any{
 	(RecommendationReason)(0),         // 0: recsys.v1.RecommendationReason
 	(SignalType)(0),                   // 1: recsys.v1.SignalType
@@ -1401,41 +1512,45 @@ var file_recsys_v1_recsys_proto_goTypes = []any{
 	(*RecordSignalResponse)(nil),      // 11: recsys.v1.RecordSignalResponse
 	(*RecordImpressionsRequest)(nil),  // 12: recsys.v1.RecordImpressionsRequest
 	(*RecordImpressionsResponse)(nil), // 13: recsys.v1.RecordImpressionsResponse
-	(*ExplainFeedRequest)(nil),        // 14: recsys.v1.ExplainFeedRequest
-	(*VideoExplanation)(nil),          // 15: recsys.v1.VideoExplanation
-	(*ExplainFeedResponse)(nil),       // 16: recsys.v1.ExplainFeedResponse
-	(*RankingTuning)(nil),             // 17: recsys.v1.RankingTuning
-	nil,                               // 18: recsys.v1.VideoExplanation.ComponentsEntry
-	(*timestamppb.Timestamp)(nil),     // 19: google.protobuf.Timestamp
+	(*DeleteUserDataRequest)(nil),     // 14: recsys.v1.DeleteUserDataRequest
+	(*DeleteUserDataResponse)(nil),    // 15: recsys.v1.DeleteUserDataResponse
+	(*ExplainFeedRequest)(nil),        // 16: recsys.v1.ExplainFeedRequest
+	(*VideoExplanation)(nil),          // 17: recsys.v1.VideoExplanation
+	(*ExplainFeedResponse)(nil),       // 18: recsys.v1.ExplainFeedResponse
+	(*RankingTuning)(nil),             // 19: recsys.v1.RankingTuning
+	nil,                               // 20: recsys.v1.VideoExplanation.ComponentsEntry
+	(*timestamppb.Timestamp)(nil),     // 21: google.protobuf.Timestamp
 }
 var file_recsys_v1_recsys_proto_depIdxs = []int32{
 	0,  // 0: recsys.v1.RankedVideo.reason:type_name -> recsys.v1.RecommendationReason
 	3,  // 1: recsys.v1.GetFeedRequest.mix:type_name -> recsys.v1.FeedMix
-	17, // 2: recsys.v1.GetFeedRequest.tuning:type_name -> recsys.v1.RankingTuning
+	19, // 2: recsys.v1.GetFeedRequest.tuning:type_name -> recsys.v1.RankingTuning
 	2,  // 3: recsys.v1.GetFeedResponse.videos:type_name -> recsys.v1.RankedVideo
 	2,  // 4: recsys.v1.GetMostWatchedResponse.videos:type_name -> recsys.v1.RankedVideo
 	2,  // 5: recsys.v1.GetUpNextResponse.videos:type_name -> recsys.v1.RankedVideo
 	1,  // 6: recsys.v1.RecordSignalRequest.type:type_name -> recsys.v1.SignalType
-	19, // 7: recsys.v1.RecordSignalRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	21, // 7: recsys.v1.RecordSignalRequest.occurred_at:type_name -> google.protobuf.Timestamp
 	3,  // 8: recsys.v1.ExplainFeedRequest.mix:type_name -> recsys.v1.FeedMix
-	17, // 9: recsys.v1.ExplainFeedRequest.tuning:type_name -> recsys.v1.RankingTuning
-	18, // 10: recsys.v1.VideoExplanation.components:type_name -> recsys.v1.VideoExplanation.ComponentsEntry
+	19, // 9: recsys.v1.ExplainFeedRequest.tuning:type_name -> recsys.v1.RankingTuning
+	20, // 10: recsys.v1.VideoExplanation.components:type_name -> recsys.v1.VideoExplanation.ComponentsEntry
 	0,  // 11: recsys.v1.VideoExplanation.reason:type_name -> recsys.v1.RecommendationReason
-	15, // 12: recsys.v1.ExplainFeedResponse.videos:type_name -> recsys.v1.VideoExplanation
+	17, // 12: recsys.v1.ExplainFeedResponse.videos:type_name -> recsys.v1.VideoExplanation
 	4,  // 13: recsys.v1.RecommendationService.GetFeed:input_type -> recsys.v1.GetFeedRequest
 	8,  // 14: recsys.v1.RecommendationService.GetUpNext:input_type -> recsys.v1.GetUpNextRequest
 	6,  // 15: recsys.v1.RecommendationService.GetMostWatched:input_type -> recsys.v1.GetMostWatchedRequest
 	10, // 16: recsys.v1.RecommendationService.RecordSignal:input_type -> recsys.v1.RecordSignalRequest
 	12, // 17: recsys.v1.RecommendationService.RecordImpressions:input_type -> recsys.v1.RecordImpressionsRequest
-	14, // 18: recsys.v1.RecommendationService.ExplainFeed:input_type -> recsys.v1.ExplainFeedRequest
-	5,  // 19: recsys.v1.RecommendationService.GetFeed:output_type -> recsys.v1.GetFeedResponse
-	9,  // 20: recsys.v1.RecommendationService.GetUpNext:output_type -> recsys.v1.GetUpNextResponse
-	7,  // 21: recsys.v1.RecommendationService.GetMostWatched:output_type -> recsys.v1.GetMostWatchedResponse
-	11, // 22: recsys.v1.RecommendationService.RecordSignal:output_type -> recsys.v1.RecordSignalResponse
-	13, // 23: recsys.v1.RecommendationService.RecordImpressions:output_type -> recsys.v1.RecordImpressionsResponse
-	16, // 24: recsys.v1.RecommendationService.ExplainFeed:output_type -> recsys.v1.ExplainFeedResponse
-	19, // [19:25] is the sub-list for method output_type
-	13, // [13:19] is the sub-list for method input_type
+	14, // 18: recsys.v1.RecommendationService.DeleteUserData:input_type -> recsys.v1.DeleteUserDataRequest
+	16, // 19: recsys.v1.RecommendationService.ExplainFeed:input_type -> recsys.v1.ExplainFeedRequest
+	5,  // 20: recsys.v1.RecommendationService.GetFeed:output_type -> recsys.v1.GetFeedResponse
+	9,  // 21: recsys.v1.RecommendationService.GetUpNext:output_type -> recsys.v1.GetUpNextResponse
+	7,  // 22: recsys.v1.RecommendationService.GetMostWatched:output_type -> recsys.v1.GetMostWatchedResponse
+	11, // 23: recsys.v1.RecommendationService.RecordSignal:output_type -> recsys.v1.RecordSignalResponse
+	13, // 24: recsys.v1.RecommendationService.RecordImpressions:output_type -> recsys.v1.RecordImpressionsResponse
+	15, // 25: recsys.v1.RecommendationService.DeleteUserData:output_type -> recsys.v1.DeleteUserDataResponse
+	18, // 26: recsys.v1.RecommendationService.ExplainFeed:output_type -> recsys.v1.ExplainFeedResponse
+	20, // [20:27] is the sub-list for method output_type
+	13, // [13:20] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
 	13, // [13:13] is the sub-list for extension extendee
 	0,  // [0:13] is the sub-list for field type_name
@@ -1446,14 +1561,14 @@ func file_recsys_v1_recsys_proto_init() {
 	if File_recsys_v1_recsys_proto != nil {
 		return
 	}
-	file_recsys_v1_recsys_proto_msgTypes[15].OneofWrappers = []any{}
+	file_recsys_v1_recsys_proto_msgTypes[17].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_recsys_v1_recsys_proto_rawDesc), len(file_recsys_v1_recsys_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   17,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

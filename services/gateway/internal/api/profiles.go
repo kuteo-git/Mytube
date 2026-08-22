@@ -10,6 +10,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"connectrpc.com/connect"
+
+	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
+	ingestv1 "github.com/lucnguyen/local-youtube/gen/go/ingest/v1"
+	recsysv1 "github.com/lucnguyen/local-youtube/gen/go/recsys/v1"
 )
 
 // Who lives here.
@@ -179,4 +185,142 @@ func (g *Gateway) handleProfiles(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Allow", "GET, POST")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+// handleDeleteProfile removes a member and everything keyed to them.
+//
+// Four places and no transaction across them, so the order is the design: the
+// entry in profiles.json goes **last**. While it is still there the profile is
+// still in the picker and still deletable, and every step below is idempotent —
+// deleting rows already gone is a no-op — so a second press finishes what a
+// failed first press started. The other ordering is what produced the ghost
+// already sitting in recsys.impressions: `u_test_empty`, ten rows, listed
+// nowhere.
+//
+// What is not touched: videos and channels. They carry no user_id — the library
+// belongs to the household — and `videos.channel_id -> channels ON DELETE
+// CASCADE` would turn removing a channel into removing every video of it, along
+// with every other member's history of them.
+func (g *Gateway) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	target := r.PathValue("id")
+	if target == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "which profile?"})
+		return
+	}
+
+	profilesMu.Lock()
+	list := g.loadProfiles()
+	profilesMu.Unlock()
+
+	found := false
+	for _, p := range list {
+		if p.ID == target {
+			found = true
+		}
+	}
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "no such profile"})
+		return
+	}
+
+	// Deleting the profile you are using would leave this browser holding the
+	// id of somebody who no longer exists, and every request afterwards
+	// answering for a ghost.
+	if g.userID(r) == target {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "Switch to another profile before deleting this one."})
+		return
+	}
+	// And the last one stays. DEV_USER_ID is where the history of every browser
+	// from before the picker lives (§6b); an empty list is a library nobody
+	// owns.
+	if len(list) <= 1 {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "This is the only profile. Add another before deleting it."})
+		return
+	}
+
+	if _, err := g.catalog.DeleteUserData(ctx, connect.NewRequest(&catalogv1.DeleteUserDataRequest{
+		UserId: target,
+	})); err != nil {
+		g.logger.Warn("delete profile: catalog", "profile", target, "error", err)
+		g.writeErr(w, r, err)
+		return
+	}
+
+	if _, err := g.recsys.DeleteUserData(ctx, connect.NewRequest(&recsysv1.DeleteUserDataRequest{
+		UserId: target,
+	})); err != nil {
+		g.logger.Warn("delete profile: recsys", "profile", target, "error", err)
+		g.writeErr(w, r, err)
+		return
+	}
+
+	// Removes the cookies.txt and the registry entry together — a live Google
+	// session is not something to leave behind on disk for a person who is gone.
+	if _, err := g.ingest.RemoveAccount(ctx, connect.NewRequest(&ingestv1.RemoveAccountRequest{
+		UserId: target,
+	})); err != nil {
+		g.logger.Warn("delete profile: account", "profile", target, "error", err)
+		g.writeErr(w, r, err)
+		return
+	}
+
+	profilesMu.Lock()
+	remaining := make([]profile, 0, len(list))
+	for _, p := range g.loadProfiles() {
+		if p.ID != target {
+			remaining = append(remaining, p)
+		}
+	}
+	err := g.saveProfiles(remaining)
+	profilesMu.Unlock()
+	if err != nil {
+		g.logger.Warn("delete profile: list", "profile", target, "error", err)
+		g.writeErr(w, r, err)
+		return
+	}
+
+	g.logger.Info("profile deleted", "profile", target)
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": target})
+}
+
+// handleProfileUsage counts what deleting a profile would remove, without
+// removing any of it.
+//
+// The same query that does the deleting, asked with dry_run — so the numbers in
+// the confirmation are the numbers that then go, rather than a second
+// definition of "what belongs to this profile" drifting quietly out of step.
+func (g *Gateway) handleProfileUsage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	target := r.PathValue("id")
+
+	counts, err := g.catalog.DeleteUserData(ctx, connect.NewRequest(&catalogv1.DeleteUserDataRequest{
+		UserId: target,
+		DryRun: true,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	signals, err := g.recsys.DeleteUserData(ctx, connect.NewRequest(&recsysv1.DeleteUserDataRequest{
+		UserId: target,
+		DryRun: true,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"subscriptions": counts.Msg.GetSubscriptions(),
+		"watched":       counts.Msg.GetWatchProgress(),
+		"reactions":     counts.Msg.GetReactions(),
+		"saved":         counts.Msg.GetSaved(),
+		"watchLater":    counts.Msg.GetWatchLater(),
+		"playlists":     counts.Msg.GetPlaylists(),
+		"comments":      counts.Msg.GetComments(),
+		"signals":       signals.Msg.GetSignals(),
+	})
 }

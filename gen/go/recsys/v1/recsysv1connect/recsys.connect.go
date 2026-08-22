@@ -48,6 +48,9 @@ const (
 	// RecommendationServiceRecordImpressionsProcedure is the fully-qualified name of the
 	// RecommendationService's RecordImpressions RPC.
 	RecommendationServiceRecordImpressionsProcedure = "/recsys.v1.RecommendationService/RecordImpressions"
+	// RecommendationServiceDeleteUserDataProcedure is the fully-qualified name of the
+	// RecommendationService's DeleteUserData RPC.
+	RecommendationServiceDeleteUserDataProcedure = "/recsys.v1.RecommendationService/DeleteUserData"
 	// RecommendationServiceExplainFeedProcedure is the fully-qualified name of the
 	// RecommendationService's ExplainFeed RPC.
 	RecommendationServiceExplainFeedProcedure = "/recsys.v1.RecommendationService/ExplainFeed"
@@ -67,6 +70,13 @@ type RecommendationServiceClient interface {
 	RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error)
 	// Suppresses items already shown, so the grid does not repeat itself.
 	RecordImpressions(context.Context, *connect.Request[v1.RecordImpressionsRequest]) (*connect.Response[v1.RecordImpressionsResponse], error)
+	// Forget a member entirely: their signals and what they were shown.
+	//
+	// The first delete this service has ever had. Without it a removed profile
+	// leaves its whole history behind — `u_luc` alone holds 63,908 signals — and
+	// §3's rule that no service reads another's database means the gateway
+	// cannot reach in and tidy up on its way past.
+	DeleteUserData(context.Context, *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error)
 	// The same ranking with its working shown, for tuning and for answering
 	// "why is this video here" and "where did that one go".
 	//
@@ -120,6 +130,12 @@ func NewRecommendationServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(recommendationServiceMethods.ByName("RecordImpressions")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteUserData: connect.NewClient[v1.DeleteUserDataRequest, v1.DeleteUserDataResponse](
+			httpClient,
+			baseURL+RecommendationServiceDeleteUserDataProcedure,
+			connect.WithSchema(recommendationServiceMethods.ByName("DeleteUserData")),
+			connect.WithClientOptions(opts...),
+		),
 		explainFeed: connect.NewClient[v1.ExplainFeedRequest, v1.ExplainFeedResponse](
 			httpClient,
 			baseURL+RecommendationServiceExplainFeedProcedure,
@@ -136,6 +152,7 @@ type recommendationServiceClient struct {
 	getMostWatched    *connect.Client[v1.GetMostWatchedRequest, v1.GetMostWatchedResponse]
 	recordSignal      *connect.Client[v1.RecordSignalRequest, v1.RecordSignalResponse]
 	recordImpressions *connect.Client[v1.RecordImpressionsRequest, v1.RecordImpressionsResponse]
+	deleteUserData    *connect.Client[v1.DeleteUserDataRequest, v1.DeleteUserDataResponse]
 	explainFeed       *connect.Client[v1.ExplainFeedRequest, v1.ExplainFeedResponse]
 }
 
@@ -164,6 +181,11 @@ func (c *recommendationServiceClient) RecordImpressions(ctx context.Context, req
 	return c.recordImpressions.CallUnary(ctx, req)
 }
 
+// DeleteUserData calls recsys.v1.RecommendationService.DeleteUserData.
+func (c *recommendationServiceClient) DeleteUserData(ctx context.Context, req *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error) {
+	return c.deleteUserData.CallUnary(ctx, req)
+}
+
 // ExplainFeed calls recsys.v1.RecommendationService.ExplainFeed.
 func (c *recommendationServiceClient) ExplainFeed(ctx context.Context, req *connect.Request[v1.ExplainFeedRequest]) (*connect.Response[v1.ExplainFeedResponse], error) {
 	return c.explainFeed.CallUnary(ctx, req)
@@ -183,6 +205,13 @@ type RecommendationServiceHandler interface {
 	RecordSignal(context.Context, *connect.Request[v1.RecordSignalRequest]) (*connect.Response[v1.RecordSignalResponse], error)
 	// Suppresses items already shown, so the grid does not repeat itself.
 	RecordImpressions(context.Context, *connect.Request[v1.RecordImpressionsRequest]) (*connect.Response[v1.RecordImpressionsResponse], error)
+	// Forget a member entirely: their signals and what they were shown.
+	//
+	// The first delete this service has ever had. Without it a removed profile
+	// leaves its whole history behind — `u_luc` alone holds 63,908 signals — and
+	// §3's rule that no service reads another's database means the gateway
+	// cannot reach in and tidy up on its way past.
+	DeleteUserData(context.Context, *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error)
 	// The same ranking with its working shown, for tuning and for answering
 	// "why is this video here" and "where did that one go".
 	//
@@ -232,6 +261,12 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 		connect.WithSchema(recommendationServiceMethods.ByName("RecordImpressions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	recommendationServiceDeleteUserDataHandler := connect.NewUnaryHandler(
+		RecommendationServiceDeleteUserDataProcedure,
+		svc.DeleteUserData,
+		connect.WithSchema(recommendationServiceMethods.ByName("DeleteUserData")),
+		connect.WithHandlerOptions(opts...),
+	)
 	recommendationServiceExplainFeedHandler := connect.NewUnaryHandler(
 		RecommendationServiceExplainFeedProcedure,
 		svc.ExplainFeed,
@@ -250,6 +285,8 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 			recommendationServiceRecordSignalHandler.ServeHTTP(w, r)
 		case RecommendationServiceRecordImpressionsProcedure:
 			recommendationServiceRecordImpressionsHandler.ServeHTTP(w, r)
+		case RecommendationServiceDeleteUserDataProcedure:
+			recommendationServiceDeleteUserDataHandler.ServeHTTP(w, r)
 		case RecommendationServiceExplainFeedProcedure:
 			recommendationServiceExplainFeedHandler.ServeHTTP(w, r)
 		default:
@@ -279,6 +316,10 @@ func (UnimplementedRecommendationServiceHandler) RecordSignal(context.Context, *
 
 func (UnimplementedRecommendationServiceHandler) RecordImpressions(context.Context, *connect.Request[v1.RecordImpressionsRequest]) (*connect.Response[v1.RecordImpressionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.RecordImpressions is not implemented"))
+}
+
+func (UnimplementedRecommendationServiceHandler) DeleteUserData(context.Context, *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.DeleteUserData is not implemented"))
 }
 
 func (UnimplementedRecommendationServiceHandler) ExplainFeed(context.Context, *connect.Request[v1.ExplainFeedRequest]) (*connect.Response[v1.ExplainFeedResponse], error) {

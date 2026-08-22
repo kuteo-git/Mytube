@@ -33,6 +33,18 @@ service CatalogService {
 
   // Writes, called by the ingest worker as a video moves through the pipeline.
   rpc UpsertChannel(UpsertChannelRequest) returns (UpsertChannelResponse);
+
+  // Everything this catalog holds *about one member*, counted or removed.
+  //
+  // One RPC for both because there is one answer to "what belongs to this
+  // profile", and two would be two lists that must agree for ever — the day
+  // they disagree is the day a dialog promises 351 and deletes 400.
+  //
+  // Never touches videos or channels. Those carry no user_id: they are the
+  // household's, and `videos.channel_id -> channels ON DELETE CASCADE` would
+  // turn removing one channel into removing every video of it, along with
+  // every other member's history of them.
+  rpc DeleteUserData(DeleteUserDataRequest) returns (DeleteUserDataResponse);
   rpc UpsertVideo(UpsertVideoRequest) returns (UpsertVideoResponse);
   rpc SetMediaState(SetMediaStateRequest) returns (SetMediaStateResponse);
   // Records whether a video is a Short. Ingest asks YouTube; catalog stores the
@@ -387,6 +399,29 @@ message UpsertChannelRequest {
 
 message UpsertChannelResponse {
   Channel channel = 1;
+}
+
+message DeleteUserDataRequest {
+  string user_id = 1;
+  // Count what would go without removing any of it. The confirmation dialog
+  // asks this first, so the numbers it shows come from the same query that
+  // then does the work.
+  bool dry_run = 2;
+}
+
+// What a profile owns, table by table.
+//
+// Named rather than a single total, because the dialog reads them out and a
+// person deciding whether to delete a profile is deciding about *these* —
+// "889 videos watched" stops somebody in a way "1,354 rows" does not.
+message DeleteUserDataResponse {
+  int64 subscriptions = 1;
+  int64 watch_progress = 2;
+  int64 reactions = 3;
+  int64 saved = 4;
+  int64 watch_later = 5;
+  int64 playlists = 6;
+  int64 comments = 7;
 }
 
 message UpsertVideoRequest {

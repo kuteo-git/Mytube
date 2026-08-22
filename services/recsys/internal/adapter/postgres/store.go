@@ -374,3 +374,47 @@ func (s *Store) VideoRetention(ctx context.Context) (map[string]float32, error) 
 	}
 	return retention, rows.Err()
 }
+
+// DeleteUserData forgets a member: their signals and what they were shown.
+//
+// The first delete this store has ever had, and it exists because §3 forbids
+// the gateway reaching into this schema on its way past. Without it a removed
+// profile leaves its whole history here — `u_luc` alone holds 63,908 signals —
+// where nothing will ever look at it again and nothing will ever clean it up.
+// `recsys.impressions` already carries one such ghost: `u_test_empty`, ten
+// rows, with no entry in profiles.json.
+//
+// One transaction, and counted before deleting so a dry run and a real run
+// answer alike.
+func (s *Store) DeleteUserData(
+	ctx context.Context, userID string, dryRun bool,
+) (signals, impressions int64, err error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM signals WHERE user_id = $1`, userID).Scan(&signals); err != nil {
+		return 0, 0, err
+	}
+	if err := tx.QueryRow(ctx,
+		`SELECT count(*) FROM impressions WHERE user_id = $1`, userID).Scan(&impressions); err != nil {
+		return 0, 0, err
+	}
+	if dryRun {
+		return signals, impressions, nil
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM signals WHERE user_id = $1`, userID); err != nil {
+		return 0, 0, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM impressions WHERE user_id = $1`, userID); err != nil {
+		return 0, 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, err
+	}
+	return signals, impressions, nil
+}

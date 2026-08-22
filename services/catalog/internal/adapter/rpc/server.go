@@ -274,6 +274,22 @@ func (s *Server) GetChannel(ctx context.Context, req *connect.Request[catalogv1.
 	}), nil
 }
 
+func (s *Server) DeleteUserData(ctx context.Context, req *connect.Request[catalogv1.DeleteUserDataRequest]) (*connect.Response[catalogv1.DeleteUserDataResponse], error) {
+	c, err := s.catalog.DeleteUserData(ctx, req.Msg.GetUserId(), req.Msg.GetDryRun())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.DeleteUserDataResponse{
+		Subscriptions: c.Subscriptions,
+		WatchProgress: c.WatchProgress,
+		Reactions:     c.Reactions,
+		Saved:         c.Saved,
+		WatchLater:    c.WatchLater,
+		Playlists:     c.Playlists,
+		Comments:      c.Comments,
+	}), nil
+}
+
 func (s *Server) ListTopics(ctx context.Context, req *connect.Request[catalogv1.ListTopicsRequest]) (*connect.Response[catalogv1.ListTopicsResponse], error) {
 	ts, err := s.catalog.ListTopics(ctx, req.Msg.GetMinVideoCount())
 	if err != nil {

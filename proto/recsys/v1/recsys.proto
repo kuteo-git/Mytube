@@ -28,6 +28,14 @@ service RecommendationService {
   // Suppresses items already shown, so the grid does not repeat itself.
   rpc RecordImpressions(RecordImpressionsRequest) returns (RecordImpressionsResponse);
 
+  // Forget a member entirely: their signals and what they were shown.
+  //
+  // The first delete this service has ever had. Without it a removed profile
+  // leaves its whole history behind — `u_luc` alone holds 63,908 signals — and
+  // §3's rule that no service reads another's database means the gateway
+  // cannot reach in and tidy up on its way past.
+  rpc DeleteUserData(DeleteUserDataRequest) returns (DeleteUserDataResponse);
+
   // The same ranking with its working shown, for tuning and for answering
   // "why is this video here" and "where did that one go".
   //
@@ -167,6 +175,16 @@ message RecordImpressionsRequest {
 }
 
 message RecordImpressionsResponse {}
+
+message DeleteUserDataRequest {
+  string user_id = 1;
+  bool dry_run = 2;
+}
+
+message DeleteUserDataResponse {
+  int64 signals = 1;
+  int64 impressions = 2;
+}
 
 message ExplainFeedRequest {
   string user_id = 1;

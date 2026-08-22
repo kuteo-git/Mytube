@@ -8,6 +8,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sort"
 	"strings"
@@ -198,6 +199,26 @@ func (r *Ranker) RecordSignal(ctx context.Context, s domain.Signal) error {
 		r.snapshots.InvalidateUser(s.UserID)
 	}
 	return nil
+}
+
+// DeleteUserData forgets a member entirely.
+//
+// The empty id is refused: a request with no profile falls back to
+// DEV_USER_ID (§6b), which holds the history of every browser from before the
+// picker existed, and a blank id would delete exactly that.
+func (r *Ranker) DeleteUserData(
+	ctx context.Context, userID string, dryRun bool,
+) (int64, int64, error) {
+	if userID == "" {
+		return 0, 0, errors.New("user_id is required")
+	}
+	// The snapshots this member has open are about to describe a library they
+	// no longer have an opinion on. Dropped so nothing serves a ranking built
+	// from rows that are gone.
+	if !dryRun {
+		r.snapshots.InvalidateUser(userID)
+	}
+	return r.store.DeleteUserData(ctx, userID, dryRun)
 }
 
 func (r *Ranker) RecordImpressions(ctx context.Context, userID string, videoIDs []string) error {

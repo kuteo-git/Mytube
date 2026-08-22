@@ -128,6 +128,22 @@ func (c *Catalog) GetChannelByHandle(ctx context.Context, handle, userID string)
 	return c.repo.GetChannelByHandle(ctx, handle, userID)
 }
 
+// DeleteUserData removes everything this catalog holds about one member, or
+// counts it when dryRun is set.
+//
+// The empty id is refused rather than treated as "everybody". A request with no
+// profile header falls back to DEV_USER_ID (§6b), which is where every
+// pre-picker browser's history lives — a blank id reaching the repository would
+// delete exactly that.
+func (c *Catalog) DeleteUserData(
+	ctx context.Context, userID string, dryRun bool,
+) (domain.UserDataCounts, error) {
+	if userID == "" {
+		return domain.UserDataCounts{}, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
+	}
+	return c.repo.DeleteUserData(ctx, userID, dryRun)
+}
+
 // ListTopics powers the home chip bar and the sidebar. A minimum count of one
 // keeps the UI from offering a filter that would produce an empty grid.
 func (c *Catalog) ListTopics(ctx context.Context, minVideoCount int32) ([]domain.Topic, error) {

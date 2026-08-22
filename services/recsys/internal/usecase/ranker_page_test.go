@@ -14,6 +14,13 @@ func (s stubFeatures) ListVideoFeatures(context.Context) ([]domain.VideoFeatures
 	return s.features, nil
 }
 
+// DeleteUserData is the store method these tests never call. Present because
+// the interface has it, and answering zero is the honest stub: nothing is
+// stored here to be deleted.
+func (stubStore) DeleteUserData(context.Context, string, bool) (int64, int64, error) {
+	return 0, 0, nil
+}
+
 type stubStore struct {
 	profile   domain.UserProfile
 	retention map[string]float32

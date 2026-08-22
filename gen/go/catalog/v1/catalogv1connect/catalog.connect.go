@@ -58,6 +58,9 @@ const (
 	// CatalogServiceUpsertChannelProcedure is the fully-qualified name of the CatalogService's
 	// UpsertChannel RPC.
 	CatalogServiceUpsertChannelProcedure = "/catalog.v1.CatalogService/UpsertChannel"
+	// CatalogServiceDeleteUserDataProcedure is the fully-qualified name of the CatalogService's
+	// DeleteUserData RPC.
+	CatalogServiceDeleteUserDataProcedure = "/catalog.v1.CatalogService/DeleteUserData"
 	// CatalogServiceUpsertVideoProcedure is the fully-qualified name of the CatalogService's
 	// UpsertVideo RPC.
 	CatalogServiceUpsertVideoProcedure = "/catalog.v1.CatalogService/UpsertVideo"
@@ -157,6 +160,17 @@ type CatalogServiceClient interface {
 	ListVideoFeatures(context.Context, *connect.Request[v1.ListVideoFeaturesRequest]) (*connect.Response[v1.ListVideoFeaturesResponse], error)
 	// Writes, called by the ingest worker as a video moves through the pipeline.
 	UpsertChannel(context.Context, *connect.Request[v1.UpsertChannelRequest]) (*connect.Response[v1.UpsertChannelResponse], error)
+	// Everything this catalog holds *about one member*, counted or removed.
+	//
+	// One RPC for both because there is one answer to "what belongs to this
+	// profile", and two would be two lists that must agree for ever — the day
+	// they disagree is the day a dialog promises 351 and deletes 400.
+	//
+	// Never touches videos or channels. Those carry no user_id: they are the
+	// household's, and `videos.channel_id -> channels ON DELETE CASCADE` would
+	// turn removing one channel into removing every video of it, along with
+	// every other member's history of them.
+	DeleteUserData(context.Context, *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error)
 	UpsertVideo(context.Context, *connect.Request[v1.UpsertVideoRequest]) (*connect.Response[v1.UpsertVideoResponse], error)
 	SetMediaState(context.Context, *connect.Request[v1.SetMediaStateRequest]) (*connect.Response[v1.SetMediaStateResponse], error)
 	// Records whether a video is a Short. Ingest asks YouTube; catalog stores the
@@ -286,6 +300,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+CatalogServiceUpsertChannelProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("UpsertChannel")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteUserData: connect.NewClient[v1.DeleteUserDataRequest, v1.DeleteUserDataResponse](
+			httpClient,
+			baseURL+CatalogServiceDeleteUserDataProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("DeleteUserData")),
 			connect.WithClientOptions(opts...),
 		),
 		upsertVideo: connect.NewClient[v1.UpsertVideoRequest, v1.UpsertVideoResponse](
@@ -458,6 +478,7 @@ type catalogServiceClient struct {
 	listTopics              *connect.Client[v1.ListTopicsRequest, v1.ListTopicsResponse]
 	listVideoFeatures       *connect.Client[v1.ListVideoFeaturesRequest, v1.ListVideoFeaturesResponse]
 	upsertChannel           *connect.Client[v1.UpsertChannelRequest, v1.UpsertChannelResponse]
+	deleteUserData          *connect.Client[v1.DeleteUserDataRequest, v1.DeleteUserDataResponse]
 	upsertVideo             *connect.Client[v1.UpsertVideoRequest, v1.UpsertVideoResponse]
 	setMediaState           *connect.Client[v1.SetMediaStateRequest, v1.SetMediaStateResponse]
 	setShort                *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
@@ -529,6 +550,11 @@ func (c *catalogServiceClient) ListVideoFeatures(ctx context.Context, req *conne
 // UpsertChannel calls catalog.v1.CatalogService.UpsertChannel.
 func (c *catalogServiceClient) UpsertChannel(ctx context.Context, req *connect.Request[v1.UpsertChannelRequest]) (*connect.Response[v1.UpsertChannelResponse], error) {
 	return c.upsertChannel.CallUnary(ctx, req)
+}
+
+// DeleteUserData calls catalog.v1.CatalogService.DeleteUserData.
+func (c *catalogServiceClient) DeleteUserData(ctx context.Context, req *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error) {
+	return c.deleteUserData.CallUnary(ctx, req)
 }
 
 // UpsertVideo calls catalog.v1.CatalogService.UpsertVideo.
@@ -681,6 +707,17 @@ type CatalogServiceHandler interface {
 	ListVideoFeatures(context.Context, *connect.Request[v1.ListVideoFeaturesRequest]) (*connect.Response[v1.ListVideoFeaturesResponse], error)
 	// Writes, called by the ingest worker as a video moves through the pipeline.
 	UpsertChannel(context.Context, *connect.Request[v1.UpsertChannelRequest]) (*connect.Response[v1.UpsertChannelResponse], error)
+	// Everything this catalog holds *about one member*, counted or removed.
+	//
+	// One RPC for both because there is one answer to "what belongs to this
+	// profile", and two would be two lists that must agree for ever — the day
+	// they disagree is the day a dialog promises 351 and deletes 400.
+	//
+	// Never touches videos or channels. Those carry no user_id: they are the
+	// household's, and `videos.channel_id -> channels ON DELETE CASCADE` would
+	// turn removing one channel into removing every video of it, along with
+	// every other member's history of them.
+	DeleteUserData(context.Context, *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error)
 	UpsertVideo(context.Context, *connect.Request[v1.UpsertVideoRequest]) (*connect.Response[v1.UpsertVideoResponse], error)
 	SetMediaState(context.Context, *connect.Request[v1.SetMediaStateRequest]) (*connect.Response[v1.SetMediaStateResponse], error)
 	// Records whether a video is a Short. Ingest asks YouTube; catalog stores the
@@ -806,6 +843,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceUpsertChannelProcedure,
 		svc.UpsertChannel,
 		connect.WithSchema(catalogServiceMethods.ByName("UpsertChannel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceDeleteUserDataHandler := connect.NewUnaryHandler(
+		CatalogServiceDeleteUserDataProcedure,
+		svc.DeleteUserData,
+		connect.WithSchema(catalogServiceMethods.ByName("DeleteUserData")),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceUpsertVideoHandler := connect.NewUnaryHandler(
@@ -984,6 +1027,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListVideoFeaturesHandler.ServeHTTP(w, r)
 		case CatalogServiceUpsertChannelProcedure:
 			catalogServiceUpsertChannelHandler.ServeHTTP(w, r)
+		case CatalogServiceDeleteUserDataProcedure:
+			catalogServiceDeleteUserDataHandler.ServeHTTP(w, r)
 		case CatalogServiceUpsertVideoProcedure:
 			catalogServiceUpsertVideoHandler.ServeHTTP(w, r)
 		case CatalogServiceSetMediaStateProcedure:
@@ -1079,6 +1124,10 @@ func (UnimplementedCatalogServiceHandler) ListVideoFeatures(context.Context, *co
 
 func (UnimplementedCatalogServiceHandler) UpsertChannel(context.Context, *connect.Request[v1.UpsertChannelRequest]) (*connect.Response[v1.UpsertChannelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.UpsertChannel is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) DeleteUserData(context.Context, *connect.Request[v1.DeleteUserDataRequest]) (*connect.Response[v1.DeleteUserDataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.DeleteUserData is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) UpsertVideo(context.Context, *connect.Request[v1.UpsertVideoRequest]) (*connect.Response[v1.UpsertVideoResponse], error) {

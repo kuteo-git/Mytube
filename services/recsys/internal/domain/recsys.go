@@ -127,6 +127,10 @@ type RankedVideo struct {
 type SignalStore interface {
 	AppendSignal(ctx context.Context, s Signal) error
 	RecordImpressions(ctx context.Context, userID string, videoIDs []string) error
+	// DeleteUserData forgets a member, or counts what forgetting them would
+	// remove. §3 keeps the gateway out of this schema, so the tidy-up after a
+	// deleted profile has to be offered from in here.
+	DeleteUserData(ctx context.Context, userID string, dryRun bool) (signals, impressions int64, err error)
 	BuildProfile(ctx context.Context, userID string, impressionWindow time.Duration) (UserProfile, error)
 	// MostWatched ranks videos by how much time this user has actually spent on
 	// them. Watch signals are appended on a timer during playback, so counting

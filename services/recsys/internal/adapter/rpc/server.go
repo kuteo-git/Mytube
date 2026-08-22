@@ -124,6 +124,17 @@ func (s *Server) RecordSignal(ctx context.Context, req *connect.Request[recsysv1
 	return connect.NewResponse(&recsysv1.RecordSignalResponse{}), nil
 }
 
+func (s *Server) DeleteUserData(ctx context.Context, req *connect.Request[recsysv1.DeleteUserDataRequest]) (*connect.Response[recsysv1.DeleteUserDataResponse], error) {
+	signals, impressions, err := s.ranker.DeleteUserData(ctx, req.Msg.GetUserId(), req.Msg.GetDryRun())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	return connect.NewResponse(&recsysv1.DeleteUserDataResponse{
+		Signals:     signals,
+		Impressions: impressions,
+	}), nil
+}
+
 func (s *Server) RecordImpressions(ctx context.Context, req *connect.Request[recsysv1.RecordImpressionsRequest]) (*connect.Response[recsysv1.RecordImpressionsResponse], error) {
 	if err := s.ranker.RecordImpressions(ctx, req.Msg.GetUserId(), req.Msg.GetVideoIds()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
