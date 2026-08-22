@@ -392,6 +392,15 @@ export const vi: Dictionary = {
   },
 
   narration: {
+    notConfigured: 'Chưa đặt dịch vụ giọng nói — vào Cài đặt › Lồng tiếng để thêm.',
+    baseURL: 'Nơi tổng hợp giọng nói',
+    // Named plainly rather than as a slogan: somebody setting this up needs to
+    // know what to paste, and the answer is "the same thing your provider's
+    // documentation calls a base URL".
+    openaiFormat:
+      'Bất cứ thứ gì nói được API audio của OpenAI: chính /v1 của họ, hoặc bất kỳ dịch vụ nào làm theo. Nhớ kèm /v1, đúng như tài liệu của nhà cung cấp ghi.',
+    modelHint: 'Gửi nguyên xi. Dịch vụ nào không có khái niệm model thì bỏ qua.',
+    voiceHint: 'Gõ tay, vì các nhà cung cấp không thống nhất danh sách. Theo từng máy.',
     tryIt:
       'Mở một video rồi quay lại đây để nghe thử — trình phát vẫn chạy ở góc màn hình.',
     voiceVolume: 'Âm lượng giọng đọc',

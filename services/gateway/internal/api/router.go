@@ -134,7 +134,14 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/translate/config", g.handleSaveTranslateConfig)
 	mux.HandleFunc("GET /api/translate/models", g.handleTranslateModels)
 	mux.HandleFunc("POST /api/translate/test", g.handleTranslateTest)
-	mux.HandleFunc("GET /api/tts/voices", g.handleTTSVoices)
+	// Where speech is synthesised, in the translate settings' mould.
+	//
+	// No voices route: OpenAI publishes no endpoint that lists them, so asking
+	// would work against one provider and 404 against the one this app now
+	// claims to speak. The voice is typed.
+	mux.HandleFunc("GET /api/settings/tts", g.handleGetTTSConfig)
+	mux.HandleFunc("POST /api/settings/tts", g.handleSaveTTSConfig)
+	mux.HandleFunc("POST /api/settings/tts/test", g.handleTestTTS)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)

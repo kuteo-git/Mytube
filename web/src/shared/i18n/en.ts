@@ -364,6 +364,12 @@ export const en = {
   },
 
   narration: {
+    notConfigured: 'No speech service set — add one in Settings › Narration.',
+    baseURL: 'Where speech is synthesised',
+    openaiFormat:
+      "Anything that speaks OpenAI's audio API: its own /v1, or any service that copies it. Include the /v1, as the provider's own documentation gives it.",
+    modelHint: 'Sent as-is. Services that have no models ignore it.',
+    voiceHint: 'Typed, because providers do not agree on a list. Per device.',
     tryIt:
       'Open a video and come back here to hear these against it — the player keeps going in the corner.',
     voiceVolume: 'Voice volume',

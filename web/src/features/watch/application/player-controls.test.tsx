@@ -86,6 +86,15 @@ let localReady = false
 /** Chips the home page offers. Empty except where a test needs one to click. */
 let topicList: Array<{ name: string; videoCount: number }> = []
 
+vi.mock('@/features/settings/application/queries', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  // Narration cannot be turned on without somewhere to synthesise, and these
+  // tests are about what the bar reports once it is on.
+  useTTSConfig: () => ({
+    data: { baseUrl: 'http://tts.test/v1', model: '', voice: '', hasKey: false, keyHint: '' },
+  }),
+}))
+
 vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
   httpCatalogRepository: {
     getVideo: vi.fn(async () => video),

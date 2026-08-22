@@ -117,6 +117,7 @@ import { useCoarsePointer } from '@/shared/lib/pointer'
 import { rememberLastWatched } from '@/features/watch/application/last-watched'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { useTTSConfig } from '@/features/settings/application/queries'
 
 /**
  * Progressive MP4 in a plain <video> element, served over HTTP range requests.
@@ -773,6 +774,11 @@ export function Player({
   const hasVi = hasHumanVietnamese(subtitles)
   const hasEn = subtitles.some((s) => /^en/.test(s.language))
   const narrationAvailable = hasVi || hasEn
+  // Whether anything can speak at all. Asked of the server rather than assumed:
+  // there is no built-in synthesiser address any more, deliberately, so a fresh
+  // install has none until somebody sets one.
+  const { data: ttsConfig } = useTTSConfig()
+  const ttsReady = Boolean(ttsConfig?.baseUrl)
   // Translation only happens when there is nothing Vietnamese to read already:
   // loadViSubtitles takes a Vietnamese track in preference to translating one.
   // Whether this video can be translated at all: there is English to work from
@@ -1813,10 +1819,17 @@ export function Player({
           the English they were already watching. Switching it on also brings
           the translation into being, which is a great deal to hide behind two
           words that do not mention Vietnamese at all. */}
+      {/* Off, and saying why, when no synthesiser has been configured.
+          
+          A switch that turns on and produces silence is the dead control §5
+          forbids, and the worst kind: somebody meeting it goes looking at the
+          volume, the subtitles and the video before they think of an empty text
+          field on a settings page. The hint names where to go. */}
       <SettingRow
         label={t('player.vietnameseNarration')}
         on={narrationSpeaks}
-        onToggle={toggleSpeak}
+        onToggle={ttsReady ? toggleSpeak : undefined}
+        hint={ttsReady ? undefined : t('narration.notConfigured')}
       />
     </>
   ) : undefined
@@ -3599,23 +3612,39 @@ function SettingRow({
   label,
   on,
   onToggle,
+  hint,
 }: {
   label: string
   on: boolean
-  onToggle: () => void
+  /** Absent where the setting cannot be changed yet — see `hint`. */
+  onToggle?: () => void
+  /**
+   * Why this row cannot be used.
+   *
+   * A switch with no handler and nothing to say is the dead control §5
+   * forbids. Present, disabled, and explaining itself is a different thing:
+   * it says the feature exists and what stands between you and it.
+   */
+  hint?: string
 }) {
+  const disabled = !onToggle
   return (
     <li>
       <button
         type="button"
         role="switch"
         aria-checked={on}
+        aria-disabled={disabled}
+        disabled={disabled}
         onClick={onToggle}
         // No hover fill. The switch beside the label is the feedback — it slides
         // and changes colour on press — and a row that lit up under the pointer
         // as well said the same thing twice. `transition-colors` goes with it:
         // nothing on this row changes colour any more.
-        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
+        className={clsx(
+          'flex w-full items-center justify-between gap-4 px-4 py-3 text-left',
+          disabled && 'opacity-50',
+        )}
       >
         <span>{label}</span>
         <span
@@ -3632,6 +3661,11 @@ function SettingRow({
           />
         </span>
       </button>
+      {/* Outside the button on purpose. Inside it, the explanation became part
+          of the switch's accessible name — "Vietnamese narration No speech
+          service set…" — which is what a screen reader would then announce as
+          the control's name. */}
+      {hint && <p className="px-4 pb-2 text-xs text-text-2">{hint}</p>}
     </li>
   )
 }

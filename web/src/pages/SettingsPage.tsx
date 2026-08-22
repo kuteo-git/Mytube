@@ -21,7 +21,9 @@ import {
   useTestTranslate,
   useTranslateConfig,
   useTranslateModels,
-  useVoices,
+  useTTSConfig,
+  useSaveTTSConfig,
+  useTestTTS,
 } from '@/features/settings/application/queries'
 import {
   DEFAULT_VOICE,
@@ -192,8 +194,34 @@ function MenuGroup({
 
 export function NarrationSettings({ headless = false }: { headless?: boolean } = {}) {
   const { t } = useTranslation()
-  const { data: voices } = useVoices()
   const [prefs, setPrefs] = useState(loadNarrationAudioPrefs)
+
+  // Where speech is synthesised. Server-side, unlike the levels below, because
+  // it holds a credential and because it is a property of the installation
+  // rather than of this browser.
+  const { data: ttsConfig } = useTTSConfig()
+  const saveTTS = useSaveTTSConfig()
+  const testTTS = useTestTTS()
+  const [ttsBaseUrl, setTTSBaseUrl] = useState('')
+  const [ttsModel, setTTSModel] = useState('')
+  const [ttsKey, setTTSKey] = useState('')
+  const [showTTSKey, setShowTTSKey] = useState(false)
+
+  useEffect(() => {
+    if (!ttsConfig) return
+    setTTSBaseUrl(ttsConfig.baseUrl)
+    setTTSModel(ttsConfig.model)
+  }, [ttsConfig])
+
+  // Named once. Test and Save acting on two separately assembled objects is how
+  // "it worked when I tested it" starts being true and useless.
+  const ttsForm = {
+    baseUrl: ttsBaseUrl,
+    model: ttsModel,
+    apiKey: ttsKey,
+    voice: prefs.voice,
+  }
+  const ttsResult = testTTS.data
 
   // Written on every change, not on a Save button. The player re-reads them and
   // the miniplayer keeps talking while you drag, which is the whole point of
@@ -216,27 +244,119 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
       title={t('ui.narration')}
       description={t('narration.tryIt')}
     >
-      <div className="rounded-lg bg-surface-input p-3">
+      {/* The endpoint comes first, because until it is set there is no sound
+          to balance and the sliders below are settings for nothing. */}
+      <SettingRow label={t('narration.baseURL')} hint={t('narration.openaiFormat')}>
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          value={ttsBaseUrl}
+          placeholder="https://api.openai.com/v1"
+          aria-label={t('narration.baseURL')}
+          onChange={(e) => setTTSBaseUrl(e.target.value)}
+        />
+      </SettingRow>
+
+      <SettingRow
+        label={t('translationSettings.apiKey')}
+        hint={
+          ttsConfig?.hasKey
+            ? t('ui.keyStored', { hint: ttsConfig.keyHint })
+            : t('translationSettings.noKeyStored')
+        }
+      >
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          type={showTTSKey ? 'text' : 'password'}
+          value={ttsKey}
+          placeholder={ttsConfig?.hasKey ? '••••••••' : 'sk-…'}
+          aria-label={t('translationSettings.apiKey')}
+          onChange={(e) => setTTSKey(e.target.value)}
+        />
+        <button
+          type="button"
+          aria-label={showTTSKey ? t('translationSettings.hideKey') : t('translationSettings.showKey')}
+          onClick={() => setShowTTSKey((v) => !v)}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-surface-hover text-text-2 transition-colors duration-150 ease-out hover:text-text"
+        >
+          {showTTSKey ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </SettingRow>
+
+      <SettingRow label={t('ui.model')} hint={t('narration.modelHint')}>
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          value={ttsModel}
+          placeholder="gpt-4o-mini-tts"
+          aria-label={t('ui.model')}
+          onChange={(e) => setTTSModel(e.target.value)}
+        />
+      </SettingRow>
+
+      {/* The same two buttons as the translation panel, in the same order and
+          the same weights: Test is the quiet one, Save is the committing one.
+          Two settings screens that do the same job should not ask to be read
+          twice. */}
+      <ActionBar>
+        <button
+          type="button"
+          onClick={() => testTTS.mutate(ttsForm)}
+          disabled={testTTS.isPending}
+          className="h-11 rounded-lg bg-surface-hover px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
+        >
+          {testTTS.isPending ? t('ui.testing') : t('ui.test')}
+        </button>
+        <button
+          type="button"
+          onClick={() => saveTTS.mutate(ttsForm)}
+          disabled={saveTTS.isPending}
+          className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
+        >
+          {saveTTS.isPending ? t('ui.saving') : t('common.save')}
+        </button>
+      </ActionBar>
+
+      {/* What the test produced, played rather than described. An endpoint can
+          answer 200 with perfectly formed silence, and a number of milliseconds
+          would report that as a success. */}
+      {ttsResult?.error && (
+        <p role="alert" className="text-xs text-brand">
+          {ttsResult.error}
+        </p>
+      )}
+      {ttsResult?.audio && (
+        <div className="rounded-lg bg-surface-input p-3">
+          <p className="text-xs text-text-2">{ttsResult.sample}</p>
+          {/* Native controls: this is one clip on a settings page, and a custom
+              player here would be a second thing to keep working for no gain. */}
+          <audio src={ttsResult.audio} controls className="mt-2 w-full" />
+          <p className="mt-1 text-xs text-text-2">
+            {t('more.milliseconds', { ms: ttsResult.ms ?? 0 })}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-lg bg-surface-input p-3">
         <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">{t('ui.audio')}</h3>
         <div className="flex flex-col gap-4">
-          <SettingRow label={t('ui.voice')}>
-            <select
-              className="min-w-0 flex-1 rounded-lg border border-line bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          {/* Typed, not chosen.
+              
+              It was a menu filled from the synthesiser's own voice list. OpenAI
+              publishes no such endpoint — its voices are a fixed set in the
+              documentation — and every service that copies the API brings its
+              own names, so a menu would be right for one provider and wrong the
+              day it added a voice, in the worst way: the voice exists and this
+              app refuses it.
+              
+              Still per device, which the levels below are too: two people in
+              one house should be able to disagree about a voice. */}
+          <SettingRow label={t('ui.voice')} hint={t('narration.voiceHint')}>
+            <input
+              className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
               value={prefs.voice}
+              placeholder={DEFAULT_VOICE}
               aria-label={t('ui.voice')}
               onChange={(e) => update({ voice: e.target.value })}
-            >
-              {/* The stored voice is listed even if the service did not answer, so
-                  a synthesiser that is down cannot silently reset the choice. */}
-              {!(voices ?? []).includes(prefs.voice) && (
-                <option value={prefs.voice}>{prefs.voice}</option>
-              )}
-              {(voices ?? [DEFAULT_VOICE]).map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+            />
           </SettingRow>
 
           <SliderRow

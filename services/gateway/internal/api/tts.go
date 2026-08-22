@@ -118,7 +118,19 @@ func (g *Gateway) handleTTS(w http.ResponseWriter, r *http.Request) {
 // anything this service did, so the caller can answer 502 rather than 500.
 var errUpstream = errors.New("tts upstream")
 
-// synthesise asks VieNeu-TTS for one line, at its natural tempo.
+// errNotConfigured is "nobody has said where to synthesise speech".
+//
+// Its own error because it is not a failure: nothing is broken and no request
+// went anywhere. The player disables the narration control on it rather than
+// letting somebody press a button that can only produce silence.
+var errNotConfigured = errors.New("tts not configured")
+
+// synthesise asks for one line, at its natural tempo, in OpenAI's shape.
+//
+// One protocol, and the URL is the only variable. VieNeu-TTS answers this shape
+// too — the endpoint was added there rather than teaching this app a second
+// dialect, because the point of the exercise is that somebody else can point
+// this at their own service and have it work.
 //
 // The context comes from the inbound request, so a browser that abandons its
 // fetch — the viewer left the video, or changed voice mid-sweep — cancels the
@@ -126,17 +138,46 @@ var errUpstream = errors.New("tts upstream")
 // on. With pre-generation walking a whole video that matters far more than it
 // did when clips were made a few seconds ahead of the playhead.
 func (g *Gateway) synthesise(ctx context.Context, text, voice string) ([]byte, error) {
-	payload, _ := json.Marshal(map[string]string{
-		"input":   text,
-		"voice":   voice,
-		"emotion": "storytelling",
+	return g.synthesiseWith(ctx, loadTTSConfig(g.ttsConfigPath()), text, voice)
+}
+
+// synthesiseWith is the same call against a config given rather than loaded.
+//
+// The Test button needs to try settings that have not been saved — otherwise
+// testing means saving first, and saving a broken endpoint to find out it is
+// broken is the wrong way round. One body, one set of headers, one place to
+// change them.
+func (g *Gateway) synthesiseWith(
+	ctx context.Context, cfg ttsConfig, text, voice string,
+) ([]byte, error) {
+	endpoint := speechURL(cfg.BaseURL)
+	if endpoint == "" {
+		return nil, errNotConfigured
+	}
+	if voice == "" {
+		voice = cfg.Voice
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"model": cfg.Model,
+		"input": text,
+		"voice": voice,
+		// Where "storytelling" went. OpenAI's own field for describing how a
+		// line should be read, which is what the emotion was; VieNeu reads it
+		// as the emotion it always did. One field, correct at both ends.
+		"instructions": "storytelling",
+		// wav, not the mp3 default. The next thing that happens to these bytes
+		// is ffmpeg stretching them to fit a subtitle slot, so mp3 would mean
+		// decoding and re-encoding once for no reason but somebody else's
+		// default.
+		"response_format": "wav",
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"http://localhost:8002/tts", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
 	resp, err := g.streamClient.Do(req)
 	if err != nil {
@@ -150,6 +191,15 @@ func (g *Gateway) synthesise(ctx context.Context, text, voice string) ([]byte, e
 }
 
 func (g *Gateway) replySynthError(w http.ResponseWriter, text string, err error) {
+	// Nothing is wrong and nothing was attempted: no speech endpoint has been
+	// set. Answered as 409 rather than 502 so the player can tell "you have
+	// not configured this" from "the thing you configured is down" — one is
+	// fixed on the settings screen, the other by looking at a server.
+	if errors.Is(err, errNotConfigured) {
+		g.logger.Info("tts not configured")
+		http.Error(w, "tts not configured", http.StatusConflict)
+		return
+	}
 	g.logger.Warn("tts upstream", "text", text[:min(80, len(text))], "error", err)
 	if errors.Is(err, errUpstream) {
 		http.Error(w, "tts service unreachable", http.StatusBadGateway)
@@ -304,33 +354,3 @@ func buildAtempoChain(factor float64) string {
 	return strings.Join(parts, ",")
 }
 
-// handleTTSVoices lists the voices the synthesiser offers.
-//
-// Only the list. The service also reports its own current voice, but that is a
-// global default this app never sets: every synthesis request names its voice,
-// because the voice is a per-device preference and two people in the house
-// should be able to disagree about it.
-func (g *Gateway) handleTTSVoices(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
-		"http://localhost:8002/voice", nil)
-	if err != nil {
-		http.Error(w, "internal", http.StatusInternalServerError)
-		return
-	}
-	resp, err := g.streamClient.Do(req)
-	if err != nil {
-		g.logger.Warn("tts voices", "error", err)
-		http.Error(w, "tts service unreachable", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	var body struct {
-		Voices []string `json:"voices"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&body); err != nil {
-		http.Error(w, "unreadable voice list", http.StatusBadGateway)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"voices": body.Voices})
-}

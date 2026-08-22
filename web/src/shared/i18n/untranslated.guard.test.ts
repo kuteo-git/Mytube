@@ -95,6 +95,9 @@ const EXEMPT_TEXT = new Map<string, string>([
   // The name of the application.
   ['MyTube', 'the name of this app'],
   ['http://host:port', 'an example URL'],
+  // A model name, shown as an example of what to type. Translating it would
+  // suggest typing a Vietnamese string into a field that takes an identifier.
+  ['gpt-4o-mini-tts', 'a model name'],
   // The equaliser's own name, kept in English with the rest of its vocabulary.
   ['Equalizer', 'kept in English by decision'],
   // Appended to a subtitle track's own name, which is content.
