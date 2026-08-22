@@ -106,14 +106,25 @@ func (s *Scanner) scanChannelLive(ctx context.Context, channel domain.Subscribed
 
 	found := 0
 	for _, video := range videos {
-		if video.LiveStatus != "is_live" {
-			// is_upcoming is deliberately not a live. A scheduled broadcast
-			// plays nothing when pressed, and an item that does nothing when
-			// pressed is the dead control §5 forbids — here it would be one
-			// wearing a red dot, which is worse than a plain one.
+		// Both are recorded; only one is counted, and only one is ever listed
+		// under the Live chip.
+		//
+		// "is_upcoming" is not a live — a scheduled broadcast plays nothing
+		// when pressed, and an item that does nothing when pressed is the dead
+		// control §5 forbids, here wearing a red dot. But *recording* it is not
+		// the same as listing it, and not recording it was its own fault: a
+		// scheduled broadcast still appears in Home like any other video, and
+		// with nothing stored the stream route had no idea and offered tiers
+		// built from adaptive tracks that do not exist yet. Measured on
+		// mYPF7KARk5Q, a subscribed channel's stream: yt-dlp answers "This live
+		// event will begin in a few moments" and the player got a generic
+		// failure.
+		if video.LiveStatus != "is_live" && video.LiveStatus != "is_upcoming" {
 			continue
 		}
-		found++
+		if video.LiveStatus == "is_live" {
+			found++
+		}
 
 		// The channel comes from the subscription record rather than the
 		// listing. A flat listing of a channel tab reports the owner once, on

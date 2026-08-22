@@ -99,6 +99,9 @@ type streamDTO struct {
 	// Full resolution, muxed on the fly from the adaptive tracks. No index, so
 	// not seekable. Absent once the local file exists.
 	Remux *sourceDTO `json:"remux,omitempty"`
+	// A broadcast that has not begun. No source, and none is missing: YouTube
+	// publishes nothing for a stream until it starts.
+	Upcoming bool `json:"upcoming,omitempty"`
 	// A broadcast still on air.
 	//
 	// Exclusive: when this is set nothing else is. Every other source here
@@ -636,6 +639,38 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 			// asked about every five seconds for as long as somebody watched.
 			CacheDisabled: true,
 		})
+		return
+	}
+
+	// A broadcast that has not started yet answers here and goes no further.
+	//
+	// It is an ordinary-looking video in Home — it has a title, a thumbnail and
+	// a channel — and pressing it used to be answered with `hls` and `remux`,
+	// both built from adaptive tracks YouTube has not published and will not
+	// until the broadcast begins. Measured on mYPF7KARk5Q: yt-dlp answers "This
+	// live event will begin in a few moments" and the viewer got a generic
+	// failure with nothing to say what had happened or that waiting would fix
+	// it.
+	//
+	// Not `unavailable`: that means permanent, offers no retry and names a
+	// reason. This is the opposite — nothing is wrong, and the answer changes
+	// on its own. The player says so and the poll it already runs picks up the
+	// change.
+	//
+	// Read from live_status directly rather than through a freshness window,
+	// unlike is_live_now. Being wrong here costs at most one scan interval of
+	// "starting soon" over a broadcast that just began, and it corrects itself;
+	// the alternative is the failure above.
+	if v.GetLiveStatus() == "is_upcoming" {
+		g.logger.Info("stream offered", "video", videoID, "tier", "none:upcoming")
+		// CacheDisabled is deliberately *not* set, unlike the live branch below.
+		//
+		// Its one job is to stop the player re-asking, and here re-asking is
+		// exactly what has to keep happening: the broadcast starting is a
+		// change in this answer and nothing else will report it. Setting it
+		// would have made the message on screen — "it will begin playing on its
+		// own" — a straightforward lie.
+		writeJSON(w, http.StatusOK, streamDTO{Upcoming: true})
 		return
 	}
 

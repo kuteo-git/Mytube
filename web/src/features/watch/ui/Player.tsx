@@ -2771,7 +2771,16 @@ export function Player({
                 : queuedBehind
                   ? 'Live streaming failed. The download is queued behind another video, and this will start by itself once it finishes.'
                   : 'The stream could not be loaded.'
-              : unavailableReason
+              : sources?.upcoming
+                ? // Nothing is wrong and nothing is missing: YouTube publishes
+                  // nothing for a stream until it begins. Said plainly, because
+                  // the alternative the viewer met was a generic failure over a
+                  // video that would have worked by simply waiting.
+                  //
+                  // No retry button. The player already polls this answer, so
+                  // the broadcast starting is picked up without being asked.
+                  'This broadcast has not started yet. It will begin playing on its own.'
+                : unavailableReason
                 ? unavailableCopy(unavailableReason)
                 : mediaState === 'EVICTED'
                 ? 'The media file was removed to reclaim disk space, and upstream has nothing directly playable. Re-download it to watch again.'
