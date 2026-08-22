@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lucnguyen/local-youtube/internal/mediaroot"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
@@ -40,8 +41,15 @@ func main() {
 		addr        = env("CATALOG_ADDR", ":8181")
 		databaseURL = env("CATALOG_DATABASE_URL",
 			"postgres://catalog_svc:catalog_dev@localhost:5432/localyoutube?search_path=catalog")
-		mediaRoot = env("MEDIA_ROOT", "./media")
+		configDir = env("CONFIG_DIR", "./data")
 	)
+
+	// Where the library lives. The saved setting wins over the environment: see
+	// internal/mediaroot, and the trap it exists to close — dev.sh always
+	// exports MEDIA_ROOT, so the other way round would make the Storage page's
+	// setting save, restart, and change nothing.
+	mediaRoot, mediaRootFrom := mediaroot.Resolve(configDir, env("MEDIA_ROOT", "./media"))
+	logger.Info("media root", "path", mediaRoot, "from", mediaRootFrom)
 
 	budgetBytes := int64(25) << 30 // 25 GiB, per the storage budget in CLAUDE.md
 	if raw := os.Getenv("STORAGE_BUDGET_BYTES"); raw != "" {

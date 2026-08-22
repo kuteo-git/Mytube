@@ -28,6 +28,12 @@ mkdir -p "$LOG_DIR"
 # shellcheck disable=SC1091
 [ -f .env.local ] && . ./.env.local
 
+# Where the library lives — but only as the *default*.
+#
+# The Storage page writes data/storage.json, and that file **wins over this
+# export**. The other way round would be a trap: this line runs on every start,
+# so the setting would save, survive a restart, and change nothing, with nothing
+# anywhere to say why. See internal/mediaroot.
 export MEDIA_ROOT="${MEDIA_ROOT:-/Volumes/Data2/Youtube}"
 export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB

@@ -189,7 +189,14 @@ export function useStream(videoId: string | undefined) {
     // list of every job the queue has ever run. A handful of finished jobs
     // pushed the running one off that list and the picture simply stayed at
     // 360p, with no way to tell from the page that anything was wrong.
-    refetchInterval: (query) => (query.state.data?.local ? false : 5000),
+    // And stop when nothing is coming. With streaming only, `local` never
+    // arrives — a three-hour video would ask two thousand times about a file
+    // that is never going to exist. The server says so in the same answer
+    // rather than the client reading the setting separately: two sources of
+    // that truth would disagree eventually, and the failure is either asking
+    // for ever or going quiet while a download really is on its way.
+    refetchInterval: (query) =>
+      query.state.data?.local || query.state.data?.cacheDisabled ? false : 5000,
   })
 }
 

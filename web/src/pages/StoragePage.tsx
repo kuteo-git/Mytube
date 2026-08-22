@@ -1,4 +1,5 @@
 import { HardDrive } from 'lucide-react'
+import { StorageSettings } from '@/features/settings/ui/StorageSettings'
 import { useStorage } from '@/features/catalog/application/queries'
 import { VideoCard } from '@/features/catalog/ui/VideoCard'
 import { formatBytes } from '@/shared/lib/format'
@@ -31,6 +32,10 @@ export function StoragePage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">Storage</h1>
+
+      {/* Above the figures, because the figures describe *that folder* under
+          *that mode*. Read first, they are numbers without a subject. */}
+      <StorageSettings />
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard

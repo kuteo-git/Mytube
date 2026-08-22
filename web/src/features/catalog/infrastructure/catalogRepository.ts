@@ -255,6 +255,13 @@ export interface StreamSources {
   remux?: StreamSource
   /** The downloaded file. Present only once on disk, and best whenever it is. */
   local?: StreamSource
+  /**
+   * No copy is coming: the household has asked for streaming only.
+   *
+   * Carried in this answer rather than read from the settings separately, so
+   * the player has one source for "what can play, and what is on its way".
+   */
+  cacheDisabled?: boolean
   /** When every source is unavailable — membership, age restriction, geo-block —
    *  this carries the yt-dlp error so the player can tell the viewer why. */
   streamError?: string

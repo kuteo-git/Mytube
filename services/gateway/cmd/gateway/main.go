@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/lucnguyen/local-youtube/internal/mediaroot"
 	"log/slog"
 	"net"
 	"net/http"
@@ -58,11 +59,17 @@ func main() {
 		catalogURL = env("CATALOG_URL", "http://localhost:8181")
 		recsysURL  = env("RECSYS_URL", "http://localhost:8182")
 		ingestURL  = env("INGEST_URL", "http://localhost:8183")
-		mediaRoot  = env("MEDIA_ROOT", "./media")
 		configDir  = env("CONFIG_DIR", "./data")
 		devUserID  = env("DEV_USER_ID", "u_luc")
 		webOrigin  = env("WEB_ORIGIN", "http://localhost:5173")
 	)
+
+	// Where the library lives. The saved setting wins over the environment: see
+	// internal/mediaroot, and the trap it exists to close — dev.sh always
+	// exports MEDIA_ROOT, so the other way round would make the Storage page's
+	// setting save, restart, and change nothing.
+	mediaRoot, mediaRootFrom := mediaroot.Resolve(configDir, env("MEDIA_ROOT", "./media"))
+	logger.Info("media root", "path", mediaRoot, "from", mediaRootFrom)
 
 	// catalog and recsys answer in milliseconds; a slow response there means
 	// something is actually wrong, so 15s stays a tight, fast-failing budget.

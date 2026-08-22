@@ -154,6 +154,27 @@ const fallbackChannelPage = 30
 // that carries view counts, upload dates and the channel's own sort options. It
 // is undocumented, so any failure falls back to the flat playlist listing —
 // which always works but knows none of those three things.
+// FetchSubtitles gets the captions for a video without queueing a transfer.
+//
+// The same pass Submit starts, reached from the other side. With caching off
+// there is no Submit, and captions would go silently — and with them the
+// translation and the read-aloud, both of which read the .vtt this writes.
+//
+// Returns at once: `startSubtitleFetch` runs in the background under its own
+// claim (`i.subtitles.begin`), so this and a download arriving a moment later
+// cannot both run the same fetch.
+func (i *Ingest) FetchSubtitles(url string, preferredHeight int32) error {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return fmt.Errorf("%w: url is required", domain.ErrInvalid)
+	}
+	if preferredHeight <= 0 {
+		preferredHeight = i.defaultHeight
+	}
+	i.startSubtitleFetch(url, preferredHeight)
+	return nil
+}
+
 // ResolveChannel says who a channel address names.
 //
 // One upstream request, and only for a channel the library has never seen. A

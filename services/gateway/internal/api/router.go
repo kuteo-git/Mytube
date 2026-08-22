@@ -157,6 +157,11 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
 	mux.HandleFunc("POST /api/videos/{id}/not-interested", g.handleNotInterested)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
+	// Where the library lives, and whether it is kept. Read together because
+	// that is where a person looks for them; they share nothing else.
+	mux.HandleFunc("GET /api/settings/storage", g.handleStorageSettings)
+	mux.HandleFunc("POST /api/settings/storage", g.handleStorageSettings)
+	mux.HandleFunc("GET /api/settings/storage/verify", g.handleVerifyStorageRoot)
 	mux.HandleFunc("GET /api/subscriptions", g.handleListSubscriptions)
 	mux.HandleFunc("GET /api/collections/top-played", g.handleTopPlayed)
 	mux.HandleFunc("GET /api/collections/popular", g.handlePopular)

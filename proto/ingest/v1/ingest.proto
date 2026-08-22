@@ -110,6 +110,18 @@ service IngestService {
   // 1690 channels carry one, so most pasted links never come here at all.
   rpc ResolveChannel(ResolveChannelRequest) returns (ResolveChannelResponse);
 
+  // Captions for a video nobody is going to download.
+  //
+  // Submit does this already, as a side effect of queueing a transfer. That is
+  // fine while every play is a download and wrong the moment one is not: with
+  // caching off there is no Submit, and subtitles would vanish silently —
+  // taking translation and read-aloud with them, since both read the .vtt.
+  //
+  // A separate call rather than a flag on Submit. "Submit" means queue a
+  // transfer, and a flag that stops it doing that is a name that lies to
+  // everyone who reads the call site afterwards.
+  rpc FetchSubtitles(FetchSubtitlesRequest) returns (FetchSubtitlesResponse);
+
   // Fetches comments for a video from YouTube via yt-dlp. Returns every comment
   // in one call — yt-dlp's --write-comments has no pagination — so the gateway
   // batches them into catalog and the frontend paginates from there.
@@ -140,6 +152,17 @@ message ListChannelUploadsResponse {
   // Empty when the listing fell back to a flat playlist, which has no header.
   string avatar_url = 4;
 }
+
+message FetchSubtitlesRequest {
+  string url = 1;
+  // Which rendition the captions are being fetched alongside. Only used to name
+  // the files consistently with a download that may follow later.
+  int32 preferred_height = 2;
+}
+
+// Empty: the fetch runs in the background and nothing waits on it. A video
+// without captions is a working video.
+message FetchSubtitlesResponse {}
 
 message ResolveChannelRequest {
   // A handle ("@mkbhd"), a bare channel id, or a full channel address.

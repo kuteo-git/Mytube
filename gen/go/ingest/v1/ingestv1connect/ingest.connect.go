@@ -103,6 +103,9 @@ const (
 	// IngestServiceResolveChannelProcedure is the fully-qualified name of the IngestService's
 	// ResolveChannel RPC.
 	IngestServiceResolveChannelProcedure = "/ingest.v1.IngestService/ResolveChannel"
+	// IngestServiceFetchSubtitlesProcedure is the fully-qualified name of the IngestService's
+	// FetchSubtitles RPC.
+	IngestServiceFetchSubtitlesProcedure = "/ingest.v1.IngestService/FetchSubtitles"
 	// IngestServiceFetchCommentsProcedure is the fully-qualified name of the IngestService's
 	// FetchComments RPC.
 	IngestServiceFetchCommentsProcedure = "/ingest.v1.IngestService/FetchComments"
@@ -197,6 +200,17 @@ type IngestServiceClient interface {
 	// Only reached when the catalog has no such handle — 1626 of this library's
 	// 1690 channels carry one, so most pasted links never come here at all.
 	ResolveChannel(context.Context, *connect.Request[v1.ResolveChannelRequest]) (*connect.Response[v1.ResolveChannelResponse], error)
+	// Captions for a video nobody is going to download.
+	//
+	// Submit does this already, as a side effect of queueing a transfer. That is
+	// fine while every play is a download and wrong the moment one is not: with
+	// caching off there is no Submit, and subtitles would vanish silently —
+	// taking translation and read-aloud with them, since both read the .vtt.
+	//
+	// A separate call rather than a flag on Submit. "Submit" means queue a
+	// transfer, and a flag that stops it doing that is a name that lies to
+	// everyone who reads the call site afterwards.
+	FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error)
 	// Fetches comments for a video from YouTube via yt-dlp. Returns every comment
 	// in one call — yt-dlp's --write-comments has no pagination — so the gateway
 	// batches them into catalog and the frontend paginates from there.
@@ -370,6 +384,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("ResolveChannel")),
 			connect.WithClientOptions(opts...),
 		),
+		fetchSubtitles: connect.NewClient[v1.FetchSubtitlesRequest, v1.FetchSubtitlesResponse](
+			httpClient,
+			baseURL+IngestServiceFetchSubtitlesProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("FetchSubtitles")),
+			connect.WithClientOptions(opts...),
+		),
 		fetchComments: connect.NewClient[v1.FetchCommentsRequest, v1.FetchCommentsResponse](
 			httpClient,
 			baseURL+IngestServiceFetchCommentsProcedure,
@@ -407,6 +427,7 @@ type ingestServiceClient struct {
 	getAccountScanStatus *connect.Client[v1.GetAccountScanStatusRequest, v1.GetAccountScanStatusResponse]
 	listChannelUploads   *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
 	resolveChannel       *connect.Client[v1.ResolveChannelRequest, v1.ResolveChannelResponse]
+	fetchSubtitles       *connect.Client[v1.FetchSubtitlesRequest, v1.FetchSubtitlesResponse]
 	fetchComments        *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
 }
 
@@ -540,6 +561,11 @@ func (c *ingestServiceClient) ResolveChannel(ctx context.Context, req *connect.R
 	return c.resolveChannel.CallUnary(ctx, req)
 }
 
+// FetchSubtitles calls ingest.v1.IngestService.FetchSubtitles.
+func (c *ingestServiceClient) FetchSubtitles(ctx context.Context, req *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error) {
+	return c.fetchSubtitles.CallUnary(ctx, req)
+}
+
 // FetchComments calls ingest.v1.IngestService.FetchComments.
 func (c *ingestServiceClient) FetchComments(ctx context.Context, req *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error) {
 	return c.fetchComments.CallUnary(ctx, req)
@@ -634,6 +660,17 @@ type IngestServiceHandler interface {
 	// Only reached when the catalog has no such handle — 1626 of this library's
 	// 1690 channels carry one, so most pasted links never come here at all.
 	ResolveChannel(context.Context, *connect.Request[v1.ResolveChannelRequest]) (*connect.Response[v1.ResolveChannelResponse], error)
+	// Captions for a video nobody is going to download.
+	//
+	// Submit does this already, as a side effect of queueing a transfer. That is
+	// fine while every play is a download and wrong the moment one is not: with
+	// caching off there is no Submit, and subtitles would vanish silently —
+	// taking translation and read-aloud with them, since both read the .vtt.
+	//
+	// A separate call rather than a flag on Submit. "Submit" means queue a
+	// transfer, and a flag that stops it doing that is a name that lies to
+	// everyone who reads the call site afterwards.
+	FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error)
 	// Fetches comments for a video from YouTube via yt-dlp. Returns every comment
 	// in one call — yt-dlp's --write-comments has no pagination — so the gateway
 	// batches them into catalog and the frontend paginates from there.
@@ -803,6 +840,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("ResolveChannel")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceFetchSubtitlesHandler := connect.NewUnaryHandler(
+		IngestServiceFetchSubtitlesProcedure,
+		svc.FetchSubtitles,
+		connect.WithSchema(ingestServiceMethods.ByName("FetchSubtitles")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceFetchCommentsHandler := connect.NewUnaryHandler(
 		IngestServiceFetchCommentsProcedure,
 		svc.FetchComments,
@@ -863,6 +906,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceListChannelUploadsHandler.ServeHTTP(w, r)
 		case IngestServiceResolveChannelProcedure:
 			ingestServiceResolveChannelHandler.ServeHTTP(w, r)
+		case IngestServiceFetchSubtitlesProcedure:
+			ingestServiceFetchSubtitlesHandler.ServeHTTP(w, r)
 		case IngestServiceFetchCommentsProcedure:
 			ingestServiceFetchCommentsHandler.ServeHTTP(w, r)
 		default:
@@ -976,6 +1021,10 @@ func (UnimplementedIngestServiceHandler) ListChannelUploads(context.Context, *co
 
 func (UnimplementedIngestServiceHandler) ResolveChannel(context.Context, *connect.Request[v1.ResolveChannelRequest]) (*connect.Response[v1.ResolveChannelResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.ResolveChannel is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.FetchSubtitles is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) FetchComments(context.Context, *connect.Request[v1.FetchCommentsRequest]) (*connect.Response[v1.FetchCommentsResponse], error) {

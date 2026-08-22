@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/lucnguyen/local-youtube/internal/mediaroot"
 	"log/slog"
 	"net"
 	"net/http"
@@ -74,12 +75,19 @@ func main() {
 		databaseURL = env("INGEST_DATABASE_URL",
 			"postgres://ingest_svc:ingest_dev@localhost:5432/localyoutube?search_path=ingest")
 		catalogURL = env("CATALOG_URL", "http://localhost:8181")
-		mediaRoot  = env("MEDIA_ROOT", "./media")
+		configDir  = env("CONFIG_DIR", "./data")
 		topicsPath = env("TOPICS_FILE", "./topics.yaml")
 		// Same default as the gateway's devUserID: until identity exists, Phase 1
 		// runs as a single seeded user, and subscriptions are per-user.
 		devUserID = env("DEV_USER_ID", "u_luc")
 	)
+
+	// Where the library lives. The saved setting wins over the environment: see
+	// internal/mediaroot, and the trap it exists to close — dev.sh always
+	// exports MEDIA_ROOT, so the other way round would make the Storage page's
+	// setting save, restart, and change nothing.
+	mediaRoot, mediaRootFrom := mediaroot.Resolve(configDir, env("MEDIA_ROOT", "./media"))
+	logger.Info("media root", "path", mediaRoot, "from", mediaRootFrom)
 
 	// The rendition kept on disk. A library holds its files for months, so this
 	// is the one number here that should not be traded for a smoother minute.

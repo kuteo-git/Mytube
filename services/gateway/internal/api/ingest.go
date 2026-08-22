@@ -77,7 +77,10 @@ type streamDTO struct {
 	// filled in. The field stays so that a client from before this change reads
 	// the same JSON it always did — one tier fewer — rather than a shape it has
 	// never seen.
-	Instant *sourceDTO `json:"instant,omitempty"`
+	// True when the household has asked for streaming only. The player stops
+	// polling for a download and stops drawing its progress.
+	CacheDisabled bool       `json:"cacheDisabled,omitempty"`
+	Instant       *sourceDTO `json:"instant,omitempty"`
 	// The same two adaptive tracks the mux combines, described as HLS so the
 	// browser combines them instead.
 	//
@@ -680,11 +683,34 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 
 	// Pressing play is what schedules a download. Enqueue is idempotent per
 	// source URL, so repeated resolves attach to the running job.
+	//
+	// Unless the household has asked for streaming only, in which case this is
+	// the one thing that stops — not the captions, which are fetched here
+	// instead, and not Retry on /activity, which is somebody saying "I want this
+	// one" and would otherwise become a dead button exactly while the mode is on.
+	//
+	// Captions cost a few tens of kilobytes against a few hundred megabytes,
+	// roughly four thousand to one, and they are what the translation and the
+	// read-aloud are built on. Losing them to save that would be the worst trade
+	// in the app.
+	cacheOff := g.cacheDisabled()
 	if !prefetch && !onDisk && v.GetSourceUrl() != "" {
-		go g.ensureDownload(v.GetSourceUrl(), g.userID(r))
+		if cacheOff {
+			go g.fetchSubtitlesOnly(v.GetSourceUrl())
+		} else {
+			go g.ensureDownload(v.GetSourceUrl(), g.userID(r))
+		}
 	}
 
 	out := streamDTO{
+		// No copy is coming, so the player can stop asking for one.
+		//
+		// It polls this answer every five seconds until `local` appears, which
+		// is how it notices a download landing. With caching off `local` never
+		// arrives: a three-hour video would ask two thousand times about
+		// something that is never coming, and the progress bar would sit at
+		// nothing for the whole film.
+		CacheDisabled: cacheOff,
 		// Set when this request found the catalog claiming a file the disk does
 		// not have, and corrected it. The player has already been handed a video
 		// row saying READY, and it stops asking for a new one once the state

@@ -15,7 +15,7 @@ A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **in
 
 | | |
 |---|---|
-| Disk | External SSD at `/Volumes/Data2/Youtube`, 437 GiB free. `MEDIA_ROOT`/`STORAGE_BUDGET_BYTES`/`EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES` point there via `scripts/dev.sh` (budget 300 GiB, sweep 350→300 GiB). |
+| Disk | External SSD at `/Volumes/Data2/Youtube`, 437 GiB free. `STORAGE_BUDGET_BYTES`/`EVICTION_HIGH_BYTES`/`EVICTION_LOW_BYTES` come from `scripts/dev.sh` (budget 300 GiB, sweep 350→300 GiB). The **folder** is set on the Storage page and saved to `data/storage.json`, which **wins over `MEDIA_ROOT`** — see §4. |
 | Machine | Apple M4, 10 cores |
 | Installed | `ffmpeg`, `yt-dlp`, `go`, `node`, `python3` |
 | Not installed | `docker`, `postgres`, `redis` (Postgres via Homebrew) |
@@ -199,6 +199,24 @@ Two rules, answering different questions, both reached through `Submit`:
 **What the retries are for**: googlevideo refuses this address in waves lasting a few minutes, and inside a wave everything is refused — `/instant`, the mux, and yt-dlp's own transfer alike. Three hypotheses for a narrower cause were tested and **all failed to reproduce** outside a wave: the audio track being special (206/206 on both tracks, ×3), two requests close together (3 concurrent pairs, all 206), and the mux competing with the download of the same video (a real download running alongside, all 206). The 6-of-6 log correlation between a mux failure and a download claim is an artefact — pressing play starts both, so they always coincide.
 
 **The remux tier cannot be retried this way.** It already re-resolves once, 1.5s later, which is inside the same wave; waiting minutes is not something a viewer waiting for a picture can do. The answer there is the tier machinery: stay on the low rendition and climb to the local file when it lands.
+
+### Where the library lives, and whether it is kept (2026-08-22)
+
+**The folder is a setting, and the saved value beats the environment.** `MEDIA_ROOT` is read at start-up by three services — ingest writes there, catalog deletes there, the gateway serves it — and used to be changeable only by editing `scripts/dev.sh`. It is now `data/storage.json`, resolved through `internal/mediaroot`.
+
+- **The file wins, and the order is the whole point.** `dev.sh` exports `MEDIA_ROOT` on every run, so the other way round would mean the Storage page saves a folder, survives a restart, and changes nothing — with nothing anywhere to say why. The environment is the default for a machine never set up.
+- **Applies on restart**, deliberately. Three processes hold it; changing it under a running job, an open `/media` response and an eviction sweep is three things losing their footing at once. The switch below takes effect at once because one process reads it per request — two mechanisms, two reasons, not carelessness.
+- **The path must be absolute and must already exist.** Relative would mean three different directories the day a service is started outside `dev.sh`. Creating on demand is how a typo becomes an empty library at `/Volumes/Data2/Youtub`, noticed only when everything needs downloading again.
+- **Verify reports free space and how many video folders are already there.** That count is the reason to press it: pointing at a disk used before brings the library back, and it should be visible before saving rather than after restarting. Measured on the real disk: 914 folders, 235 GB free.
+- **Changing away from a root that still holds files needs confirmation**, with the count from the catalog — 32,377 here. `media_path` is relative, so nothing in the database breaks; the files simply are not under the new base and would be fetched again.
+- **Verifying stats a path this request names**, so anyone on the LAN can learn whether a directory exists. Consistent with §6b's trust model — the LAN is trusted, media URLs are unprotected — and recorded rather than left to be noticed.
+
+**Streaming only is one switch, and it stops exactly one thing.** Pressing play no longer schedules a download.
+
+- **Subtitles still arrive**, through a new `FetchSubtitles` RPC. They used to ride inside `Submit` as a side effect of queueing a transfer, so switching caching off would have taken captions with it — and translation and read-aloud with them, since both read the `.vtt`. Captions are tens of kilobytes against hundreds of megabytes; losing them to save that would be the worst trade in the app. Not a flag on `Submit`: that name means "queue a transfer", and a flag that stops it doing so lies to every later reader. Verified on the running stack — `job claimed` unchanged, `1080p.mp4.en.vtt` on disk, no video.
+- **Retry still works.** Somebody pressing it on `/activity` is saying "I want this one", and refusing would make the button dead exactly while the mode is on.
+- **Nothing is deleted and the sweep still runs.** The switch is not a purge, and somebody may well turn it on *because* the disk is full — the worst moment to also stop the thing that frees space.
+- **The stream answer carries `cacheDisabled`.** The player polls it every five seconds until `local` appears, which is how it notices a download landing; with caching off that never comes, and a three-hour video would ask two thousand times about a file that will never exist. One answer says what can play and what is on its way, rather than the client reading a second setting it would have to keep in step.
 
 ### Eviction
 
