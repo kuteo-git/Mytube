@@ -127,9 +127,13 @@ function SuggestionRow({ video }: { video: Video }) {
           channelName={video.channel.name}
           rounded="rounded-lg"
         >
-          <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">
-            {fmt.duration(video.durationSeconds)}
-          </span>
+          {/* Nothing when the length is not known — the same rule the queue
+              rail beside it already followed. */}
+          {video.durationSeconds > 0 && (
+            <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">
+              {fmt.duration(video.durationSeconds)}
+            </span>
+          )}
         </ThumbnailSurface>
       </div>
       <div className="min-w-0 flex-1">

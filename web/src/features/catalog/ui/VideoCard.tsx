@@ -85,21 +85,30 @@ export function VideoCard({
               {t('card.suggested')}
             </span>
           )}
-          {/* A broadcast has no duration, and printing one is not a cosmetic
-              fault: a live row carries durationSeconds 0, so this badge read
-              "0:00" — a video the viewer would reasonably read as broken.
-              Same corner and same box as the duration it replaces, so a grid
-              holding both does not step. */}
-          <span
-            className={clsx(
-              'absolute right-1.5 bottom-1.5 rounded px-1 py-0.5 text-xs font-medium',
-              video.isLiveNow
-                ? 'bg-brand text-white'
-                : 'bg-badge tabular-nums',
-            )}
-          >
-            {video.isLiveNow ? 'LIVE' : fmt.duration(video.durationSeconds)}
-          </span>
+          {/* Nothing at all when the length is not known.
+              
+              A flat listing carries no duration, so plenty of rows arrive with
+              zero — and "0:00" is not a shorter way of saying "we don't know",
+              it is a claim that the video is empty. ExternalVideoCard and
+              QueueRail already drew nothing in that case; this card and the up
+              next rail did not, which is the sort of disagreement nobody sees
+              until they are looking at both at once.
+              
+              A broadcast is the exception that made this visible: it carries
+              zero *and* has something to say. Same corner and same box as the
+              duration it replaces, so a grid holding both does not step. */}
+          {(video.isLiveNow || video.durationSeconds > 0) && (
+            <span
+              className={clsx(
+                'absolute right-1.5 bottom-1.5 rounded px-1 py-0.5 text-xs font-medium',
+                video.isLiveNow
+                  ? 'bg-brand text-white'
+                  : 'bg-badge tabular-nums',
+              )}
+            >
+              {video.isLiveNow ? 'LIVE' : fmt.duration(video.durationSeconds)}
+            </span>
+          )}
           {progress > 0 && (
             <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30">
               <span
