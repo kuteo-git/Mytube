@@ -41,7 +41,15 @@ export function VideoRail({ videos, variant }: { videos: Video[]; variant?: Vide
       // added to the box was padding the snap immediately scrolled away.
       // scroll-padding moves the line the snap aligns to, so the room stays on
       // screen.
-      className="-mx-4 -my-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain px-4 py-4
+      // Proximity, not mandatory.
+      //
+      // Mandatory means the browser must always come to rest on a card, so it
+      // takes hold of the row from the first pixel of sideways movement and
+      // fights anything else the finger is doing. Proximity snaps only when the
+      // scroll has already stopped near a card, which is the part worth having;
+      // it also lets a fast flick travel across several cards instead of being
+      // caught by the next one.
+      className="-mx-4 -my-4 flex snap-x snap-proximity gap-4 overflow-x-auto overscroll-x-contain px-4 py-4
                  scroll-pl-4 no-scrollbar min-[700px]:-mx-6 min-[700px]:px-6
                  min-[700px]:scroll-pl-6"
     >

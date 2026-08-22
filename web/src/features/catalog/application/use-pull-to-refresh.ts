@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   REFRESH_THRESHOLD,
   canPull,
+  isVerticalPull,
   pullDistance,
   shouldRefresh,
 } from './pull-to-refresh'
@@ -32,6 +33,10 @@ export function usePullToRefresh({
   const [distance, setDistance] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const startY = useRef<number | null>(null)
+  // Where the finger started sideways, so a swipe across a rail can be told
+  // from a drag down the page. Both are cleared together; a half-remembered
+  // origin would decide the axis from a stale point.
+  const startX = useRef<number | null>(null)
   const refreshingRef = useRef(false)
   /**
    * The distance as of the last move, written where it is computed.
@@ -60,20 +65,35 @@ export function usePullToRefresh({
       // Recorded only from the top. Deciding later, when the finger has already
       // moved, would mean a scroll that happened to end at the top could turn
       // into a pull halfway through.
-      startY.current = canPull(scroller.scrollTop) ? e.touches[0].clientY : null
+      const start = canPull(scroller.scrollTop)
+      startY.current = start ? e.touches[0].clientY : null
+      // Recorded so the gesture can be given up when it turns out to be
+      // sideways. Without it the pull had no way to tell a swipe across a rail
+      // from a drag down the page.
+      startX.current = start ? e.touches[0].clientX : null
     }
 
     const onMove = (e: TouchEvent) => {
       const from = startY.current
       if (from === null) return
       const dy = e.touches[0].clientY - from
+      const dx = e.touches[0].clientX - (startX.current ?? e.touches[0].clientX)
 
-      if (dy <= 0) {
-        // Pulled back up past where it started: hand the gesture back rather
-        // than holding on to it. From here the finger is scrolling.
+      // Handed back the moment the finger is doing something else — pulled
+      // back up past where it started, or travelling further sideways than
+      // down.
+      //
+      // The second case is the one that had to be added. `preventDefault`
+      // below is a claim on the gesture that nothing else can then have, and
+      // `canPull` is true only at the very top of the page — which is exactly
+      // where the horizontal rails are. A swipe across Continue watching
+      // carries a thumb's ordinary downward drift, so the pull took it,
+      // cancelled the rail's scroll, and dragged the page down instead.
+      if (!isVerticalPull(dx, dy)) {
         distanceRef.current = 0
         setDistance(null)
         startY.current = null
+        startX.current = null
         return
       }
       // The browser would otherwise bounce the scroller at the same time, so
@@ -86,6 +106,7 @@ export function usePullToRefresh({
     const onEnd = () => {
       const pulled = startY.current === null ? null : distanceRef.current
       startY.current = null
+      startX.current = null
       distanceRef.current = 0
       if (pulled === null || !shouldRefresh(pulled)) {
         setDistance(null)

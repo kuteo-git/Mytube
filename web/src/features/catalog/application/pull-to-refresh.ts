@@ -70,3 +70,34 @@ export function pullProgress(distance: number): number {
 export function canPull(scrollTop: number): boolean {
   return scrollTop <= 0
 }
+
+/**
+ * How far sideways a finger may wander before the gesture stops being a pull.
+ *
+ * Below this the movement is treated as vertical and the diagonal is forgiven —
+ * nobody swipes down in a perfectly straight line, and demanding one would make
+ * the pull hard to start.
+ */
+export const AXIS_SLOP = 1
+
+/**
+ * Is this finger pulling the page down, or scrolling something sideways?
+ *
+ * The question exists because the pull calls `preventDefault` — that is the
+ * whole point of a non-passive listener, and it is also a claim on the gesture
+ * that nothing else can then have. Made on the vertical delta alone, the claim
+ * was taken from any drag with *any* downward component: the top of Home is
+ * exactly where `canPull` is true, and the top of Home is where the horizontal
+ * rails live, so swiping Continue watching sideways with a thumb's ordinary
+ * downward drift cancelled the rail's scroll and pulled the page instead. The
+ * rail felt stuck to the page and the page felt stuck to the rail; both were
+ * one finger being claimed by the wrong one.
+ *
+ * Compared rather than thresholded: a gesture belongs to whichever axis it has
+ * actually travelled further along, which is the same rule the browser's own
+ * scroll axis-locking uses, and it needs no constant that a different screen
+ * size makes wrong.
+ */
+export function isVerticalPull(dx: number, dy: number): boolean {
+  return dy > 0 && dy > Math.abs(dx) * AXIS_SLOP
+}
