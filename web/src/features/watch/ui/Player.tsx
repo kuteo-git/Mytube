@@ -20,6 +20,7 @@ import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { UnavailableReason } from '@/features/catalog/infrastructure/catalogRepository'
 import { useStream } from '@/features/catalog/application/queries'
 import { atLiveEdge, livePercent } from '../application/live-timeline'
+import { playbackDuration } from '../application/player-duration'
 import { seekElement } from '@/features/watch/application/player-seek'
 import {
   type Tier,
@@ -715,33 +716,39 @@ export function Player({
   const handoverFrameRef = useRef(0)
   const justSwappedRef = useRef(false)
 
-  // A fragmented stream declares no total length: its header says only how much
-  // has been muxed so far, which grows as it plays. Trusting it makes the
-  // progress bar read as full from the first second, since position and
-  // duration are then the same number. The catalog knows the real length, so
-  // that is what the bar is drawn against until the complete file takes over.
-  // Anything that is not the file on disk. The element's own duration is
-  // trustworthy for HLS — the playlist states it — but the catalogue's length
-  // is still the fallback while nothing has loaded yet.
-  const streaming = tier?.name !== 'local'
-  // The catalogue's length is the fallback and, for a stream opened partway
-  // through, the only honest answer: an element that starts at ten minutes
-  // reports only what remains, and a bar drawn against that would say a
-  // half-watched film is barely begun.
+  // What the element says, whenever it has said anything.
+  //
+  // This used to be refused for anything that was not the file on disk, and the
+  // comment above it argued both sides at once: a *fragmented* stream declares
+  // no total length — true of the muxed tier, which no longer exists — while
+  // "the element's own duration is trustworthy for HLS, the playlist states
+  // it" was written directly underneath and never acted on.
+  //
+  // So a video the catalogue has no length for read **0:00** for as long as it
+  // streamed, and only gained a duration when the local file landed — which for
+  // a video nobody downloads is never. Measured on DM2WU9gbNGc: the catalogue
+  // says 0 because it arrived through a flat listing, while its playlist is
+  // `EXT-X-PLAYLIST-TYPE:VOD` with an `ENDLIST` and 3,166 segments summing to
+  // 16,254 seconds. The answer was there the whole time.
+  //
+  // The catalogue stays the fallback for the moment before metadata arrives,
+  // which is what it was always good for.
+  //
+  // `offsetSeconds` is always zero today: nothing sets it to anything else, and
+  // the guard is left standing only because reintroducing an offset without it
+  // would draw a half-watched film as barely begun.
   // A broadcast still on air. Asked of the tier rather than of the catalog row,
   // because the tier is what is actually playing: the row can say "live" for up
   // to thirty minutes after a broadcast has ended, and the player must follow
   // the stream in front of it.
   const isLive = tier?.name === 'live'
-  const duration = isLive
-    ? // The far end of the rewindable window. Zero until the first `progress`
-      // event, which is a second or so — and the bar is drawn against
-      // `max(duration, 1)`, so an unfinished answer reads as a bar at the start
-      // rather than one painted full.
-      (liveWindow?.end ?? 0)
-    : !streaming && offsetSeconds === 0 && elementDuration > 0
-      ? elementDuration
-      : durationSeconds
+  const duration = playbackDuration({
+    elementDuration,
+    catalogueDuration: durationSeconds,
+    liveWindow,
+    isLive,
+    offsetSeconds,
+  })
   // Where the bar begins. Always zero except on a broadcast, whose window slides
   // forward and eventually leaves zero behind it.
   const timelineOrigin = isLive ? (liveWindow?.start ?? 0) : 0
