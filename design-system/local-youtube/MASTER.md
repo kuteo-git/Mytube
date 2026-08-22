@@ -148,6 +148,10 @@ vùng cuộn đã mang sẵn `pt-14`. Ghi thêm chiều cao bar là đếm hai l
 **đẩy phần tử xuống** cho tới ngưỡng, nên hàng chip tụt đúng một header ngay cả khi chưa cuộn.
 Con số 56 chỉ được ghi ở **một** chỗ: vùng cuộn.
 
+**Setting row:** nhãn cột trái `6rem` (desktop `7rem`), control cột phải, `gap-x` **12px**. Mô tả dưới control thì **nằm cùng cột với control**, không phải cùng cột với nhãn.
+
+> Dùng grid hai cột (`grid-cols-[6rem_1fr]`, mô tả `col-start-2`), **không** thụt lề bằng `padding` tính tay. Bản trước tính tay và sai: nó chép bề rộng nhãn (`pl-24` = 96px) mà quên `gap-3` (12px), nên mô tả lệch trái 12px so với ô input ở cả hai breakpoint. Grid thì bề rộng nhãn và gap đổi bao nhiêu cũng vẫn thẳng hàng.
+
 **Search:** input nền `--surface-input`, border `--line`, radius full trái; nút search nền `--surface` radius full phải; focus → border `--ring`.
 
 **Chip:** mặc định nền `--surface` text `--text`; active nền `--invert-bg` text `--invert-text`. Thanh chip scroll ngang, có nút mũi tên 2 đầu, **ẩn scrollbar**.
