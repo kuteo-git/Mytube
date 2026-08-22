@@ -15,3 +15,9 @@ media/
 # Secrets for local services (API keys). Never committed — see scripts/dev.sh,
 # which sources this file if it exists.
 .env.local
+
+# Python environments for the two sidecars. `.venv-nllb` carries its own
+# .gitignore, so git already skipped it — by accident rather than by anything
+# this repository says. Named here so a differently-built environment is
+# skipped too.
+.venv*/
