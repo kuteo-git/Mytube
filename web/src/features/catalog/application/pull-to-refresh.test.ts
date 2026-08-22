@@ -3,6 +3,7 @@ import {
   MAX_PULL,
   REFRESH_THRESHOLD,
   canPull,
+  isVerticalPull,
   pullDistance,
   pullProgress,
   shouldRefresh,
@@ -110,5 +111,48 @@ describe('what the indicator reports', () => {
     for (const d of [0, 20, 50, REFRESH_THRESHOLD - 1, REFRESH_THRESHOLD, 200]) {
       expect(pullProgress(d) >= 1).toBe(shouldRefresh(d))
     }
+  })
+})
+
+/**
+ * Which way the finger is going, and why the question had to be asked.
+ *
+ * The pull calls `preventDefault` — that is what the non-passive listener is
+ * for — and doing so claims the gesture so completely that nothing else can
+ * have it. Decided on the vertical delta alone, the claim was taken from any
+ * drag with *any* downward component. `canPull` is true only at the very top of
+ * the page, and the top of Home is exactly where the horizontal rails are, so
+ * swiping Continue watching sideways with a thumb's ordinary downward drift
+ * cancelled the rail's scroll and dragged the page down instead.
+ */
+describe('telling a pull from a sideways swipe', () => {
+  it('is a pull when the finger has mostly gone down', () => {
+    expect(isVerticalPull(4, 60)).toBe(true)
+  })
+
+  /** Nobody swipes down in a straight line, and demanding one is unusable. */
+  it('forgives the diagonal of an ordinary downward drag', () => {
+    expect(isVerticalPull(20, 40)).toBe(true)
+  })
+
+  /**
+   * The case that was broken: across a rail, with the drift a thumb always
+   * has. Vertically this is a pull by the old rule and by any threshold small
+   * enough to start a pull comfortably.
+   */
+  it('is not a pull when the finger has mostly gone sideways', () => {
+    expect(isVerticalPull(-90, 12)).toBe(false)
+    expect(isVerticalPull(90, 12)).toBe(false)
+  })
+
+  /** Upwards is a scroll, whatever the sideways component. */
+  it('is never a pull upwards', () => {
+    expect(isVerticalPull(0, -30)).toBe(false)
+    expect(isVerticalPull(-5, -1)).toBe(false)
+  })
+
+  /** A finger that has not moved has not chosen an axis yet. */
+  it('claims nothing before the finger has moved', () => {
+    expect(isVerticalPull(0, 0)).toBe(false)
   })
 })

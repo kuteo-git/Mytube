@@ -13,10 +13,21 @@ let scrollTop = 0
  * off it — the finger's position and whether the default can be called off — so
  * those are what a stand-in has to provide.
  */
-function touch(type: string, ys: number[], cancelable = true) {
+/**
+ * A touch carries both coordinates, and this double used to carry only one.
+ *
+ * That mattered the day the hook started asking which way the finger was
+ * going: `clientX` was undefined, every delta was NaN, and five passing tests
+ * turned into five failures describing a gesture nobody makes. The fake was
+ * the incomplete thing, not the rule.
+ *
+ * `x` defaults to a constant so the existing tests keep meaning what they say —
+ * a pull straight down the screen.
+ */
+function touch(type: string, ys: number[], cancelable = true, x = 0) {
   const e = new Event(type, { cancelable, bubbles: true })
   Object.defineProperty(e, 'touches', {
-    value: ys.map((clientY) => ({ clientY })),
+    value: ys.map((clientY) => ({ clientY, clientX: x })),
   })
   return e
 }
@@ -216,4 +227,48 @@ describe('pulling the feed down', () => {
 
     expect(state()).toBe('0:0:idle')
   })
+})
+
+/**
+ * A swipe across a horizontal rail must reach the rail.
+ *
+ * This is the fault as it was reported: Continue watching "dính scroll ngang và
+ * scroll dọc" — the rail stuck to the page and the page stuck to the rail. One
+ * finger, claimed by the wrong one.
+ *
+ * The pull is only armed at the very top of the scroller, and the top of Home
+ * is precisely where the rails are. `preventDefault` on a touchmove cancels the
+ * rail's own scrolling outright, so a sideways swipe with a thumb's ordinary
+ * downward drift stopped the rail dead and dragged the page instead.
+ */
+it('lets a sideways swipe through to the rail underneath it', () => {
+  const onRefresh = vi.fn(async () => {})
+  render(<Harness onRefresh={onRefresh} />)
+
+  const move = touch('touchmove', [312], true, 200)
+  act(() => {
+    // Down 12px, across 100: a swipe, with the drift every thumb has.
+    scroller.dispatchEvent(touch('touchstart', [300], true, 300))
+    scroller.dispatchEvent(move)
+    scroller.dispatchEvent(touch('touchend', []))
+  })
+
+  // Not cancelled, so the browser is still free to scroll the rail.
+  expect(move.defaultPrevented).toBe(false)
+  expect(onRefresh).not.toHaveBeenCalled()
+})
+
+/** And the pull itself still works, which is the other half of the trade. */
+it('still claims a drag that is mostly downward', () => {
+  const onRefresh = vi.fn(async () => {})
+  render(<Harness onRefresh={onRefresh} />)
+
+  const move = touch('touchmove', [400], true, 312)
+  act(() => {
+    // Down 100px, across 12: the same shape the other way round.
+    scroller.dispatchEvent(touch('touchstart', [300], true, 300))
+    scroller.dispatchEvent(move)
+  })
+
+  expect(move.defaultPrevented).toBe(true)
 })
