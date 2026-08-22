@@ -24,7 +24,7 @@ export function SettingsSection({
   children: ReactNode
 }) {
   return (
-    <section className="mt-10 rounded-xl bg-surface p-4 ring-1 ring-transparent transition-shadow duration-150 ease-out hover:ring-border min-[700px]:p-5">
+    <section className="mt-10 rounded-xl bg-surface p-4 ring-1 ring-transparent transition-shadow duration-150 ease-out hover:ring-line min-[700px]:p-5">
       {!headless && (
         <div className="flex items-center gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-hover text-text-2">
@@ -59,15 +59,22 @@ export function SettingRow({
   hint?: string
   children: ReactNode
 }) {
+  // A grid, so the hint lines up with the control by construction.
+  //
+  // It was a flex row with the hint indented by hand, and the two numbers did
+  // not agree: the label is 6rem and the row's gap is 0.75rem, so the control
+  // starts at 6.75rem while the hint was pushed to 6. Twelve pixels out, at
+  // both breakpoints, because the indent copied the label's width and forgot
+  // the gap between them.
+  //
+  // `col-start-2` cannot be off by anything. The gap and the label width can
+  // change and the hint follows, which the arithmetic version could not do —
+  // it would have gone on being wrong by whatever the new difference was.
   return (
-    <div>
-      <div className="flex items-center gap-3">
-        <label className="w-24 shrink-0 text-sm text-text-2 min-[700px]:w-28">
-          {label}
-        </label>
-        <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
-      </div>
-      {hint && <p className="mt-1 pl-24 text-xs text-text-2 min-[700px]:pl-28">{hint}</p>}
+    <div className="grid grid-cols-[6rem_1fr] items-center gap-x-3 gap-y-1 min-[700px]:grid-cols-[7rem_1fr]">
+      <label className="text-sm text-text-2">{label}</label>
+      <div className="flex min-w-0 items-center gap-2">{children}</div>
+      {hint && <p className="col-start-2 text-xs text-text-2">{hint}</p>}
     </div>
   )
 }

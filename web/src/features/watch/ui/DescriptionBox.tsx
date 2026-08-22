@@ -1,10 +1,14 @@
 import clsx from 'clsx'
 import { useState } from 'react'
 import type { Video } from '@/features/catalog/domain/video'
-import { formatBytes, formatDate, formatViews } from '@/shared/lib/format'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
+
 
 /** Collapsible description. Also surfaces local-only facts: disk size and media state. */
 export function DescriptionBox({ video }: { video: Video }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -17,8 +21,8 @@ export function DescriptionBox({ video }: { video: Video }) {
     >
       <p className="font-medium">
         {[
-          video.viewCount > 0 ? formatViews(video.viewCount) : null,
-          video.publishedAt ? formatDate(video.publishedAt) : null,
+          video.viewCount > 0 ? fmt.views(video.viewCount) : null,
+          video.publishedAt ? fmt.date(video.publishedAt) : null,
         ]
           .filter(Boolean)
           .join(' • ')}{' '}
@@ -35,12 +39,16 @@ export function DescriptionBox({ video }: { video: Video }) {
 
       {expanded && (
         <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 border-t border-line-subtle pt-3 text-text-2">
-          <dt>On disk</dt>
-          <dd className="text-text">{formatBytes(video.sizeBytes)}</dd>
-          <dt>Added to library</dt>
-          <dd className="text-text">{formatDate(video.addedAt)}</dd>
-          <dt>Media state</dt>
-          <dd className="text-text">{video.mediaState}</dd>
+          <dt>{t('description.onDisk')}</dt>
+          <dd className="text-text">{fmt.bytes(video.sizeBytes)}</dd>
+          <dt>{t('description.addedToLibrary')}</dt>
+          <dd className="text-text">{fmt.date(video.addedAt)}</dd>
+          <dt>{t('description.mediaState')}</dt>
+          <dd className="text-text">
+            {/* The enum in words. It is a value in a database, and printing
+                it raw showed "DOWNLOADING" on a Vietnamese screen. */}
+            {t(`description.state.${video.mediaState}`)}
+          </dd>
         </dl>
       )}
 
@@ -52,7 +60,7 @@ export function DescriptionBox({ video }: { video: Video }) {
         }}
         className="mt-2 font-medium"
       >
-        {expanded ? 'Show less' : '…more'}
+        {expanded ? t('description.showLess') : t('description.showMore')}
       </button>
     </section>
   )

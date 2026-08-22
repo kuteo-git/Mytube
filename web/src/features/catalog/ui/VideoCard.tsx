@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import { Bookmark, BookmarkMinus, CheckCircle, EyeOff, MoreVertical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
 import {
@@ -12,11 +12,14 @@ import {
   useStreamPrefetch,
 } from '../application/queries'
 import { Avatar, ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 export type VideoCardVariant =
   | 'continueWatching'
@@ -44,6 +47,8 @@ export function VideoCard({
    */
   queueSearch?: string
 }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -73,11 +78,11 @@ export function VideoCard({
       onFocus={() => prefetch(video.id)}
       onBlur={cancel}
     >
-      <Link to={`/watch/${video.id}${queueSearch}`} tabIndex={-1} aria-hidden className="block">
+      <PageLink to={`/watch/${video.id}${queueSearch}`} tabIndex={-1} aria-hidden className="block">
         <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title} channelName={video.channel.name}>
           {video.reason === 'DISCOVERY' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
-              Suggested
+              {t('card.suggested')}
             </span>
           )}
           {/* A broadcast has no duration, and printing one is not a cosmetic
@@ -93,7 +98,7 @@ export function VideoCard({
                 : 'bg-badge tabular-nums',
             )}
           >
-            {video.isLiveNow ? 'LIVE' : formatDuration(video.durationSeconds)}
+            {video.isLiveNow ? 'LIVE' : fmt.duration(video.durationSeconds)}
           </span>
           {progress > 0 && (
             <span className="absolute inset-x-0 bottom-0 h-1 bg-white/30">
@@ -104,7 +109,7 @@ export function VideoCard({
             </span>
           )}
         </ThumbnailSurface>
-      </Link>
+      </PageLink>
 
       <div className="flex gap-3">
         {/* The picture goes where the name goes.
@@ -115,7 +120,7 @@ export function VideoCard({
             avatar was live there and dead here.
             `shrink-0` because the row is `flex` and a long title would
             otherwise squeeze the anchor narrower than the picture inside it. */}
-        <Link
+        <PageLink
           to={`/channel/${video.channel.id}`}
           className="shrink-0 self-start rounded-full"
           aria-label={video.channel.name}
@@ -126,25 +131,25 @@ export function VideoCard({
             src={mediaURL(video.channel.avatarPath)}
             size={36}
           />
-        </Link>
+        </PageLink>
 
         <div className="min-w-0 flex-1">
           <h3 className="clamp-2 text-sm leading-5 font-medium">
-            <Link to={`/watch/${video.id}${queueSearch}`}>{video.title}</Link>
+            <PageLink to={`/watch/${video.id}${queueSearch}`}>{video.title}</PageLink>
           </h3>
           <p className="mt-1 flex items-center gap-1 text-xs text-text-2">
-            <Link to={`/channel/${video.channel.id}`} className="hover:text-text">
+            <PageLink to={`/channel/${video.channel.id}`} className="hover:text-text">
               {video.channel.name}
-            </Link>
-            {video.channel.verified && <CheckCircle size={12} aria-label="Verified" />}
+            </PageLink>
+            {video.channel.verified && <CheckCircle size={12} aria-label={t('ui.verified')} />}
           </p>
-          <p className="text-xs text-text-2">{describeVideo(video)}</p>
+          <p className="text-xs text-text-2">{describeVideo(video, fmt)}</p>
         </div>
 
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            aria-label="More options"
+            aria-label={t('common.moreOptions')}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
             className={clsx(
@@ -182,10 +187,10 @@ export function VideoCard({
  * Printing "0 views • 1 minute ago" for all of them would be a plausible lie,
  * so each part appears only when it is actually known.
  */
-function describeVideo(video: Video): string {
+function describeVideo(video: Video, fmt: ReturnType<typeof useFormat>): string {
   const parts: string[] = []
-  if (video.viewCount > 0) parts.push(formatViews(video.viewCount))
-  if (video.publishedAt) parts.push(formatRelative(video.publishedAt))
+  if (video.viewCount > 0) parts.push(fmt.views(video.viewCount))
+  if (video.publishedAt) parts.push(fmt.relative(video.publishedAt))
   return parts.join(' • ')
 }
 
@@ -221,6 +226,7 @@ function CardMenu({
   variant: VideoCardVariant
   close: () => void
 }) {
+  const { t } = useTranslation()
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
   const setPinned = useSetPinned()
@@ -237,13 +243,13 @@ function CardMenu({
             videoId: video.id,
             durationSeconds: video.durationSeconds,
           })
-          toast('Marked as watched')
+          toast(t('card.markedWatched'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <CheckCircle size={16} />
-        Watched
+        {t('card.watched')}
       </button>
     </li>
   )
@@ -254,14 +260,12 @@ function CardMenu({
         type="button"
         onClick={() => {
           notInterested.mutate(video.id)
-          toast('Not interested')
+          toast(t('card.notInterested'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
-        <EyeOff size={16} />
-        Not interested
-      </button>
+        <EyeOff size={16} />{t('card.notInterested')}</button>
     </li>
   )
 
@@ -271,13 +275,13 @@ function CardMenu({
         type="button"
         onClick={() => {
           setPinned.mutate({ videoId: video.id, pinned: true })
-          toast('Saved')
+          toast(t('common.saved'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <Bookmark size={16} />
-        Save
+        {t('common.save')}
       </button>
     </li>
   )
@@ -288,13 +292,13 @@ function CardMenu({
         type="button"
         onClick={() => {
           setPinned.mutate({ videoId: video.id, pinned: false })
-          toast('Unsaved')
+          toast(t('ui.unsaved'))
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <BookmarkMinus size={16} />
-        Unsave
+        {t('card.unsave')}
       </button>
     </li>
   )

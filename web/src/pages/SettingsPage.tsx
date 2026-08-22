@@ -15,13 +15,15 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import {
   useSaveTranslateConfig,
   useTestTranslate,
   useTranslateConfig,
   useTranslateModels,
-  useVoices,
+  useTTSConfig,
+  useSaveTTSConfig,
+  useTestTTS,
 } from '@/features/settings/application/queries'
 import {
   DEFAULT_VOICE,
@@ -43,10 +45,14 @@ import {
   SettingsSection,
 } from '@/features/settings/ui/SettingsSection'
 import { SliderRow } from '@/features/settings/ui/SliderRow'
+import { useTranslation } from 'react-i18next'
+import type { TranslationKey } from '@/shared/i18n/en'
+import { PageLink } from '@/shared/ui/PageLink'
 
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
 export function SettingsPage() {
+  const { t } = useTranslation()
   const { isMobile } = usePlayer()
 
   // A phone gets a list of rows, each opening a screen of its own; a desktop
@@ -59,7 +65,7 @@ export function SettingsPage() {
   if (isMobile) {
     return (
       <div className="px-4 py-6">
-        <h1 className="text-2xl font-bold">Settings</h1>
+        <h1 className="text-2xl font-bold">{t('ui.settings')}</h1>
         <PhoneMenu />
       </div>
     )
@@ -67,7 +73,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <h1 className="text-2xl font-bold">{t('ui.settings')}</h1>
       {/* First, because it decides whose every other setting on this page is. */}
       <ProfileSettings />
       <YouTubeAccountSettings />
@@ -96,10 +102,13 @@ export function SettingsPage() {
  * that is content; the rest are read when you have decided to change or check
  * something.
  */
-const PHONE_LIBRARY = [
-  { to: '/saved', icon: Bookmark, label: 'Saved' },
-  { to: '/storage', icon: HardDrive, label: 'Storage' },
-  { to: '/activity', icon: Activity, label: 'Activity' },
+// Keys, not words. These are module constants and cannot call a hook, so text
+// baked in here would never change language — the same rule the sidebar's
+// arrays follow, for the same reason.
+const PHONE_LIBRARY: MenuItem[] = [
+  { to: '/saved', icon: Bookmark, label: 'nav.saved' },
+  { to: '/storage', icon: HardDrive, label: 'nav.storage' },
+  { to: '/activity', icon: Activity, label: 'nav.activity' },
 ]
 
 /**
@@ -118,26 +127,34 @@ const PHONE_LIBRARY = [
  * a place there is what you move between while browsing. The avatar in the top
  * bar is the other door to the same room.
  */
-const PHONE_ACCOUNT = [
-  { to: '/profile', icon: UserRound, label: 'Profile' },
-  { to: '/account', icon: KeyRound, label: 'YouTube account' },
-  { to: '/watch-later', icon: Clock, label: 'Watch later' },
-  { to: '/playlists', icon: ListVideo, label: 'Playlists' },
+const PHONE_ACCOUNT: MenuItem[] = [
+  { to: '/profile', icon: UserRound, label: 'nav.profile' },
+  { to: '/account', icon: KeyRound, label: 'youtubeAccount.title' },
+  { to: '/watch-later', icon: Clock, label: 'nav.watchLater' },
+  { to: '/playlists', icon: ListVideo, label: 'nav.playlists' },
 ]
 
-const PHONE_PREFS = [
-  { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
-  { to: '/settings/narration', icon: Headphones, label: 'Narration' },
-  { to: '/settings/translation', icon: Languages, label: 'Translation' },
-  { to: '/settings/advanced', icon: SlidersHorizontal, label: 'Advanced' },
+const PHONE_PREFS: MenuItem[] = [
+  { to: '/settings/feed', icon: LayoutGrid, label: 'settings.feedMix.title' },
+  { to: '/settings/narration', icon: Headphones, label: 'phoneSettings.narration' },
+  { to: '/settings/translation', icon: Languages, label: 'phoneSettings.translation' },
+  { to: '/settings/advanced', icon: SlidersHorizontal, label: 'phoneSettings.advanced' },
 ]
+
+/** A row in the phone settings menu. `label` is a key — see the note above. */
+interface MenuItem {
+  to: string
+  icon: typeof Bookmark
+  label: TranslationKey
+}
 
 function PhoneMenu() {
+  const { t } = useTranslation()
   return (
-    <nav className="mt-4 flex flex-col gap-6" aria-label="Settings">
-      <MenuGroup label="Library" items={PHONE_LIBRARY} />
-      <MenuGroup label="Account" items={PHONE_ACCOUNT} />
-      <MenuGroup label="Preferences" items={PHONE_PREFS} />
+    <nav className="mt-4 flex flex-col gap-6" aria-label={t('ui.settings')}>
+      <MenuGroup label={t('phoneSettings.library')} items={PHONE_LIBRARY} />
+      <MenuGroup label={t('phoneSettings.account')} items={PHONE_ACCOUNT} />
+      <MenuGroup label={t('phoneSettings.preferences')} items={PHONE_PREFS} />
     </nav>
   )
 }
@@ -146,9 +163,12 @@ function MenuGroup({
   label,
   items,
 }: {
+  /** Already translated: the group headings are written at the call site. */
   label: string
-  items: Array<{ to: string; icon: typeof Bookmark; label: string }>
+  items: MenuItem[]
 }) {
+  const { t } = useTranslation()
+
   return (
     <div>
       <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-text-2">
@@ -156,16 +176,16 @@ function MenuGroup({
       </h2>
       <div className="mt-1">
         {items.map(({ to, icon: Icon, label }) => (
-          <Link
+          <PageLink
             key={to}
             to={to}
             className="flex items-center gap-3 rounded-xl px-1 py-3.5 text-sm
                        transition-colors hover:bg-surface-hover"
           >
             <Icon size={18} className="shrink-0 text-text-2" />
-            <span className="flex-1">{label}</span>
+            <span className="flex-1">{t(label)}</span>
             <ChevronRight size={18} className="shrink-0 text-text-2" />
-          </Link>
+          </PageLink>
         ))}
       </div>
     </div>
@@ -173,8 +193,35 @@ function MenuGroup({
 }
 
 export function NarrationSettings({ headless = false }: { headless?: boolean } = {}) {
-  const { data: voices } = useVoices()
+  const { t } = useTranslation()
   const [prefs, setPrefs] = useState(loadNarrationAudioPrefs)
+
+  // Where speech is synthesised. Server-side, unlike the levels below, because
+  // it holds a credential and because it is a property of the installation
+  // rather than of this browser.
+  const { data: ttsConfig } = useTTSConfig()
+  const saveTTS = useSaveTTSConfig()
+  const testTTS = useTestTTS()
+  const [ttsBaseUrl, setTTSBaseUrl] = useState('')
+  const [ttsModel, setTTSModel] = useState('')
+  const [ttsKey, setTTSKey] = useState('')
+  const [showTTSKey, setShowTTSKey] = useState(false)
+
+  useEffect(() => {
+    if (!ttsConfig) return
+    setTTSBaseUrl(ttsConfig.baseUrl)
+    setTTSModel(ttsConfig.model)
+  }, [ttsConfig])
+
+  // Named once. Test and Save acting on two separately assembled objects is how
+  // "it worked when I tested it" starts being true and useless.
+  const ttsForm = {
+    baseUrl: ttsBaseUrl,
+    model: ttsModel,
+    apiKey: ttsKey,
+    voice: prefs.voice,
+  }
+  const ttsResult = testTTS.data
 
   // Written on every change, not on a Save button. The player re-reads them and
   // the miniplayer keeps talking while you drag, which is the whole point of
@@ -194,43 +241,135 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
     <SettingsSection
       headless={headless}
       icon={<Headphones size={18} />}
-      title="Narration"
-      description="Open a video and come back here to hear these against it — the player keeps going in the corner."
+      title={t('ui.narration')}
+      description={t('narration.tryIt')}
     >
-      <div className="rounded-lg bg-surface-input p-3">
-        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">Audio</h3>
+      {/* The endpoint comes first, because until it is set there is no sound
+          to balance and the sliders below are settings for nothing. */}
+      <SettingRow label={t('narration.baseURL')} hint={t('narration.openaiFormat')}>
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
+          value={ttsBaseUrl}
+          placeholder="https://api.openai.com/v1"
+          aria-label={t('narration.baseURL')}
+          onChange={(e) => setTTSBaseUrl(e.target.value)}
+        />
+      </SettingRow>
+
+      <SettingRow
+        label={t('translationSettings.apiKey')}
+        hint={
+          ttsConfig?.hasKey
+            ? t('ui.keyStored', { hint: ttsConfig.keyHint })
+            : t('translationSettings.noKeyStored')
+        }
+      >
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
+          type={showTTSKey ? 'text' : 'password'}
+          value={ttsKey}
+          placeholder={ttsConfig?.hasKey ? '••••••••' : 'sk-…'}
+          aria-label={t('translationSettings.apiKey')}
+          onChange={(e) => setTTSKey(e.target.value)}
+        />
+        <button
+          type="button"
+          aria-label={showTTSKey ? t('translationSettings.hideKey') : t('translationSettings.showKey')}
+          onClick={() => setShowTTSKey((v) => !v)}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-surface-hover text-text-2 transition-colors duration-150 ease-out hover:text-text"
+        >
+          {showTTSKey ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </SettingRow>
+
+      <SettingRow label={t('ui.model')} hint={t('narration.modelHint')}>
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
+          value={ttsModel}
+          placeholder="gpt-4o-mini-tts"
+          aria-label={t('ui.model')}
+          onChange={(e) => setTTSModel(e.target.value)}
+        />
+      </SettingRow>
+
+      {/* The same two buttons as the translation panel, in the same order and
+          the same weights: Test is the quiet one, Save is the committing one.
+          Two settings screens that do the same job should not ask to be read
+          twice. */}
+      <ActionBar>
+        <button
+          type="button"
+          onClick={() => testTTS.mutate(ttsForm)}
+          disabled={testTTS.isPending}
+          className="h-11 rounded-lg bg-surface-hover px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
+        >
+          {testTTS.isPending ? t('ui.testing') : t('ui.test')}
+        </button>
+        <button
+          type="button"
+          onClick={() => saveTTS.mutate(ttsForm)}
+          disabled={saveTTS.isPending}
+          className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
+        >
+          {saveTTS.isPending ? t('ui.saving') : t('common.save')}
+        </button>
+      </ActionBar>
+
+      {/* What the test produced, played rather than described. An endpoint can
+          answer 200 with perfectly formed silence, and a number of milliseconds
+          would report that as a success. */}
+      {ttsResult?.error && (
+        <p role="alert" className="text-xs text-brand">
+          {ttsResult.error}
+        </p>
+      )}
+      {ttsResult?.audio && (
+        <div className="rounded-lg bg-surface-input p-3">
+          <p className="text-xs text-text-2">{ttsResult.sample}</p>
+          {/* Native controls: this is one clip on a settings page, and a custom
+              player here would be a second thing to keep working for no gain. */}
+          <audio src={ttsResult.audio} controls className="mt-2 w-full" />
+          <p className="mt-1 text-xs text-text-2">
+            {t('more.milliseconds', { ms: ttsResult.ms ?? 0 })}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-lg bg-surface-input p-3">
+        <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-text-2">{t('ui.audio')}</h3>
         <div className="flex flex-col gap-4">
-          <SettingRow label="Voice">
-            <select
-              className="min-w-0 flex-1 rounded-lg border border-line bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          {/* Typed, not chosen.
+              
+              It was a menu filled from the synthesiser's own voice list. OpenAI
+              publishes no such endpoint — its voices are a fixed set in the
+              documentation — and every service that copies the API brings its
+              own names, so a menu would be right for one provider and wrong the
+              day it added a voice, in the worst way: the voice exists and this
+              app refuses it.
+              
+              Still per device, which the levels below are too: two people in
+              one house should be able to disagree about a voice. */}
+          <SettingRow label={t('ui.voice')} hint={t('narration.voiceHint')}>
+            <input
+              className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
               value={prefs.voice}
-              aria-label="Voice"
+              placeholder={DEFAULT_VOICE}
+              aria-label={t('ui.voice')}
               onChange={(e) => update({ voice: e.target.value })}
-            >
-              {/* The stored voice is listed even if the service did not answer, so
-                  a synthesiser that is down cannot silently reset the choice. */}
-              {!(voices ?? []).includes(prefs.voice) && (
-                <option value={prefs.voice}>{prefs.voice}</option>
-              )}
-              {(voices ?? [DEFAULT_VOICE]).map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+            />
           </SettingRow>
 
           <SliderRow
-            label="Voice volume"
+            label={t('narration.voiceVolume')}
             value={prefs.voiceLevel}
             max={MAX_VOICE_LEVEL}
             format={percent}
             onChange={(voiceLevel) => update({ voiceLevel })}
-            hint="Goes past 100% because synthesised speech is quieter than film audio."
+            hint={t('narration.voiceVolumeHint')}
           />
 
           <SliderRow
-            label="Video volume while speaking"
+            label={t('narration.videoVolumeWhileSpeaking')}
             value={prefs.duckLevel}
             max={1}
             format={percent}
@@ -243,6 +382,7 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
 }
 
 export function TranslationSettings({ headless = false }: { headless?: boolean } = {}) {
+  const { t } = useTranslation()
   const { data: config } = useTranslateConfig()
   const save = useSaveTranslateConfig()
   const models = useTranslateModels()
@@ -269,38 +409,41 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
     <SettingsSection
       headless={headless}
       icon={<Languages size={18} />}
-      title="Translation"
-      description="Where subtitles are translated. Changing the model translates fresh — earlier translations are kept, so switching back costs nothing."
+      title={t('ui.translation')}
+      description={t('translationSettings.description')}
     >
-      <SettingRow label="Base URL">
+      <SettingRow
+        label={t('translationSettings.baseURL')}
+        hint={t('translationSettings.openaiFormat')}
+      >
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={baseUrl}
           placeholder="http://host:port"
-          aria-label="Base URL"
+          aria-label={t('translationSettings.baseURL')}
           onChange={(e) => setBaseUrl(e.target.value)}
         />
       </SettingRow>
 
       <SettingRow
-        label="API key"
+        label={t('translationSettings.apiKey')}
         hint={
           config?.hasKey
-            ? `A key ending ${config.keyHint} is stored. Leave blank to keep it.`
-            : 'No key stored yet.'
+            ? t('ui.keyStored', { hint: config.keyHint })
+            : t('translationSettings.noKeyStored')
         }
       >
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           type={showKey ? 'text' : 'password'}
           value={apiKey}
           placeholder={config?.hasKey ? '••••••••' : 'sk-…'}
-          aria-label="API key"
+          aria-label={t('translationSettings.apiKey')}
           onChange={(e) => setApiKey(e.target.value)}
         />
         <button
           type="button"
-          aria-label={showKey ? 'Hide the API key' : 'Show the API key'}
+          aria-label={showKey ? t('translationSettings.hideKey') : t('translationSettings.showKey')}
           onClick={() => setShowKey((v) => !v)}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-surface-hover text-text-2 transition-colors duration-150 ease-out hover:text-text"
         >
@@ -308,7 +451,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         </button>
       </SettingRow>
 
-      <SettingRow label="Model">
+      <SettingRow label={t('ui.model')}>
         <ModelPicker
           value={model}
           models={models.data ?? []}
@@ -325,7 +468,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
           disabled={test.isPending}
           className="h-11 rounded-lg bg-surface-hover px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
         >
-          {test.isPending ? 'Testing…' : 'Test'}
+          {test.isPending ? t('ui.testing') : t('ui.test')}
         </button>
         <button
           type="button"
@@ -333,15 +476,17 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
           disabled={save.isPending}
           className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
         >
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('ui.saving') : t('common.save')}
         </button>
       </ActionBar>
 
       {models.isError && (
-        <p className="text-xs text-brand">Could not load the model list.</p>
+        <p className="text-xs text-brand">{t('translationSettings.couldNotLoadModels')}</p>
       )}
       {models.data && (
-        <p className="text-xs text-text-2">{models.data.length} models available.</p>
+        <p className="text-xs text-text-2">
+          {t('more.modelsAvailable', { count: models.data.length })}
+        </p>
       )}
 
       {/* The same sentence every time, so pressing Test on one model and then
@@ -354,16 +499,16 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
             <>
               <p className="text-xs text-text-2">{result.sample}</p>
               <p className="mt-1">{result.translated}</p>
-              <p className="mt-1 text-xs text-text-2">{result.ms} ms</p>
+              <p className="mt-1 text-xs text-text-2">{t('more.milliseconds', { ms: result.ms ?? 0 })}</p>
             </>
           )}
         </div>
       )}
       {test.isError && (
-        <p className="text-xs text-brand">The test call did not get through.</p>
+        <p className="text-xs text-brand">{t('translationSettings.testFailed')}</p>
       )}
       {save.isSuccess && !save.isPending && (
-        <p className="text-xs text-text-2">Saved. The next batch uses it.</p>
+        <p className="text-xs text-text-2">{t('translationSettings.savedNextBatch')}</p>
       )}
     </SettingsSection>
   )

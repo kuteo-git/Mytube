@@ -24,6 +24,16 @@ const stream = {
   sources: [{ name: 'hls', url: '/api/videos/abc/hls/master.m3u8', height: 360, seekable: true }],
 }
 
+vi.mock('@/features/settings/application/queries', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  // This test is about the pipeline running at all, which presupposes
+  // somewhere to synthesise. Without one the switch is correctly disabled and
+  // there is nothing to turn on.
+  useTTSConfig: () => ({
+    data: { baseUrl: 'http://tts.test/v1', model: '', voice: '', hasKey: false, keyHint: '' },
+  }),
+}))
+
 vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
   httpCatalogRepository: {
     getVideo: vi.fn(async () => video),

@@ -13,6 +13,18 @@
  * the back bar decides what to call the screen. The last time two of those
  * worked it out separately, the miniplayer floated a tab bar's height above the
  * bottom of a channel page.
+ *
+ * ## Watch later, Playlists and a playlist's own page
+ *
+ * These were kept out on the reasoning that a bare screen drops the tab bar for
+ * a back arrow while a playlist's own page never did — so the parent would lose
+ * the navigation while the child kept it, which is the wrong way round.
+ *
+ * The observation was right and the conclusion was not: the fix is to move the
+ * whole chain rather than to hold the top of it back. They sit in the Account
+ * group beside the profile and the YouTube connection, and two of four
+ * behaving one way while two behave another is a rule nobody can see and
+ * everybody has to learn.
  */
 
 /**
@@ -25,20 +37,28 @@
  */
 const TITLES: Array<[test: (path: string) => boolean, title: string | null]> = [
   [(p) => p.startsWith('/channel/'), null],
-  [(p) => p === '/saved', 'Saved'],
-  // Watch later and Playlists are deliberately *not* here.
+  [(p) => p === '/saved', 'nav.saved'],
+  // A playlist names itself, like a channel, so the shell draws no bar for it
+  // and the page draws its own — see the note above on null.
+  [(p) => p.startsWith('/playlist/'), null],
+  [(p) => p === '/playlists', 'nav.playlists'],
+  [(p) => p === '/watch-later', 'nav.watchLater'],
+  // The two halves of "who am I and what is my account doing".
   //
-  // A bare screen drops the tab bar for a back arrow, and a playlist's own page
-  // never did — so the parent lost the navigation while the child kept it,
-  // which is the wrong way round however you argue it. They are lists you
-  // browse, like Home, not a detour you back out of; each draws its own heading
-  // already, so there is nothing a back bar would add.
-  [(p) => p === '/storage', 'Storage'],
-  [(p) => p === '/activity', 'Activity'],
-  [(p) => p === '/settings/feed', 'Home feed'],
-  [(p) => p === '/settings/advanced', 'Advanced'],
-  [(p) => p === '/settings/narration', 'Narration'],
-  [(p) => p === '/settings/translation', 'Translation'],
+  // These were missing rather than excluded, and the panels prove it: both
+  // render `headless`, which means they deliberately draw no heading because
+  // the shell was expected to name them — exactly as their four /settings/*
+  // siblings do. Without an entry here the shell named nothing, so on a phone
+  // both screens were untitled, under a search bar that had nothing to do with
+  // them.
+  [(p) => p === '/profile', 'nav.profile'],
+  [(p) => p === '/account', 'nav.youtubeAccount'],
+  [(p) => p === '/storage', 'nav.storage'],
+  [(p) => p === '/activity', 'nav.activity'],
+  [(p) => p === '/settings/feed', 'settings.feedMix.title'],
+  [(p) => p === '/settings/advanced', 'phoneSettings.advanced'],
+  [(p) => p === '/settings/narration', 'phoneSettings.narration'],
+  [(p) => p === '/settings/translation', 'phoneSettings.translation'],
 ]
 
 /**

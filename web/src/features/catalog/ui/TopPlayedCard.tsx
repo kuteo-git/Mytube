@@ -1,13 +1,15 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import { ListVideo } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { topPlayedQueueSearch } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The most-played collection, presented as a stack of cards the way youtube.com
@@ -18,6 +20,7 @@ import { useState } from 'react'
  * it plays from most-watched downwards.
  */
 export function TopPlayedCard({ videos }: { videos: Video[] }) {
+  const { t } = useTranslation()
   if (videos.length === 0) return null
 
   // Pick a random video as the lead each time the card mounts, so the thumbnail
@@ -31,7 +34,7 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
 
   return (
     <article className={clsx('group flex flex-col gap-3', videoItemHover, videoItemBleed)}>
-      <Link to={`/watch/${lead.id}${topPlayedQueueSearch()}`} className="block">
+      <PageLink to={`/watch/${lead.id}${topPlayedQueueSearch()}`} className="block">
         {/* The offset slivers behind the thumbnail are the stack. Purely
             decorative, so they are hidden from assistive technology. */}
         <div className="relative pt-2">
@@ -46,17 +49,17 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
           <ThumbnailSurface hue={hueFromId(lead.id)} src={mediaURL(lead.thumbnailPath)} alt="" channelName={lead.channel.name}>
             <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1.5 rounded bg-badge px-2 py-1 text-xs font-medium">
               <ListVideo size={14} />
-              Mix
+              {t('more.mix')}
             </span>
           </ThumbnailSurface>
         </div>
-      </Link>
+      </PageLink>
 
       <div className="min-w-0">
         <h3 className="clamp-2 text-sm leading-5 font-medium">
-          <Link to={`/watch/${lead.id}${topPlayedQueueSearch()}`}>
-            Mix — the {videos.length} you play most
-          </Link>
+          <PageLink to={`/watch/${lead.id}${topPlayedQueueSearch()}`}>
+            {t('more.mixOf', { count: videos.length })}
+          </PageLink>
         </h3>
         {names.length > 0 && (
           <p className="mt-1 clamp-2 text-xs text-text-2">

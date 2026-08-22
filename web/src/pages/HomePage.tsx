@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
+import {useParams} from 'react-router-dom'
 import {
   useDiscover,
   useFeed,
@@ -13,7 +13,7 @@ import {
 } from '@/features/catalog/application/queries'
 import { isInProgress } from '@/features/catalog/domain/video'
 import { useHiddenVideos } from '@/features/catalog/application/hidden'
-import { ChipBar, LIVE_CATEGORY } from '@/features/catalog/ui/ChipBar'
+import { ALL_CATEGORY, ChipBar, LIVE_CATEGORY } from '@/features/catalog/ui/ChipBar'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
@@ -23,14 +23,17 @@ import { usePlayer } from '@/features/watch/application/player-context'
 import { PullIndicator } from '@/features/catalog/ui/PullIndicator'
 import { usePullToRefresh } from '@/features/catalog/application/use-pull-to-refresh'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { Trans, useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Serves both "/" and "/topic/:name". A topic route is the same grid with the
  * filter preselected, so the two cannot drift apart.
  */
 export function HomePage() {
+  const { t } = useTranslation()
   const { topicName } = useParams()
-  const [selected, setSelected] = useState('All')
+  const [selected, setSelected] = useState<string>(ALL_CATEGORY)
   const active = topicName ?? selected
 
   // A different topic is a different grid, so it starts at its own beginning.
@@ -140,7 +143,7 @@ export function HomePage() {
   // claim that something is happening, and one that is lit over an empty grid
   // teaches people to stop believing it.
   const chips = [
-    'All',
+    ALL_CATEGORY,
     ...(live && live.length > 0 ? [LIVE_CATEGORY] : []),
     ...(topics ?? []).map((t) => t.name),
   ]
@@ -195,7 +198,7 @@ export function HomePage() {
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not reach the library service. Is the gateway running?
+          {t('empty.couldNotReachLibrary')}
         </p>
       ) : (
         <>
@@ -205,7 +208,7 @@ export function HomePage() {
               it — four rows on a desktop and twelve on a phone. */}
           {railShown && (
             <section className="pt-3">
-              <h2 className="mb-3 text-lg font-medium">Continue watching</h2>
+              <h2 className="mb-3 text-lg font-medium">{t('pages.home.continueWatching')}</h2>
               <VideoRail videos={continueWatching} variant="continueWatching" />
               {/* Space below the rule belongs to the grid that follows, so it
                   is set there — matched to this margin. */}
@@ -251,11 +254,12 @@ export function HomePage() {
               thing that will change the answer. */}
           {!isPending && !hasNextPage && videos.length > 0 && (
             <p className="py-10 text-center text-sm text-text-2">
-              That is everything your Home feed is set to show.{' '}
-              <Link to="/settings/feed" className="underline hover:text-text">
-                Adjust the mix
-              </Link>{' '}
-              to widen it.
+              <Trans
+                i18nKey="more.everythingShown"
+                components={[
+                  <PageLink key="l" to="/settings/feed" className="underline hover:text-text" />,
+                ]}
+              />
             </p>
           )}
         </>
@@ -263,11 +267,12 @@ export function HomePage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          Nothing here yet. Topics are scanned every 12 hours; use Refresh to scan now.{' '}
-          <Link to="/settings/feed" className="underline hover:text-text">
-            Check your Home feed mix
-          </Link>{' '}
-          — a share set to 0% shows nothing at all.
+          <Trans
+            i18nKey="more.nothingYetHome"
+            components={[
+              <PageLink key="l" to="/settings/feed" className="underline hover:text-text" />,
+            ]}
+          />
         </p>
       )}
     </div>

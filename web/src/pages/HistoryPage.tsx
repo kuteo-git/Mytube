@@ -1,8 +1,10 @@
 import { useHistory } from '@/features/catalog/application/queries'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
 
 export function HistoryPage() {
+  const { t } = useTranslation()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useHistory()
 
@@ -10,11 +12,11 @@ export function HistoryPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Watch history</h1>
+      <h1 className="py-4 text-2xl font-bold">{t('pages.history.title')}</h1>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load history. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_history') })}
         </p>
       ) : (
         <>
@@ -34,7 +36,7 @@ export function HistoryPage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          No watch history yet. Videos will appear here after you watch them.
+          {t('empty.history')}
         </p>
       )}
     </div>

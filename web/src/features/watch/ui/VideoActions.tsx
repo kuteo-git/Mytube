@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Bookmark, CheckCircle, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
+import {} from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
@@ -11,9 +11,12 @@ import {
   shareURL,
   shareVideo,
 } from '@/features/watch/application/share-link'
-import { formatCount, formatSubscribers } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Channel row plus the action cluster.
@@ -25,6 +28,8 @@ import { mediaURL } from '@/shared/lib/media'
  * will never reclaim it.
  */
 export function VideoActions({ video, likeCount }: { video: Video; likeCount: number }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const reaction = video.userState?.reaction ?? 'NONE'
   const setReaction = useSetReaction(video.id)
   const setSubscription = useSetSubscription(video.channel.id)
@@ -43,9 +48,9 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   // read by whoever is already looking at that one control — while the eye at
   // that moment is on the thing being shared.
   const announce = (outcome: ShareOutcome) => {
-    if (outcome === 'shared') toast('Shared')
-    else if (outcome === 'copied') toast('YouTube link copied')
-    else if (outcome === 'failed') toast("Couldn't copy the link")
+    if (outcome === 'shared') toast(t('ui.shared'))
+    else if (outcome === 'copied') toast(t('actions.linkCopied'))
+    else if (outcome === 'failed') toast(t('actions.couldNotCopy'))
     // A cancelled share sheet is the viewer's own answer, and reporting a
     // decision back to the person who made it is noise.
   }
@@ -53,20 +58,20 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <Link to={`/channel/${video.channel.id}`}>
+        <PageLink to={`/channel/${video.channel.id}`}>
           <Avatar
             hue={hueFromId(video.channel.id)}
             name={video.channel.name}
             src={mediaURL(video.channel.avatarPath)}
             size={40}
           />
-        </Link>
+        </PageLink>
         <div>
-          <Link to={`/channel/${video.channel.id}`} className="flex items-center gap-1 text-base font-medium">
+          <PageLink to={`/channel/${video.channel.id}`} className="flex items-center gap-1 text-base font-medium">
             {video.channel.name}
             {video.channel.verified && <CheckCircle size={14} className="text-text-2" />}
-          </Link>
-          <p className="text-xs text-text-2">{formatSubscribers(video.channel.subscriberCount)}</p>
+          </PageLink>
+          <p className="text-xs text-text-2">{fmt.subscribers(video.channel.subscriberCount)}</p>
         </div>
         <button
           type="button"
@@ -80,7 +85,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
               : 'bg-text text-bg hover:bg-text/90')
           }
         >
-          {video.channel.subscribed ? 'Subscribed' : 'Subscribe'}
+          {video.channel.subscribed ? t('ui.subscribed') : t('ui.subscribe')}
         </button>
       </div>
 
@@ -89,19 +94,19 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           <button
             type="button"
             aria-pressed={reaction === 'LIKE'}
-            aria-label="Like"
+            aria-label={t('ui.like')}
             disabled={setReaction.isPending}
             onClick={() => setReaction.mutate(reaction === 'LIKE' ? 'NONE' : 'LIKE')}
             className="flex h-full items-center gap-2 rounded-l-full px-4 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
           >
             <ThumbsUp size={20} fill={reaction === 'LIKE' ? 'currentColor' : 'none'} />
-            {formatCount(likeCount)}
+            {fmt.count(likeCount)}
           </button>
           <span className="h-6 w-px bg-line-subtle" />
           <button
             type="button"
             aria-pressed={reaction === 'DISLIKE'}
-            aria-label="Dislike"
+            aria-label={t('ui.dislike')}
             disabled={setReaction.isPending}
             onClick={() => setReaction.mutate(reaction === 'DISLIKE' ? 'NONE' : 'DISLIKE')}
             className="grid h-full w-12 place-items-center rounded-r-full transition-colors duration-150 ease-out hover:bg-surface-hover"
@@ -115,7 +120,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             reported twice. */}
         <ActionPill
           icon={<Share2 size={20} />}
-          label="Share"
+          label={t('ui.share')}
           onClick={() => {
             void shareVideo({
               url: shareURL(video),
@@ -129,17 +134,12 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
             press here would be undone by the next pass. */}
         <ActionPill
           icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
-          label={video.pinned ? 'Saved' : 'Save'}
+          label={video.pinned ? t('common.saved') : t('common.save')}
           onClick={() => setPinned.mutate({ videoId: video.id, pinned: !video.pinned })}
         />
 
-        <button
-          type="button"
-          aria-label="More actions"
-          className="grid h-9 w-9 place-items-center rounded-full bg-surface transition-colors duration-150 ease-out hover:bg-surface-hover"
-        >
-          <MoreHorizontal size={20} />
-        </button>
+        {/* No overflow menu. It opened nothing — a button that looks like a
+            control and is not one is the single thing §5 forbids outright. */}
       </div>
     </div>
   )

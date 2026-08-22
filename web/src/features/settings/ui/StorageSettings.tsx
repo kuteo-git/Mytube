@@ -6,6 +6,7 @@ import { apiJSON } from '@/shared/api/http'
 import { formatBytes } from '@/shared/lib/format'
 import { SettingsSection } from './SettingsSection'
 import { ActionBar } from './ActionBar'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Where the library lives, and whether it is kept at all.
@@ -35,6 +36,7 @@ interface RootCheck {
 }
 
 export function StorageSettings({ headless = false }: { headless?: boolean }) {
+  const { t } = useTranslation()
   const [state, setState] = useState<StorageSettingsState | null>(null)
   const [path, setPath] = useState('')
   const [check, setCheck] = useState<RootCheck | null>(null)
@@ -49,7 +51,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         setState(s)
         setPath(s.mediaRoot)
       })
-      .catch(() => setError('Could not read the storage settings.'))
+      .catch(() => setError(t('settings.storage.couldNotRead')))
   }, [])
 
   // Checked on leaving the field as well as on the button. Validating only when
@@ -62,7 +64,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
     try {
       setCheck(await apiJSON<RootCheck>(`/api/settings/storage/verify?path=${encodeURIComponent(candidate)}`))
     } catch {
-      setCheck({ ok: false, problem: 'Could not reach the server to check that folder.' })
+      setCheck({ ok: false, problem: t('settings.storage.couldNotReach') })
     } finally {
       setChecking(false)
     }
@@ -80,8 +82,8 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       setConfirming(null)
       setSaved(
         next.restartRequired
-          ? 'Saved. Restart the app for it to take effect — three services read this when they start.'
-          : 'Saved.',
+          ? t('settings.storage.savedRestart')
+          : t('ui.savedFull'),
       )
     } catch (e) {
       // The gateway answers 409 with the count when the old folder still holds
@@ -92,7 +94,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         setConfirming({ videos: Number(match[1]), oldRoot: state?.mediaRoot ?? '' })
         return
       }
-      setError(body || 'Could not save that folder.')
+      setError(body || t('settings.storage.couldNotSaveFolder'))
     }
   }
 
@@ -106,7 +108,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         }),
       )
     } catch {
-      setError('Could not change that setting.')
+      setError(t('settings.storage.couldNotChange'))
     }
   }
 
@@ -115,12 +117,12 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       icon={<FolderOpen size={18} />}
       // Not "Storage": the page heading an inch above already says that word,
       // which is the fault SettingsSection's own note warns about.
-      title="Library folder"
-      description="Where downloaded videos are kept, and whether to keep them at all."
+      title={t('settings.storage.title')}
+      description={t('settings.storage.description')}
       headless={headless}
     >
       <label className="mt-4 block text-sm text-text-2" htmlFor="media-root">
-        Folder
+        {t('more.folder')}
       </label>
       <input
         id="media-root"
@@ -133,7 +135,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         onBlur={(e) => void verify(e.target.value)}
         spellCheck={false}
         placeholder="/Volumes/Data2/Youtube"
-        className="mt-1 w-full rounded-lg bg-surface-input p-3 font-mono text-sm outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
+        className="mt-1 w-full rounded-lg bg-surface-input p-3 font-mono text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
       />
 
       {/* Where the current value came from. Somebody who cannot tell a saved
@@ -143,8 +145,8 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       {state && (
         <p className="pt-1 text-xs text-text-2">
           {state.source === 'file'
-            ? 'Saved here.'
-            : 'From the environment — nothing saved yet.'}
+            ? t('settings.storage.savedHere')
+            : t('storageMode.fromEnvironment')}
         </p>
       )}
 
@@ -155,7 +157,10 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
           className={clsx('pt-2 text-sm', check.ok ? 'text-text-2' : 'text-brand')}
         >
           {check.ok
-            ? `Writable. ${formatBytes(check.freeBytes ?? 0)} free, ${check.videoCount ?? 0} videos already there.`
+            ? t('ui.writable', {
+                free: formatBytes(check.freeBytes ?? 0),
+                count: check.videoCount ?? 0,
+              })
             : check.problem}
         </p>
       )}
@@ -167,7 +172,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
           disabled={checking || !path.trim()}
           className="mt-3 rounded-full bg-surface-hover px-4 py-2 text-sm transition-colors duration-150 ease-out disabled:opacity-60"
         >
-          {checking ? 'Checking…' : 'Check'}
+          {checking ? t('ui.checking') : t('ui.check')}
         </button>
         <button
           type="button"
@@ -175,7 +180,7 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
           disabled={checking || !check?.ok}
           className="mt-3 rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-colors duration-150 ease-out disabled:opacity-60"
         >
-          Save
+          {t('common.save')}
         </button>
         {saved && (
           <span role="status" className="mt-3 text-sm text-text-2">
@@ -192,12 +197,17 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
       {confirming && (
         <div role="alert" className="mt-4 rounded-lg bg-surface-hover p-3 text-sm">
           <p>
-            <span className="font-medium">{confirming.videos.toLocaleString()}</span> videos are at{' '}
-            <span className="font-mono text-xs">{confirming.oldRoot}</span>. Changing the folder
-            does not move them — they would have to be downloaded again.
+            {t('more.videosAreAt', {
+              // Named `total`, not `count`: i18next reserves `count` for plural
+              // selection, so passing a formatted string there is a type error
+              // and, worse, would silently pick a plural form in a language
+              // that has none.
+              total: confirming.videos.toLocaleString(),
+              path: confirming.oldRoot,
+            })}
           </p>
           <p className="pt-2 text-text-2">
-            To keep them, move them yourself first, then change this.
+            {t('more.keepThemFirst')}
           </p>
           <div className="flex gap-2 pt-3">
             <button
@@ -205,14 +215,14 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
               onClick={() => setConfirming(null)}
               className="rounded-full px-3 py-1.5 text-sm transition-colors duration-150 ease-out hover:bg-surface"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               onClick={() => void save(true)}
               className="rounded-full bg-brand px-3 py-1.5 text-sm font-medium text-white transition-colors duration-150 ease-out"
             >
-              Change anyway
+              {t('more.changeAnyway')}
             </button>
           </div>
         </div>
@@ -229,10 +239,9 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         className="mt-6 flex w-full items-center justify-between gap-4 text-left"
       >
         <span>
-          <span className="block text-sm">Stream only, keep nothing</span>
+          <span className="block text-sm">{t('storageMode.streamOnly')}</span>
           <span className="block pt-0.5 text-xs text-text-2">
-            Videos play from YouTube and are not downloaded. Subtitles still
-            arrive, files already here still play, and Retry still works.
+            {t('more.streamOnlyHint')}
           </span>
         </span>
         <span

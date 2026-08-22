@@ -74,7 +74,7 @@ export function desiredTrackMode(input: {
   return 'disabled'
 }
 
-/** One row of the "Subtitles" setting, past the "Off" that always leads it. */
+/** One row of the t('ui.subtitles') setting, past the t('ui.off') that always leads it. */
 export type SubtitleOption = { value: string; label: string; hint: string }
 
 /**
@@ -113,7 +113,7 @@ export function subtitleOptions(
       label: 'VI (auto)',
       // The track's own name is content, read in the language it is written in,
       // as the gateway's machineVTTLabel already is. The rest is UI copy.
-      hint: 'Tiếng Việt (dịch máy) — translated as you watch',
+      hint: 'queue.machineVietnamese',
     })
   }
   return options

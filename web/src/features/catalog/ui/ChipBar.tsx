@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRememberedScrollX } from '@/features/navigation/application/use-remembered-scroll-x'
 import { Pill } from '@/shared/ui/primitives'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The chip that means "on air".
@@ -9,6 +10,14 @@ import { Pill } from '@/shared/ui/primitives'
  * arbitrary content per chip — would let any caller put anything beside any
  * label, and there is exactly one chip in this app that is not a topic name.
  */
+/**
+ * The two chips this app adds to the topic list.
+ *
+ * Identities, not labels: they are compared against the active chip, so they
+ * must be the same string whatever language is on screen. What the viewer
+ * reads is looked up where the chip is drawn.
+ */
+export const ALL_CATEGORY = 'All'
 export const LIVE_CATEGORY = 'Live'
 
 /**
@@ -42,6 +51,7 @@ export function ChipBar({
   active: string
   onSelect: (category: string) => void
 }) {
+  const { t } = useTranslation()
   // Where this row was left, kept across the page being unmounted. Switching
   // tabs rebuilds Home, and without this the chips came back at the beginning —
   // losing exactly the one you had scrolled across to find.
@@ -92,7 +102,7 @@ export function ChipBar({
     >
       <button
         type="button"
-        aria-label="Scroll categories left"
+        aria-label={t('chips.scrollLeft')}
         onClick={() => scrollBy(-320)}
         // The arrows are for a mouse; a finger just drags the row.
         className="hidden h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-surface-hover min-[700px]:grid"
@@ -103,7 +113,7 @@ export function ChipBar({
       <div
         ref={attach}
         role="tablist"
-        aria-label="Categories"
+        aria-label={t('ui.categories')}
         // The inset lives on the scroller, not on the wrapper around it.
         //
         // On the wrapper it shortened the scrolling region itself, so a chip
@@ -127,14 +137,20 @@ export function ChipBar({
             onClick={() => onSelect(category)}
           >
             {category === LIVE_CATEGORY && <LiveDot />}
-            {category}
+            {/* Topic names are content and are shown as they come; the two
+                chips this app adds itself are looked up. */}
+            {category === LIVE_CATEGORY
+              ? t('chips.live')
+              : category === ALL_CATEGORY
+                ? t('chips.all')
+                : category}
           </Pill>
         ))}
       </div>
 
       <button
         type="button"
-        aria-label="Scroll categories right"
+        aria-label={t('chips.scrollRight')}
         onClick={() => scrollBy(320)}
         className="hidden h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-surface-hover min-[700px]:grid"
       >

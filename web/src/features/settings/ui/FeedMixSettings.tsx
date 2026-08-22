@@ -18,6 +18,8 @@ import {
 import { ActionBar } from '@/features/settings/ui/ActionBar'
 import { SettingsSection } from '@/features/settings/ui/SettingsSection'
 import { SliderRow } from '@/features/settings/ui/SliderRow'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 /**
  * What the home feed is made of.
@@ -33,6 +35,7 @@ import { SliderRow } from '@/features/settings/ui/SliderRow'
  * something to do sixty times on the way to a number.
  */
 export function FeedMixSettings({ headless = false }: { headless?: boolean } = {}) {
+  const { t } = useTranslation()
   const { data: stored, isError, isPending, refetch } = useFeedMix()
   const save = useSaveFeedMix()
   // Loaded separately and allowed to fail: it costs a full ranking pass, and the
@@ -64,15 +67,15 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
       <SettingsSection
         headless={headless}
         icon={<LayoutGrid size={18} />}
-        title="Home feed"
-        description="Could not read the current mix. The gateway may be running an older build that does not have this setting yet."
+        title={t('settings.feedMix.title')}
+        description={t('settings.feedMix.couldNotRead')}
       >
         <button
           type="button"
           onClick={() => void refetch()}
           className="h-11 w-fit rounded-lg bg-surface-hover px-4 text-sm font-medium transition-opacity duration-150 ease-out hover:opacity-90"
         >
-          Try again
+          {t('more.tryAgain')}
         </button>
       </SettingsSection>
     )
@@ -82,8 +85,8 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
     return (
       <SettingsSection
         icon={<LayoutGrid size={18} />}
-        title="Home feed"
-        description="Loading…"
+        title={t('settings.feedMix.title')}
+        description={t('common.loading')}
       >
         <div className="h-24 animate-pulse rounded-lg bg-surface-input" />
       </SettingsSection>
@@ -108,29 +111,29 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
   return (
     <SettingsSection
       icon={<LayoutGrid size={18} />}
-      title="Home feed"
-      description="Where the new videos on your home page come from. The three add up to one page, so raising one lowers the others."
+      title={t('settings.feedMix.title')}
+      description={t('settings.feedMix.intro')}
     >
       <FeedMixSlider
-        label="Channels you follow"
+        label={t('settings.feedMix.subscribed')}
         value={mix.subscribedPercent}
         onChange={drag('subscribedPercent')}
         fixed={fixed}
         available={buckets?.subscribed}
       />
       <FeedMixSlider
-        label="More of what you watch"
+        label={t('settings.feedMix.affinity')}
         value={mix.affinityPercent}
         onChange={drag('affinityPercent')}
-        hint="Channels you have not subscribed to, on subjects you keep coming back to."
+        hint={t('settings.feedMix.affinityHint')}
         fixed={fixed}
         available={buckets?.affinity}
       />
       <FeedMixSlider
-        label="Something new"
+        label={t('settings.feedMix.discovery')}
         value={mix.discoveryPercent}
         onChange={drag('discoveryPercent')}
-        hint="Outside your usual subjects. Set this to zero and none will appear."
+        hint={t('settings.feedMix.discoveryHint')}
         fixed={fixed}
         available={buckets?.discovery}
       />
@@ -144,7 +147,7 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
           onClick={() => save.mutate(mix)}
           className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
         >
-          {save.isPending ? 'Saving…' : 'Save'}
+          {save.isPending ? t('ui.saving') : t('common.save')}
         </button>
         <button
           type="button"
@@ -153,15 +156,15 @@ export function FeedMixSettings({ headless = false }: { headless?: boolean } = {
           className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-50"
         >
           <RotateCcw size={14} />
-          Reset to default
+          {t('settings.feedMix.resetToDefault')}
         </button>
         {/* Confirmation, not decoration: without it a save that changed nothing
             visible on this page is indistinguishable from a save that failed. */}
         {!dirty && save.isSuccess && (
-          <span className="text-sm text-text-2">Saved — your feed has been rebuilt.</span>
+          <span className="text-sm text-text-2">{t('settings.feedMix.savedRebuilt')}</span>
         )}
         {save.isError && (
-          <span className="text-sm text-brand">Could not save. Is the gateway running?</span>
+          <span className="text-sm text-brand">{t('settings.feedMix.couldNotSave')}</span>
         )}
       </ActionBar>
     </SettingsSection>
@@ -184,6 +187,7 @@ function FeedMixSlider({
   /** How many videos this share has to choose from, once the count arrives. */
   available?: number
 }) {
+  const { t } = useTranslation()
   const wanted = videosPerWindow(value, fixed)
 
   return (
@@ -196,7 +200,7 @@ function FeedMixSlider({
       // Both, because neither alone is the answer. The percentage is what was
       // set; the count is what it means on the page you are about to look at.
       format={(v) => `${v}% · ${videosPerWindow(v, fixed)} of ${FEED_WINDOW}`}
-      hint={[hint, supply(available, wanted)].filter(Boolean).join(' ')}
+      hint={[hint, supply(available, wanted, t)].filter(Boolean).join(' ')}
     />
   )
 }
@@ -215,16 +219,20 @@ function FeedMixSlider({
  * not news, and a count printed under every slider would be nine words nobody
  * reads, which is how the one that matters gets missed.
  */
-function supply(available: number | undefined, wantedPerWindow: number): string {
+function supply(
+  available: number | undefined,
+  wantedPerWindow: number,
+  t: TFunction,
+): string {
   if (available === undefined) return ''
   if (available === 0) {
-    return 'Nothing in your library fits this right now, so its places go to the other two.'
+    return t('settings.feedMix.emptyBucket')
   }
   // A share is only spread thin if a couple of pages would exhaust it.
   if (wantedPerWindow > 0 && available < wantedPerWindow * 3) {
-    return `Only ${available} videos fit this, so a share this large repeats them or reaches well down the list.`
+    return t('settings.feedMix.thin', { count: available })
   }
-  return `${available} videos fit this.`
+  return t('ui.fits', { count: available })
 }
 
 /**
@@ -236,17 +244,18 @@ function supply(available: number | undefined, wantedPerWindow: number): string 
  * page of twenty-four should be able to find out why it was not six.
  */
 function DefaultsNote({ defaults, fixed }: { defaults: FeedMix; fixed: FixedShares }) {
+  const { t } = useTranslation()
   const rows: Array<[string, number]> = [
-    ['Channels you follow', defaults.subscribedPercent],
-    ['More of what you watch', defaults.affinityPercent],
-    ['Something new', defaults.discoveryPercent],
+    [t('settings.feedMix.subscribed'), defaults.subscribedPercent],
+    [t('settings.feedMix.affinity'), defaults.affinityPercent],
+    [t('settings.feedMix.discovery'), defaults.discoveryPercent],
   ]
 
   return (
     <div className="rounded-lg bg-surface-input p-3 text-sm">
       <div className="flex items-center gap-2 font-medium">
         <Info size={15} className="text-text-2" />
-        Defaults
+        {t('settings.feedMix.defaults')}
       </div>
       <dl className="mt-2 space-y-1">
         {rows.map(([label, percent]) => (
@@ -255,19 +264,19 @@ function DefaultsNote({ defaults, fixed }: { defaults: FeedMix; fixed: FixedShar
             <dd className="tabular-nums">
               {percent}%{' '}
               <span className="text-text-2">
-                · {videosPerWindow(percent, fixed)} of {FEED_WINDOW}
+                · {t('settings.feedMix.ofWindow', { count: videosPerWindow(percent, fixed), window: FEED_WINDOW })}
               </span>
             </dd>
           </div>
         ))}
       </dl>
       <p className="mt-2 leading-relaxed text-text-2">
-        These three divide {adjustablePercent(fixed)}% of the page. The rest is kept
-        for videos you are part way through ({fixed.continueWatching}%), ones you have
-        finished and might want again ({fixed.rewatch}%), and new uploads from channels
-        you follow ({fixed.freshSubscribed}%). None of those three is a taste — the
-        first two are your watch history, and the last is how you find out a channel
-        posted — so they are not divided here.
+        {t('settings.feedMix.explainer', {
+          adjustable: adjustablePercent(fixed),
+          continue: fixed.continueWatching,
+          rewatch: fixed.rewatch,
+          fresh: fixed.freshSubscribed,
+        })}
       </p>
     </div>
   )

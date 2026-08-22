@@ -262,12 +262,20 @@ func (s *AccountScanner) ScanAll(ctx context.Context, onlyUser string) (AccountS
 			out.Expired++
 		}
 
-		// Never the account's own details in the note: this string is shown on
-		// a settings screen and written to a file beside the cookies.
-		note := fmt.Sprintf("%d subscriptions, %d playlists, %d videos",
+		// Numbers and a code, not a sentence.
+		//
+		// This is written to a file and then shown on a settings screen, and it
+		// used to be English prose — "305 subscriptions, 27 playlists, 192
+		// videos" — which arrived unchanged on a Vietnamese page. The server
+		// does not know what language the person reads, so it reports what it
+		// counted and the screen says it in words.
+		//
+		// Never the account's own details: this sits in a file beside the
+		// cookies.
+		note := fmt.Sprintf("counts %d %d %d",
 			result.Subscriptions, result.Playlists, result.Videos)
 		if authFailed {
-			note = "signed out — paste your cookies again"
+			note = "signed_out"
 		}
 		if err := s.accounts.Record(ctx, account.UserID, note, authFailed); err != nil {
 			s.logger.Warn("recording account scan", "user", account.UserID, "error", err)

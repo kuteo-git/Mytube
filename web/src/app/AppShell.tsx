@@ -4,6 +4,7 @@ import { Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { bareTitle, isWatchScreen } from '@/features/navigation/application/bare-screens'
+import { observeDirection } from '@/features/navigation/application/page-transition'
 import { BackBar } from '@/features/catalog/ui/BackBar'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
@@ -15,6 +16,8 @@ import { BOTTOM_NAV_HEIGHT } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 import { dismissFade, layerOpacity } from '@/features/watch/application/watch-overlay'
 import { ToastProvider } from '@/shared/ui/toast'
+import { useTranslation } from 'react-i18next'
+import type { TranslationKey } from '@/shared/i18n/en'
 
 export function AppShell() {
   const { pathname } = useLocation()
@@ -30,9 +33,27 @@ export function AppShell() {
 }
 
 function AppShellInner() {
+  const { t } = useTranslation()
   const location = useLocation()
   const { pathname } = location
   const isWatch = isWatchScreen(pathname)
+
+  // Keeps the root describing the last navigation for the one path nothing
+  // here can wrap: the browser's own back gesture, which offers no callback to
+  // put the DOM change inside. Links go through PageLink, which sets the
+  // direction before the transition starts rather than after it.
+  //
+  // The watch screen is left out on purpose: on a phone it is already a layer
+  // over the tab underneath, with its own pull-to-dismiss gesture and its own
+  // transform. A second animation across the same pixels is two things
+  // fighting, and the gesture has to win.
+  useEffect(() => {
+    if (isWatchScreen(pathname)) {
+      delete document.documentElement.dataset.nav
+      return
+    }
+    observeDirection()
+  }, [pathname])
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const {
@@ -176,7 +197,13 @@ function AppShellInner() {
           bar there fades its own copy in only once that has scrolled away —
           behaviour the page owns. */}
       {chromeHidden && !isWatch && bareTitle(pathname) !== null && (
-        <BackBar title={bareTitle(pathname) ?? ''} showTitle fallback="/" />
+        <BackBar
+          // bareTitle returns a key, not a word — the list is a module
+          // constant and cannot call a hook, so the shell translates it here.
+          title={t(bareTitle(pathname) as TranslationKey)}
+          showTitle
+          fallback="/"
+        />
       )}
 
       <TopBar

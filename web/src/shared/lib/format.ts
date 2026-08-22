@@ -1,20 +1,82 @@
-/** Display formatting helpers — pure functions, framework independent. */
+/**
+ * Display formatting helpers — pure functions, framework independent.
+ *
+ * These carry more English than anything else in the app, and they carry it
+ * where it is hardest to see: not as a label somebody wrote once, but baked
+ * into a return value that renders on every card in every grid. "248 views",
+ * "3 days ago", "4.1M subscribers".
+ *
+ * Worse, they carry English *grammar*. `formatRelative` appended an "s" for
+ * the plural; Vietnamese has no plural, so a translated version that kept the
+ * shape would say "3 ngàys trước".
+ *
+ * So language is a parameter. Still pure — `format.test.ts` tests them without
+ * React — and components reach them through `useFormat()`, which binds the
+ * current language once instead of every call site remembering to pass it.
+ */
+import type { Language } from '@/shared/i18n'
 
-export function formatViews(n: number): string {
-  if (n >= 1_000_000_000) return `${trim(n / 1_000_000_000)}B views`
-  if (n >= 1_000_000) return `${trim(n / 1_000_000)}M views`
-  if (n >= 1_000) return `${trim(n / 1_000)}K views`
-  return `${n} views`
+/**
+ * The abbreviations for thousand, million and billion.
+ *
+ * Vietnamese uses its own initials rather than the English K/M/B — nghìn,
+ * triệu, tỷ — which is what YouTube shows there and what anybody reading a
+ * view count expects.
+ */
+const SCALE: Record<Language, [string, string, string]> = {
+  en: ['K', 'M', 'B'],
+  vi: ['N', 'Tr', 'T'],
 }
 
-export function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${trim(n / 1_000_000)}M`
-  if (n >= 1_000) return `${trim(n / 1_000)}K`
+/** Words that follow a number. Vietnamese needs no plural form of any of them. */
+const WORDS = {
+  en: { views: 'views', subscribers: 'subscribers', justNow: 'just now' },
+  vi: { views: 'lượt xem', subscribers: 'người đăng ký', justNow: 'vừa xong' },
+} satisfies Record<Language, Record<string, string>>
+
+/**
+ * Relative time, one entry per unit.
+ *
+ * Vietnamese has a single word for each and no plural, which is why the
+ * English side keeps its "s" here as data rather than as a rule applied to
+ * every language.
+ */
+const RELATIVE = {
+  en: {
+    year: ['year', 'years'],
+    month: ['month', 'months'],
+    week: ['week', 'weeks'],
+    day: ['day', 'days'],
+    hour: ['hour', 'hours'],
+    minute: ['minute', 'minutes'],
+  },
+  vi: {
+    year: ['năm', 'năm'],
+    month: ['tháng', 'tháng'],
+    week: ['tuần', 'tuần'],
+    day: ['ngày', 'ngày'],
+    hour: ['giờ', 'giờ'],
+    minute: ['phút', 'phút'],
+  },
+} satisfies Record<Language, Record<string, [string, string]>>
+
+/** Where the locale tags live, for the one thing ICU does better than a table. */
+const LOCALE: Record<Language, string> = { en: 'en-US', vi: 'vi-VN' }
+
+export function formatViews(n: number, lang: Language = 'en'): string {
+  return `${formatCount(n, lang)} ${WORDS[lang].views}`
+}
+
+export function formatCount(n: number, lang: Language = 'en'): string {
+  const [k, m, b] = SCALE[lang]
+  if (n >= 1_000_000_000) return `${trim(n / 1_000_000_000)}${b}`
+  if (n >= 1_000_000) return `${trim(n / 1_000_000)}${m}`
+  if (n >= 1_000) return `${trim(n / 1_000)}${k}`
   return `${n}`
 }
 
-export function formatSubscribers(n: number): string {
-  return `${formatCount(n)} subscribers`
+export function formatSubscribers(n: number, lang: Language = 'en'): string {
+  return `${formatCount(n, lang)} ${WORDS[lang].subscribers}`
 }
 
 function trim(n: number): string {
@@ -38,19 +100,27 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60],
 ]
 
-export function formatRelative(iso: string): string {
+export function formatRelative(iso: string, lang: Language = 'en'): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
   for (const [unit, secs] of UNITS) {
     if (diff >= secs) {
       const value = Math.floor(diff / secs)
-      return `${value} ${unit}${value > 1 ? 's' : ''} ago`
+      const [one, many] = RELATIVE[lang][unit as keyof (typeof RELATIVE)['en']]
+      const word = value > 1 ? many : one
+      // Vietnamese puts the marker after the phrase — "3 ngày trước" — and
+      // English before the unit. Two shapes, not one shape with a translated
+      // word, which is the thing that makes a translation read as a machine's.
+      return lang === 'vi' ? `${value} ${word} trước` : `${value} ${word} ago`
     }
   }
-  return 'just now'
+  return WORDS[lang].justNow
 }
 
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
+export function formatDate(iso: string, lang: Language = 'en'): string {
+  // ICU rather than a table of month names: it already knows that Vietnamese
+  // writes 22 thg 8, 2026, and beating it at that would mean maintaining a
+  // list to arrive at the same answer.
+  return new Date(iso).toLocaleDateString(LOCALE[lang], {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

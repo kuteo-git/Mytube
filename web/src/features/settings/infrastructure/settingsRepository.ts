@@ -55,10 +55,66 @@ async function json<T>(resp: Response): Promise<T> {
   return (await resp.json()) as T
 }
 
+/**
+ * What the server will tell the browser about the synthesiser.
+ *
+ * Never the key itself — only whether one is stored and its last four
+ * characters, which is enough to recognise it by and not enough to use.
+ */
+export interface TTSConfig {
+  baseUrl: string
+  model: string
+  voice: string
+  hasKey: boolean
+  keyHint: string
+}
+
+/**
+ * What a test run produced.
+ *
+ * `audio` is the clip itself, because "did it work" is not something a status
+ * code answers for speech: an endpoint can return 200 and perfectly formed
+ * silence. The only test that means anything is hearing it.
+ */
+export interface TTSTestResult {
+  sample?: string
+  ms?: number
+  bytes?: number
+  audio?: string
+  error?: string
+}
+
 export const settingsRepository = {
-  async listVoices(): Promise<string[]> {
-    const r = await apiFetch('/api/tts/voices')
-    return (await json<{ voices: string[] }>(r)).voices ?? []
+  async testTTS(input: {
+    baseUrl: string
+    model: string
+    apiKey: string
+    voice: string
+  }): Promise<TTSTestResult> {
+    return json<TTSTestResult>(
+      await apiFetch('/api/settings/tts/test', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    )
+  },
+
+  async getTTSConfig(): Promise<TTSConfig> {
+    return json<TTSConfig>(await apiFetch('/api/settings/tts'))
+  },
+
+  async saveTTSConfig(input: {
+    baseUrl: string
+    model: string
+    apiKey: string
+    voice: string
+  }): Promise<TTSConfig> {
+    return json<TTSConfig>(
+      await apiFetch('/api/settings/tts', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    )
   },
 
   async getBucketSizes(): Promise<BucketSizes> {

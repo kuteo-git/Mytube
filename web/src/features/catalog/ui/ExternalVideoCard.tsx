@@ -6,10 +6,12 @@ import { useNavigate } from 'react-router-dom'
 import type { ExternalVideo } from '../infrastructure/catalogRepository'
 import { useOpenExternal, useSetPinned } from '../application/queries'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration, formatRelative, formatViews } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * A video that lives upstream and may not have a catalog row yet.
@@ -30,6 +32,8 @@ export function ExternalVideoCard({
    */
   queueSearch?: string
 }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const navigate = useNavigate()
   const open = useOpenExternal()
   const setPinned = useSetPinned()
@@ -66,7 +70,7 @@ export function ExternalVideoCard({
         <ThumbnailSurface hue={hueFromId(video.id)} src={video.thumbnailUrl} alt={video.title} channelName={video.channelName}>
           {video.durationSeconds > 0 && (
             <span className="absolute right-1.5 bottom-1.5 rounded bg-badge px-1 py-0.5 text-xs font-medium tabular-nums">
-              {formatDuration(video.durationSeconds)}
+              {fmt.duration(video.durationSeconds)}
             </span>
           )}
           {open.isPending && (
@@ -85,15 +89,15 @@ export function ExternalVideoCard({
             </button>
           </h3>
           {video.channelName && <p className="mt-1 text-xs text-text-2">{video.channelName}</p>}
-          {describeExternal(video) && (
-            <p className="text-xs text-text-2">{describeExternal(video)}</p>
+          {describeExternal(video, fmt) && (
+            <p className="text-xs text-text-2">{describeExternal(video, fmt)}</p>
           )}
         </div>
 
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            aria-label="More options"
+            aria-label={t('common.moreOptions')}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((o) => !o)}
             className={clsx(
@@ -117,7 +121,7 @@ export function ExternalVideoCard({
                     try {
                       const videoId = await open.mutateAsync(video.sourceUrl)
                       setPinned.mutate({ videoId, pinned: true })
-                      toast('Saved')
+                      toast(t('common.saved'))
                     } catch {
                       // Video may already exist; try standard save
                     }
@@ -127,7 +131,7 @@ export function ExternalVideoCard({
                   className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Bookmark size={16} />}
-                  Save
+                  {t('common.save')}
                 </button>
               </li>
             </ul>
@@ -135,7 +139,7 @@ export function ExternalVideoCard({
         </div>
       </div>
 
-      {open.isError && <p className="text-xs text-brand">Could not open that video.</p>}
+      {open.isError && <p className="text-xs text-brand">{t('card.couldNotOpen')}</p>}
     </article>
   )
 }
@@ -148,9 +152,9 @@ export function ExternalVideoCard({
  * again — which is both what YouTube shows and the only precision that is
  * actually there.
  */
-function describeExternal(video: ExternalVideo): string {
+function describeExternal(video: ExternalVideo, fmt: ReturnType<typeof useFormat>): string {
   const parts: string[] = []
-  if (video.viewCount > 0) parts.push(formatViews(video.viewCount))
-  if (video.publishedAt) parts.push(formatRelative(video.publishedAt))
+  if (video.viewCount > 0) parts.push(fmt.views(video.viewCount))
+  if (video.publishedAt) parts.push(fmt.relative(video.publishedAt))
   return parts.join(' • ')
 }

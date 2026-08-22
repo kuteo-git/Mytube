@@ -1,13 +1,16 @@
-import { ChevronDown, ListFilter, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
+import { ChevronDown, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { Comment } from '@/features/catalog/domain/video'
 import { useAddComment, useComments, useFetchComments } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
-import { formatCount, formatRelative } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 export function CommentSection({ videoId }: { videoId: string }) {
+  const { t } = useTranslation()
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useComments(videoId)
   const addComment = useAddComment(videoId)
   const fetchComments = useFetchComments(videoId)
@@ -28,17 +31,10 @@ export function CommentSection({ videoId }: { videoId: string }) {
   }, [data?.totalCount, isPending, autoFetched])
 
   return (
-    <section className="mt-6" aria-label="Comments">
-      <div className="flex items-center gap-8">
-        <h2 className="text-xl font-bold">{data?.totalCount ?? 0} Comments</h2>
-        <button
-          type="button"
-          className="flex items-center gap-2 text-sm font-medium hover:text-text-2"
-        >
-          <ListFilter size={20} />
-          Sort by
-        </button>
-      </div>
+    <section className="mt-6" aria-label={t('ui.comments')}>
+      {/* No "Sort by". It was a button with no handler — §5's one prohibition,
+          and it had been sitting here long enough to look like a feature. */}
+      <h2 className="text-xl font-bold">{t('comments.count', { count: data?.totalCount ?? 0 })}</h2>
 
       <form
         className="mt-6 flex gap-3"
@@ -53,8 +49,8 @@ export function CommentSection({ videoId }: { videoId: string }) {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a comment..."
-          aria-label="Add a comment"
+          placeholder={t('comments.placeholder')}
+          aria-label={t('comments.label')}
           className="flex-1 border-b border-line bg-transparent pb-1 text-sm outline-none placeholder:text-text-2 focus:border-text"
         />
       </form>
@@ -88,8 +84,8 @@ export function CommentSection({ videoId }: { videoId: string }) {
         <div className="mt-6 flex flex-col items-start gap-3 rounded-lg bg-surface p-4">
           <p className="text-sm text-text-2">
             {fetchComments.data?.unavailable
-              ? 'YouTube did not return comments for this video.'
-              : 'Could not load YouTube comments.'}
+              ? t('comments.noneReturned')
+              : t('comments.couldNotLoad')}
           </p>
           <button
             type="button"
@@ -97,7 +93,7 @@ export function CommentSection({ videoId }: { videoId: string }) {
             className="flex items-center gap-2 rounded-lg bg-surface-hover px-4 py-2 text-sm font-medium transition-colors hover:bg-white/15"
           >
             <RefreshCw size={14} />
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -122,6 +118,8 @@ export function CommentSection({ videoId }: { videoId: string }) {
 }
 
 function CommentThread({ comment }: { comment: Comment }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const [showReplies, setShowReplies] = useState(false)
   const replies = comment.replies ?? []
 
@@ -136,13 +134,13 @@ function CommentThread({ comment }: { comment: Comment }) {
       <div className="min-w-0 flex-1">
         {comment.pinnedBy && (
           <p className="mb-1 flex items-center gap-1.5 text-xs text-text-2">
-            <Pin size={14} /> Pinned by {comment.pinnedBy}
+            <Pin size={14} /> {t('more.pinnedByName', { name: comment.pinnedBy })}
           </p>
         )}
         <p className="flex items-center gap-2 text-[13px] font-medium">
           {comment.authorHandle}
           <span className="text-xs font-normal text-text-2">
-            {formatRelative(comment.publishedAt)}
+            {fmt.relative(comment.publishedAt)}
           </span>
         </p>
         <p className="mt-1 text-sm whitespace-pre-line">{comment.text}</p>
@@ -150,15 +148,15 @@ function CommentThread({ comment }: { comment: Comment }) {
         <div className="mt-1.5 flex items-center gap-2 text-text-2">
           <button
             type="button"
-            aria-label="Like comment"
+            aria-label={t('comments.like')}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-surface-hover"
           >
             <ThumbsUp size={16} />
           </button>
-          <span className="text-xs">{formatCount(comment.likeCount)}</span>
+          <span className="text-xs">{fmt.count(comment.likeCount)}</span>
           <button
             type="button"
-            aria-label="Dislike comment"
+            aria-label={t('comments.dislike')}
             className="grid h-8 w-8 place-items-center rounded-full hover:bg-surface-hover"
           >
             <ThumbsDown size={16} />
@@ -167,7 +165,7 @@ function CommentThread({ comment }: { comment: Comment }) {
             type="button"
             className="ml-2 rounded-full px-3 py-1.5 text-xs font-medium hover:bg-surface-hover"
           >
-            Reply
+            {t('more.reply')}
           </button>
         </div>
 

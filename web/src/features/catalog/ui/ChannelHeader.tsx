@@ -1,9 +1,11 @@
 import type { Channel } from '../domain/video'
 import { useSetSubscription } from '../application/queries'
 import { Avatar } from '@/shared/ui/primitives'
-import { formatSubscribers } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Channel identity, matching the reference layout in Example/channel.png.
@@ -14,6 +16,8 @@ import { mediaURL } from '@/shared/lib/media'
  * would be decoration over nothing.
  */
 export function ChannelHeader({ channel, videoCount }: { channel: Channel; videoCount: number }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const setSubscription = useSetSubscription(channel.id)
 
   return (
@@ -46,9 +50,9 @@ export function ChannelHeader({ channel, videoCount }: { channel: Channel; video
           <p className="mt-1 text-sm text-text-2">
             {channel.handle && <span>{channel.handle} · </span>}
             {channel.subscriberCount > 0 && (
-              <span>{formatSubscribers(channel.subscriberCount)} · </span>
+              <span>{fmt.subscribers(channel.subscriberCount)} · </span>
             )}
-            {videoCount > 0 && <span>{videoCount} in your library</span>}
+            {videoCount > 0 && <span>{t('more.countInLibrary', { count: videoCount })}</span>}
           </p>
 
           <button
@@ -63,7 +67,7 @@ export function ChannelHeader({ channel, videoCount }: { channel: Channel; video
                 : 'bg-text text-bg hover:bg-text/90')
             }
           >
-            {channel.subscribed ? 'Subscribed' : 'Subscribe'}
+            {channel.subscribed ? t('ui.subscribed') : t('ui.subscribe')}
           </button>
         </div>
       </div>

@@ -1,5 +1,7 @@
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { navigateWithTransition } from '@/shared/ui/PageLink'
 
 /**
  * The top of a screen you drilled into, on a phone.
@@ -24,6 +26,7 @@ export function BackBar({
   /** Where to go when there is no history to pop — a link opened cold. */
   fallback?: string
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   return (
@@ -33,14 +36,20 @@ export function BackBar({
     >
       <button
         type="button"
-        aria-label="Back"
+        aria-label={t('common.back')}
         onClick={() => {
           // `navigate(-1)` walks out of the app when this was opened cold —
           // a shared link, or a reload. Same reasoning as the watch layer.
+          //
+          // Through the same door as every link, so the screen slides back out
+          // the way it slid in. Two implementations of "change the screen"
+          // would be two chances for the push and the pop to stop matching,
+          // and a pop that does not animate while the push does is more
+          // jarring than neither animating.
           if (((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0) {
-            navigate(-1)
+            navigateWithTransition(navigate, -1)
           } else {
-            navigate(fallback, { replace: true })
+            navigateWithTransition(navigate, fallback, { replace: true })
           }
         }}
         className="grid h-11 w-11 shrink-0 place-items-center rounded-full

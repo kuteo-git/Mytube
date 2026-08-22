@@ -1,10 +1,13 @@
 import clsx from 'clsx'
 import { useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { QueueItem } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
-import { formatDuration, formatRelative } from '@/shared/lib/format'
+
 import { hueFromId } from '@/shared/lib/hue'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The list being played through, beside the player.
@@ -25,6 +28,8 @@ export function QueueRail({
   /** The list's own name. Empty falls back to the generic wording. */
   label?: string
 }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const activeRef = useRef<HTMLAnchorElement>(null)
 
   // Deep into a long queue the playing item would otherwise be off-screen, and
@@ -34,11 +39,13 @@ export function QueueRail({
   }, [currentIndex])
 
   return (
-    <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label="Queue">
+    <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label={t('ui.queue')}>
       <div className="border-b border-line px-4 py-3">
-        <p className="text-sm font-medium">{label ? `Playing from ${label}` : 'Playing from queue'}</p>
+        <p className="text-sm font-medium">{label ? t('ui.playingFrom', { name: label }) : t('upNext.playingFromQueue')}</p>
         <p className="mt-0.5 text-xs text-text-2">
-          {currentIndex >= 0 ? `${currentIndex + 1} / ${items.length}` : `${items.length} videos`}
+          {currentIndex >= 0
+            ? `${currentIndex + 1} / ${items.length}`
+            : t('ui.videoCount', { count: items.length })}
         </p>
       </div>
 
@@ -47,7 +54,7 @@ export function QueueRail({
           const active = index === currentIndex
           return (
             <li key={item.id}>
-              <Link
+              <PageLink
                 ref={active ? activeRef : undefined}
                 to={`/watch/${item.id}${search}`}
                 aria-current={active ? 'true' : undefined}
@@ -77,7 +84,7 @@ export function QueueRail({
                   >
                     {item.durationSeconds > 0 && (
                       <span className="absolute right-1 bottom-1 rounded bg-badge px-1 text-[11px] font-medium tabular-nums">
-                        {formatDuration(item.durationSeconds)}
+                        {fmt.duration(item.durationSeconds)}
                       </span>
                     )}
                   </ThumbnailSurface>
@@ -91,13 +98,13 @@ export function QueueRail({
                       list from the one it was opened from. */}
                   {(item.channelName || item.publishedAt) && (
                     <p className="clamp-1 mt-1 text-xs text-text-2">
-                      {[item.channelName, item.publishedAt && formatRelative(item.publishedAt)]
+                      {[item.channelName, item.publishedAt && fmt.relative(item.publishedAt)]
                         .filter(Boolean)
                         .join(' · ')}
                     </p>
                   )}
                 </div>
-              </Link>
+              </PageLink>
             </li>
           )
         })}

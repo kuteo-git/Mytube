@@ -328,3 +328,79 @@
     transform: translateY(0);
   }
 }
+
+/* Pushing a screen in and popping it back out, the way a phone does it.
+ *
+ * Two halves move, and that is the whole of why it reads as iOS rather than as
+ * a fade: the arriving screen comes in from the right edge, and the one being
+ * left behind slides a *short* way in the opposite direction and dims. The
+ * parallax between them — 100% against 30% — is what says one is on top of the
+ * other rather than beside it.
+ *
+ * Only `startViewTransition` can do this. React has already unmounted the old
+ * screen by the time any CSS could reach it; the transition keeps a snapshot of
+ * it alive for the duration, which is the one thing that makes the outgoing
+ * half possible at all.
+ *
+ * Direction comes from `data-nav` on the root, written from the history index
+ * before the navigation — see page-transition.ts. Without it a pop would
+ * animate as a push and read as having gone the wrong way.
+ */
+@keyframes page-in-from-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes page-out-to-left {
+  from { transform: translateX(0); filter: brightness(1); }
+  to { transform: translateX(-30%); filter: brightness(0.75); }
+}
+@keyframes page-in-from-left {
+  from { transform: translateX(-30%); filter: brightness(0.75); }
+  to { transform: translateX(0); filter: brightness(1); }
+}
+@keyframes page-out-to-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The two snapshots are stacked, and the one arriving has to be on top on a
+     push and underneath on a pop — that is what makes a push read as a card
+     laid over and a pop as one lifted away. */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 320ms;
+    /* iOS eases out of a push rather than in and out of it: the screen arrives
+       quickly and settles. A symmetric curve reads as slower than it is. */
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+    mix-blend-mode: normal;
+  }
+
+  :root[data-nav='push']::view-transition-new(root) {
+    animation-name: page-in-from-right;
+    z-index: 1;
+  }
+  :root[data-nav='push']::view-transition-old(root) {
+    animation-name: page-out-to-left;
+  }
+
+  :root[data-nav='pop']::view-transition-new(root) {
+    animation-name: page-in-from-left;
+  }
+  :root[data-nav='pop']::view-transition-old(root) {
+    animation-name: page-out-to-right;
+    z-index: 1;
+  }
+}
+
+/* Off entirely for anyone who asked for less motion. Not shortened: a screen
+   sliding across the whole width in 10ms is a flash, which is worse than the
+   instant change it was meant to soften — the same reason the live dot is
+   `motion-safe:` rather than left to the global rule. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

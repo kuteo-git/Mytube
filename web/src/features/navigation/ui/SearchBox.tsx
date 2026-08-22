@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSuggestions } from '@/features/catalog/application/queries'
 import type { Suggestion } from '@/features/catalog/infrastructure/catalogRepository'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Search with type-ahead over the local library.
@@ -16,6 +17,7 @@ import type { Suggestion } from '@/features/catalog/infrastructure/catalogReposi
  * a TV remote maps onto, not because a mouse user needs it.
  */
 export function SearchBox() {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(-1)
@@ -83,8 +85,8 @@ export function SearchBox() {
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
-            placeholder="Search"
-            aria-label="Search the library"
+            placeholder={t('ui.search')}
+            aria-label={t('search.placeholder')}
             aria-expanded={items.length > 0}
             aria-controls="search-suggestions"
             aria-autocomplete="list"
@@ -95,7 +97,7 @@ export function SearchBox() {
           {query && (
             <button
               type="button"
-              aria-label="Clear search"
+              aria-label={t('search.clear')}
               onClick={() => {
                 setQuery('')
                 setOpen(false)
@@ -108,7 +110,7 @@ export function SearchBox() {
 
           <button
             type="button"
-            aria-label="Search"
+            aria-label={t('ui.search')}
             onClick={() => query.trim() && go(query.trim())}
             className="grid h-full w-16 place-items-center rounded-r-full border-l border-line bg-surface transition-colors duration-150 ease-out hover:bg-surface-hover"
           >
@@ -139,7 +141,7 @@ export function SearchBox() {
                   </span>
                   {suggestion.kind !== 'TITLE' && (
                     <span className="shrink-0 text-xs text-text-2">
-                      {suggestion.videoCount} videos
+                      {t('more.videoSuggestionCount', { count: suggestion.videoCount })}
                     </span>
                   )}
                 </button>

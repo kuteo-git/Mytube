@@ -1,0 +1,78 @@
+<!doctype html>
+<style>body{font:14px system-ui;margin:0;padding:16px;background:#0f0f0f;color:#f1f1f1}
+#log{white-space:pre-wrap;font:12px ui-monospace,Menlo,monospace}</style>
+<!--
+  Does a screen change actually animate?
+
+  Asked of the running app rather than of the code, because the last version of
+  this typechecked, shipped, and did nothing: React Router accepts a
+  `viewTransition` prop and only acts on it under a data router, which this app
+  is not. Nothing anywhere reported that.
+-->
+<h3>Nav transition check</h3>
+<div id=log>running…</div>
+<script type="module">
+const out = [], say = (s) => { out.push(s); document.getElementById('log').textContent = out.join('\n') }
+const sink = new URLSearchParams(location.search).get('sink')
+const send = (s) => sink && fetch(sink, { method: 'POST', body: s, mode: 'no-cors' }).catch(() => {})
+
+say(`startViewTransition: ${typeof document.startViewTransition}`)
+send(`startViewTransition: ${typeof document.startViewTransition}`)
+
+// Count transitions the app starts, by wrapping the API before the app loads.
+let started = 0, dirs = []
+const real = document.startViewTransition?.bind(document)
+if (real) {
+  document.startViewTransition = (cb) => {
+    started++
+    dirs.push(document.documentElement.dataset.nav ?? '(none)')
+    return real(cb)
+  }
+}
+const app = document.createElement('iframe')
+app.src = '/'
+app.style.cssText = 'width:390px;height:600px;border:1px solid #333'
+document.body.appendChild(app)
+let primed = false
+app.onload = () => {
+  const w = app.contentWindow, d = app.contentDocument
+  // The app opens on the profile picker in a fresh browser, and a picker has
+  // no navigation links. Same origin, so the choice can be made from here.
+  if (!primed) {
+    primed = true
+    w.localStorage.setItem('yt-profile-id-v1', 'u_luc')
+    app.src = '/'
+    return
+  }
+  say(`app frame: startViewTransition ${typeof d.startViewTransition}`)
+  send(`frame API: ${typeof d.startViewTransition}`)
+  // Wrap inside the frame, where the app actually runs.
+  const inner = d.startViewTransition?.bind(d)
+  if (inner) d.startViewTransition = (cb) => { started++; dirs.push(d.documentElement.dataset.nav ?? '(none)'); return inner(cb) }
+  setTimeout(() => {
+    const links = [...d.querySelectorAll('a[href^="/"]')].filter((a) => a.getAttribute('href') !== '/')
+    const link = links[0]
+    send(`links found: ${links.length} first: ${link?.getAttribute('href')}`)
+    say(`links: ${links.length}`)
+    link?.click()
+    setTimeout(() => {
+      send(`after push: ${started} dirs: ${dirs.join(',')} path: ${w.location.pathname}`)
+      // The back arrow, which is what a phone actually uses to come out again.
+      const back = d.querySelector('button[aria-label="Back"], button[aria-label="Quay lại"]')
+      back?.click()
+      setTimeout(() => {
+        send(`after pop: ${started} dirs: ${dirs.join(',')} path: ${w.location.pathname}`)
+        // A tab is not a hierarchy and must not slide.
+        const before = started
+        const tab = d.querySelector('nav a[href="/history"]')
+        send(`tab found: ${Boolean(tab)}`)
+        tab?.click()
+        setTimeout(() => {
+          send(`after tab: started ${started} (was ${before}) path: ${w.location.pathname}`)
+          say(`transitions ${started}: ${dirs.join(',')}`)
+        }, 900)
+      }, 900)
+    }, 900)
+  }, 2500)
+}
+</script>

@@ -1,5 +1,6 @@
 import { Pencil, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Choosing one model out of a couple of hundred.
@@ -26,6 +27,7 @@ export function ModelPicker({
   onChange: (v: string) => void
   onRefresh: () => void
 }) {
+  const { t } = useTranslation()
   const [filter, setFilter] = useState('')
   const [manual, setManual] = useState(false)
   const [open, setOpen] = useState(false)
@@ -41,13 +43,13 @@ export function ModelPicker({
     return (
       <>
         <input
-          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={value}
-          placeholder="model name"
-          aria-label="Model"
+          placeholder={t('settings.model.name')}
+          aria-label={t('ui.model')}
           onChange={(e) => onChange(e.target.value)}
         />
-        <IconButton label="Choose from the list" onClick={() => setManual(false)}>
+        <IconButton label={t('settings.model.chooseFromList')} onClick={() => setManual(false)}>
           <RefreshCw size={16} />
         </IconButton>
       </>
@@ -61,7 +63,7 @@ export function ModelPicker({
           className="w-full rounded-lg bg-surface-input px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
           value={open ? filter : value}
           placeholder={models.length ? 'type to filter…' : 'refresh to load models'}
-          aria-label="Model"
+          aria-label={t('ui.model')}
           onFocus={() => {
             setFilter('')
             setOpen(true)
@@ -77,7 +79,7 @@ export function ModelPicker({
         {open && models.length > 0 && (
           <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg bg-surface py-1 text-sm shadow-lg">
             {matches.length === 0 && (
-              <li className="px-3 py-2 text-text-2">no match</li>
+              <li className="px-3 py-2 text-text-2">{t('settings.model.noMatch')}</li>
             )}
             {matches.map((m) => (
               <li key={m}>
@@ -100,10 +102,10 @@ export function ModelPicker({
           </ul>
         )}
       </div>
-      <IconButton label="Reload the model list" onClick={onRefresh} busy={loading}>
+      <IconButton label={t('settings.model.reload')} onClick={onRefresh} busy={loading}>
         <RefreshCw size={16} className={loading ? 'animate-spin' : undefined} />
       </IconButton>
-      <IconButton label="Type a model name" onClick={() => setManual(true)}>
+      <IconButton label={t('settings.model.type')} onClick={() => setManual(true)}>
         <Pencil size={16} />
       </IconButton>
     </>

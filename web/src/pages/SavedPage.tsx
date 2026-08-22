@@ -1,8 +1,11 @@
 import { useSaved } from '@/features/catalog/application/queries'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 export function SavedPage() {
+  const { t } = useTranslation()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useSaved()
 
@@ -10,11 +13,11 @@ export function SavedPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Saved videos</h1>
+      <PageHeading>{t('pages.saved.title')}</PageHeading>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load saved videos. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_savedVideos') })}
         </p>
       ) : (
         <>
@@ -34,7 +37,7 @@ export function SavedPage() {
 
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
-          No saved videos yet. Keep a video from its menu or the Storage page.
+          {t('empty.saved')}
         </p>
       )}
     </div>

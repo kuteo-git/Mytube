@@ -3,6 +3,8 @@ import { useAccountState } from '@/features/settings/application/account-state'
 import { watchLaterQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * The videos somebody put aside to watch next.
@@ -18,6 +20,7 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
  * is a note about what to do this evening.
  */
 export function WatchLaterPage() {
+  const { t } = useTranslation()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useWatchLater()
   const { signedOut } = useAccountState()
@@ -26,16 +29,20 @@ export function WatchLaterPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Watch later</h1>
+      <PageHeading>{t('pages.watchLater.title')}</PageHeading>
+      {/* No negative margin. It existed to pull this up under the heading's own
+          padding, and with the heading gone it pulled the first line of the page
+          up underneath the back bar instead — the bar is an overlay and reserves
+          nothing, so anything with a negative top margin lands behind it. */}
       {!isPending && !isError && (
-        <p className="-mt-2 pb-4 text-sm text-text-2">
-          {videos.length} {videos.length === 1 ? 'video' : 'videos'}
+        <p className="py-4 text-sm text-text-2">
+          {t('more.videosCount', { count: videos.length })}
         </p>
       )}
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load Watch later. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_watchLater') })}
         </p>
       ) : (
         <>
@@ -63,8 +70,8 @@ export function WatchLaterPage() {
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
           {signedOut
-            ? 'YouTube signed you out, so this list is not being brought across. Paste your cookies again in Settings.'
-            : 'Nothing here yet. This list is a copy of your YouTube Watch later, brought across on each account scan.'}
+            ? t('pages.watchLater.signedOut')
+            : t('pages.watchLater.empty')}
         </p>
       )}
     </div>

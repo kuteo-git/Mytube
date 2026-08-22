@@ -5,6 +5,7 @@ import { useChannelLink, useDiscover, useSearch } from '@/features/catalog/appli
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Two sections, deliberately.
@@ -30,6 +31,7 @@ function looksLikeLink(query: string): boolean {
 }
 
 export function SearchResultsPage() {
+  const { t } = useTranslation()
   const [params] = useSearchParams()
   const query = params.get('q') ?? ''
   const navigate = useNavigate()
@@ -88,23 +90,22 @@ export function SearchResultsPage() {
           // An address is not worth repeating back: it is long, it wraps, and
           // it says nothing the person who pasted it does not already know.
           // What it means is the interesting part.
-          'Video from a link'
+          t('pages.search.fromLink')
         ) : (
           <>
-            Results for <span className="font-bold">{query}</span>
+            {t('more.resultsFor')} <span className="font-bold">{query}</span>
           </>
         )}
       </h1>
 
       {isLink && settled && local.length === 0 && remaining.length === 0 && (
         <p className="text-sm text-text-2">
-          That link does not lead to a video or a channel. Playlist links cannot be opened here
-          yet.
+          {t('more.linkNotVideo')}
         </p>
       )}
 
       <section hidden={isLink && settled && local.length === 0}>
-        <h2 className="mb-4 text-base font-medium text-text-2">In your library</h2>
+        <h2 className="mb-4 text-base font-medium text-text-2">{t('pages.search.inLibrary')}</h2>
         {localPending ? (
           <Grid>
             {Array.from({ length: 4 }, (_, i) => (
@@ -125,18 +126,18 @@ export function SearchResultsPage() {
             />
           </>
         ) : (
-          <p className="text-sm text-text-2">Nothing here matches.</p>
+          <p className="text-sm text-text-2">{t('pages.search.noMatches')}</p>
         )}
       </section>
 
       <section className="mt-12" hidden={isLink && settled && remaining.length === 0}>
         <h2 className="mb-4 flex items-center gap-2 text-base font-medium text-text-2">
-          On YouTube
+          {t('more.onYouTube')}
           {upstreamPending && <Loader2 size={16} className="animate-spin" />}
         </h2>
 
         {upstreamError ? (
-          <p className="text-sm text-text-2">Could not reach YouTube.</p>
+          <p className="text-sm text-text-2">{t('pages.search.youtubeUnreachable')}</p>
         ) : (
           <>
             <Grid>
@@ -157,7 +158,7 @@ export function SearchResultsPage() {
         )}
 
         {!upstreamPending && !upstreamError && remaining.length === 0 && (
-          <p className="text-sm text-text-2">No further results.</p>
+          <p className="text-sm text-text-2">{t('pages.search.noMore')}</p>
         )}
       </section>
     </div>

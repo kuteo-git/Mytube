@@ -137,3 +137,22 @@ globalThis.matchMedia ??= ((query: string) => ({
   removeListener() {},
   dispatchEvent: () => false,
 })) as unknown as typeof matchMedia
+
+/**
+ * Tests run in English, always.
+ *
+ * The 179 assertions in this suite read visible text, and that text describes
+ * *behaviour* — "the button says Delete", "the empty state names the setting
+ * that caused it". Rewriting them to look up translation keys would make every
+ * one of them require a trip to the dictionary to understand, and would not
+ * catch a single extra fault: whether the dictionaries agree is checked by
+ * dictionaries.test.ts, and whether anything was left untranslated is checked
+ * by untranslated.guard.test.ts.
+ *
+ * Pinned rather than left to default, because the default reads
+ * navigator.language and jsdom's is whatever the machine's is — so a suite that
+ * passes here would fail on a Vietnamese laptop.
+ */
+import i18n from '@/shared/i18n'
+
+void i18n.changeLanguage('en')

@@ -7,7 +7,11 @@ import { MOBILE_BREAKPOINT } from '@/features/watch/application/player-geometry'
 import { SettingsPage } from './SettingsPage'
 
 vi.mock('@/features/settings/application/queries', () => ({
-  useVoices: () => ({ data: ['Ngọc Linh'] }),
+  // The voice list endpoint is gone: OpenAI publishes none, so the voice is
+  // typed. What the form asks for now is where to synthesise.
+  useTTSConfig: () => ({ data: { baseUrl: '', model: '', voice: '', hasKey: false, keyHint: '' } }),
+  useSaveTTSConfig: () => ({ mutate: () => {}, isPending: false, isSuccess: false }),
+  useTestTTS: () => ({ mutate: () => {}, isPending: false, data: undefined }),
   useTranslateConfig: () => ({ data: undefined }),
   useSaveTranslateConfig: () => ({ mutate: () => {}, isPending: false }),
   useTestTranslate: () => ({ mutate: () => {}, isPending: false, data: undefined }),

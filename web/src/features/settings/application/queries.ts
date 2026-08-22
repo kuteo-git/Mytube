@@ -8,12 +8,41 @@ import {
   type TranslateTestResult,
 } from '@/features/settings/infrastructure/settingsRepository'
 
-export function useVoices() {
+/**
+ * Where speech is synthesised, and what to ask it for.
+ *
+ * This replaces a `useVoices` that fetched the synthesiser's own list. OpenAI
+ * publishes no endpoint that lists voices, so the app cannot ask a question
+ * that only one provider can answer — the voice is typed instead, and this
+ * carries the endpoint that will be given it.
+ */
+export function useTTSConfig() {
   return useQuery({
-    queryKey: ['tts-voices'],
-    queryFn: () => settingsRepository.listVoices(),
-    // The synthesiser's voice list does not change while the app is open.
-    staleTime: Infinity,
+    queryKey: ['tts-config'],
+    queryFn: () => settingsRepository.getTTSConfig(),
+  })
+}
+
+/**
+ * Try the settings before committing them.
+ *
+ * Takes the form's current values rather than what is stored: testing after
+ * saving is testing the thing you have already accepted, which is the wrong way
+ * round when the point is to find out whether to accept it.
+ */
+export function useTestTTS() {
+  return useMutation({
+    mutationFn: (input: { baseUrl: string; model: string; apiKey: string; voice: string }) =>
+      settingsRepository.testTTS(input),
+  })
+}
+
+export function useSaveTTSConfig() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { baseUrl: string; model: string; apiKey: string; voice: string }) =>
+      settingsRepository.saveTTSConfig(input),
+    onSuccess: (saved) => client.setQueryData(['tts-config'], saved),
   })
 }
 

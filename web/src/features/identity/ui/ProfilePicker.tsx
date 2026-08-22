@@ -5,6 +5,7 @@ import { useCurrentProfile, useProfiles } from '../application/use-profile'
 import { httpProfileRepository } from '../infrastructure/profileRepository'
 import { validProfileName, type Profile } from '../domain/profile'
 import { DeleteProfileDialog } from './DeleteProfileDialog'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Who is watching.
@@ -31,6 +32,7 @@ export function ProfilePicker({
    */
   manage?: boolean
 }) {
+  const { t } = useTranslation()
   const { data: profiles = [], isLoading, refetch } = useProfiles()
   const { id: currentID, choose } = useCurrentProfile()
   const [adding, setAdding] = useState(false)
@@ -41,7 +43,7 @@ export function ProfilePicker({
 
   const add = async () => {
     if (!validProfileName(name)) {
-      setError('Enter a name')
+      setError(t('profiles.enterName'))
       return
     }
     setBusy(true)
@@ -52,7 +54,7 @@ export function ProfilePicker({
       choose(created)
       onDone?.()
     } catch {
-      setError('Could not add that name')
+      setError(t('profiles.couldNotAdd'))
     } finally {
       setBusy(false)
     }
@@ -60,10 +62,9 @@ export function ProfilePicker({
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-10">
-      <h1 className="text-xl font-medium">Who's watching?</h1>
+      <h1 className="text-xl font-medium">{t('ui.whosWatching')}</h1>
       <p className="pt-1 text-sm text-text-2">
-        Keeps subscriptions, history and recommendations separate. The library
-        itself is shared.
+        {t('profiles.keepsSeparate')}
       </p>
 
       {deleting && (
@@ -78,7 +79,7 @@ export function ProfilePicker({
       )}
 
       {isLoading ? (
-        <p className="pt-6 text-sm text-text-2">Loading…</p>
+        <p className="pt-6 text-sm text-text-2">{t('common.loading')}</p>
       ) : (
         <ul className="flex flex-col gap-2 pt-6">
           {profiles.map((p) => (
@@ -118,7 +119,7 @@ export function ProfilePicker({
                   onClick={() => setDeleting(p)}
                   className="shrink-0 rounded-full px-3 py-2 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover hover:text-text"
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               )}
             </li>
@@ -135,10 +136,10 @@ export function ProfilePicker({
             onKeyDown={(e) => {
               if (e.key === 'Enter') void add()
             }}
-            placeholder="Name"
-            aria-label="New profile name"
+            placeholder={t('ui.name')}
+            aria-label={t('profiles.newProfileName')}
             maxLength={40}
-            className="w-full rounded-lg bg-surface-input px-4 py-3 text-base outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
+            className="w-full rounded-lg bg-surface-input px-4 py-3 text-base outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
           />
           {error && <p className="text-xs text-brand">{error}</p>}
           <button
@@ -147,7 +148,7 @@ export function ProfilePicker({
             onClick={() => void add()}
             className="min-h-11 rounded-lg bg-invert-bg px-4 text-sm font-medium text-invert-text disabled:opacity-50"
           >
-            {busy ? 'Adding…' : 'Add'}
+            {busy ? t('ui.adding') : t('ui.add')}
           </button>
         </div>
       ) : (
@@ -156,7 +157,7 @@ export function ProfilePicker({
           onClick={() => setAdding(true)}
           className="mt-4 min-h-11 w-full rounded-xl bg-surface px-4 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover"
         >
-          Add someone
+          {t('storagePage.addSomeone')}
         </button>
       )}
     </div>

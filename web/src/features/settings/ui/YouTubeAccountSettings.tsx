@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { SettingsSection } from './SettingsSection'
 import { accountRepository } from '../infrastructure/accountRepository'
+import { Trans, useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 /**
  * Connecting a household member's own YouTube account.
@@ -19,6 +21,7 @@ import { accountRepository } from '../infrastructure/accountRepository'
  * the moment the server accepts it.
  */
 export function YouTubeAccountSettings({ headless = false }: { headless?: boolean }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: account } = useQuery({
     queryKey: ['youtube-account'],
@@ -69,43 +72,50 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
   return (
     <SettingsSection
       icon={<KeyRound size={18} />}
-      title="YouTube account"
+      title={t('youtubeAccount.title')}
       // Names what the import actually does. It said "playlists", which nothing
       // here has ever brought in — there is no playlist anywhere in this system.
       // §5's rule against a button that does nothing holds for a sentence that
       // promises something too.
-      description="Brings your own subscriptions, playlists and liked videos into the library. Your account, on this machine only."
+      description={t('youtubeAccount.description')}
       headless={headless}
     >
       <div className="pt-2">
         <p className="text-sm">
-          <span className="text-text-2">Status: </span>
-          {state === 'OK' && <span>Connected</span>}
+          <span className="text-text-2">{t('ui.status')} </span>
+          {state === 'OK' && <span>{t('ui.connected')}</span>}
           {state === 'EXPIRED' && (
-            <span className="text-brand">Signed out — paste your cookies again</span>
+            <span className="text-brand">{t('youtubeAccount.signedOut')}</span>
           )}
-          {state === 'NEVER_SET' && <span className="text-text-2">Not connected</span>}
+          {state === 'NEVER_SET' && <span className="text-text-2">{t('youtubeAccount.notConnected')}</span>}
         </p>
         {account?.lastResult && (
-          <p className="pt-1 text-xs text-text-2">Last scan: {account.lastResult}</p>
+          <p className="pt-1 text-xs text-text-2">
+            {t('more.lastScanResult', { result: describeScan(account.lastResult, t) })}
+          </p>
         )}
       </div>
 
       <ol className="flex list-decimal flex-col gap-1 pl-5 pt-4 text-xs text-text-2">
         <li>
-          Install{' '}
-          <a
-            className="text-text underline"
-            href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Get cookies.txt LOCALLY
-          </a>{' '}
-          for Chrome — the one yt-dlp's own FAQ recommends.
+          {/* The extension's name stays inside the link and out of the
+              dictionary: it is a name, and the wrong one was pulled from the
+              store as malware. */}
+          <Trans
+            i18nKey="youtubeAccount.installStep"
+            components={[
+              <a
+                key="link"
+                className="text-text underline"
+                href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc"
+                target="_blank"
+                rel="noreferrer"
+              />,
+            ]}
+          />
         </li>
-        <li>Open youtube.com signed in, click the extension, choose Netscape format.</li>
-        <li>Paste the whole file below.</li>
+        <li>{t('youtubeAccount.howTo')}</li>
+        <li>{t('youtubeAccount.pasteBelow')}</li>
       </ol>
 
       {/*
@@ -115,18 +125,17 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
         hand one of them a live Google session.
       */}
       <p className="pt-2 text-xs text-brand">
-        Do not install "Get cookies.txt" without LOCALLY — that one was removed
-        from the store as malware.
+        {t('youtubeAccount.warning')}
       </p>
 
       <textarea
         value={cookies}
         onChange={(e) => setCookies(e.target.value)}
         placeholder="# Netscape HTTP Cookie File…"
-        aria-label="Cookies file"
+        aria-label={t('youtubeAccount.cookiesFile')}
         rows={5}
         spellCheck={false}
-        className="mt-3 w-full rounded-lg bg-surface-input p-3 font-mono text-xs outline-none ring-1 ring-border focus:ring-2 focus:ring-brand"
+        className="mt-3 w-full rounded-lg bg-surface-input p-3 font-mono text-xs outline-none ring-1 ring-line focus:ring-2 focus:ring-brand"
       />
       {error && (
         <p className="pt-1 text-xs text-brand" role="alert">
@@ -141,7 +150,7 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
           onClick={() => save.mutate()}
           className="min-h-11 rounded-lg bg-invert-bg px-4 text-sm font-medium text-invert-text disabled:opacity-50"
         >
-          {save.isPending ? 'Saving…' : 'Connect'}
+          {save.isPending ? t('ui.saving') : t('ui.connect')}
         </button>
         {state !== 'NEVER_SET' && (
           <>
@@ -151,14 +160,14 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
               onClick={() => scan.mutate()}
               className="min-h-11 rounded-lg bg-surface px-4 text-sm disabled:opacity-50"
             >
-              {running ? 'Scanning…' : 'Scan now'}
+              {running ? t('ui.scanning') : t('youtubeAccount.scanNow')}
             </button>
             <button
               type="button"
               onClick={() => remove.mutate()}
               className="min-h-11 rounded-lg bg-surface px-4 text-sm text-text-2"
             >
-              Disconnect
+              {t('youtubeAccount.disconnect')}
             </button>
           </>
         )}
@@ -184,8 +193,11 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
             </>
           ) : (
             <p>
-              {status.subscriptions} subscriptions, {status.playlists} playlists,{' '}
-              {status.videos} videos.
+              {t('youtubeAccount.summary', {
+                subscriptions: status.subscriptions,
+                playlists: status.playlists,
+                videos: status.videos,
+              })}
             </p>
           )}
           {status.errors.length > 0 && (
@@ -199,4 +211,24 @@ export function YouTubeAccountSettings({ headless = false }: { headless?: boolea
       )}
     </SettingsSection>
   )
+}
+
+/**
+ * What the last scan found, in words.
+ *
+ * The server reports `counts 305 27 192` or `signed_out` — numbers and a code,
+ * because it cannot know what language the person reads. This is where that
+ * becomes a sentence. Anything unrecognised is passed through rather than
+ * hidden: an older ingest still sending prose should be visible, not silently
+ * swallowed.
+ */
+function describeScan(result: string, t: TFunction): string {
+  if (result === 'signed_out') return t('youtubeAccount.signedOut')
+  const counts = /^counts (\d+) (\d+) (\d+)$/.exec(result)
+  if (!counts) return result
+  return t('youtubeAccount.summary', {
+    subscriptions: counts[1],
+    playlists: counts[2],
+    videos: counts[3],
+  })
 }

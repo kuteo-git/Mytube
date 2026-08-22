@@ -14,8 +14,11 @@ import {
 import { usePagedList } from '@/features/catalog/application/paged-list'
 import { ShowMore } from '@/features/catalog/ui/ShowMore'
 import type { IngestJob, ScanStatus } from '@/features/catalog/infrastructure/catalogRepository'
-import { formatRelative } from '@/shared/lib/format'
+
 import { useToast } from '@/shared/ui/toast'
+import { useFormat } from '@/shared/lib/useFormat'
+import { useTranslation } from 'react-i18next'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * What the system has been doing, and what went wrong doing it.
@@ -35,6 +38,7 @@ import { useToast } from '@/shared/ui/toast'
  * place to look for anything underneath the job layer.
  */
 export function ActivityPage() {
+  const { t } = useTranslation()
   const { data: jobs, isPending: jobsPending } = useActivityJobs()
   const refresh = useRefreshTopics()
   const clearScans = useClearScans()
@@ -49,25 +53,25 @@ export function ActivityPage() {
 
   const handleClearScans = () => {
     clearScans.mutate(undefined, {
-      onSuccess: () => toast('Scan history cleared'),
+      onSuccess: () => toast(t('pages.activity.historyCleared')),
     })
   }
 
   const handleDismissFailed = () => {
     dismissJobs.mutate('FAILED', {
-      onSuccess: (count) => toast(`${count} failed job${count !== 1 ? 's' : ''} cleared`),
+      onSuccess: (count) => toast(t('ui.jobsCleared_failed', { count })),
     })
   }
 
   const handleDismissCompleted = () => {
     dismissJobs.mutate('SUCCEEDED', {
-      onSuccess: (count) => toast(`${count} completed job${count !== 1 ? 's' : ''} cleared`),
+      onSuccess: (count) => toast(t('ui.jobsCleared_completed', { count })),
     })
   }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 min-[700px]:px-6">
-      <h1 className="text-2xl font-medium">Activity</h1>
+      <PageHeading spacer={false}>{t('nav.activity')}</PageHeading>
 
       <ScanHistory
         refreshing={scanning || refresh.isPending}
@@ -76,18 +80,18 @@ export function ActivityPage() {
       />
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium">Downloads</h2>
+        <h2 className="text-lg font-medium">{t('ui.downloads')}</h2>
 
-        {jobsPending && <p className="mt-3 text-sm text-text-2">Loading…</p>}
+        {jobsPending && <p className="mt-3 text-sm text-text-2">{t('common.loading')}</p>}
 
         {!jobsPending && failed.length === 0 && active.length === 0 && done.length === 0 && (
           <p className="mt-3 text-sm text-text-2">
-            Nothing has been downloaded yet. Pressing play on a video schedules a copy.
+            {t('empty.downloads')}
           </p>
         )}
 
         <JobGroup
-          title="Failed"
+          title={t('ui.failed')}
           tone="error"
           jobs={failed}
           render={(job) => <FailedRow job={job} />}
@@ -95,13 +99,13 @@ export function ActivityPage() {
           canClear={failed.length > 0}
         />
         <JobGroup
-          title="In progress"
+          title={t('pages.activity.inProgress')}
           tone="active"
           jobs={active}
           render={(job) => <ActiveRow job={job} />}
         />
         <JobGroup
-          title="Completed"
+          title={t('ui.completed')}
           tone="done"
           jobs={done}
           render={(job) => <DoneRow job={job} />}
@@ -122,6 +126,7 @@ function ScanHistory({
   onRefresh: () => void
   onClearAll: () => void
 }) {
+  const { t } = useTranslation()
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isPending } = useScans()
   const scans = data?.pages.flatMap((page) => page.scans) ?? []
   const total = data?.pages[0]?.total ?? 0
@@ -129,7 +134,7 @@ function ScanHistory({
   return (
     <section className="mt-6">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-medium">Scans</h2>
+        <h2 className="text-lg font-medium">{t('ui.scans')}</h2>
         <div className="flex items-center gap-2">
           {scans.length > 0 && (
             <button
@@ -137,7 +142,7 @@ function ScanHistory({
               onClick={onClearAll}
               className="rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
             >
-              Clear all
+              {t('more.clearAll')}
             </button>
           )}
           <button
@@ -147,15 +152,15 @@ function ScanHistory({
             className="flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover disabled:opacity-60"
           >
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : undefined} />
-            {refreshing ? 'Scanning…' : 'Scan now'}
+            {refreshing ? t('ui.scanning') : t('pages.activity.scanNow')}
           </button>
         </div>
       </div>
 
-      {isPending && <p className="mt-3 text-sm text-text-2">Loading…</p>}
+      {isPending && <p className="mt-3 text-sm text-text-2">{t('common.loading')}</p>}
 
       {!isPending && scans.length === 0 && (
-        <p className="mt-3 text-sm text-text-2">No scan has run yet.</p>
+        <p className="mt-3 text-sm text-text-2">{t('pages.activity.neverScanned')}</p>
       )}
 
       {scans.length > 0 && (
@@ -177,11 +182,17 @@ function ScanHistory({
 }
 
 function ScanRow({ scan }: { scan: ScanStatus }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   return (
     <li className="rounded-xl bg-surface p-4 text-sm">
       <p className="text-text-2">
-        {formatRelative(scan.startedAt)} · {Math.round(scan.durationMs / 1000)}s ·{' '}
-        {scan.sourcesScanned} sources · {scan.videosSeen} videos seen · {scan.videosAdded} added
+        {fmt.relative(scan.startedAt)} · {Math.round(scan.durationMs / 1000)}s ·{' '}
+        {t('more.scanLine', {
+          sources: scan.sourcesScanned,
+          seen: scan.videosSeen,
+          added: scan.videosAdded,
+        })}
       </p>
       {scan.sourcesFailed > 0 && (
         <ul className="mt-3 space-y-1.5">
@@ -198,6 +209,8 @@ function ScanRow({ scan }: { scan: ScanStatus }) {
 }
 
 function FailedRow({ job }: { job: IngestJob }) {
+  const { t } = useTranslation()
+  const fmt = useFormat()
   const retry = useRetryJob()
   return (
     <li className="rounded-xl bg-surface p-4">
@@ -208,7 +221,7 @@ function FailedRow({ job }: { job: IngestJob }) {
               most of them here are temporary. Without it, hiding would be the
               only thing anybody could do with a failure. */}
           <IconButton
-            label="Retry download"
+            label={t('pages.activity.retryDownload')}
             onClick={() => retry.mutate(job.id)}
             disabled={retry.isPending}
           >
@@ -218,12 +231,13 @@ function FailedRow({ job }: { job: IngestJob }) {
         </div>
       </div>
       <p className="mt-1 text-xs break-words text-amber-400">{job.errorMessage}</p>
-      <p className="mt-1 text-xs text-text-2">{formatRelative(job.createdAt)}</p>
+      <p className="mt-1 text-xs text-text-2">{fmt.relative(job.createdAt)}</p>
     </li>
   )
 }
 
 function ActiveRow({ job }: { job: IngestJob }) {
+  const { t } = useTranslation()
   const cancel = useCancelJob()
   // One video is transferred at a time — a single worker, claiming one job — so
   // everything else in this group is standing in line, not downloading. Both
@@ -252,7 +266,7 @@ function ActiveRow({ job }: { job: IngestJob }) {
             hidden: hiding work that carries on underneath is the one thing this
             must never do. */}
         <IconButton
-          label="Cancel download"
+          label={t('pages.activity.cancelDownload')}
           onClick={() => cancel.mutate(job.id)}
           disabled={cancel.isPending}
         >
@@ -260,27 +274,29 @@ function ActiveRow({ job }: { job: IngestJob }) {
         </IconButton>
       </div>
       <p className="mt-1 text-xs text-text-2 tabular-nums">
-        {transferring ? `${Math.round(job.progress * 100)}%` : 'Waiting its turn'}
+        {transferring ? `${Math.round(job.progress * 100)}%` : t('pages.activity.queued')}
       </p>
     </li>
   )
 }
 
 function DoneRow({ job }: { job: IngestJob }) {
+  const fmt = useFormat()
   return (
     <li className="flex items-center gap-2 rounded-xl bg-surface p-4 text-sm">
       <CheckCircle size={14} className="shrink-0 text-text-2" />
       <span className="clamp-1">{job.title || job.sourceUrl}</span>
-      <span className="ml-auto shrink-0 text-xs text-text-2">{formatRelative(job.createdAt)}</span>
+      <span className="ml-auto shrink-0 text-xs text-text-2">{fmt.relative(job.createdAt)}</span>
       <DismissButton jobId={job.id} />
     </li>
   )
 }
 
 function DismissButton({ jobId }: { jobId: string }) {
+  const { t } = useTranslation()
   const dismiss = useDismissJob()
   return (
-    <IconButton label="Dismiss" onClick={() => dismiss.mutate(jobId)} disabled={dismiss.isPending}>
+    <IconButton label={t('ui.dismiss')} onClick={() => dismiss.mutate(jobId)} disabled={dismiss.isPending}>
       <X size={16} />
     </IconButton>
   )
@@ -332,6 +348,7 @@ function JobGroup({
   onClearAll?: () => void
   canClear?: boolean
 }) {
+  const { t } = useTranslation()
   const { visible, remaining, showMore } = usePagedList(jobs)
   if (jobs.length === 0) return null
 
@@ -347,7 +364,7 @@ function JobGroup({
             onClick={onClearAll}
             className="rounded-full bg-surface px-4 py-2 text-sm font-medium transition-colors duration-150 ease-out hover:bg-surface-hover"
           >
-            Clear all
+            {t('more.clearAll')}
           </button>
         )}
       </div>

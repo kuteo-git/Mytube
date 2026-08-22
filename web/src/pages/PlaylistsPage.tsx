@@ -1,10 +1,13 @@
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { usePlaylists } from '@/features/catalog/application/queries'
 import { useAccountState } from '@/features/settings/application/account-state'
 import type { Playlist } from '@/features/catalog/domain/video'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * The member's playlists, as their YouTube account has them.
@@ -18,6 +21,7 @@ import { mediaURL } from '@/shared/lib/media'
  * channels are the household's and what somebody assembled is theirs.
  */
 export function PlaylistsPage() {
+  const { t } = useTranslation()
   const { data: playlists, isPending, isError } = usePlaylists()
   // "Not read yet" becomes a lie the moment the session dies: nothing is coming
   // on the next pass, because there will not be one until somebody pastes a
@@ -26,11 +30,11 @@ export function PlaylistsPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">Playlists</h1>
+      <PageHeading>{t('nav.playlists')}</PageHeading>
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          Could not load playlists. Is the gateway running?
+          {t('empty.couldNotLoad', { what: t('empty.what_playlists') })}
         </p>
       ) : isPending ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-8 min-[700px]:grid-cols-3 min-[1000px]:grid-cols-4 min-[1600px]:grid-cols-5">
@@ -54,8 +58,7 @@ export function PlaylistsPage() {
         </div>
       ) : (
         <p className="py-16 text-center text-text-2">
-          No playlists yet. Connect your YouTube account in Settings and they arrive on
-          the next scan.
+          {t('more.noPlaylistsYet')}
         </p>
       )}
     </div>
@@ -63,10 +66,11 @@ export function PlaylistsPage() {
 }
 
 function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: boolean }) {
+  const { t } = useTranslation()
   const cover = playlist.thumbnails[0]
 
   return (
-    <Link to={`/playlist/${playlist.id}`} className="block">
+    <PageLink to={`/playlist/${playlist.id}`} className="block">
       {/* Keyed on the playlist's own id, like every other card in the app. It
           matters more here than elsewhere: a playlist whose contents have not
           been read yet has no cover at all, so the gradient is the whole of what
@@ -86,13 +90,13 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
             hours, and saying so is the difference between "not yet" and
             "something is wrong". */}
         {playlist.unavailable
-          ? 'YouTube will not open this one'
+          ? t('pages.playlists.wontOpen')
           : playlist.itemsSynced
-            ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
+            ? t('more.videosCount', { count: playlist.itemCount })
             : signedOut
-              ? 'Waiting for a YouTube session'
-              : 'Not read yet'}
+              ? t('pages.playlists.waitingSession')
+              : t('pages.playlists.notReadYet')}
       </p>
-    </Link>
+    </PageLink>
   )
 }

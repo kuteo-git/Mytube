@@ -1,7 +1,9 @@
 import { Info, X } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { formatBytes } from '@/shared/lib/format'
+import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Dismissible alert banner. On youtube.com this slot carries billing notices;
@@ -15,6 +17,7 @@ export function StorageBanner({
   usedBytes: number
   budgetBytes: number
 }) {
+  const { t } = useTranslation()
   const [dismissed, setDismissed] = useState(false)
   if (dismissed) return null
 
@@ -26,20 +29,22 @@ export function StorageBanner({
       <Info size={20} className="mt-0.5 shrink-0 text-text-2" />
       <div className="flex-1">
         <p className="text-sm">
-          Storage is {Math.round(ratio * 100)}% full ({formatBytes(usedBytes)} of{' '}
-          {formatBytes(budgetBytes)}). The least recently watched videos will be removed from
-          disk automatically; their metadata and history are kept.
+          {t('storagePage.bannerFull', {
+            percent: Math.round(ratio * 100),
+            used: formatBytes(usedBytes),
+            budget: formatBytes(budgetBytes),
+          })}
         </p>
-        <Link
+        <PageLink
           to="/storage"
           className="mt-2 inline-block text-sm font-medium text-link hover:underline"
         >
-          Manage storage
-        </Link>
+          {t('storagePage.manage')}
+        </PageLink>
       </div>
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t('ui.dismiss')}
         onClick={() => setDismissed(true)}
         className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-surface-hover"
       >

@@ -9,6 +9,7 @@ import { BackBar } from '@/features/catalog/ui/BackBar'
 import { usePlayer } from '@/features/watch/application/player-context'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { Pill } from '@/shared/ui/primitives'
+import { useTranslation } from 'react-i18next'
 
 /**
  * A channel's own page. The video grid comes live from YouTube, paged as you
@@ -17,6 +18,7 @@ import { Pill } from '@/shared/ui/primitives'
  * capped at whatever a scan happened to bring in.
  */
 export function ChannelPage() {
+  const { t } = useTranslation()
   const { channelId } = useParams()
   const { isMobile } = usePlayer()
   const [sortToken, setSortToken] = useState<string | undefined>(undefined)
@@ -65,7 +67,7 @@ export function ChannelPage() {
   const sortOptions = data?.pages[0]?.sortOptions ?? []
 
   if (channelError) {
-    return <p className="py-16 text-center text-text-2">Channel not found.</p>
+    return <p className="py-16 text-center text-text-2">{t('pages.channel.notFound')}</p>
   }
 
   return (
@@ -96,7 +98,7 @@ export function ChannelPage() {
       {sortOptions.length > 1 && (
         <div
           role="group"
-          aria-label="Sort videos"
+          aria-label={t('pages.channel.sort')}
           className="mt-6 flex flex-wrap gap-3 border-b border-line pb-4"
         >
           {sortOptions.map((option, index) => {
@@ -128,7 +130,7 @@ export function ChannelPage() {
       )}
 
       {videosError ? (
-        <p className="mt-8 text-sm text-text-2">Could not reach YouTube to list this channel.</p>
+        <p className="mt-8 text-sm text-text-2">{t('pages.channel.unreachable')}</p>
       ) : (
         <>
           <div className="mt-8 grid grid-cols-1 gap-x-4 gap-y-10 min-[700px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1600px]:grid-cols-4">
@@ -153,7 +155,7 @@ export function ChannelPage() {
           />
 
           {!videosPending && videos.length === 0 && (
-            <p className="mt-8 text-sm text-text-2">This channel has no uploads.</p>
+            <p className="mt-8 text-sm text-text-2">{t('pages.channel.noUploads')}</p>
           )}
         </>
       )}

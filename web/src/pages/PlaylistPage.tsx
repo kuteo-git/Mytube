@@ -3,6 +3,10 @@ import { usePlaylist } from '@/features/catalog/application/queries'
 import { playlistQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
+import { useTranslation } from 'react-i18next'
+import { BackBar } from '@/features/catalog/ui/BackBar'
+import { usePlayer } from '@/features/watch/application/player-context'
+import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
  * One playlist, in its own order.
@@ -12,6 +16,8 @@ import { InfiniteList } from '@/shared/ui/InfiniteList'
  * by date is a different list.
  */
 export function PlaylistPage() {
+  const { isMobile } = usePlayer()
+  const { t } = useTranslation()
   const { playlistId = '' } = useParams()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     usePlaylist(playlistId)
@@ -21,21 +27,30 @@ export function PlaylistPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">{playlist?.title ?? 'Playlist'}</h1>
+      {/* Its own bar, like a channel's: the name is the playlist's and the
+          shell cannot know it, so `bare-screens` records a null title here and
+          leaves the naming to this page. */}
+      {isMobile && (
+        <BackBar
+          title={playlist?.title ?? t('ui.playlist')}
+          showTitle
+          fallback="/playlists"
+        />
+      )}
+      <PageHeading>{playlist?.title ?? t('ui.playlist')}</PageHeading>
       {playlist && (
-        <p className="-mt-2 pb-4 text-sm text-text-2">
+        <p className="pb-4 text-sm text-text-2 min-[700px]:-mt-2">
           {playlist.unavailable
-            ? 'YouTube will not open this one'
+            ? t('pages.playlists.wontOpen')
             : playlist.itemsSynced
-              ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
-              : 'Not read yet'}
+              ? t('more.videosCount', { count: playlist.itemCount })
+              : t('pages.playlists.notReadYet')}
         </p>
       )}
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
-          That playlist could not be opened. It may have been deleted, or it belongs to
-          another profile.
+          {t('more.playlistUnopenable')}
         </p>
       ) : (
         <>
@@ -67,10 +82,10 @@ export function PlaylistPage() {
       {!isPending && !isError && videos.length === 0 && (
         <p className="py-16 text-center text-text-2">
           {playlist?.unavailable
-            ? 'YouTube lists this playlist but will not open it — it answers "the playlist does not exist". Nothing here can fix that; it is asked once and then left alone.'
+            ? t('pages.playlists.wontOpenLong')
             : playlist && !playlist.itemsSynced
-              ? 'This playlist has not been read from YouTube yet. It fills in on one of the next account scans.'
-              : 'This playlist is empty on YouTube.'}
+              ? t('pages.playlists.notReadYetLong')
+              : t('pages.playlists.emptyUpstream')}
         </p>
       )}
     </div>
