@@ -276,6 +276,29 @@
   }
 }
 
+/* The ring around the live dot: it expands and fades, and the dot underneath
+   never moves or dims.
+
+   The dot has to stay legible at a glance — a chip row is scanned, not stared
+   at — so what animates is a second element behind it, not the dot itself. A
+   blinking dot takes the word beside it with it and reads as a fault light.
+
+   This is applied through `motion-safe:` at the call site rather than relying
+   on the global reduced-motion rule near the top of this file. That rule
+   shortens animations to 0.01ms, which is right for a transition that happens
+   once and is a strobe for one that repeats for ever — precisely the hazard
+   the setting exists to prevent. */
+@keyframes live-ring {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
 /* The toast arrives from below, the direction it sits in. Short enough to be
    felt rather than watched; the reduced-motion rule above flattens it. */
 @keyframes toast-in {

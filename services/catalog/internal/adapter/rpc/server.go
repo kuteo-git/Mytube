@@ -119,6 +119,8 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		LikeCount:       v.LikeCount,
 		Language:        v.Language,
 		DiscoveredVia:   v.DiscoveredVia,
+		LiveStatus:      v.LiveStatus,
+		IsLiveNow:       v.IsLiveNow,
 	}
 
 	for _, t := range v.Subtitles {
@@ -339,6 +341,7 @@ func featuresToProto(fs []domain.VideoFeatures) []*catalogv1.VideoFeatures {
 			ViewCount:       f.ViewCount,
 			IsShort:         f.IsShort,
 			DiscoveredVia:   f.DiscoveredVia,
+			IsLiveNow:       f.IsLive,
 		}
 		// Left unset rather than sent as the zero instant: the ranker excludes
 		// an undated video outright, and epoch zero is a date.
@@ -399,6 +402,15 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 		SourceURL:       in.GetSourceUrl(),
 		Language:        in.GetLanguage(),
 		DiscoveredVia:   in.GetDiscoveredVia(),
+		// The direction featuresToProto's note is about, mirrored. That one was
+		// written after is_short crossed the wire as a field nobody copied;
+		// this one went the same way for the same reason, and was caught only
+		// because a real pass found 18 broadcasts and wrote none of them.
+		//
+		// IsLiveNow is deliberately not read here. It is computed in SQL from
+		// the two stored columns, so accepting it from a caller would be a
+		// second source for a fact that has one.
+		LiveStatus:      in.GetLiveStatus(),
 	}
 	if ts := in.GetPublishedAt(); ts != nil {
 		v.PublishedAt = ts.AsTime()
@@ -424,6 +436,29 @@ func (s *Server) ListUncheckedShorts(ctx context.Context, req *connect.Request[c
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.ListUncheckedShortsResponse{VideoIds: ids}), nil
+}
+
+// ListLive answers with the broadcasts this member's channels have on air.
+//
+// An empty user is refused rather than answered with the household's. That
+// guard is not ceremony: the same omission elsewhere in this service is what
+// would hand one browser everybody's subscriptions, and a Live list is built
+// out of exactly that.
+func (s *Server) ListLive(ctx context.Context, req *connect.Request[catalogv1.ListLiveRequest]) (*connect.Response[catalogv1.ListLiveResponse], error) {
+	userID := req.Msg.GetUserId()
+	if userID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("user_id is required"))
+	}
+	videos, err := s.catalog.ListLive(ctx, userID)
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	out := make([]*catalogv1.Video, 0, len(videos))
+	for _, v := range videos {
+		out = append(out, videoToProto(v))
+	}
+	return connect.NewResponse(&catalogv1.ListLiveResponse{Videos: out}), nil
 }
 
 func (s *Server) SetMediaState(ctx context.Context, req *connect.Request[catalogv1.SetMediaStateRequest]) (*connect.Response[catalogv1.SetMediaStateResponse], error) {

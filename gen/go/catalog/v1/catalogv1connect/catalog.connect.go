@@ -72,6 +72,8 @@ const (
 	// CatalogServiceListUncheckedShortsProcedure is the fully-qualified name of the CatalogService's
 	// ListUncheckedShorts RPC.
 	CatalogServiceListUncheckedShortsProcedure = "/catalog.v1.CatalogService/ListUncheckedShorts"
+	// CatalogServiceListLiveProcedure is the fully-qualified name of the CatalogService's ListLive RPC.
+	CatalogServiceListLiveProcedure = "/catalog.v1.CatalogService/ListLive"
 	// CatalogServiceFindBySourceURLProcedure is the fully-qualified name of the CatalogService's
 	// FindBySourceURL RPC.
 	CatalogServiceFindBySourceURLProcedure = "/catalog.v1.CatalogService/FindBySourceURL"
@@ -179,6 +181,12 @@ type CatalogServiceClient interface {
 	SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error)
 	// The videos nobody has asked about yet, newest first.
 	ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error)
+	// Broadcasts on air right now, from channels this member follows.
+	//
+	// Not a feed: this is "everything that is happening", which is a list. There
+	// are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
+	// would actively hide some of them.
+	ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
 	FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error)
@@ -332,6 +340,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListUncheckedShorts")),
 			connect.WithClientOptions(opts...),
 		),
+		listLive: connect.NewClient[v1.ListLiveRequest, v1.ListLiveResponse](
+			httpClient,
+			baseURL+CatalogServiceListLiveProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListLive")),
+			connect.WithClientOptions(opts...),
+		),
 		findBySourceURL: connect.NewClient[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse](
 			httpClient,
 			baseURL+CatalogServiceFindBySourceURLProcedure,
@@ -483,6 +497,7 @@ type catalogServiceClient struct {
 	setMediaState           *connect.Client[v1.SetMediaStateRequest, v1.SetMediaStateResponse]
 	setShort                *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
 	listUncheckedShorts     *connect.Client[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse]
+	listLive                *connect.Client[v1.ListLiveRequest, v1.ListLiveResponse]
 	findBySourceURL         *connect.Client[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse]
 	listComments            *connect.Client[v1.ListCommentsRequest, v1.ListCommentsResponse]
 	createComment           *connect.Client[v1.CreateCommentRequest, v1.CreateCommentResponse]
@@ -575,6 +590,11 @@ func (c *catalogServiceClient) SetShort(ctx context.Context, req *connect.Reques
 // ListUncheckedShorts calls catalog.v1.CatalogService.ListUncheckedShorts.
 func (c *catalogServiceClient) ListUncheckedShorts(ctx context.Context, req *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error) {
 	return c.listUncheckedShorts.CallUnary(ctx, req)
+}
+
+// ListLive calls catalog.v1.CatalogService.ListLive.
+func (c *catalogServiceClient) ListLive(ctx context.Context, req *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error) {
+	return c.listLive.CallUnary(ctx, req)
 }
 
 // FindBySourceURL calls catalog.v1.CatalogService.FindBySourceURL.
@@ -726,6 +746,12 @@ type CatalogServiceHandler interface {
 	SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error)
 	// The videos nobody has asked about yet, newest first.
 	ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error)
+	// Broadcasts on air right now, from channels this member follows.
+	//
+	// Not a feed: this is "everything that is happening", which is a list. There
+	// are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
+	// would actively hide some of them.
+	ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
 	FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error)
@@ -873,6 +899,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceListUncheckedShortsProcedure,
 		svc.ListUncheckedShorts,
 		connect.WithSchema(catalogServiceMethods.ByName("ListUncheckedShorts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceListLiveHandler := connect.NewUnaryHandler(
+		CatalogServiceListLiveProcedure,
+		svc.ListLive,
+		connect.WithSchema(catalogServiceMethods.ByName("ListLive")),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceFindBySourceURLHandler := connect.NewUnaryHandler(
@@ -1037,6 +1069,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceSetShortHandler.ServeHTTP(w, r)
 		case CatalogServiceListUncheckedShortsProcedure:
 			catalogServiceListUncheckedShortsHandler.ServeHTTP(w, r)
+		case CatalogServiceListLiveProcedure:
+			catalogServiceListLiveHandler.ServeHTTP(w, r)
 		case CatalogServiceFindBySourceURLProcedure:
 			catalogServiceFindBySourceURLHandler.ServeHTTP(w, r)
 		case CatalogServiceListCommentsProcedure:
@@ -1144,6 +1178,10 @@ func (UnimplementedCatalogServiceHandler) SetShort(context.Context, *connect.Req
 
 func (UnimplementedCatalogServiceHandler) ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListUncheckedShorts is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListLive is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error) {

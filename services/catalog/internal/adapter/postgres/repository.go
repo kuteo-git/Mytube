@@ -40,6 +40,17 @@ SELECT v.id, v.title, v.duration_seconds, v.view_count, v.published_at, v.added_
        (s.user_id IS NOT NULL) AS subscribed,
        wp.position_seconds, wp.watched_fraction, wp.last_watched_at,
        r.reaction, (wl.user_id IS NOT NULL) AS in_watch_later,
+       v.live_status,
+       -- The one definition of "on air now". Thirty minutes is three passes of
+       -- the ten-minute live scan, so a single failed pass does not put a
+       -- broadcast out and a finished one does not stay lit for long.
+       -- COALESCE because NULL is the ordinary case, not an edge one: nothing
+       -- has asked about all but a few hundred of these rows, and in SQL a
+       -- comparison against NULL is NULL rather than false. Without it every video
+       -- the live scan has never visited fails to scan into a bool at all —
+       -- which is to say every video in the library.
+       COALESCE(v.live_status = 'is_live'
+                AND v.live_checked_at > now() - interval '30 minutes', false) AS is_live_now,
        (SELECT count(*) FROM reactions lr
          WHERE lr.video_id = v.id AND lr.reaction = 'LIKE') AS like_count
 FROM videos v
@@ -73,6 +84,11 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 		lastWatchedAt   *time.Time
 		reaction        *string
 		inWatchLater    bool
+
+		// NULL for every row nobody has asked about, which is nearly all of
+		// them: the live scan visits subscribed channels only.
+		liveStatus *string
+		isLiveNow  bool
 	)
 
 	err := row.Scan(
@@ -83,7 +99,7 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 		&v.Channel.SubscriberCount, &v.Channel.Verified,
 		&subscribed,
 		&positionSeconds, &watchedFraction, &lastWatchedAt,
-		&reaction, &inWatchLater, &v.LikeCount,
+		&reaction, &inWatchLater, &liveStatus, &isLiveNow, &v.LikeCount,
 	)
 	if err != nil {
 		return domain.Video{}, err
@@ -91,6 +107,10 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 
 	v.MediaState = domain.MediaState(state)
 	v.Channel.Subscribed = subscribed
+	if liveStatus != nil {
+		v.LiveStatus = *liveStatus
+	}
+	v.IsLiveNow = isLiveNow
 	if publishedAt != nil {
 		v.PublishedAt = *publishedAt
 	}
@@ -444,8 +464,10 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		INSERT INTO videos (id, title, channel_id, duration_seconds, view_count,
 		                    published_at, added_at, thumbnail_path, description,
 		                    hashtags, topics, media_state, media_path,
-		                    size_bytes, source_url, language, discovered_via)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		                    size_bytes, source_url, language, discovered_via,
+		                    live_status, live_checked_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now(), $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+		        NULLIF($17, ''), CASE WHEN $17 <> '' THEN now() END)
 		ON CONFLICT (id) DO UPDATE
 		SET title = EXCLUDED.title,
 		    channel_id = EXCLUDED.channel_id,
@@ -479,12 +501,28 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 		    -- the moment it arrived, and a later scan finding it again under a
 		    -- curated source does not change where it came from — nor should a
 		    -- related lookup be able to relabel something the viewer chose.
-		    discovered_via = COALESCE(videos.discovered_via, NULLIF(EXCLUDED.discovered_via, ''))`,
+		    discovered_via = COALESCE(videos.discovered_via, NULLIF(EXCLUDED.discovered_via, '')),
+		    -- The one field here where a *quieter* answer must win.
+		    --
+		    -- Every rule above protects what an earlier, better-informed fetch
+		    -- established, because those facts do not change. This one does:
+		    -- "was_live" arriving over "is_live" is the broadcast ending, which
+		    -- is the single most important thing this column has to record. A
+		    -- COALESCE in the usual direction would leave the red dot lit for
+		    -- ever.
+		    --
+		    -- Silence is still not an answer. An upsert carrying no live_status
+		    -- — every ordinary scan, every RSS pass — leaves both columns alone
+		    -- rather than erasing what the live scan found a minute ago.
+		    live_status = COALESCE(NULLIF(EXCLUDED.live_status, ''), videos.live_status),
+		    live_checked_at = CASE WHEN EXCLUDED.live_status IS NOT NULL
+		                           THEN EXCLUDED.live_checked_at
+		                           ELSE videos.live_checked_at END`,
 		v.ID, v.Title, v.Channel.ID, v.DurationSeconds, nullableCount(v.ViewCount),
 		nullableTime(v.PublishedAt),
 		v.ThumbnailPath, v.Description, v.Hashtags, v.Topics,
 		string(v.MediaState), v.MediaPath, v.SizeBytes, v.SourceURL, v.Language,
-		nullableText(v.DiscoveredVia))
+		nullableText(v.DiscoveredVia), v.LiveStatus)
 	if err != nil {
 		return domain.Video{}, err
 	}
@@ -648,6 +686,40 @@ func (r *Repository) FindBySourceURL(ctx context.Context, sourceURL, userID stri
 	return v, err
 }
 
+// ListLive returns the broadcasts on air now, from channels this member
+// follows.
+//
+// Ordered newest-confirmed first rather than by any score. "Everything on air"
+// is a list, and the handful of rows involved gives ranking nothing to sort;
+// the diversity cap would only start hiding channels from a set small enough to
+// show whole.
+//
+// Filtered by subscription rather than shown household-wide. The library is
+// shared, but who you follow is not: one member follows 8 channels and another
+// 152, and an unfiltered list would be almost entirely somebody else's.
+func (r *Repository) ListLive(ctx context.Context, userID string) ([]domain.Video, error) {
+	rows, err := r.pool.Query(ctx, videoSelect+`
+		JOIN subscriptions live_s
+		  ON live_s.channel_id = v.channel_id AND live_s.user_id = $1
+		WHERE v.live_status = 'is_live'
+		  AND v.live_checked_at > now() - interval '30 minutes'
+		ORDER BY v.live_checked_at DESC, v.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]domain.Video, 0, 16)
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([]domain.VideoFeatures, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, channel_id, topics, hashtags, published_at, added_at,
@@ -655,7 +727,12 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 		       -- Unknown reads as "not a Short". Ranking must never withhold a
 		       -- video over a question the checker has not reached yet.
 		       COALESCE(is_short, false),
-		       discovered_via
+		       discovered_via,
+		       -- On air *now*, not merely once. Ranking exempts a live row from
+		       -- the 365-day age filter, and a broadcast that ended last year
+		       -- must not keep that exemption.
+		       COALESCE(live_status = 'is_live'
+		                AND live_checked_at > now() - interval '30 minutes', false) AS is_live
 		FROM videos
 		ORDER BY id
 		LIMIT $1 OFFSET $2`, page.Size, page.Offset)
@@ -675,7 +752,7 @@ func (r *Repository) ListVideoFeatures(ctx context.Context, page domain.Page) ([
 		var discoveredVia *string
 		if err := rows.Scan(&f.VideoID, &f.ChannelID, &f.Topics, &f.Hashtags,
 			&publishedAt, &f.AddedAt, &f.DurationSeconds, &state, &f.Language, &viewCountFeature,
-			&f.IsShort, &discoveredVia); err != nil {
+			&f.IsShort, &discoveredVia, &f.IsLive); err != nil {
 			return nil, err
 		}
 		if discoveredVia != nil {

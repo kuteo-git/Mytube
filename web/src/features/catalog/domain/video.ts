@@ -87,6 +87,24 @@ export interface Video {
   subtitles: SubtitleTrack[]
   userState?: VideoUserState
   reason?: RecommendationReason
+  /**
+   * On air right now. Decided by the server, never here.
+   *
+   * "Right now" means live when last asked *and* asked recently enough for
+   * that to still mean something, and the cut is applied in SQL beside the
+   * index that serves it. Sending the timestamp instead and letting this layer
+   * judge would be a second definition of one question — agreeing with the
+   * first until the day one of them changes.
+   */
+  isLiveNow?: boolean
+  /**
+   * yt-dlp's own word: "is_live", "is_upcoming", "was_live", "post_live",
+   * "not_live", or empty where nobody has asked.
+   *
+   * Distinct from isLiveNow and worth keeping: "was_live" is how the player
+   * tells a broadcast from its recording without going back to YouTube.
+   */
+  liveStatus?: string
 }
 
 export interface Comment {

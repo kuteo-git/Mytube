@@ -59,6 +59,10 @@ type VideoFeatures struct {
 	DurationSeconds int32
 	// Confirmed by asking YouTube, never inferred from DurationSeconds.
 	IsShort bool
+	// On air right now, as catalog decided it — live when last asked, and asked
+	// recently enough for that to still mean something. Ranking asks it once,
+	// to exempt a broadcast from the age filter.
+	IsLive bool
 	// How this video reached the library: SOURCE, RELATED or SEARCH. Empty for
 	// anything ingested before the column existed.
 	DiscoveredVia string

@@ -225,6 +225,13 @@ func (c *Catalog) ListUncheckedShorts(ctx context.Context, limit int32) ([]strin
 	return c.repo.ListUncheckedShorts(ctx, limit)
 }
 
+// ListLive passes straight through. No limit, no ordering choice, no ranking:
+// every one of those would be this layer deciding something about a list whose
+// whole promise is that it is complete.
+func (c *Catalog) ListLive(ctx context.Context, userID string) ([]domain.Video, error) {
+	return c.repo.ListLive(ctx, userID)
+}
+
 func (c *Catalog) FindBySourceURL(ctx context.Context, sourceURL, userID string) (domain.Video, error) {
 	if sourceURL == "" {
 		return domain.Video{}, fmt.Errorf("%w: source_url is required", domain.ErrInvalid)

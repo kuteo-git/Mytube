@@ -81,9 +81,23 @@ type ExternalVideo struct {
 	// metadata fetch or detected from the title when yt-dlp did not carry one.
 	// Empty when neither source could determine it.
 	Language string
-	// IsLive marks a broadcast still in progress. Only a full metadata fetch
-	// reports it; a flat listing never does.
+	// IsLive marks a broadcast still in progress.
+	//
+	// A flat listing reports this perfectly well, contrary to what this comment
+	// said for a release. Measured on ABC News, one request each: the /streams
+	// tab carried live_status on 40 of 40 entries — 1 is_live, 39 was_live —
+	// while the /videos tab carried it on none and listed no broadcast at all.
+	// The field yt-dlp fills is `live_status`, not `is_live`, and
+	// isStillBroadcasting has always read that one first; believing the old
+	// comment is why nothing here ever looked.
 	IsLive bool
+	// LiveStatus is yt-dlp's own word, kept because "was_live" is worth having
+	// and a boolean collapses it into "not live".
+	//
+	// One of "is_live", "is_upcoming", "was_live", "post_live", "not_live", or
+	// empty where nobody asked. The player needs the difference: it is what
+	// tells a broadcast from its recording without going back to YouTube.
+	LiveStatus string
 }
 
 // ChannelMetadata is everything a channel page needs that a flat video listing
