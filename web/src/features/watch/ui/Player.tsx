@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { UnavailableReason } from '@/features/catalog/infrastructure/catalogRepository'
 import { useStream } from '@/features/catalog/application/queries'
+import { atLiveEdge, livePercent } from '../application/live-timeline'
 import { seekElement } from '@/features/watch/application/player-seek'
 import {
   type Tier,
@@ -555,6 +556,20 @@ export function Player({
   // Duration reported by the media element. Only meaningful once the whole
   // file is there; see `duration` below for why it is not used directly.
   const [elementDuration, setElementDuration] = useState(0)
+  /**
+   * The rewindable window of a broadcast, read from the element itself.
+   *
+   * A live stream declares no duration at all, so everything the bar is
+   * normally drawn against is zero — and `position / max(duration, 1)` on a
+   * stream 26 minutes in is 155,700%, which is a bar painted solid red from
+   * the first second. It read "25:57 / 0:00" beside it.
+   *
+   * What a live playlist does declare is `seekable`, and that is the honest
+   * thing to draw: measured on two real broadcasts, 0..3605 on one and 0..1285
+   * on another. The window is YouTube's, it moves forward as the broadcast
+   * runs, and it is the only statement of length that exists here.
+   */
+  const [liveWindow, setLiveWindow] = useState<{ start: number; end: number } | null>(null)
   // The catalog row can say READY while the file is missing from disk, for
   // example after a manual cleanup. Trust the element, not the metadata.
   const [loadFailed, setLoadFailed] = useState(false)
@@ -709,8 +724,27 @@ export function Player({
   // through, the only honest answer: an element that starts at ten minutes
   // reports only what remains, and a bar drawn against that would say a
   // half-watched film is barely begun.
-  const duration =
-    !streaming && offsetSeconds === 0 && elementDuration > 0 ? elementDuration : durationSeconds
+  // A broadcast still on air. Asked of the tier rather than of the catalog row,
+  // because the tier is what is actually playing: the row can say "live" for up
+  // to thirty minutes after a broadcast has ended, and the player must follow
+  // the stream in front of it.
+  const isLive = tier?.name === 'live'
+  const duration = isLive
+    ? // The far end of the rewindable window. Zero until the first `progress`
+      // event, which is a second or so — and the bar is drawn against
+      // `max(duration, 1)`, so an unfinished answer reads as a bar at the start
+      // rather than one painted full.
+      (liveWindow?.end ?? 0)
+    : !streaming && offsetSeconds === 0 && elementDuration > 0
+      ? elementDuration
+      : durationSeconds
+  // Where the bar begins. Always zero except on a broadcast, whose window slides
+  // forward and eventually leaves zero behind it.
+  const timelineOrigin = isLive ? (liveWindow?.start ?? 0) : 0
+  // Whether the viewer is watching what is happening rather than a rewind.
+  // The rule lives in live-timeline.ts, with the arithmetic the bar uses, so
+  // the label and the bar can never disagree about where the edge is.
+  const onLiveEdge = isLive && atLiveEdge(liveWindow, position)
 
   // Why this video cannot be fetched, when it cannot.
   //
@@ -1140,6 +1174,7 @@ export function Player({
     // Otherwise the previous video's length would draw this one's progress bar
     // until the element got around to reporting its own.
     setElementDuration(0)
+    setLiveWindow(null)
     setBuffered(0)
     // Carrying this over would seek the new video to wherever the previous one
     // was left, which is not a position that means anything here.
@@ -2603,6 +2638,21 @@ export function Player({
                         if (ranges.length > 0) {
                           setBuffered(ranges.end(ranges.length - 1) + offsetRef.current)
                         }
+                        // A broadcast's window moves as it runs, so this is
+                        // read continuously rather than once at metadata. Only
+                        // for live: on every other tier the bar is drawn
+                        // against a length that is already known and does not
+                        // change, and seekable there would only be a second
+                        // answer to a settled question.
+                        if (isLive) {
+                          const seekable = e.currentTarget.seekable
+                          if (seekable.length > 0) {
+                            setLiveWindow({
+                              start: seekable.start(0),
+                              end: seekable.end(seekable.length - 1),
+                            })
+                          }
+                        }
                       }
                     : undefined
                 }
@@ -2769,6 +2819,7 @@ export function Player({
         <SeekBar
           position={position}
           duration={duration}
+          origin={timelineOrigin}
           buffered={buffered}
           // Seeking works on every tier. The muxed stream has no index of its
           // own, but it is not moved within: the seek goes down to the
@@ -2829,7 +2880,39 @@ export function Player({
 
           {variant === 'full' && (
             <span className="ml-1 text-xs tabular-nums">
-              {formatDuration(position)} / {formatDuration(duration)}
+              {isLive ? (
+                // A broadcast has no total, so "25:57 / 0:00" was two wrong
+                // numbers rather than one. What a viewer actually wants to know
+                // here is whether they are watching what is happening, and if
+                // not, how far back — so that is what it says.
+                //
+                // The button is the way forward again. Pressing it is the only
+                // way back to the edge once you have rewound, short of
+                // reloading, and it doubles as the label when you are already
+                // there: lit is "you are live", dimmed is "you are not, press
+                // to be".
+                <button
+                  type="button"
+                  onClick={() => seekTo(duration)}
+                  disabled={onLiveEdge}
+                  aria-label={onLiveEdge ? 'Live' : 'Go to live'}
+                  className="flex items-center gap-1.5 rounded px-1 text-white transition-opacity duration-150 ease-out disabled:cursor-default"
+                >
+                  <span
+                    className={clsx(
+                      'h-2 w-2 rounded-full',
+                      onLiveEdge ? 'bg-brand' : 'bg-white/40',
+                    )}
+                  />
+                  {onLiveEdge
+                    ? 'LIVE'
+                    : `LIVE · −${formatDuration(Math.max(duration - position, 0))}`}
+                </button>
+              ) : (
+                <>
+                  {formatDuration(position)} / {formatDuration(duration)}
+                </>
+              )}
             </span>
           )}
           <span className="flex-1" />
@@ -3633,6 +3716,7 @@ function CaptionMenu({
 function SeekBar({
   position,
   duration,
+  origin = 0,
   buffered,
   disabled,
   onScrub,
@@ -3640,6 +3724,15 @@ function SeekBar({
 }: {
   position: number
   duration: number
+  /**
+   * Where the timeline starts. Zero for anything with a beginning.
+   *
+   * A broadcast has none: its rewindable window slides forward as it runs, so
+   * the earliest thing that can still be played is not second zero. Drawing it
+   * from zero would give a bar whose filled part shrinks while the picture
+   * plays forward.
+   */
+  origin?: number
   buffered: number
   disabled: boolean
   /** Called continuously while dragging. Moves the readout, nothing else. */
@@ -3647,9 +3740,18 @@ function SeekBar({
   /** Called once, when the handle is released or a key press lands. */
   onSeek: (next: number) => void
 }) {
-  const safeDuration = Math.max(duration, 1)
-  const playedPercent = (position / safeDuration) * 100
-  const bufferedPercent = Math.min((buffered / safeDuration) * 100, 100)
+  const safeDuration = Math.max(duration, origin + 1)
+  // Everything is measured from the origin, and clamped.
+  //
+  // The clamp is not defensive tidiness: a live stream reports no duration at
+  // all, so before the window is known this arithmetic is position over one —
+  // 155,700% on a broadcast 26 minutes in, drawn as a bar solid red from the
+  // first second, with "25:57 / 0:00" beside it.
+  // The same arithmetic the live readout uses, from the same function. Written
+  // twice they would agree until one of them was fixed.
+  const window = { start: origin, end: safeDuration }
+  const playedPercent = livePercent(window, position)
+  const bufferedPercent = livePercent(window, buffered)
 
   return (
     <div className="relative h-4">
@@ -3662,7 +3764,7 @@ function SeekBar({
       </div>
       <input
         type="range"
-        min={0}
+        min={origin}
         max={safeDuration}
         step={0.1}
         value={position}
