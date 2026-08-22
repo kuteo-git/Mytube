@@ -57,6 +57,9 @@ const video = () => ({
 
 const fetchComments = vi.fn(async () => ({ imported: 0, skipped: false }))
 
+/** Switched per test: the specific refusal, or the one YouTube does not explain. */
+let genericReason = false
+
 vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
   httpCatalogRepository: {
     getVideo: vi.fn(async () => video()),
@@ -64,7 +67,11 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
     // What the gateway answers for a video upstream has refused: no sources at
     // all, and the reason in a word.
     getStream: vi.fn(async () => ({
-      unavailable: { reason: 'members_only' as const },
+      unavailable: {
+        reason: (genericReason ? 'unavailable' : 'members_only') as
+          | 'unavailable'
+          | 'members_only',
+      },
     })),
     getRemuxStart: vi.fn(async () => 0),
     listUpNext: vi.fn(async () => ({ videos: [], nextPageToken: '' })),
@@ -108,6 +115,10 @@ async function openWatchPage() {
 }
 
 describe('a video upstream refuses', () => {
+  beforeEach(() => {
+    genericReason = false
+  })
+
   it('says why, in words that lead somewhere', async () => {
     await openWatchPage()
 
@@ -121,6 +132,22 @@ describe('a video upstream refuses', () => {
   // The reported 500. The section fetches comments the moment it finds none,
   // so leaving it mounted is a request per visit to an endpoint that can only
   // refuse — and refusing is exactly what it did, loudly.
+  /**
+   * The generic reason, which is the one most videos actually get.
+   *
+   * Reported from the app: a geo-blocked video showed no message at all on the
+   * player while YouTube's own page explains itself. The specific reasons were
+   * covered by the test above; this is the one that was not.
+   */
+  it('says something for the reason YouTube gives no reason for', async () => {
+    genericReason = true
+    await openWatchPage()
+
+    expect(
+      await screen.findByText(/will not hand this video over/i),
+    ).toBeInTheDocument()
+  })
+
   it('does not ask YouTube for comments', async () => {
     await openWatchPage()
 
