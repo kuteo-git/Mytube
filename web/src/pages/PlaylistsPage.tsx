@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { usePlaylists } from '@/features/catalog/application/queries'
 import { useAccountState } from '@/features/settings/application/account-state'
 import type { Playlist } from '@/features/catalog/domain/video'
@@ -6,6 +6,7 @@ import { ThumbnailSurface } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The member's playlists, as their YouTube account has them.
@@ -70,7 +71,7 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
   const cover = playlist.thumbnails[0]
 
   return (
-    <Link to={`/playlist/${playlist.id}`} className="block">
+    <PageLink to={`/playlist/${playlist.id}`} className="block">
       {/* Keyed on the playlist's own id, like every other card in the app. It
           matters more here than elsewhere: a playlist whose contents have not
           been read yet has no cover at all, so the gradient is the whole of what
@@ -97,6 +98,6 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
               ? t('pages.playlists.waitingSession')
               : t('pages.playlists.notReadYet')}
       </p>
-    </Link>
+    </PageLink>
   )
 }

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Bookmark, CheckCircle, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
@@ -16,6 +16,7 @@ import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Channel row plus the action cluster.
@@ -57,19 +58,19 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
-        <Link to={`/channel/${video.channel.id}`}>
+        <PageLink to={`/channel/${video.channel.id}`}>
           <Avatar
             hue={hueFromId(video.channel.id)}
             name={video.channel.name}
             src={mediaURL(video.channel.avatarPath)}
             size={40}
           />
-        </Link>
+        </PageLink>
         <div>
-          <Link to={`/channel/${video.channel.id}`} className="flex items-center gap-1 text-base font-medium">
+          <PageLink to={`/channel/${video.channel.id}`} className="flex items-center gap-1 text-base font-medium">
             {video.channel.name}
             {video.channel.verified && <CheckCircle size={14} className="text-text-2" />}
-          </Link>
+          </PageLink>
           <p className="text-xs text-text-2">{fmt.subscribers(video.channel.subscriberCount)}</p>
         </div>
         <button

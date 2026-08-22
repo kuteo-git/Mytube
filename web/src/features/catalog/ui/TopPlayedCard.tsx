@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import { ListVideo } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { topPlayedQueueSearch } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
@@ -9,6 +9,7 @@ import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The most-played collection, presented as a stack of cards the way youtube.com
@@ -33,7 +34,7 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
 
   return (
     <article className={clsx('group flex flex-col gap-3', videoItemHover, videoItemBleed)}>
-      <Link to={`/watch/${lead.id}${topPlayedQueueSearch()}`} className="block">
+      <PageLink to={`/watch/${lead.id}${topPlayedQueueSearch()}`} className="block">
         {/* The offset slivers behind the thumbnail are the stack. Purely
             decorative, so they are hidden from assistive technology. */}
         <div className="relative pt-2">
@@ -52,13 +53,13 @@ export function TopPlayedCard({ videos }: { videos: Video[] }) {
             </span>
           </ThumbnailSurface>
         </div>
-      </Link>
+      </PageLink>
 
       <div className="min-w-0">
         <h3 className="clamp-2 text-sm leading-5 font-medium">
-          <Link to={`/watch/${lead.id}${topPlayedQueueSearch()}`}>
+          <PageLink to={`/watch/${lead.id}${topPlayedQueueSearch()}`}>
             {t('more.mixOf', { count: videos.length })}
-          </Link>
+          </PageLink>
         </h3>
         {names.length > 0 && (
           <p className="mt-1 clamp-2 text-xs text-text-2">

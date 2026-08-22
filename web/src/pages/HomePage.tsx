@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from 'react-router-dom'
+import {useParams} from 'react-router-dom'
 import {
   useDiscover,
   useFeed,
@@ -24,6 +24,7 @@ import { PullIndicator } from '@/features/catalog/ui/PullIndicator'
 import { usePullToRefresh } from '@/features/catalog/application/use-pull-to-refresh'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { Trans, useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Serves both "/" and "/topic/:name". A topic route is the same grid with the
@@ -256,7 +257,7 @@ export function HomePage() {
               <Trans
                 i18nKey="more.everythingShown"
                 components={[
-                  <Link key="l" to="/settings/feed" className="underline hover:text-text" />,
+                  <PageLink key="l" to="/settings/feed" className="underline hover:text-text" />,
                 ]}
               />
             </p>
@@ -269,7 +270,7 @@ export function HomePage() {
           <Trans
             i18nKey="more.nothingYetHome"
             components={[
-              <Link key="l" to="/settings/feed" className="underline hover:text-text" />,
+              <PageLink key="l" to="/settings/feed" className="underline hover:text-text" />,
             ]}
           />
         </p>

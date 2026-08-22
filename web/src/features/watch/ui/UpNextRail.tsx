@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react'
 import { useCallback, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useUpNext } from '@/features/catalog/application/queries'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
@@ -10,6 +10,7 @@ import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 export function UpNextRail({
   current,
@@ -114,7 +115,7 @@ function SuggestionRow({ video }: { video: Video }) {
   const isNew = Date.now() - new Date(video.addedAt).getTime() < 2 * 86_400_000
 
   return (
-    <Link
+    <PageLink
       to={`/watch/${video.id}`}
       className="flex gap-2 rounded-xl p-1 transition-colors duration-150 ease-out hover:bg-surface-hover"
     >
@@ -148,6 +149,6 @@ function SuggestionRow({ video }: { video: Video }) {
           </span>
         )}
       </div>
-    </Link>
+    </PageLink>
   )
 }

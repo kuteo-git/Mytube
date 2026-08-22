@@ -1,7 +1,8 @@
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 
 import { useAccountState } from '../application/account-state'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Says when a YouTube session has ended.
@@ -28,12 +29,12 @@ export function CookieExpiryBanner() {
       <span className="min-w-0 truncate">
         {t('more.signedOutBanner')}
       </span>
-      <Link
+      <PageLink
         to="/settings/youtube-account"
         className="shrink-0 rounded-lg bg-invert-bg px-3 py-1.5 text-xs font-medium text-invert-text"
       >
         {t('youtubeAccount.reconnect')}
-      </Link>
+      </PageLink>
     </div>
   )
 }

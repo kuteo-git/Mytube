@@ -15,7 +15,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import {
   useSaveTranslateConfig,
   useTestTranslate,
@@ -45,6 +45,7 @@ import {
 import { SliderRow } from '@/features/settings/ui/SliderRow'
 import { useTranslation } from 'react-i18next'
 import type { TranslationKey } from '@/shared/i18n/en'
+import { PageLink } from '@/shared/ui/PageLink'
 
 const percent = (v: number) => `${Math.round(v * 100)}%`
 
@@ -173,7 +174,7 @@ function MenuGroup({
       </h2>
       <div className="mt-1">
         {items.map(({ to, icon: Icon, label }) => (
-          <Link
+          <PageLink
             key={to}
             to={to}
             className="flex items-center gap-3 rounded-xl px-1 py-3.5 text-sm
@@ -182,7 +183,7 @@ function MenuGroup({
             <Icon size={18} className="shrink-0 text-text-2" />
             <span className="flex-1">{t(label)}</span>
             <ChevronRight size={18} className="shrink-0 text-text-2" />
-          </Link>
+          </PageLink>
         ))}
       </div>
     </div>

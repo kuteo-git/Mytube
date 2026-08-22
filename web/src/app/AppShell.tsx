@@ -4,6 +4,7 @@ import { Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { bareTitle, isWatchScreen } from '@/features/navigation/application/bare-screens'
+import { markDirection } from '@/features/navigation/application/page-transition'
 import { BackBar } from '@/features/catalog/ui/BackBar'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
@@ -36,6 +37,20 @@ function AppShellInner() {
   const location = useLocation()
   const { pathname } = location
   const isWatch = isWatchScreen(pathname)
+
+  // Which way the next screen change is going, recorded before it renders.
+  //
+  // The watch screen is left out on purpose: on a phone it is already a layer
+  // over the tab underneath, with its own pull-to-dismiss gesture and its own
+  // transform. A second animation across the whole viewport would be two
+  // things moving the same pixels, and the gesture is the one that has to win.
+  useEffect(() => {
+    if (isWatchScreen(pathname)) {
+      delete document.documentElement.dataset.nav
+      return
+    }
+    markDirection()
+  }, [pathname])
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const {

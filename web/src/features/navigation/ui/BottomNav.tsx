@@ -1,9 +1,10 @@
 import clsx from 'clsx'
 import { Clock, Home, Settings, Users } from 'lucide-react'
 import type { ComponentType } from 'react'
-import { NavLink } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TranslationKey } from '@/shared/i18n/en'
+import { PageNavLink } from '@/shared/ui/PageLink'
 
 /**
  * The mobile shell's navigation, replacing the sidebar rail below the breakpoint.
@@ -62,7 +63,7 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
       aria-label={t('ui.main')}
     >
       {ITEMS.map(({ icon: Icon, label, to }) => (
-        <NavLink
+        <PageNavLink
           key={to}
           to={to}
           end={to === '/'}
@@ -75,7 +76,7 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
         >
           <Icon size={20} />
           <span>{t(label)}</span>
-        </NavLink>
+        </PageNavLink>
       ))}
     </nav>
   )

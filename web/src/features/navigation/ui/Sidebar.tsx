@@ -15,12 +15,13 @@ import {
   Tag,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
-import { NavLink } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { useSubscriptions, useTopics } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useCurrentProfile, useProfiles } from '@/features/identity/application/use-profile'
+import { PageNavLink } from '@/shared/ui/PageLink'
 
 type Icon = ComponentType<{ size?: number }>
 
@@ -97,7 +98,7 @@ function Row({ item, mini }: { item: Item; mini: boolean }) {
   // there would never change language.
   const { t } = useTranslation()
   return (
-    <NavLink
+    <PageNavLink
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
@@ -112,7 +113,7 @@ function Row({ item, mini }: { item: Item; mini: boolean }) {
       <span className={mini ? 'text-[10px] leading-tight' : 'text-sm whitespace-nowrap'}>
         {t(label)}
       </span>
-    </NavLink>
+    </PageNavLink>
   )
 }
 
@@ -158,7 +159,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
             the rail answers it without spending a line on it. Same 40px row and
             24px slot as every other item (MASTER.md §4), the avatar simply
             standing where the icon stands. */}
-        <NavLink
+        <PageNavLink
           to="/profile"
           className={({ isActive }) =>
             clsx(
@@ -169,7 +170,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
         >
           <Avatar hue={hueFromId(currentProfile?.id ?? '')} name={currentProfile?.name ?? '?'} size={24} />
           <span className="clamp-1 text-sm">{currentProfile?.name ?? t('nav.profile')}</span>
-        </NavLink>
+        </PageNavLink>
         {ACCOUNT.map((item) => (
           <Row key={item.to} item={item} mini={false} />
         ))}
@@ -181,7 +182,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
           <section className="flex flex-col gap-0.5">
             <h2 className="px-3 py-1.5 text-base font-medium">{t('nav.subscriptions')}</h2>
             {subscriptions.map((channel) => (
-              <NavLink
+              <PageNavLink
                 key={channel.id}
                 to={`/channel/${channel.id}`}
                 className={({ isActive }) =>
@@ -198,7 +199,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
                   size={24}
                 />
                 <span className="clamp-1 text-sm">{channel.name}</span>
-              </NavLink>
+              </PageNavLink>
             ))}
           </section>
         </>
@@ -210,7 +211,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
           <section className="flex flex-col gap-0.5">
             <h2 className="px-3 py-1.5 text-base font-medium">{t('nav.topics')}</h2>
             {topics.map((topic) => (
-              <NavLink
+              <PageNavLink
                 key={topic.name}
                 to={`/topic/${encodeURIComponent(topic.name)}`}
                 className={({ isActive }) =>
@@ -223,7 +224,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
                 <Tag size={24} />
                 <span className="clamp-1 text-sm">{topic.name}</span>
                 <span className="ml-auto text-xs text-text-2">{topic.videoCount}</span>
-              </NavLink>
+              </PageNavLink>
             ))}
           </section>
         </>

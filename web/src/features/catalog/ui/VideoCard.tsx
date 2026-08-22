@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
 import { Bookmark, BookmarkMinus, CheckCircle, EyeOff, MoreVertical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { Video } from '../domain/video'
 import { watchProgress } from '../domain/video'
 import {
@@ -19,6 +19,7 @@ import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
 import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 export type VideoCardVariant =
   | 'continueWatching'
@@ -77,7 +78,7 @@ export function VideoCard({
       onFocus={() => prefetch(video.id)}
       onBlur={cancel}
     >
-      <Link to={`/watch/${video.id}${queueSearch}`} tabIndex={-1} aria-hidden className="block">
+      <PageLink to={`/watch/${video.id}${queueSearch}`} tabIndex={-1} aria-hidden className="block">
         <ThumbnailSurface hue={hueFromId(video.id)} src={mediaURL(video.thumbnailPath)} alt={video.title} channelName={video.channel.name}>
           {video.reason === 'DISCOVERY' && (
             <span className="absolute top-2 left-2 rounded bg-badge px-1.5 py-0.5 text-xs font-medium">
@@ -108,7 +109,7 @@ export function VideoCard({
             </span>
           )}
         </ThumbnailSurface>
-      </Link>
+      </PageLink>
 
       <div className="flex gap-3">
         {/* The picture goes where the name goes.
@@ -119,7 +120,7 @@ export function VideoCard({
             avatar was live there and dead here.
             `shrink-0` because the row is `flex` and a long title would
             otherwise squeeze the anchor narrower than the picture inside it. */}
-        <Link
+        <PageLink
           to={`/channel/${video.channel.id}`}
           className="shrink-0 self-start rounded-full"
           aria-label={video.channel.name}
@@ -130,16 +131,16 @@ export function VideoCard({
             src={mediaURL(video.channel.avatarPath)}
             size={36}
           />
-        </Link>
+        </PageLink>
 
         <div className="min-w-0 flex-1">
           <h3 className="clamp-2 text-sm leading-5 font-medium">
-            <Link to={`/watch/${video.id}${queueSearch}`}>{video.title}</Link>
+            <PageLink to={`/watch/${video.id}${queueSearch}`}>{video.title}</PageLink>
           </h3>
           <p className="mt-1 flex items-center gap-1 text-xs text-text-2">
-            <Link to={`/channel/${video.channel.id}`} className="hover:text-text">
+            <PageLink to={`/channel/${video.channel.id}`} className="hover:text-text">
               {video.channel.name}
-            </Link>
+            </PageLink>
             {video.channel.verified && <CheckCircle size={12} aria-label={t('ui.verified')} />}
           </p>
           <p className="text-xs text-text-2">{describeVideo(video, fmt)}</p>

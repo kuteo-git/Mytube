@@ -1,10 +1,11 @@
 import { ChevronRight } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { useSubscriptions } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The channels you follow, as a page of their own.
@@ -47,7 +48,7 @@ export function SubscriptionsPage() {
         <ul className="flex flex-col">
           {channels.map((channel) => (
             <li key={channel.id}>
-              <Link
+              <PageLink
                 to={`/channel/${channel.id}`}
                 // 44px of height at least, which the 44px avatar and the
                 // padding around it clear on their own.
@@ -67,7 +68,7 @@ export function SubscriptionsPage() {
                   )}
                 </span>
                 <ChevronRight size={18} className="shrink-0 text-text-2" />
-              </Link>
+              </PageLink>
             </li>
           ))}
         </ul>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Check } from 'lucide-react'
 import clsx from 'clsx'
@@ -9,6 +9,7 @@ import { LANGUAGES, LANGUAGE_NAMES, setLanguage, type Language } from '@/shared/
 import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { useCurrentProfile, useProfiles } from '../application/use-profile'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The avatar in the top bar, and what opens under it.
@@ -157,13 +158,13 @@ function MenuLink({
   children: React.ReactNode
 }) {
   return (
-    <Link
+    <PageLink
       to={to}
       role="menuitem"
       onClick={onDone}
       className="block px-4 py-2 text-sm transition-colors duration-150 ease-out hover:bg-surface-hover"
     >
       {children}
-    </Link>
+    </PageLink>
   )
 }

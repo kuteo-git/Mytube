@@ -1,8 +1,9 @@
 import { Info, X } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { formatBytes } from '@/shared/lib/format'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Dismissible alert banner. On youtube.com this slot carries billing notices;
@@ -34,12 +35,12 @@ export function StorageBanner({
             budget: formatBytes(budgetBytes),
           })}
         </p>
-        <Link
+        <PageLink
           to="/storage"
           className="mt-2 inline-block text-sm font-medium text-link hover:underline"
         >
           {t('storagePage.manage')}
-        </Link>
+        </PageLink>
       </div>
       <button
         type="button"

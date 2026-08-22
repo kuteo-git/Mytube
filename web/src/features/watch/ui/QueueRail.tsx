@@ -1,12 +1,13 @@
 import clsx from 'clsx'
 import { useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import type { QueueItem } from '@/features/watch/application/queue'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
 
 import { hueFromId } from '@/shared/lib/hue'
 import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * The list being played through, beside the player.
@@ -53,7 +54,7 @@ export function QueueRail({
           const active = index === currentIndex
           return (
             <li key={item.id}>
-              <Link
+              <PageLink
                 ref={active ? activeRef : undefined}
                 to={`/watch/${item.id}${search}`}
                 aria-current={active ? 'true' : undefined}
@@ -103,7 +104,7 @@ export function QueueRail({
                     </p>
                   )}
                 </div>
-              </Link>
+              </PageLink>
             </li>
           )
         })}

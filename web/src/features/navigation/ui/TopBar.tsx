@@ -1,10 +1,11 @@
 import { Bell, Menu } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import {} from 'react-router-dom'
 import { useIngestJobs } from '@/features/catalog/application/queries'
 import { SearchBox } from './SearchBox'
 import { IconButton } from '@/shared/ui/primitives'
 import { AccountMenu } from '@/features/identity/ui/AccountMenu'
 import { useTranslation } from 'react-i18next'
+import { PageLink } from '@/shared/ui/PageLink'
 
 /**
  * Top bar. Deviations from youtube.com follow the "no dead buttons" rule in
@@ -88,7 +89,7 @@ export function TopBar({
             <Menu size={24} />
           </IconButton>
         </span>
-        <Link to="/" className="ml-1 flex items-center gap-1.5" aria-label={t('nav.home')}>
+        <PageLink to="/" className="ml-1 flex items-center gap-1.5" aria-label={t('nav.home')}>
           <svg viewBox="0 0 28 20" width={30} height={22} aria-hidden>
             <path
               d="M27.4 3.1a3.5 3.5 0 0 0-2.5-2.5C22.7 0 14 0 14 0S5.3 0 3.1.6A3.5 3.5 0 0 0 .6 3.1C0 5.3 0 10 0 10s0 4.7.6 6.9a3.5 3.5 0 0 0 2.5 2.5c2.2.6 10.9.6 10.9.6s8.7 0 10.9-.6a3.5 3.5 0 0 0 2.5-2.5c.6-2.2.6-6.9.6-6.9s0-4.7-.6-6.9Z"
@@ -101,7 +102,7 @@ export function TopBar({
           <span className="hidden text-xl font-medium tracking-tight min-[700px]:inline">
             MyTube
           </span>
-        </Link>
+        </PageLink>
       </div>
 
       <SearchBox />
@@ -111,7 +112,7 @@ export function TopBar({
             events are listed — so the bell goes there. It had the count but no
             destination, which made it the one control on this bar that reported
             something and then refused to explain it. */}
-        <Link
+        <PageLink
           to="/activity"
           aria-label={`Downloads: ${active} active, ${failed} failed`}
           title={`Downloads: ${active} active, ${failed} failed`}
@@ -123,7 +124,7 @@ export function TopBar({
               {pendingIngest > 9 ? '9+' : pendingIngest}
             </span>
           )}
-        </Link>
+        </PageLink>
 
         <AccountMenu />
       </div>
