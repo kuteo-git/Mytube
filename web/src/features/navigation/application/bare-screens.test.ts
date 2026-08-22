@@ -25,14 +25,53 @@ describe('which screens carry their own chrome', () => {
     }
   })
 
-  // A list and the pages under it have to agree, and they did not: Watch later
-  // and Playlists dropped the tab bar while a playlist's own page kept it, so
-  // the parent lost the navigation and the child had it. Whichever way that is
-  // argued, it cannot be argued both ways at once.
-  it('keeps the navigation on the lists and on a list', () => {
+  /**
+   * A list and the pages under it have to agree, and the whole chain moves
+   * together.
+   *
+   * They used to be kept out of this list on the reasoning that a bare screen
+   * drops the tab bar while a playlist's own page did not, so the parent would
+   * lose the navigation while the child kept it. The observation was right and
+   * the conclusion was not: the answer is to move the child too, rather than
+   * hold the parent back.
+   *
+   * What settled it is where they live. All four sit in the Account group,
+   * beside the profile and the YouTube connection, and two of four behaving
+   * one way while two behave another is a rule nobody can see and everybody
+   * has to learn.
+   */
+  it('treats the account lists and a list itself the same way', () => {
     for (const p of ['/watch-later', '/playlists', '/playlist/pl_1']) {
-      expect(isBareScreen(p)).toBe(false)
+      expect(isBareScreen(p)).toBe(true)
     }
+  })
+
+  /**
+   * Both were missing rather than excluded, and the panels are the proof.
+   *
+   * `ProfileSettings` and `YouTubeAccountSettings` render `headless` — they
+   * deliberately draw no heading, because the shell was expected to name them
+   * as it names their four /settings/* siblings. With no entry here the shell
+   * named nothing, so on a phone both screens were untitled, under a search
+   * bar that had nothing to do with them.
+   */
+  it('names the profile and the YouTube account, whose panels draw no heading', () => {
+    expect(isBareScreen('/profile')).toBe(true)
+    expect(isBareScreen('/account')).toBe(true)
+    expect(bareTitle('/profile')).toBe('nav.profile')
+    expect(bareTitle('/account')).toBe('nav.youtubeAccount')
+  })
+
+  /**
+   * A playlist names itself, like a channel.
+   *
+   * Null here is not "not a bare screen" — `isBareScreen` says otherwise on
+   * the same path. It means the shell draws no bar and the page draws its own,
+   * because the name is the playlist's and a module constant cannot know it.
+   */
+  it('leaves a playlist to name itself', () => {
+    expect(isBareScreen('/playlist/pl_1')).toBe(true)
+    expect(bareTitle('/playlist/pl_1')).toBeNull()
   })
 
   // '/watch-later'.startsWith('/watch') is true, and that one character of

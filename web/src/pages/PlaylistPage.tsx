@@ -4,6 +4,8 @@ import { playlistQueueSearch } from '@/features/watch/application/queue'
 import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { useTranslation } from 'react-i18next'
+import { BackBar } from '@/features/catalog/ui/BackBar'
+import { usePlayer } from '@/features/watch/application/player-context'
 
 /**
  * One playlist, in its own order.
@@ -13,6 +15,7 @@ import { useTranslation } from 'react-i18next'
  * by date is a different list.
  */
 export function PlaylistPage() {
+  const { isMobile } = usePlayer()
   const { t } = useTranslation()
   const { playlistId = '' } = useParams()
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
@@ -23,13 +26,26 @@ export function PlaylistPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">{playlist?.title ?? t('ui.playlist')}</h1>
+      {/* Its own bar, like a channel's: the name is the playlist's and the
+          shell cannot know it, so `bare-screens` records a null title here and
+          leaves the naming to this page. */}
+      {isMobile && (
+        <BackBar
+          title={playlist?.title ?? t('ui.playlist')}
+          showTitle
+          fallback="/playlists"
+        />
+      )}
+      {/* Hidden on a phone, where the bar above has just said it. */}
+      <h1 className="hidden py-4 text-2xl font-bold min-[700px]:block">
+        {playlist?.title ?? t('ui.playlist')}
+      </h1>
       {playlist && (
-        <p className="-mt-2 pb-4 text-sm text-text-2">
+        <p className="pb-4 text-sm text-text-2 min-[700px]:-mt-2">
           {playlist.unavailable
             ? t('pages.playlists.wontOpen')
             : playlist.itemsSynced
-              ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
+              ? t('more.videosCount', { count: playlist.itemCount })
               : t('pages.playlists.notReadYet')}
         </p>
       )}

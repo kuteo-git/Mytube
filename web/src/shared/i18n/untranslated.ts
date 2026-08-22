@@ -61,6 +61,25 @@ const PROSE = /[A-Za-z]{2,}/
  */
 const LITERAL = /'([A-Z][A-Za-z][^']*)'|"([A-Z][A-Za-z][^"]*)"/g
 
+/**
+ * An English plural, written as a conditional.
+ *
+ * `count === 1 ? 'video' : 'videos'`, `job${n !== 1 ? 's' : ''}`. This is the
+ * one shape that kept surviving every widening of this scan, because the words
+ * are lowercase and the capital is what separates copy from Tailwind classes.
+ * Four rounds in, three were still live.
+ *
+ * Matching the *shape* rather than the case is what makes it precise: two
+ * branches differing only by a trailing "s" is a plural rule and nothing else.
+ * Lowercase literals in general are far more often state — 'on'/'off',
+ * 'copied'/'failed', 'full'/'mini' — and treating those as copy floods the
+ * scan with values nobody reads.
+ *
+ * It matters beyond tidiness. Vietnamese has no plural, so the rule does not
+ * translate: applied anyway it produces "3 ngàys".
+ */
+const ENGLISH_PLURAL = /'(\w+)'\s*:\s*'\1s'|'(\w+)s'\s*:\s*'\2'|\?\s*'s'\s*:\s*''/
+
 /** SCREAMING_CASE and header names: a value, never something anybody reads. */
 const SHOUTED = /^[A-Z0-9_ -]+$/
 
@@ -205,6 +224,12 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // message in a ternary, a toast. This is where most of it actually lives —
     // 170 of the app's 243 strings, against 73 in text nodes — so a scan
     // without it would have passed while two thirds of the app stayed English.
+    // An English plural rule, whatever case its words are in.
+    if (ENGLISH_PLURAL.test(line) && !seen.has(code)) {
+      seen.add(code)
+      out.push({ file, line: at, text: code, kind: 'literal' })
+    }
+
     for (const match of line.matchAll(TEMPLATE)) {
       const text = match[1].trim()
       if (seen.has(text)) continue
@@ -221,6 +246,7 @@ export function findStragglers(file: string, source: string): Straggler[] {
       const text = (match[1] ?? match[2]).trim()
       if (seen.has(text)) continue
       if (SHOUTED.test(text) || IDENTIFIER.test(text) || HEADER.test(text)) continue
+
       if (COMPARED.test(line.slice(0, match.index).trimEnd())) continue
       seen.add(text)
       out.push({ file, line: at, text, kind: 'literal' })

@@ -28,7 +28,9 @@ export function PlaylistsPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">{t('nav.playlists')}</h1>
+      {/* No heading here: on a phone the shell's back bar carries the name,
+          and on a desktop the sidebar row is already lit. Drawn in both it
+          appeared twice. */}
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
@@ -90,7 +92,7 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
         {playlist.unavailable
           ? t('pages.playlists.wontOpen')
           : playlist.itemsSynced
-            ? `${playlist.itemCount} ${playlist.itemCount === 1 ? 'video' : 'videos'}`
+            ? t('more.videosCount', { count: playlist.itemCount })
             : signedOut
               ? t('pages.playlists.waitingSession')
               : t('pages.playlists.notReadYet')}

@@ -28,10 +28,16 @@ export function WatchLaterPage() {
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <h1 className="py-4 text-2xl font-bold">{t('pages.watchLater.title')}</h1>
+      {/* No heading here: on a phone the shell's back bar carries the name,
+          and on a desktop the sidebar row is already lit. Drawn in both it
+          appeared twice. */}
+      {/* No negative margin. It existed to pull this up under the heading's own
+          padding, and with the heading gone it pulled the first line of the page
+          up underneath the back bar instead — the bar is an overlay and reserves
+          nothing, so anything with a negative top margin lands behind it. */}
       {!isPending && !isError && (
-        <p className="-mt-2 pb-4 text-sm text-text-2">
-          {videos.length} {videos.length === 1 ? 'video' : 'videos'}
+        <p className="py-4 text-sm text-text-2">
+          {t('more.videosCount', { count: videos.length })}
         </p>
       )}
 
