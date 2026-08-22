@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Bookmark, CheckCircle, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { Bookmark, CheckCircle, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
 import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
@@ -137,13 +137,8 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
           onClick={() => setPinned.mutate({ videoId: video.id, pinned: !video.pinned })}
         />
 
-        <button
-          type="button"
-          aria-label={t('common.moreActions')}
-          className="grid h-9 w-9 place-items-center rounded-full bg-surface transition-colors duration-150 ease-out hover:bg-surface-hover"
-        >
-          <MoreHorizontal size={20} />
-        </button>
+        {/* No overflow menu. It opened nothing — a button that looks like a
+            control and is not one is the single thing §5 forbids outright. */}
       </div>
     </div>
   )

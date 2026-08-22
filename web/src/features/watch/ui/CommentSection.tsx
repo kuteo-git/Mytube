@@ -1,4 +1,4 @@
-import { ChevronDown, ListFilter, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
+import { ChevronDown, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { Comment } from '@/features/catalog/domain/video'
 import { useAddComment, useComments, useFetchComments } from '@/features/catalog/application/queries'
@@ -32,16 +32,9 @@ export function CommentSection({ videoId }: { videoId: string }) {
 
   return (
     <section className="mt-6" aria-label={t('ui.comments')}>
-      <div className="flex items-center gap-8">
-        <h2 className="text-xl font-bold">{data?.totalCount ?? 0} Comments</h2>
-        <button
-          type="button"
-          className="flex items-center gap-2 text-sm font-medium hover:text-text-2"
-        >
-          <ListFilter size={20} />
-          Sort by
-        </button>
-      </div>
+      {/* No "Sort by". It was a button with no handler — §5's one prohibition,
+          and it had been sitting here long enough to look like a feature. */}
+      <h2 className="text-xl font-bold">{t('comments.count', { count: data?.totalCount ?? 0 })}</h2>
 
       <form
         className="mt-6 flex gap-3"

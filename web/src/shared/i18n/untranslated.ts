@@ -106,10 +106,22 @@ export function looksLikeCopy(text: string): boolean {
   if (!PROSE.test(trimmed)) return false
   // A line of prose that is entirely inside an expression is markup, not copy.
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) return false
-  // The tail of a JSX expression that happens to span a `>`: `{count > 0 &&`
-  // leaves "0 && available" between a bracket and the next tag. Operators do
-  // not appear in copy, and copy that contains one is not worth the exemption.
-  if (/(&&|\|\||\?\?|=>|===|!==)/.test(trimmed)) return false
+  // Code, not words.
+  //
+  // Scanning JSX across whole lines means every `=>`, every `a > b` and every
+  // generic produces a span that ends at the next `<`. Those spans are full of
+  // punctuation that copy never has — `= useStorage()`, `) : (`, `void`,
+  // `0 ? fmt.views(v) : null` — and the cheapest reliable way to tell them
+  // apart is to insist that copy is made of words.
+  if (/[=;{}[\]`|&<>]|=>|\+\+|\.\w/.test(trimmed)) return false
+  // A lone keyword or fragment of a statement.
+  if (/^(return|void|null|undefined|true|false|export|function|const|let|async|await)\b/.test(trimmed))
+    return false
+  // Must actually contain a word, not just punctuation and digits.
+  if (!/[A-Za-z]{2,}/.test(trimmed)) return false
+  // Copy does not open with a closing bracket or a colon. Those are the tail
+  // of an expression the scan cut through — `) : null`, `: PillProps)`.
+  if (/^[)(:;,]/.test(trimmed)) return false
   return true
 }
 
@@ -123,6 +135,8 @@ export function looksLikeCopy(text: string): boolean {
 export function findStragglers(file: string, source: string): Straggler[] {
   const out: Straggler[] = []
   const lines = source.split('\n')
+
+  if (file.endsWith('.tsx')) out.push(...findJSXText(file, source))
 
   // Whether the scan is inside a block comment.
   //
@@ -176,20 +190,6 @@ export function findStragglers(file: string, source: string): Straggler[] {
       }
     }
 
-    // JSX text: what sits between a closing bracket and an opening one, on the
-    // same line. Text spanning several lines is caught by whichever of its
-    // lines happens to hold two words, which is enough to point at it.
-    //
-    // Only in .tsx. In a .ts file the same shape is a generic — `Promise<T>`,
-    // `(path: string): Promise<Response>` — and reading those as copy is how a
-    // guard starts reporting the language it is written in.
-    for (const match of file.endsWith('.tsx') ? line.matchAll(/>([^<>{}]+)</g) : []) {
-      const text = match[1].trim()
-      if (looksLikeCopy(match[1]) && !seen.has(text)) {
-        seen.add(text)
-        out.push({ file, line: at, text, kind: 'jsx-text' })
-      }
-    }
 
     // And copy that never reaches JSX as text: a label passed as a prop, a
     // message in a ternary, a toast. This is where most of it actually lives —
@@ -218,4 +218,71 @@ export function findStragglers(file: string, source: string): Straggler[] {
   })
 
   return out
+}
+
+
+/**
+ * Copy sitting between tags, however it is laid out.
+ *
+ * Read across the whole file rather than line by line, because line by line
+ * missed the two shapes copy most often takes:
+ *
+ *   <p>                              <Pill>
+ *     When storage fills past …        From {channel.name}
+ *     are removed from disk.         </Pill>
+ *   </p>
+ *
+ * A paragraph's middle lines carry no bracket at all, and text beside an
+ * expression is separated from the nearest bracket by a `}`. Both were live on
+ * screen while the scan reported nothing — the storage explanation, the
+ * activity empty state, "All", "From …", "{n} Comments".
+ *
+ * `{…}` is treated as a boundary rather than as content, so an expression's
+ * code is never mistaken for words and the text on either side of it is still
+ * seen.
+ *
+ * `.tsx` only: in a `.ts` file the same angle brackets are a generic.
+ */
+function findJSXText(file: string, source: string): Straggler[] {
+  const out: Straggler[] = []
+  // Comments first, and replaced by newlines rather than removed, so the line
+  // numbers a failure reports still point at the right place.
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+
+  for (const match of code.matchAll(/>([^<>]*)</g)) {
+    const span = match[1]
+    if (!span.trim()) continue
+    // Where this span starts, for the report.
+    const at = code.slice(0, match.index).split('\n').length
+
+    // Braces bound an expression: split on them and keep what is outside.
+    for (const piece of splitOutsideBraces(span)) {
+      const text = piece.trim()
+      if (!text || !looksLikeCopy(text)) continue
+      out.push({ file, line: at + span.slice(0, span.indexOf(piece)).split('\n').length - 1, text, kind: 'jsx-text' })
+    }
+  }
+  return out
+}
+
+/** The parts of a JSX span that are not inside `{…}`. */
+function splitOutsideBraces(span: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let current = ''
+  for (const ch of span) {
+    if (ch === '{') {
+      if (depth === 0 && current) parts.push(current)
+      current = ''
+      depth++
+    } else if (ch === '}') {
+      depth = Math.max(0, depth - 1)
+    } else if (depth === 0) {
+      current += ch
+    }
+  }
+  if (current) parts.push(current)
+  return parts
 }
