@@ -736,7 +736,20 @@ function stopEverything() {
  * is a no-op, a different one abandons whatever was in progress.
  */
 export function loadViSubtitles(url: string, lang = 'vi') {
-  if (url === _cuesURL && _cues !== null) return
+  // Already loaded, or already being loaded. Both are the same answer.
+  //
+  // This used to require `_cues !== null`, which is exactly false while a fetch
+  // is in flight — so calling it again for the *same* URL tore down its own
+  // request: `_generation++` invalidated the response that was on its way, and
+  // the handler dropped it at the generation check. `_cues` stayed null, so the
+  // next call did it again.
+  //
+  // That is self-perpetuating rather than a one-off. Every re-render that
+  // reached here restarted the fetch and discarded the previous one, and the
+  // translation pass sat on "Loading subtitles…" against subtitles already
+  // listed on screen — until something changed the URL and broke the cycle,
+  // which is why picking a different track appeared to fix it.
+  if (url === _cuesURL) return
   _cuesURL = url
   _sourceLang = lang
   _cues = null

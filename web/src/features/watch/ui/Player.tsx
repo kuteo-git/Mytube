@@ -1077,7 +1077,14 @@ export function Player({
     if (viSub) { loadViSubtitles(viSub.url, 'vi'); return }
     const enSub = subtitles.find((s) => /^en/.test(s.language))
     if (enSub) loadViSubtitles(enSub.url, 'en')
-  }, [narrationOn, captions, subtitles])
+    // Keyed on the addresses, not on the array.
+    //
+    // `subtitleKey` exists for this and nothing used it: the array arrives from
+    // a query, so every refetch — and the player polls while a video downloads
+    // — hands over a new reference with identical contents. Depending on it ran
+    // this effect on data that had not changed, and the call below is not free
+    // to repeat.
+  }, [narrationOn, captions, subtitleKey])
 
   // Tell narration which video it is for, so synthesised clips are filed beside
   // that video. Not folded into the translation pass: the realtime engine has
