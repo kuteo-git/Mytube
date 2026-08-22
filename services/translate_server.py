@@ -210,21 +210,77 @@ def omniroute_batch(
             "content": BATCH_PROMPT.format(n=len(cues), ctx=ctx, body=body),
         }],
     }
-    req = urllib.request.Request(
-        base_url.rstrip("/") + "/v1/chat/completions",
-        json.dumps(payload).encode(),
-        {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-    )
+    data = _post_chat(chat_url(base_url), payload, api_key)
+    if data is None:
+        return None
+    return aligned_or_none(parse_numbered(openai_content(data)), len(cues))
+
+
+def _post_chat(url: str, payload: dict, api_key: str):
+    """One chat completion, retried once without `thinking` if it is refused.
+
+    `thinking` is not an OpenAI parameter. It is worth sending — measured on a
+    real 15-cue batch it took the same translation from 5.1s and 649 completion
+    tokens to 2.5s and 345 — and providers that do not know it answer 400
+    rather than ignoring it.
+
+    So it is sent, and a 400 that names it is read as "this provider does not
+    have that field" rather than as a failure. The alternative was to drop it
+    everywhere, which would spend the measured half of the time on every batch
+    to accommodate a provider the household does not use.
+
+    Only on a 400, and only when the body mentions the field: a 400 for any
+    other reason is a real error and retrying it blind would hide it behind a
+    second identical failure.
+    """
+    body = json.dumps(payload).encode()
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     try:
+        req = urllib.request.Request(url, body, headers)
         with urllib.request.urlopen(req, timeout=OMNIROUTE_TIMEOUT) as resp:
-            data = json.load(resp)
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", "replace")[:500]
+        except Exception:
+            pass
+        if e.code != 400 or "thinking" not in detail or "thinking" not in payload:
+            print(f"[omniroute] {e} {detail}", flush=True)
+            return None
+        print("[omniroute] provider rejected 'thinking'; retrying without it", flush=True)
+        retry = {k: v for k, v in payload.items() if k != "thinking"}
+        try:
+            req = urllib.request.Request(url, json.dumps(retry).encode(), headers)
+            with urllib.request.urlopen(req, timeout=OMNIROUTE_TIMEOUT) as resp:
+                return json.load(resp)
+        except (urllib.error.URLError, TimeoutError, ValueError) as err:
+            print(f"[omniroute] {err}", flush=True)
+            return None
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
         print(f"[omniroute] {e}", flush=True)
         return None
-    return aligned_or_none(parse_numbered(openai_content(data)), len(cues))
+
+
+def chat_url(base_url: str) -> str:
+    """The chat completions endpoint, from whatever was typed in the field.
+
+    This field has always been given a base *without* `/v1` and appended the
+    rest itself, while every provider's documentation — and this project's own
+    speech field — gives the base *with* it. Two inputs on one settings screen
+    disagreeing about what a base URL is, and someone will paste one into the
+    other: the result is `/v1/v1/chat/completions` and a 404 that explains
+    nothing.
+
+    Both are accepted. A base already naming the endpoint is left alone, for
+    somebody who pasted the whole thing.
+    """
+    trimmed = base_url.rstrip("/")
+    if trimmed.endswith("/chat/completions"):
+        return trimmed
+    if not trimmed.endswith("/v1"):
+        trimmed += "/v1"
+    return trimmed + "/chat/completions"
 
 
 # ---- app --------------------------------------------------------------------

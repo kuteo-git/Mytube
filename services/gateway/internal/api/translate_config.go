@@ -96,6 +96,28 @@ func keyHint(key string) string {
 	return "…" + key[len(key)-4:]
 }
 
+// providerURL builds an endpoint from whatever was typed in a base URL field.
+//
+// This field has always taken a base *without* `/v1` and appended the rest
+// itself, while every provider's documentation — and this project's own speech
+// field, added later — gives the base *with* it. Two inputs on one settings
+// screen disagreeing about what a base URL is, and somebody will paste one into
+// the other: `/v1/v1/models`, and a 404 that explains nothing.
+//
+// Both are accepted. The same rule as speechURL, written twice rather than
+// shared because the two live either side of a service boundary — and stated
+// here so the next reader knows there is a second copy in translate_server.py.
+func providerURL(base, path string) string {
+	trimmed := strings.TrimSuffix(strings.TrimSpace(base), "/")
+	if trimmed == "" {
+		return ""
+	}
+	if !strings.HasSuffix(trimmed, "/v1") {
+		trimmed += "/v1"
+	}
+	return trimmed + "/" + path
+}
+
 func (g *Gateway) translateConfigPath() string {
 	return filepath.Join(g.configDir, "translate-config.json")
 }
@@ -155,7 +177,7 @@ func (g *Gateway) handleTranslateModels(w http.ResponseWriter, r *http.Request) 
 	}
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet,
-		strings.TrimSuffix(base, "/")+"/v1/models", nil)
+		providerURL(base, "models"), nil)
 	if err != nil {
 		http.Error(w, "bad base url", http.StatusBadRequest)
 		return
