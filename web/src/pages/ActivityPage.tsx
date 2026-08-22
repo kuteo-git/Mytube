@@ -58,13 +58,13 @@ export function ActivityPage() {
 
   const handleDismissFailed = () => {
     dismissJobs.mutate('FAILED', {
-      onSuccess: (count) => toast(`${count} failed job${count !== 1 ? 's' : ''} cleared`),
+      onSuccess: (count) => toast(t('ui.jobsCleared_failed', { count })),
     })
   }
 
   const handleDismissCompleted = () => {
     dismissJobs.mutate('SUCCEEDED', {
-      onSuccess: (count) => toast(`${count} completed job${count !== 1 ? 's' : ''} cleared`),
+      onSuccess: (count) => toast(t('ui.jobsCleared_completed', { count })),
     })
   }
 

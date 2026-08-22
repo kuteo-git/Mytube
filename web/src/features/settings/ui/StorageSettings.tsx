@@ -157,7 +157,10 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
           className={clsx('pt-2 text-sm', check.ok ? 'text-text-2' : 'text-brand')}
         >
           {check.ok
-            ? `Writable. ${formatBytes(check.freeBytes ?? 0)} free, ${check.videoCount ?? 0} videos already there.`
+            ? t('ui.writable', {
+                free: formatBytes(check.freeBytes ?? 0),
+                count: check.videoCount ?? 0,
+              })
             : check.problem}
         </p>
       )}

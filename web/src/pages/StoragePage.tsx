@@ -44,7 +44,11 @@ export function StoragePage() {
           icon={<HardDrive size={20} />}
           label={t('ui.used')}
           value={formatBytes(data.usedBytes)}
-          detail={data.budgetBytes > 0 ? `${Math.round(ratio * 100)}% of budget` : undefined}
+          detail={
+            data.budgetBytes > 0
+              ? t('ui.percentOfBudget', { percent: Math.round(ratio * 100) })
+              : undefined
+          }
         />
         <StatCard
           icon={<HardDrive size={20} />}

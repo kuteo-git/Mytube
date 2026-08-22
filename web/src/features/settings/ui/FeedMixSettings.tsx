@@ -232,7 +232,7 @@ function supply(
   if (wantedPerWindow > 0 && available < wantedPerWindow * 3) {
     return t('settings.feedMix.thin', { count: available })
   }
-  return `${available} videos fit this.`
+  return t('ui.fits', { count: available })
 }
 
 /**

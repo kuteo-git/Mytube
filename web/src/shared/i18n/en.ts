@@ -244,7 +244,9 @@ export const en = {
   },
 
   player: {
-    findingStream: 'Finding a stream…',
+    findingStream: 'Finding a stream…',    streamFailedDownloading:
+      'Live streaming failed. Downloading instead — {{percent}}%, it will start by itself.',
+
     streamFailedQueued:
       'Live streaming failed. The download is queued behind another video, and this will start by itself once it finishes.',
     streamFailed: 'The stream could not be loaded.',
@@ -287,7 +289,8 @@ export const en = {
       loadingSubtitles: 'Loading subtitles…',
       preparingCues: 'Preparing cues…',
       noSubtitles: 'No subtitles available',
-      alreadyVietnamese: 'Already Vietnamese — nothing to translate',
+      alreadyVietnamese: 'Already Vietnamese — nothing to translate',      failedWith: 'Translation failed: {{error}}',
+
       failed: 'Translation failed — nothing came back',
     },
   },
@@ -386,6 +389,15 @@ export const en = {
   },
 
   ui: {
+    jobsCleared_failed: '{{count}} failed jobs cleared',
+    jobsCleared_completed: '{{count}} completed jobs cleared',
+    percentOfBudget: '{{percent}}% of budget',
+    writable: 'Writable. {{free}} free, {{count}} videos already there.',
+    fits: '{{count}} videos fit this.',
+    viewMore: 'View more ({{count}})',
+    playingFrom: 'Playing from {{name}}',
+    keyStored: 'A key ending {{hint}} is stored. Leave blank to keep it.',
+    videoCount: '{{count}} videos',
     add: 'Add',
     adding: 'Adding…',
     advanced: 'Advanced',

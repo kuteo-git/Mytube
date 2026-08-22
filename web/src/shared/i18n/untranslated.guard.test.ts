@@ -58,6 +58,12 @@ const EXEMPT = new Map<string, string>([
   // "Tr" is the Vietnamese abbreviation for triệu. It is in the file because
   // the file is what holds both languages' abbreviations.
   ['shared/lib/format.ts', 'holds both languages abbreviations'],
+  // Diagnostics — "server returned 500", "got 0/40 lines, all empty" — which
+  // are interpolated into an already-translated sentence the way an HTTP
+  // status is. The sentence around them is Vietnamese; the detail is what it
+  // is, and inventing a Vietnamese rendering of an upstream fault would make
+  // it harder to search for, not easier to read.
+  ['features/watch/application/narration-batch.ts', 'diagnostic detail, shown inside translated copy'],
   // Each language is named in its own words on purpose: somebody who switched
   // by accident needs to be able to read their way back.
   ['shared/i18n/index.ts', 'holds each language name in that language'],

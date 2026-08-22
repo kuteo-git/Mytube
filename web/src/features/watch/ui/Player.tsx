@@ -2770,7 +2770,7 @@ export function Player({
                 // actually happening, and the player starts on its own the
                 // moment the file is there (see the effect on the local URL).
                 transferring
-                ? `Live streaming failed. Downloading instead — ${downloadPercent}%, it will start by itself.`
+                ? t('player.streamFailedDownloading', { percent: downloadPercent })
                 : queuedBehind
                   ? t('player.streamFailedQueued')
                   : t('player.streamFailed')
@@ -3484,7 +3484,7 @@ function NarrationStatus({
     translating: t('ui.translating'),
     done: t('ui.translated'),
     failed: p.error
-      ? `Translation failed: ${p.error}`
+      ? t('player.translation.failedWith', { error: p.error })
       : t('player.translation.failed'),
   }
   const bar =

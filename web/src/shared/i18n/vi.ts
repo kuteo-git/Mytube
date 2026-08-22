@@ -263,7 +263,9 @@ export const vi: Dictionary = {
   },
 
   player: {
-    findingStream: 'Đang tìm nguồn phát…',
+    findingStream: 'Đang tìm nguồn phát…',    streamFailedDownloading:
+      'Phát trực tiếp không được. Đang tải về thay thế — {{percent}}%, xong là tự chạy.',
+
     streamFailedQueued:
       'Phát trực tiếp không được. Video đang xếp hàng chờ tải sau một video khác, xong là tự chạy.',
     streamFailed: 'Không tải được luồng phát.',
@@ -308,7 +310,8 @@ export const vi: Dictionary = {
       loadingSubtitles: 'Đang tải phụ đề…',
       preparingCues: 'Đang chuẩn bị phụ đề…',
       noSubtitles: 'Không có phụ đề',
-      alreadyVietnamese: 'Vốn đã là tiếng Việt — không cần dịch',
+      alreadyVietnamese: 'Vốn đã là tiếng Việt — không cần dịch',      failedWith: 'Dịch không thành: {{error}}',
+
       failed: 'Dịch không thành — không nhận được gì',
     },
   },
@@ -407,6 +410,17 @@ export const vi: Dictionary = {
   },
 
   ui: {
+    // No plural: the English version had `job${count !== 1 ? 's' : ''}`, which
+    // is a rule that produces "3 côngs việc" in a language that has none.
+    jobsCleared_failed: 'Đã xoá {{count}} việc lỗi',
+    jobsCleared_completed: 'Đã xoá {{count}} việc đã xong',
+    percentOfBudget: '{{percent}}% giới hạn',
+    writable: 'Ghi được. Còn trống {{free}}, đã có sẵn {{count}} video.',
+    fits: 'Có {{count}} video hợp phần này.',
+    viewMore: 'Xem thêm ({{count}})',
+    playingFrom: 'Đang phát từ {{name}}',
+    keyStored: 'Đã lưu một key kết thúc bằng {{hint}}. Để trống nếu muốn giữ nguyên.',
+    videoCount: '{{count}} video',
     add: 'Thêm',
     adding: 'Đang thêm…',
     advanced: 'Nâng cao',

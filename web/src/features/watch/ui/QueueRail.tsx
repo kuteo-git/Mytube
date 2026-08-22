@@ -40,9 +40,11 @@ export function QueueRail({
   return (
     <aside className="flex w-full flex-col rounded-xl bg-surface" aria-label={t('ui.queue')}>
       <div className="border-b border-line px-4 py-3">
-        <p className="text-sm font-medium">{label ? `Playing from ${label}` : t('upNext.playingFromQueue')}</p>
+        <p className="text-sm font-medium">{label ? t('ui.playingFrom', { name: label }) : t('upNext.playingFromQueue')}</p>
         <p className="mt-0.5 text-xs text-text-2">
-          {currentIndex >= 0 ? `${currentIndex + 1} / ${items.length}` : `${items.length} videos`}
+          {currentIndex >= 0
+            ? `${currentIndex + 1} / ${items.length}`
+            : t('ui.videoCount', { count: items.length })}
         </p>
       </div>
 

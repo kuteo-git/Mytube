@@ -305,7 +305,7 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
         label={t('translationSettings.apiKey')}
         hint={
           config?.hasKey
-            ? `A key ending ${config.keyHint} is stored. Leave blank to keep it.`
+            ? t('ui.keyStored', { hint: config.keyHint })
             : t('translationSettings.noKeyStored')
         }
       >

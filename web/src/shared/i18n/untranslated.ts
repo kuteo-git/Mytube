@@ -29,7 +29,7 @@ export interface Straggler {
   line: number
   text: string
   /** Which of the four places it was found in, for the failure message. */
-  kind: 'jsx-text' | 'aria-label' | 'placeholder' | 'title' | 'literal'
+  kind: 'jsx-text' | 'aria-label' | 'placeholder' | 'title' | 'literal' | 'template'
 }
 
 /**
@@ -69,6 +69,23 @@ const IDENTIFIER = /^[A-Za-z]+([A-Z][a-z]+)+$/
 
 /** `Content-Type`, `Cache-Control`: hyphenated with no space. */
 const HEADER = /^[A-Za-z]+(-[A-Za-z]+)+$/
+
+/**
+ * A template literal with two real words in it.
+ *
+ * The scan read `'` and `"` and not backticks, which is where copy goes the
+ * moment it has to interpolate anything — and copy that interpolates is the
+ * copy most worth checking, because it is a sentence rather than a label.
+ * Six of them were live on screen while every other check was green:
+ * "View more (3)", "Playing from …", "Writable. 235 GB free, 914 videos
+ * already there."
+ *
+ * Two words rather than one, unlike the quoted rule: a backtick string is far
+ * more often a URL, a class list or a key path, and those have no two adjacent
+ * words. `${...}` counts as a break, so "Playing from ${label}" is caught on
+ * "Playing from" and `${a}/${b}` is not caught at all.
+ */
+const TEMPLATE = /`([^`]*[A-Za-z]{2,}\s+[A-Za-z]{2,}[^`]*)`/g
 
 /**
  * A literal being compared or switched on is a value, not copy.
@@ -178,6 +195,18 @@ export function findStragglers(file: string, source: string): Straggler[] {
     // message in a ternary, a toast. This is where most of it actually lives —
     // 170 of the app's 243 strings, against 73 in text nodes — so a scan
     // without it would have passed while two thirds of the app stayed English.
+    for (const match of line.matchAll(TEMPLATE)) {
+      const text = match[1].trim()
+      if (seen.has(text)) continue
+      // A path or a query string is not copy however many words it has.
+      if (/^[/?]|^https?:/.test(text)) continue
+      // A *type*-level template literal — `nav.${keyof Dictionary['nav']}` —
+      // is a type, not a string, and nobody reads it.
+      if (text.includes('keyof ') || code.startsWith('type ')) continue
+      seen.add(text)
+      out.push({ file, line: at, text, kind: 'template' })
+    }
+
     for (const match of line.matchAll(LITERAL)) {
       const text = (match[1] ?? match[2]).trim()
       if (seen.has(text)) continue
