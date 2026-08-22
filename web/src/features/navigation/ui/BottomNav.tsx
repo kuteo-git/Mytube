@@ -4,7 +4,7 @@ import type { ComponentType } from 'react'
 import {} from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TranslationKey } from '@/shared/i18n/en'
-import { PageNavLink } from '@/shared/ui/PageLink'
+import { TabLink } from '@/shared/ui/PageLink'
 
 /**
  * The mobile shell's navigation, replacing the sidebar rail below the breakpoint.
@@ -63,7 +63,7 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
       aria-label={t('ui.main')}
     >
       {ITEMS.map(({ icon: Icon, label, to }) => (
-        <PageNavLink
+        <TabLink
           key={to}
           to={to}
           end={to === '/'}
@@ -76,7 +76,7 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
         >
           <Icon size={20} />
           <span>{t(label)}</span>
-        </PageNavLink>
+        </TabLink>
       ))}
     </nav>
   )

@@ -25,13 +25,32 @@ function historyIndex(): number {
 let lastIndex = typeof window === 'undefined' ? 0 : historyIndex()
 
 /**
- * Record which way this navigation went, and hand back the direction.
+ * Say which way the screen is about to go.
  *
- * A replace navigation leaves the index unchanged — the redirect from
- * `/settings/profile` to `/profile` is one — and that is a push as far as
- * anybody watching is concerned: they arrived somewhere new.
+ * Told rather than inferred, because it has to be known *before* the
+ * navigation: CSS reads it off the root while the transition is running, and
+ * the history index only moves once the navigation has already happened. An
+ * earlier version worked it out afterwards in an effect and was a frame late,
+ * which is the whole animation.
+ *
+ * The index is still tracked, for the one case nothing here can wrap: the
+ * browser's own back gesture does not go through any link.
  */
-export function markDirection(): Direction {
+export function markDirection(direction: Direction): Direction {
+  lastIndex = historyIndex()
+  document.documentElement.dataset.nav = direction
+  return direction
+}
+
+/**
+ * Which way a navigation that has already happened went.
+ *
+ * For the browser's back gesture and the hardware button, which cannot be
+ * wrapped in a transition at all — there is no callback to put the DOM change
+ * inside. The screen changes without animating; this at least leaves the root
+ * describing what happened rather than describing the last thing that did.
+ */
+export function observeDirection(): Direction {
   const now = historyIndex()
   const direction: Direction = now < lastIndex ? 'pop' : 'push'
   lastIndex = now

@@ -4,7 +4,7 @@ import { Routes, useLocation, useNavigate } from 'react-router-dom'
 import { pageRoutes } from './routes'
 import { useScrollRestoration } from '@/features/navigation/application/use-scroll-restoration'
 import { bareTitle, isWatchScreen } from '@/features/navigation/application/bare-screens'
-import { markDirection } from '@/features/navigation/application/page-transition'
+import { observeDirection } from '@/features/navigation/application/page-transition'
 import { BackBar } from '@/features/catalog/ui/BackBar'
 import { BottomNav } from '@/features/navigation/ui/BottomNav'
 import { Sidebar } from '@/features/navigation/ui/Sidebar'
@@ -38,18 +38,21 @@ function AppShellInner() {
   const { pathname } = location
   const isWatch = isWatchScreen(pathname)
 
-  // Which way the next screen change is going, recorded before it renders.
+  // Keeps the root describing the last navigation for the one path nothing
+  // here can wrap: the browser's own back gesture, which offers no callback to
+  // put the DOM change inside. Links go through PageLink, which sets the
+  // direction before the transition starts rather than after it.
   //
   // The watch screen is left out on purpose: on a phone it is already a layer
   // over the tab underneath, with its own pull-to-dismiss gesture and its own
-  // transform. A second animation across the whole viewport would be two
-  // things moving the same pixels, and the gesture is the one that has to win.
+  // transform. A second animation across the same pixels is two things
+  // fighting, and the gesture has to win.
   useEffect(() => {
     if (isWatchScreen(pathname)) {
       delete document.documentElement.dataset.nav
       return
     }
-    markDirection()
+    observeDirection()
   }, [pathname])
   const [expanded, setExpanded] = useState(true)
   const [drawerOpen, setDrawerOpen] = useState(false)
