@@ -16,6 +16,8 @@
  * which exist outside the React tree entirely.
  */
 
+import { MOBILE_BREAKPOINT } from '@/features/watch/application/player-geometry'
+
 export type Direction = 'push' | 'pop'
 
 function historyIndex(): number {
@@ -59,13 +61,29 @@ export function observeDirection(): Direction {
 }
 
 /**
- * Whether this browser can animate between screens at all.
+ * Whether to animate between screens at all.
+ *
+ * Two conditions, and the second is a decision rather than a capability.
  *
  * `startViewTransition` is the only way to keep the outgoing screen on screen
  * while the incoming one arrives: React has already unmounted it by the time
  * any CSS could run. Safari has it from 18, Chrome from 111. Where it is
- * missing the navigation simply happens, which is what happens today.
+ * missing the navigation simply happens.
+ *
+ * **Phones only.** A screen sliding in from the right is how a phone says one
+ * thing is inside another, and it says that because a phone shows one screen at
+ * a time. A desktop shows the sidebar the whole way through, so the same
+ * animation slides the *content* across while the navigation beside it sits
+ * still — which reads as the page having been shoved rather than entered. It
+ * was applied everywhere at first and looked wrong on a wide window
+ * immediately.
+ *
+ * The same 700px the rest of the app uses, read at the moment of the press
+ * rather than subscribed to: a window resized mid-navigation is not a case
+ * worth code.
  */
 export function canAnimatePages(): boolean {
-  return typeof document !== 'undefined' && 'startViewTransition' in document
+  if (typeof document === 'undefined') return false
+  if (!('startViewTransition' in document)) return false
+  return window.innerWidth < MOBILE_BREAKPOINT
 }
