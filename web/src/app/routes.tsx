@@ -49,10 +49,17 @@ export const pageRoutes = (
     <Route path="/subscriptions" element={<SubscriptionsPage />} />
     <Route path="/storage" element={<StoragePage />} />
     <Route path="/settings" element={<SettingsPage />} />
-    {/* One panel each, for the phone's Settings menu. The desktop page still
-        shows all three together; only the arrangement differs. */}
-    <Route path="/settings/profile" element={<ProfileSettingsPage />} />
-    <Route path="/settings/youtube-account" element={<YouTubeAccountPage />} />
+    {/* The account has a place of its own now, off Settings, because "who am I
+        and what is my YouTube connection doing" is one subject and it was filed
+        in two. The old paths still resolve: links are shared, and a bookmark
+        that stops working is a worse answer than a redirect. */}
+    <Route path="/profile" element={<ProfileSettingsPage />} />
+    <Route path="/account" element={<YouTubeAccountPage />} />
+    <Route path="/settings/profile" element={<Navigate to="/profile" replace />} />
+    <Route
+      path="/settings/youtube-account"
+      element={<Navigate to="/account" replace />}
+    />
     <Route path="/settings/feed" element={<FeedSettingsPage />} />
     <Route path="/settings/advanced" element={<AdvancedSettingsPage />} />
     <Route path="/settings/narration" element={<NarrationSettingsPage />} />

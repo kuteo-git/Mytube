@@ -2,7 +2,8 @@ import { Bell, Menu } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useIngestJobs } from '@/features/catalog/application/queries'
 import { SearchBox } from './SearchBox'
-import { Avatar, IconButton } from '@/shared/ui/primitives'
+import { IconButton } from '@/shared/ui/primitives'
+import { AccountMenu } from '@/features/identity/ui/AccountMenu'
 
 /**
  * Top bar. Deviations from youtube.com follow the "no dead buttons" rule in
@@ -122,9 +123,7 @@ export function TopBar({
           )}
         </Link>
 
-        <button type="button" aria-label="Account" className="ml-1 rounded-full">
-          <Avatar hue={210} name="Luc" size={32} />
-        </button>
+        <AccountMenu />
       </div>
     </header>
   )

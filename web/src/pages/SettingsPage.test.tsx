@@ -79,13 +79,15 @@ describe('Settings on a phone', () => {
       '/saved',
       '/storage',
       '/activity',
-      // The mirrors of the YouTube account, in their own group. A phone has no
-      // sidebar and the bottom bar is full, so this is their only way in.
+      // Everything belonging to this account, in one group and in the order
+      // the desktop rail uses. The profile leads it: it decides whose every
+      // other setting here is. A phone has no sidebar and the bottom bar is
+      // full at five, so this is the way in — the avatar being the other door
+      // to the same room.
+      '/profile',
+      '/account',
       '/watch-later',
       '/playlists',
-      // Profile leads Preferences: it decides whose every other setting here is.
-      '/settings/profile',
-      '/settings/youtube-account',
       '/settings/feed',
       '/settings/narration',
       '/settings/translation',

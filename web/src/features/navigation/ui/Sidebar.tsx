@@ -6,6 +6,7 @@ import {
   HardDrive,
   History,
   Home,
+  KeyRound,
   ListVideo,
   Settings,
   Tag,
@@ -16,6 +17,7 @@ import { useSubscriptions, useTopics } from '@/features/catalog/application/quer
 import { Avatar } from '@/shared/ui/primitives'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
+import { useCurrentProfile, useProfiles } from '@/features/identity/application/use-profile'
 
 type Icon = ComponentType<{ size?: number }>
 
@@ -47,16 +49,22 @@ const PRIMARY: Item[] = [
 ]
 
 /**
- * Read-only mirrors of the signed-in account, kept apart from everything above.
+ * Everything that belongs to *this account*, kept apart from everything above.
  *
- * The separation is the honest label for what they are. Saved and History are
- * this library's own records and can be changed here; these two are a copy of
- * what the member's YouTube account says, refreshed on every account scan, and
- * nothing in this app may edit them — an edit would be silently reverted by the
- * next pass, which is worse than not offering it (§5's rule against a control
- * that does not do what it says).
+ * The group was "From YouTube" and held only the two mirrors. It now also holds
+ * the profile and the YouTube connection, because those are the same subject —
+ * somebody looking for "who am I and what is my account doing" was being sent
+ * to Preferences on a phone and to nowhere at all on a desktop.
+ *
+ * The old heading carried a promise the new one cannot: that nothing here can
+ * be edited. Watch later and Playlists are still a read-only copy of what the
+ * member's YouTube account says, refreshed on every scan, and an edit made here
+ * would be reverted by the next pass — §5's rule against a control that does not
+ * do what it says. That promise now lives on those two items rather than on the
+ * heading above them.
  */
-const FROM_YOUTUBE: Item[] = [
+const ACCOUNT: Item[] = [
+  { icon: KeyRound, label: 'YouTube account', to: '/account' },
   { icon: Clock, label: 'Watch later', to: '/watch-later' },
   { icon: ListVideo, label: 'Playlists', to: '/playlists' },
 ]
@@ -69,7 +77,7 @@ const FROM_YOUTUBE: Item[] = [
  * exists in neither the router nor the other is a link to the not-found page,
  * and nothing about rendering it would say so.
  */
-export const SIDEBAR_ROUTES = [...PRIMARY, ...FROM_YOUTUBE].map((i) => i.to)
+export const SIDEBAR_ROUTES = [...PRIMARY, ...ACCOUNT, { to: '/profile' }].map((i) => i.to)
 
 function Row({ item, mini }: { item: Item; mini: boolean }) {
   const { icon: Icon, label, to } = item
@@ -96,6 +104,12 @@ function Row({ item, mini }: { item: Item; mini: boolean }) {
 export function Sidebar({ mini }: { mini: boolean }) {
   const { data: topics } = useTopics()
   const { data: subscriptions } = useSubscriptions()
+  const { data: profiles } = useProfiles()
+  const { id: profileID } = useCurrentProfile()
+  // Whoever this browser is. Undefined only before the list has arrived, or on
+  // a household of one that has never been asked — the row still draws, with
+  // the neutral label, because the destination exists either way.
+  const currentProfile = profiles?.find((p) => p.id === profileID) ?? profiles?.[0]
 
   if (mini) {
     return (
@@ -103,7 +117,7 @@ export function Sidebar({ mini }: { mini: boolean }) {
         aria-label="Main"
         className="fixed top-[var(--top-bar)] bottom-0 left-0 z-20 w-[72px] overflow-y-auto bg-bg py-1 no-scrollbar"
       >
-        {[...PRIMARY, ...FROM_YOUTUBE].map((item) => (
+        {[...PRIMARY, ...ACCOUNT].map((item) => (
           <Row key={item.to} item={item} mini />
         ))}
       </nav>
@@ -123,8 +137,24 @@ export function Sidebar({ mini }: { mini: boolean }) {
 
       <hr className="my-3 border-0 border-t border-line" />
       <section className="flex flex-col gap-0.5">
-        <h2 className="px-3 py-1.5 text-base font-medium">From YouTube</h2>
-        {FROM_YOUTUBE.map((item) => (
+        <h2 className="px-3 py-1.5 text-base font-medium">Account</h2>
+        {/* Who is watching, said with the avatar rather than a generic icon —
+            the rail answers it without spending a line on it. Same 40px row and
+            24px slot as every other item (MASTER.md §4), the avatar simply
+            standing where the icon stands. */}
+        <NavLink
+          to="/profile"
+          className={({ isActive }) =>
+            clsx(
+              'flex h-10 items-center gap-6 rounded-[10px] px-3 transition-colors duration-150 ease-out hover:bg-surface-hover',
+              isActive && 'bg-surface-hover font-medium',
+            )
+          }
+        >
+          <Avatar hue={hueFromId(currentProfile?.id ?? '')} name={currentProfile?.name ?? '?'} size={24} />
+          <span className="clamp-1 text-sm">{currentProfile?.name ?? 'Profile'}</span>
+        </NavLink>
+        {ACCOUNT.map((item) => (
           <Row key={item.to} item={item} mini={false} />
         ))}
       </section>

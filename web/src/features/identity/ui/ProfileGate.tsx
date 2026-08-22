@@ -1,4 +1,7 @@
+import { useEffect } from 'react'
+
 import { useCurrentProfile, useProfiles } from '../application/use-profile'
+import { setCurrentProfileID } from '../infrastructure/current-profile'
 import { ProfilePicker } from './ProfilePicker'
 
 /**
@@ -18,12 +21,28 @@ import { ProfilePicker } from './ProfilePicker'
  */
 export function ProfileGate({ children }: { children: React.ReactNode }) {
   const { data: profiles, isLoading } = useProfiles()
-  const { chosen } = useCurrentProfile()
+  const { id, chosen } = useCurrentProfile()
+
+  // A choice that no longer names anybody is not a choice.
+  //
+  // This asked only whether *an* id had been stored, never whether it still
+  // existed — so a device holding a deleted profile's id went on putting it in
+  // `X-User-Id` for ever, and the gateway went on answering for a ghost with
+  // its own feed and its own history, all keyed to rows that are gone. Nothing
+  // on screen said so.
+  //
+  // The server cannot repair it: `localStorage` is per device, and the deletion
+  // happens on somebody else's. So the device repairs itself here, the next
+  // time it loads, against the list it has just fetched.
+  const missing = Boolean(chosen && profiles && !profiles.some((p) => p.id === id))
+  useEffect(() => {
+    if (missing) setCurrentProfileID('')
+  }, [missing])
 
   // While the list is loading, show the app rather than a spinner. Being
   // momentarily wrong about which profile is asking costs a re-fetch; a blank
   // screen on every cold load costs the whole first impression.
-  if (isLoading || chosen || !profiles || profiles.length < 2) {
+  if (isLoading || (chosen && !missing) || !profiles || profiles.length < 2) {
     return <>{children}</>
   }
   return <ProfilePicker />

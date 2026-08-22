@@ -3,7 +3,8 @@ import clsx from 'clsx'
 
 import { useCurrentProfile, useProfiles } from '../application/use-profile'
 import { httpProfileRepository } from '../infrastructure/profileRepository'
-import { validProfileName } from '../domain/profile'
+import { validProfileName, type Profile } from '../domain/profile'
+import { DeleteProfileDialog } from './DeleteProfileDialog'
 
 /**
  * Who is watching.
@@ -16,13 +17,27 @@ import { validProfileName } from '../domain/profile'
  * The names are large and the list is short because this is read from a sofa as
  * often as from a desk.
  */
-export function ProfilePicker({ onDone }: { onDone?: () => void }) {
+export function ProfilePicker({
+  onDone,
+  manage = false,
+}: {
+  onDone?: () => void
+  /**
+   * Show what each profile holds, and offer to delete it.
+   *
+   * Off by default: the same component answers "who is watching?" at the gate,
+   * where a row of delete buttons in front of somebody trying to start watching
+   * would be both noise and a hazard.
+   */
+  manage?: boolean
+}) {
   const { data: profiles = [], isLoading, refetch } = useProfiles()
   const { id: currentID, choose } = useCurrentProfile()
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [deleting, setDeleting] = useState<Profile | null>(null)
 
   const add = async () => {
     if (!validProfileName(name)) {
@@ -51,12 +66,23 @@ export function ProfilePicker({ onDone }: { onDone?: () => void }) {
         itself is shared.
       </p>
 
+      {deleting && (
+        <DeleteProfileDialog
+          profile={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null)
+            void refetch()
+          }}
+        />
+      )}
+
       {isLoading ? (
         <p className="pt-6 text-sm text-text-2">Loading…</p>
       ) : (
         <ul className="flex flex-col gap-2 pt-6">
           {profiles.map((p) => (
-            <li key={p.id}>
+            <li key={p.id} className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -64,7 +90,7 @@ export function ProfilePicker({ onDone }: { onDone?: () => void }) {
                   onDone?.()
                 }}
                 className={clsx(
-                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors duration-150 ease-out',
+                  'flex min-w-0 flex-1 items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors duration-150 ease-out',
                   p.id === currentID
                     ? 'bg-invert-bg text-invert-text'
                     : 'bg-surface hover:bg-surface-hover',
@@ -78,6 +104,23 @@ export function ProfilePicker({ onDone }: { onDone?: () => void }) {
                 </span>
                 <span className="min-w-0 flex-1 truncate text-base">{p.name}</span>
               </button>
+
+              {/* Never for the profile in use, and never for the last one — the
+                  gateway refuses both, and a button that exists only to be
+                  refused is the dead control §5 forbids. Drawn rather than
+                  hidden behind an "Edit" mode: the confirmation carries the real
+                  numbers, which is the guard, and a mode is one more state to
+                  remember. */}
+              {manage && p.id !== currentID && profiles.length > 1 && (
+                <button
+                  type="button"
+                  aria-label={`Delete ${p.name}`}
+                  onClick={() => setDeleting(p)}
+                  className="shrink-0 rounded-full px-3 py-2 text-sm text-text-2 transition-colors duration-150 ease-out hover:bg-surface-hover hover:text-text"
+                >
+                  Delete
+                </button>
+              )}
             </li>
           ))}
         </ul>

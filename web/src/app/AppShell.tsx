@@ -246,6 +246,11 @@ function AppShellInner() {
             here by decision: a full-width bar on every page costs 44px of every
             screen for a message that is the same one every time.
 
+            `/account` is in the condition because the YouTube account screen
+            moved out of `/settings`, and a banner that followed the old path
+            would have vanished from the one page it is most about — the same
+            "warning nobody can see" this narrowing was written just after.
+
             The cost is real and worth naming. Nobody meets this until they open
             Settings, which is exactly how the last one went unnoticed for five
             days — it was in the flow above `<main>`, under an `absolute` top
@@ -254,7 +259,9 @@ function AppShellInner() {
             Inside the scroller either way, which is the one place that reserves
             room for the bar. The height belongs in exactly one place and that
             place is the scroller; this is the fourth thing to learn it. */}
-        {pathname.startsWith('/settings') && <CookieExpiryBanner />}
+        {(pathname.startsWith('/settings') || pathname.startsWith('/account')) && (
+          <CookieExpiryBanner />
+        )}
 
         {/* The page underneath, and — when there is no layer over it — simply
             the page.

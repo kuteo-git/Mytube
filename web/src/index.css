@@ -288,3 +288,20 @@
     transform: translateY(0);
   }
 }
+
+/* The one dropdown motion the design system allows: a fade and a 4px rise over
+   150ms. Named here rather than written inline, so the account menu and
+   anything that follows it cannot drift apart.
+
+   `motion-safe:` at the call site is what honours `prefers-reduced-motion` —
+   the animation is simply not applied rather than shortened. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

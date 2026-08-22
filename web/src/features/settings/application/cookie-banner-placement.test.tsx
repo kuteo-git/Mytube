@@ -61,7 +61,7 @@ function renderShell(at = '/settings') {
           <Route element={<AppShell />}>
             <Route path="/" element={<div>a page</div>} />
             <Route path="/settings" element={<div>settings</div>} />
-            <Route path="/settings/youtube-account" element={<div>account</div>} />
+            <Route path="/account" element={<div>account</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -115,8 +115,13 @@ describe('the expired-session banner', () => {
     expect(screen.queryByRole('status')).toBeNull()
   })
 
-  it('reaches every settings screen, not just the index', async () => {
-    renderShell('/settings/youtube-account')
+  it('reaches the account screen, which is no longer under settings', async () => {
+    // The YouTube account moved to `/account` when profiles got a home of their
+    // own. The banner's condition had to move with it: it is the one page this
+    // warning is most about, and following the old path would have taken it off
+    // exactly there — the same "warning nobody can see" this file was written
+    // about in the first place.
+    renderShell('/account')
     expect(await screen.findByRole('status')).toBeInTheDocument()
   })
 

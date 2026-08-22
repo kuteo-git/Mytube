@@ -103,22 +103,29 @@ const PHONE_LIBRARY = [
 ]
 
 /**
- * The read-only mirrors of the YouTube account, kept as their own group for the
- * same reason the sidebar keeps them apart: they are a copy of what that account
- * says, not lists this app can change, and grouping them with Saved would put a
- * page you can edit beside two you cannot under one heading.
+ * Everything belonging to this account, in the order the desktop rail uses.
  *
- * On a phone this is the only way in — the bottom bar is full at five, and what
- * earns a place there is what you move between while browsing.
+ * The group was "From YouTube" and held only the two read-only mirrors; the
+ * profile and the YouTube connection have joined them, because that is one
+ * subject and it was filed in two places — here under Preferences, and on the
+ * desktop nowhere at all.
+ *
+ * Watch later and Playlists are still a copy of what the account says and still
+ * cannot be edited here; that promise now sits on those two items rather than on
+ * the heading, which no longer only means "read-only".
+ *
+ * On a phone this is the way in — the bottom bar is full at five, and what earns
+ * a place there is what you move between while browsing. The avatar in the top
+ * bar is the other door to the same room.
  */
-const PHONE_FROM_YOUTUBE = [
+const PHONE_ACCOUNT = [
+  { to: '/profile', icon: UserRound, label: 'Profile' },
+  { to: '/account', icon: KeyRound, label: 'YouTube account' },
   { to: '/watch-later', icon: Clock, label: 'Watch later' },
   { to: '/playlists', icon: ListVideo, label: 'Playlists' },
 ]
 
 const PHONE_PREFS = [
-  { to: '/settings/profile', icon: UserRound, label: 'Profile' },
-  { to: '/settings/youtube-account', icon: KeyRound, label: 'YouTube account' },
   { to: '/settings/feed', icon: LayoutGrid, label: 'Home feed' },
   { to: '/settings/narration', icon: Headphones, label: 'Narration' },
   { to: '/settings/translation', icon: Languages, label: 'Translation' },
@@ -129,7 +136,7 @@ function PhoneMenu() {
   return (
     <nav className="mt-4 flex flex-col gap-6" aria-label="Settings">
       <MenuGroup label="Library" items={PHONE_LIBRARY} />
-      <MenuGroup label="From YouTube" items={PHONE_FROM_YOUTUBE} />
+      <MenuGroup label="Account" items={PHONE_ACCOUNT} />
       <MenuGroup label="Preferences" items={PHONE_PREFS} />
     </nav>
   )

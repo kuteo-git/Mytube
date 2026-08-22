@@ -131,3 +131,45 @@ describe('adding somebody', () => {
     expect(httpProfileRepository.create).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * A stored id whose profile has been deleted must not keep being sent.
+ *
+ * The gate asked only whether *an* id had been chosen, never whether it still
+ * named anybody. So a device left holding a deleted profile's id kept putting it
+ * in `X-User-Id` for ever, and the gateway kept answering for a ghost — its own
+ * feed, its own history, all keyed to rows that no longer exist. Nothing on
+ * screen would have said so.
+ *
+ * The server cannot fix this: `localStorage` is per device, and the delete
+ * happens on somebody else's. So the device repairs itself the next time it
+ * loads, by comparing what it holds against the list it just fetched.
+ */
+describe('a profile that has been deleted elsewhere', () => {
+  it('stops being this browser and asks again', async () => {
+    household = [
+      { id: 'u_luc', name: 'Luc' },
+      { id: 'u_tunkhanh', name: 'Tuấn Khanh' },
+    ]
+    setCurrentProfileID('u_gone')
+    renderGate()
+
+    // The picker, not the app: this browser no longer knows who it is.
+    expect(await screen.findByText("Who's watching?")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(window.localStorage.getItem('yt-profile-id-v1')).toBeNull(),
+    )
+  })
+
+  it('leaves a valid choice alone', async () => {
+    household = [
+      { id: 'u_luc', name: 'Luc' },
+      { id: 'u_tunkhanh', name: 'Tuấn Khanh' },
+    ]
+    setCurrentProfileID('u_tunkhanh')
+    renderGate()
+
+    expect(await screen.findByText('the app')).toBeInTheDocument()
+    expect(window.localStorage.getItem('yt-profile-id-v1')).toBe('u_tunkhanh')
+  })
+})
