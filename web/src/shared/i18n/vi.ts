@@ -398,7 +398,7 @@ export const vi: Dictionary = {
     // know what to paste, and the answer is "the same thing your provider's
     // documentation calls a base URL".
     openaiFormat:
-      'Bất cứ thứ gì nói được API audio của OpenAI: chính /v1 của họ, hoặc bất kỳ dịch vụ nào làm theo. Nhớ kèm /v1, đúng như tài liệu của nhà cung cấp ghi.',
+      'Bất cứ thứ gì nói được API audio của OpenAI: chính /v1 của họ, hoặc dịch vụ nào làm theo. Kèm /v1 hay không đều được.',
     modelHint: 'Gửi nguyên xi. Dịch vụ nào không có khái niệm model thì bỏ qua.',
     voiceHint: 'Gõ tay, vì các nhà cung cấp không thống nhất danh sách. Theo từng máy.',
     tryIt:
@@ -409,6 +409,10 @@ export const vi: Dictionary = {
   },
 
   translationSettings: {
+    // Names the endpoint rather than saying "chuẩn OpenAI": somebody plugging
+    // in their own service needs to know which of its APIs this uses.
+    openaiFormat:
+      'Bất cứ thứ gì nói được API chat completions của OpenAI: chính /v1 của họ, hoặc dịch vụ nào làm theo — OmniRouter, một bản chạy nội bộ. Kèm /v1 hay không đều được.',
     description:
       'Nơi dịch phụ đề. Đổi model thì dịch lại từ đầu — bản dịch cũ vẫn giữ, nên đổi qua đổi lại không mất gì.',
     baseURL: 'Base URL',

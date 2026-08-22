@@ -367,7 +367,7 @@ export const en = {
     notConfigured: 'No speech service set — add one in Settings › Narration.',
     baseURL: 'Where speech is synthesised',
     openaiFormat:
-      "Anything that speaks OpenAI's audio API: its own /v1, or any service that copies it. Include the /v1, as the provider's own documentation gives it.",
+      "Anything that speaks OpenAI's audio API: its own /v1, or any service that copies it. The /v1 is optional here; both forms work.",
     modelHint: 'Sent as-is. Services that have no models ignore it.',
     voiceHint: 'Typed, because providers do not agree on a list. Per device.',
     tryIt:
@@ -378,6 +378,8 @@ export const en = {
   },
 
   translationSettings: {
+    openaiFormat:
+      "Anything that speaks OpenAI's chat completions API: its own /v1, or any service that copies it — OmniRouter, a local runner. The /v1 is optional here; both forms work.",
     description:
       'Where subtitles are translated. Changing the model translates fresh — earlier translations are kept, so switching back costs nothing.',
     baseURL: 'Base URL',

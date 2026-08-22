@@ -412,7 +412,10 @@ export function TranslationSettings({ headless = false }: { headless?: boolean }
       title={t('ui.translation')}
       description={t('translationSettings.description')}
     >
-      <SettingRow label={t('translationSettings.baseURL')}>
+      <SettingRow
+        label={t('translationSettings.baseURL')}
+        hint={t('translationSettings.openaiFormat')}
+      >
         <input
           className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
           value={baseUrl}
