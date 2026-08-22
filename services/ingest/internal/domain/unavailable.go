@@ -88,10 +88,21 @@ var permanentSignatures = []struct {
 	{"this video is no longer available because the youtube account associated with this video has been terminated", ReasonRemoved},
 	{"video unavailable. this video has been removed", ReasonRemoved},
 
-	// The bare form, last: the phrases above are all more specific than it, and
-	// whichever matches first is the one reported.
-	{"video unavailable", ReasonUnavailable},
-	{"this video is unavailable", ReasonUnavailable},
+	// **No bare form.** "Video unavailable" on its own used to be here, last,
+	// on the reasoning that the phrases above are more specific and match
+	// first. It is a catch-all, and this file's own rule below says there is
+	// not supposed to be one.
+	//
+	// Measured on 4H857SWaTHQ: YouTube answered a bare "Video unavailable",
+	// which was recorded as permanent — and answering the same URL hours later
+	// gave "The uploader has not made this video available in your country.
+	// This video is available in United States." A geo-block, which §4 calls
+	// temporary because a route or a session answers it. One video, two
+	// messages, and the vaguer one is not evidence of anything.
+	//
+	// A removed video that YouTube declines to explain now costs a few retries
+	// and ends up FAILED with a Retry button, which is the direction this file
+	// says to err in.
 }
 
 // ClassifyUnavailable reads an upstream failure and says whether it is
@@ -114,6 +125,13 @@ func ClassifyUnavailable(message string) (UnavailableReason, bool) {
 		"sign in to confirm your age",
 		"temporarily",
 		"try again later",
+		// Geo-blocking, in YouTube's own words. §4 calls it temporary — a
+		// route or a session answers it — and it was covered only by accident:
+		// nothing matched it, so it fell through to "not recognised". Named
+		// here so it is a decision rather than a gap, and so the test for it
+		// tests the message YouTube actually sends.
+		"available in your country",
+		"not available in your country",
 	} {
 		if strings.Contains(lower, temporary) {
 			return "", false

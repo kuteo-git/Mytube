@@ -35,11 +35,6 @@ func TestClassifyPermanent(t *testing.T) {
 			"ERROR: [youtube] abc: This video is no longer available because the YouTube account associated with this video has been terminated.",
 			domain.ReasonRemoved,
 		},
-		{
-			"bare unavailable",
-			"ERROR: [youtube] abc: Video unavailable",
-			domain.ReasonUnavailable,
-		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -78,13 +73,40 @@ func TestClassifyLeavesTemporaryFailuresAlone(t *testing.T) {
 
 // Age-gating and geo-blocking are deliberately temporary: both can be answered
 // with cookies or a different route, so neither is the library's final word.
+//
+// The geo case used to be tested with a message ending "Please try again
+// later", which passed for the wrong reason — that phrase is on the temporary
+// list, so the test proved nothing about geo-blocking at all. The message
+// below is the one YouTube actually sends, measured on 4H857SWaTHQ.
 func TestAgeAndCountryBlocksAreNotPermanent(t *testing.T) {
 	for _, m := range []string{
 		"ERROR: [youtube] abc: Sign in to confirm your age. This video may be inappropriate for some users",
-		"ERROR: [youtube] abc: Video unavailable. This video is not available in your country. Please try again later",
+		"ERROR: [youtube] abc: The uploader has not made this video available in your country. This video is available in United States.",
+		"ERROR: [youtube] abc: Video unavailable. This video is not available in your country",
 	} {
 		if _, permanent := domain.ClassifyUnavailable(m); permanent {
 			t.Fatalf("classified %q as permanent", m)
+		}
+	}
+}
+
+// A refusal YouTube declines to explain is not evidence of anything.
+//
+// "Video unavailable", alone, used to be recorded as permanent — and permanent
+// means the video disappears from the library until somebody presses Retry.
+// Measured on 4H857SWaTHQ: YouTube gave exactly that at 06:23, and hours later
+// gave "The uploader has not made this video available in your country" for the
+// same URL. The bare form was the same server declining to say why.
+//
+// Erring the other way costs a few retries and ends at FAILED with a Retry
+// button, which is what the classifier's own note says to prefer.
+func TestABareUnavailableIsNotPermanent(t *testing.T) {
+	for _, m := range []string{
+		"ERROR: [youtube] abc: Video unavailable",
+		"ERROR: [youtube] abc: This video is unavailable",
+	} {
+		if reason, permanent := domain.ClassifyUnavailable(m); permanent {
+			t.Fatalf("classified %q as permanently %s", m, reason)
 		}
 	}
 }
