@@ -48,6 +48,7 @@ one set of use cases, not two front ends.
 | **[docs/SETUP.md](docs/SETUP.md)** | from an empty machine to a working install |
 | **[docs/USAGE.md](docs/USAGE.md)** | what each screen does |
 | [CLAUDE.md](CLAUDE.md) | every architectural decision and why |
+| [CHANGELOG.md](CHANGELOG.md) | what is in this release |
 | [design-system/…/MASTER.md](design-system/local-youtube/MASTER.md) | UI tokens |
 
 ```bash
@@ -165,6 +166,7 @@ một bộ use case, không phải hai front end.
 | **[docs/SETUP.vi.md](docs/SETUP.vi.md)** | từ máy trắng tới bản chạy được |
 | **[docs/USAGE.vi.md](docs/USAGE.vi.md)** | mỗi màn hình làm gì |
 | [CLAUDE.md](CLAUDE.md) | mọi quyết định kiến trúc và lý do |
+| [CHANGELOG.md](CHANGELOG.md) | bản này có những gì |
 
 ```bash
 brew install go node postgresql@17 ffmpeg
