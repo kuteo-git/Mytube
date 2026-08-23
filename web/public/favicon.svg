@@ -1,14 +1,16 @@
 <!-- The same mark the top bar draws, so the tab and the page agree.
 
-     What was here before was the purple bolt left over from the Vite template —
-     it named a build tool rather than this library.
+     A house with a play in it. What was here — and in the top bar — was
+     YouTube's own mark, the rounded rectangle with the white triangle. That is
+     a trademark rather than a layout, and this repository is public: the tokens
+     read off YouTube's desktop are a reference for spacing and colour, its logo
+     is not one of them.
 
      The mark is inset rather than filling the box: a favicon is read at 16px
      beside a dozen others, and a shape running to the edge has nothing to
      separate it from its neighbours. The triangle is the only detail that
-     survives at that size, so it is drawn large and centred on the optical
-     centre, which sits right of the geometric one. -->
+     survives at that size, so it is drawn large. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect x="1" y="5" width="30" height="22" rx="6.5" fill="#ff0000" />
-  <path d="M13 10.4 22 16l-9 5.6z" fill="#fff" />
+  <path d="M16 3.5 30 14a1.4 1.4 0 0 1 .6 1.1V27a2.6 2.6 0 0 1-2.6 2.6H4a2.6 2.6 0 0 1-2.6-2.6V15.1A1.4 1.4 0 0 1 2 14L16 3.5Z" fill="#ff0000" />
+  <path d="M13 15.5 21 20l-8 4.5z" fill="#fff" />
 </svg>

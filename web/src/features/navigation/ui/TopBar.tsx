@@ -90,12 +90,20 @@ export function TopBar({
           </IconButton>
         </span>
         <PageLink to="/" className="ml-1 flex items-center gap-1.5" aria-label={t('nav.home')}>
-          <svg viewBox="0 0 28 20" width={30} height={22} aria-hidden>
+          {/* A house with a play in it, and the shape is the point.
+              What was here was YouTube's own mark — the rounded rectangle with
+              the white triangle — traced path for path. That is a trademark
+              rather than a layout, and this repository is public; the tokens
+              taken from YouTube's desktop are a reference for spacing and
+              colour, its logo is not one of them. A house also says what this
+              is in a way the borrowed mark never did: the library is on a disk
+              in the room you are sitting in. */}
+          <svg viewBox="0 0 24 24" width={26} height={26} aria-hidden>
             <path
-              d="M27.4 3.1a3.5 3.5 0 0 0-2.5-2.5C22.7 0 14 0 14 0S5.3 0 3.1.6A3.5 3.5 0 0 0 .6 3.1C0 5.3 0 10 0 10s0 4.7.6 6.9a3.5 3.5 0 0 0 2.5 2.5c2.2.6 10.9.6 10.9.6s8.7 0 10.9-.6a3.5 3.5 0 0 0 2.5-2.5c.6-2.2.6-6.9.6-6.9s0-4.7-.6-6.9Z"
+              d="M12 2.2 22.4 10a1 1 0 0 1 .4.8V20a2 2 0 0 1-2 2H3.2a2 2 0 0 1-2-2v-9.2a1 1 0 0 1 .4-.8L12 2.2Z"
               fill="var(--color-brand)"
             />
-            <path d="M11.2 14.3 18.4 10l-7.2-4.3v8.6Z" fill="#fff" />
+            <path d="M9.8 11.4 16 15l-6.2 3.6v-7.2Z" fill="#fff" />
           </svg>
           {/* The wordmark is the cheapest thing to cut when the row is short:
               the mark alone still says where home is. */}
