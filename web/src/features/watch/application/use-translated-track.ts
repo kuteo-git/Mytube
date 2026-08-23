@@ -39,7 +39,14 @@ export function useTranslatedTrack(
 
     if (first) seen.first = true
     if (last) seen.complete = true
-    void client.invalidateQueries({ queryKey: ['video', videoId] })
+    // The prefix, not `['video', videoId]`. The query is keyed
+    // `['video', <profile>, <id>]` — the profile is in the middle — so a key of
+    // `['video', <id>]` matched nothing, and this whole effect was inert. The
+    // translation finished, the file was written, and the VI option never
+    // appeared until the page was reloaded. Every other caller in
+    // `catalog/application/queries.ts` uses the bare prefix; this was the one
+    // that tried to be specific and named the wrong position.
+    void client.invalidateQueries({ queryKey: ['video'] })
     // The list coming back is not enough on its own.
     //
     // The file keeps the same name while it is rewritten after every batch, and

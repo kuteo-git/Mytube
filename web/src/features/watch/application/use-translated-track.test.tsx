@@ -16,8 +16,10 @@ function Harness({
   return <span data-testid="rev">{revision}</span>
 }
 
-function renderHook(props: Parameters<typeof Harness>[0]) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderHook(
+  props: Parameters<typeof Harness>[0],
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   const view = render(
     <QueryClientProvider client={client}>
       <Harness {...props} />
@@ -106,5 +108,28 @@ describe('when the track is fetched again', () => {
 
     set({ vttVersion: 0, complete: false, videoId: 'other' })
     expect(rev()).toBe(0)
+  })
+})
+
+describe('the query that is asked again', () => {
+  // The regression this exists for. The key is `['video', <profile>, <id>]` —
+  // the profile sits in the middle — and this hook used to name
+  // `['video', <id>]`, which matches no key at all. So the effect ran, the
+  // revision moved, every test above passed, and the subtitle list was never
+  // refetched: the translation finished and the VI option did not appear until
+  // the page was reloaded.
+  //
+  // The revision alone cannot catch that, which is why it did not. This asserts
+  // on the cache instead.
+  it('is the one the video was actually stored under', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const key = ['video', 'u_luc', 'abc']
+    client.setQueryData(key, { id: 'abc', subtitles: [] })
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false)
+
+    const { set } = renderHook({ vttVersion: 0, complete: false }, client)
+    set({ vttVersion: 1, complete: false })
+
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
 })

@@ -16,7 +16,7 @@ describe('videoPollInterval', () => {
       .toBe(VIDEO_POLL_MS)
   })
 
-  it('stops once both the media and the subtitles are in', () => {
+  it('stops once the subtitles are in', () => {
     expect(videoPollInterval(READY, 0)).toBe(false)
   })
 
@@ -24,6 +24,16 @@ describe('videoPollInterval', () => {
   // polls forever on it is the same problem in a different coat.
   it('stops on a failed download that has subtitles', () => {
     expect(videoPollInterval({ mediaState: 'FAILED', subtitles: [{}] }, 0))
+      .toBe(false)
+  })
+
+  // The regression this exists for. With caching switched off nothing is ever
+  // downloaded, so a row left at DOWNLOADING stays there for good and a rule
+  // waiting for READY can never be satisfied. Both videos this was found on had
+  // their subtitles on disk and their state stuck days earlier: the page ran the
+  // full forty polls — forty full metadata fetches — and then stopped for good.
+  it('stops on a row stuck at DOWNLOADING once its subtitles are there', () => {
+    expect(videoPollInterval({ mediaState: 'DOWNLOADING', subtitles: [{}] }, 0))
       .toBe(false)
   })
 
