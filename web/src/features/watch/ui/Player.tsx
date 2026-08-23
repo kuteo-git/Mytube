@@ -21,6 +21,7 @@ import type { UnavailableReason } from '@/features/catalog/infrastructure/catalo
 import { useStream } from '@/features/catalog/application/queries'
 import { atLiveEdge, livePercent } from '../application/live-timeline'
 import { playbackDuration } from '../application/player-duration'
+import { log } from '@/shared/api/log'
 import { seekElement } from '@/features/watch/application/player-seek'
 import {
   type Tier,
@@ -1069,6 +1070,11 @@ export function Player({
   // done nothing at all.
   useEffect(() => {
     if (!narrationOn && captions !== MACHINE_LANGUAGE) return
+    log('cue source', {
+      videoId,
+      tracks: subtitles.map((s) => s.language).join(',') || '(none)',
+      settled: captionsSettled(subtitles),
+    })
     // Nothing has been published yet, so "no Vietnamese" is not an answer, it is
     // the absence of one. Choosing English from an empty list is how the
     // realtime engine started translating a video that had Vietnamese coming.
@@ -1132,7 +1138,15 @@ export function Player({
     // Same gate as the source-choice effect above, for the same reason and at
     // greater cost: a pass started against an empty caption list spends tokens
     // on a video whose own Vietnamese track is seconds away.
-    if (!captionsSettled(subtitles) || hasVi) return
+    if (!captionsSettled(subtitles) || hasVi) {
+      log('translation not asked for', {
+        videoId,
+        settled: captionsSettled(subtitles),
+        hasVi,
+        tracks: subtitles.length,
+      })
+      return
+    }
     const el = front()
     startTranslationPass(videoId, el ? el.currentTime : 0)
   }, [

@@ -128,6 +128,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/topics/backfill", g.handleBackfillStatus)
 	mux.HandleFunc("POST /api/tts", g.handleTTS)
 	mux.HandleFunc("POST /api/translate/batch", g.handleTranslateBatch)
+	// The page's own log, so what the browser decided lands beside what the
+	// services did — see client_log.go.
+	mux.HandleFunc("POST /api/client-log", g.handleClientLog)
 	mux.HandleFunc("GET /api/settings/feed-mix", g.handleGetFeedMix)
 	mux.HandleFunc("POST /api/settings/feed-mix", g.handleSaveFeedMix)
 	mux.HandleFunc("GET /api/translate/config", g.handleGetTranslateConfig)

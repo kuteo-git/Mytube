@@ -12,6 +12,8 @@
  * left here is the part that genuinely needs them: fetching, and putting clips
  * on the audio timeline in order.
  */
+import { log } from '@/shared/api/log'
+
 import { type CueText, parseVTT } from './narration-vtt'
 import {
   CONTEXT_CUES,
@@ -235,6 +237,7 @@ function announceCues(cues: CueText[]) {
  * the one state from which no pass can ever start again.
  */
 export function cancelTranslationPass() {
+  if (_passRunning) log('pass cancelled', { videoId: _passVideoId, phase: _passPhase })
   // Stop the work upstream, not just our interest in it. A batch nobody is
   // waiting for is still a batch the router is spending time on — the same
   // reasoning that cancels a download when you leave a video (CLAUDE.md §8b).
@@ -288,7 +291,16 @@ export function nearestCueIndex(cues: CueText[], time: number): number {
  * only has to keep going, not hurry.
  */
 export function startTranslationPass(videoId: string, fromTime: number) {
-  if (_passRunning && videoId === _passVideoId) return
+  if (_passRunning && videoId === _passVideoId) {
+    log('pass already running', { videoId, phase: _passPhase })
+    return
+  }
+  log('pass start', {
+    videoId,
+    fromTime: Math.round(fromTime),
+    previous: _passVideoId,
+    previousPhase: _passPhase,
+  })
   _passVideoId = videoId
   _passRunning = true
   _passGeneration++
@@ -317,6 +329,7 @@ export function startTranslationPass(videoId: string, fromTime: number) {
         // Nothing to translate with. Saying so is the whole of what can be
         // done here: the answer lives in Settings, not in waiting longer.
         _passPhase = 'no-translator'
+        log('pass gave up', { videoId, phase: _passPhase })
         return
       }
 
@@ -326,17 +339,26 @@ export function startTranslationPass(videoId: string, fromTime: number) {
 
       // Wait for the cue list, which loadViSubtitles is fetching in parallel.
       _passPhase = 'waiting-subtitles'
+      log('pass waiting for cues', {
+        videoId,
+        cuesLoading: _cuesLoading,
+        cuesKnown: _cues === null ? -1 : _cues.length,
+        url: _cuesURL,
+      })
       const cues = await whenCuesReady()
+      log('pass has cues', { videoId, count: cues.length })
       if (generation !== _passGeneration) return
       if (cues.length === 0) {
         // The load finished and produced nothing — a missing or unparseable
         // VTT. Distinct from still waiting, which no longer expires.
         _passPhase = 'no-subtitles'
+        log('pass gave up', { videoId, phase: _passPhase })
         return
       }
       if (_sourceLang !== 'en') {
         // Already Vietnamese. Narration reads the cues as they are.
         _passPhase = 'not-needed'
+        log('pass gave up', { videoId, phase: _passPhase })
         return
       }
 
@@ -488,6 +510,13 @@ export function startTranslationPass(videoId: string, fromTime: number) {
           _passPhase =
             _passTotal > 0 && _passDone >= _passTotal ? 'done' : 'failed'
         }
+        log('pass finished', {
+          videoId,
+          phase: _passPhase,
+          done: _passDone,
+          total: _passTotal,
+          error: _passThrew,
+        })
       }
     }
   })()
@@ -637,6 +666,24 @@ let _cuesURL = ''
 // Whether a fetch for the cues is actually running. Without it, waiting was
 // indistinguishable from waiting for nobody — see whenCuesReady.
 let _cuesLoading = false
+/**
+ * Generation for the cue fetch, and nothing else.
+ *
+ * It used to share `_generation` with the narration timeline, and the two have
+ * different lifetimes. `stopNarrationPlayback()` says in its own name that it
+ * keeps the cues — it fires whenever the voice stops, which includes every swap
+ * between the two <video> layers — and it bumps that counter, so a VTT request
+ * still in flight was dropped at its generation check. Nothing then cleared
+ * `_cuesLoading`, nothing announced, and `_cuesURL` still held the address, so
+ * the reload was a no-op for ever: `whenCuesReady` handed out a promise no code
+ * path could resolve and the pass sat on "Loading subtitles…" for the life of
+ * the page.
+ *
+ * It only bit a video that was still downloading — those are the ones that swap
+ * layers — and whose subtitles arrived after the page did, which is exactly the
+ * case of pressing a video in the up-next rail.
+ */
+let _cuesGeneration = 0
 let _sourceLang = 'vi' // 'vi' = cues are Vietnamese, 'en' = needs translation
 
 /** Index of the next cue to commit. Only ever moves forwards. */
@@ -776,23 +823,30 @@ export function loadViSubtitles(url: string, lang = 'vi') {
   _masterGain = null
   stopEverything()
 
-  const generation = _generation
+  _cuesGeneration++
+  const generation = _cuesGeneration
   _cuesLoading = true
+  log('cues fetch', { url, lang, generation })
   void fetch(url)
     .then(async (resp) => {
       if (!resp.ok) throw new Error(`VTT ${resp.status}`)
       return parseVTT(await resp.text(), lang)
     })
     .then((cues) => {
-      if (generation !== _generation) return
+      if (generation !== _cuesGeneration) {
+        log('cues dropped', { url, generation, now: _cuesGeneration })
+        return
+      }
       _cuesLoading = false
       _cues = cues
+      log('cues ready', { url, count: cues.length, waiters: _cuesWaiters.length })
       announceCues(cues)
       void saveNarrationCues(_passVideoId, cues)
     })
-    .catch(() => {
-      if (generation !== _generation) return
+    .catch((e) => {
+      if (generation !== _cuesGeneration) return
       _cuesLoading = false
+      log('cues failed', { url, error: String(e) })
       // A video without narration is still a video.
       _cues = []
       announceCues([])
@@ -1199,9 +1253,14 @@ export function stopNarrationPlayback() {
 
 /** Stop speaking and forget the cue list. For leaving the video behind. */
 export function resetNarration() {
+  log('narration reset', { cuesLoading: _cuesLoading, url: _cuesURL })
   _cues = null
   _cuesURL = ''
   _cuesLoading = false
+  // The cue fetch has its own generation, and this is the other thing entitled
+  // to end one: an answer for the video just left must not land as the cues of
+  // the video just opened.
+  _cuesGeneration++
   stopNarrationPlayback()
 }
 

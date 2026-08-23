@@ -333,7 +333,7 @@ func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	g.logger.Info("narration vtt", "file", name, "bytes", len(body))
+	g.logger.Info("narration vtt", "video", r.PathValue("id"), "file", name, "bytes", len(body))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"file": name, "bytes": len(body)})
 }
