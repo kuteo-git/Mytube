@@ -1,4 +1,4 @@
-# Local YouTube
+# Local Mytube
 
 A self-hosted video library for the home LAN. `yt-dlp` is the **ingest tool**,
 not a streaming proxy: a video is fetched to disk once and then served from your
@@ -115,6 +115,11 @@ code and the reasoning behind it — see [CLAUDE.md](CLAUDE.md) — are the poin
 
 Use it to learn from. Anything beyond that is on you.
 
+### Licence
+
+[MIT](LICENSE). The licence covers this code and nothing else: it says nothing
+about the videos you put into it, which belong to whoever made them.
+
 ---
 
 ## Tiếng Việt
@@ -226,3 +231,8 @@ component. Phần đáng giá là code và lý do đằng sau nó — xem [CLAUD
   bạn quý. Tự giữ bản sao lưu.
 
 Lấy nó mà học. Ngoài chuyện đó ra thì bạn tự chịu.
+
+### Giấy phép
+
+[MIT](LICENSE). Giấy phép này chỉ áp cho phần code ở đây, không áp cho thứ gì
+khác: nó không nói gì về những video bạn nạp vào, chúng thuộc về người làm ra.

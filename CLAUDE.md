@@ -1,4 +1,4 @@
-# Local YouTube — Project Charter
+# Local Mytube — Project Charter
 
 > Source of truth for every architectural decision. If a new decision contradicts this file, update this file rather than quietly going another way.
 > Long-form history and debug narrative has been moved to `CLAUDE-history.md`.

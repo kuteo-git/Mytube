@@ -1,9 +1,9 @@
-# Design System Master — Local YouTube
+# Design System Master — Local Mytube
 
 > **LOGIC:** Khi build một page cụ thể, đọc `design-system/local-youtube/pages/[page].md` trước.
 > Nếu file đó tồn tại, rule của nó **override** file này. Nếu không, theo đúng file này.
 
-**Project:** Local YouTube · **Category:** Content-dense application shell (KHÔNG phải landing page)
+**Project:** Local Mytube · **Category:** Content-dense application shell (KHÔNG phải landing page)
 **Dials:** Variance 2/10 (Centered/Minimal) · Motion 3/10 (Subtle) · Density 8/10 (Dense)
 
 > ⚠️ **Nguồn sự thật từng là `Example/home.png` và `Example/play.png`** — ảnh chụp giao diện YouTube, đã xoá khỏi repo (22 MB giao diện của người khác trong một repo công khai). Token đọc được từ chúng nằm hết trong file này, và file này là nguồn sự thật từ giờ. Mục tiêu là clone pixel-perfect
