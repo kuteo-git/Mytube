@@ -133,3 +133,43 @@ describe('the query that is asked again', () => {
     expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
 })
+
+describe('a second video opened without reloading the page', () => {
+  // The reported fault: playing one video, pressing another in the rail. The
+  // English track arrived and the machine translation never appeared.
+  //
+  // `vttVersion` counts every translated file this page has written, not this
+  // video's — nothing resets it — so the second video opened on a number
+  // already above zero. "The first write has happened" was true before its
+  // pass had written a byte, the one invalidation that makes the Vietnamese
+  // track appear was spent there, and the real first write found the hook
+  // already used up.
+  it('waits for a write of its own before asking for the list', () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const key = ['video', 'u_luc', 'second']
+    const { rev, set } = renderHook({ vttVersion: 0, complete: false }, client)
+
+    // The first video runs a translation to the end.
+    set({ vttVersion: 1, complete: false })
+    set({ vttVersion: 6, complete: true })
+
+    // The viewer presses the next video. Its own pass has written nothing.
+    set({ vttVersion: 6, complete: true, videoId: 'second' })
+    client.setQueryData(key, { id: 'second', subtitles: [] })
+    expect(rev()).toBe(0)
+    expect(client.getQueryState(key)?.isInvalidated).toBe(false)
+
+    // Its first batch lands.
+    set({ vttVersion: 7, complete: false, videoId: 'second' })
+    expect(rev()).toBe(1)
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true)
+  })
+
+  it('still announces the finish of the second video', () => {
+    const { rev, set } = renderHook({ vttVersion: 4, complete: true })
+    set({ vttVersion: 4, complete: true, videoId: 'second' })
+    set({ vttVersion: 5, complete: false, videoId: 'second' })
+    set({ vttVersion: 9, complete: true, videoId: 'second' })
+    expect(rev()).toBe(2)
+  })
+})

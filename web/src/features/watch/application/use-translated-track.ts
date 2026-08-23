@@ -24,17 +24,40 @@ export function useTranslatedTrack(
 ): number {
   const client = useQueryClient()
   const announced = useRef({ first: false, complete: false })
+  // How many writes had happened when this video was opened.
+  //
+  // `vttVersion` counts every translated file ever written by this page, not
+  // this video's — it is a module counter in narration.ts and nothing resets
+  // it. So the second video watched without a reload opened on a number
+  // already above zero, "the first write has happened" was true before its
+  // pass had written anything, and the one invalidation that makes the
+  // Vietnamese track appear was spent on the video before it. That is exactly
+  // what was reported: open a video from the rail while another is playing,
+  // the English track arrives, and the machine translation never shows up.
+  //
+  // Held in a ref rather than derived, because what matters is the value at
+  // the moment the video changed, and every later render sees a bigger one.
+  const baseline = useRef(0)
   const [revision, setRevision] = useState(0)
 
   useEffect(() => {
     announced.current = { first: false, complete: false }
+    baseline.current = vttVersion
     setRevision(0)
+    // `vttVersion` is deliberately not a dependency: this effect is about the
+    // video changing, and re-running it on every write would keep moving the
+    // baseline out of reach of the comparison below.
   }, [videoId])
 
   useEffect(() => {
     const seen = announced.current
-    const first = vttVersion > 0 && !seen.first
-    const last = complete && vttVersion > 0 && !seen.complete
+    // Counted from where this video started, not from zero.
+    const written = vttVersion > baseline.current
+    const first = written && !seen.first
+    // `complete` is read off the same module-wide progress, so it can still be
+    // saying "done" about the previous video at the moment this one opens.
+    // Requiring a write of our own is what keeps that from being believed.
+    const last = complete && written && !seen.complete
     if (!first && !last) return
 
     if (first) seen.first = true
