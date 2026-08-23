@@ -27,6 +27,20 @@ kept on a disk you own until a budget you set decides otherwise.
 - **Optional**: subtitle translation, and reading them aloud, through any
   service that speaks OpenAI's API.
 
+### What it looks like
+
+Desktop and phone are the same application — a feature-sliced `ui/` layer over
+one set of use cases, not two front ends.
+
+| Home | Watch |
+|---|---|
+| ![Home on a desktop](docs/screenshots/desktop-home.png) | ![Watching on a desktop](docs/screenshots/desktop-watch.png) |
+
+<p align="center">
+  <img src="docs/screenshots/phone-home.png" alt="Home on a phone" width="270">
+  <img src="docs/screenshots/phone-watch.png" alt="Watching on a phone" width="270">
+</p>
+
 ### Getting started
 
 | | |
@@ -101,6 +115,20 @@ trên ổ đĩa của bạn cho tới khi hạn mức bạn đặt quyết đị
 - **English và Tiếng Việt**, đổi từ menu avatar.
 - **Tuỳ chọn**: dịch phụ đề và đọc phụ đề thành tiếng, qua bất kỳ dịch vụ nào nói
   được API của OpenAI.
+
+### Nhìn nó ra sao
+
+Bản desktop và bản điện thoại là cùng một ứng dụng — một lớp `ui/` đặt trên cùng
+một bộ use case, không phải hai front end.
+
+| Trang chủ | Xem video |
+|---|---|
+| ![Trang chủ trên desktop](docs/screenshots/desktop-home.png) | ![Xem video trên desktop](docs/screenshots/desktop-watch.png) |
+
+<p align="center">
+  <img src="docs/screenshots/phone-home.png" alt="Trang chủ trên điện thoại" width="270">
+  <img src="docs/screenshots/phone-watch.png" alt="Xem video trên điện thoại" width="270">
+</p>
 
 ### Bắt đầu
 

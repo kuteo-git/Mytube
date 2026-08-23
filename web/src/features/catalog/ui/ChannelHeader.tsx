@@ -8,7 +8,7 @@ import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
 
 /**
- * Channel identity, matching the reference layout in Example/channel.png.
+ * Channel identity, matching YouTube's own channel header.
  *
  * The tabs from that screenshot — Shorts, Releases, Playlists, and a Popular
  * row sorted by view count — are deliberately absent. Flat listings return no

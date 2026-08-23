@@ -6,7 +6,7 @@
 **Project:** Local YouTube · **Category:** Content-dense application shell (KHÔNG phải landing page)
 **Dials:** Variance 2/10 (Centered/Minimal) · Motion 3/10 (Subtle) · Density 8/10 (Dense)
 
-> ⚠️ **Nguồn sự thật là `Example/home.png` và `Example/play.png`.** Mục tiêu là clone pixel-perfect
+> ⚠️ **Nguồn sự thật từng là `Example/home.png` và `Example/play.png`** — ảnh chụp giao diện YouTube, đã xoá khỏi repo (22 MB giao diện của người khác trong một repo công khai). Token đọc được từ chúng nằm hết trong file này, và file này là nguồn sự thật từ giờ. Mục tiêu là clone pixel-perfect
 > YouTube dark theme. Token dưới đây đo từ 2 ảnh đó. Không thay bằng gợi ý generic từ DB —
 > output gốc của ui-ux-pro-max (style "Exaggerated Minimalism", accent `#E11D48`, pattern
 > "Video-First Hero + CTA") là design system cho landing page marketing và **đã bị loại bỏ có chủ đích**.
@@ -96,7 +96,7 @@ Hover card: **không transform, không shadow, không scale** — YouTube không
 **Sidebar item:** height 40px, radius 10px, padding trái 12px, icon 24px cách label 24px. Hover `--surface-hover`. Active: nền `--surface-hover` + label weight 500.
 
 **Chrome trong suốt (sửa 2026-08-05 — lệch có chủ đích khỏi ảnh tham chiếu):** nền `--bg` ở
-**95%** phủ blur 24px + saturate 150%, **không** đục như `Example/home.png`. Viết một lần thành
+**95%** phủ blur 24px + saturate 150%, **không** đục như YouTube. Viết một lần thành
 class **`.chrome-blur`** trong `index.css`, dùng cho **cả ba** mặt: top bar, ChipBar, và thanh
 player trên mobile. Alpha là con số phải chỉnh bằng mắt; để thành nhiều literal thì các mặt sẽ
 lệch nhau và không ai nói được cái nào mới đúng ý.

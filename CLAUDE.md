@@ -9,7 +9,11 @@ A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **in
 
 - 2–5 users in one household (light multi-user, no public sign-up)
 - Final target: watching in a **Smart TV browser**; Phase 1 builds desktop web first
-- Reference layout: `Example/home.png`, `Example/play.png` (YouTube desktop)
+- Reference layout: YouTube's own desktop, read from screenshots while the UI was
+  built. **Those files are gone** — `Example/*.png` was 22 MB of somebody else's
+  interface in a public repository, and the tokens taken from them are written
+  down in `design-system/local-youtube/MASTER.md`, which is the reference now.
+  What this app actually looks like is in `docs/screenshots/`.
 
 ## 2. Hard constraints
 
@@ -365,7 +369,7 @@ The ask was not "translate the app" but "do not leave English lying around", so 
 
 **Vite + React + TypeScript + plain Tailwind + TanStack Query.**
 
-- **No shadcn/ui** — components are built against design tokens taken from `Example/*.png`.
+- **No shadcn/ui** — components are built against the design tokens in `design-system/local-youtube/MASTER.md`, which were read off YouTube's own desktop while this was built (see §2 on why those screenshots are no longer in the repository).
 - Use the `ui-ux-pro-max` skill when designing or building UI.
 
 ### Feature-sliced structure
