@@ -28,6 +28,16 @@ vi.mock('@/features/settings/ui/AdvancedSettings', () => ({
   AdvancedSettings: () => <div>advanced panel</div>,
 }))
 
+// Mocked so the assertion below is about this page rendering them at all,
+// rather than about anything the real panels happen to put on screen.
+vi.mock('@/features/identity/ui/ProfileSettings', () => ({
+  ProfileSettings: () => <div>profile panel</div>,
+}))
+
+vi.mock('@/features/settings/ui/YouTubeAccountSettings', () => ({
+  YouTubeAccountSettings: () => <div>youtube account panel</div>,
+}))
+
 function renderAt(width: number) {
   Object.defineProperty(window, 'innerWidth', { value: width, configurable: true })
   Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true })
@@ -108,6 +118,18 @@ describe('Settings on a phone', () => {
 })
 
 describe('Settings on a desktop', () => {
+  it('leaves the account to the account screens', () => {
+    // The profile and the YouTube connection moved into the Account group, on
+    // the rail and in the phone's Settings alike — and this page went on
+    // rendering them as well, so the desktop had both panels twice: once behind
+    // their own sidebar entry and once stacked at the top of Settings. Two ways
+    // in is fine; two copies of the same controls is not, because changing one
+    // leaves somebody looking at the other.
+    desktop()
+    expect(screen.queryByText('profile panel')).not.toBeInTheDocument()
+    expect(screen.queryByText('youtube account panel')).not.toBeInTheDocument()
+  })
+
   it('shows the panels themselves, with room for them', () => {
     desktop()
     expect(screen.getByText('feed mix panel')).toBeInTheDocument()

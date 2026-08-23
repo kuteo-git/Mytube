@@ -37,8 +37,6 @@ import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { usePlayer } from '@/features/watch/application/player-context'
 import { ModelPicker } from '@/features/settings/ui/ModelPicker'
 import { ActionBar } from '@/features/settings/ui/ActionBar'
-import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
-import { YouTubeAccountSettings } from '@/features/settings/ui/YouTubeAccountSettings'
 
 import {
   SettingRow,
@@ -74,9 +72,13 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 min-[700px]:px-6">
       <h1 className="text-2xl font-bold">{t('ui.settings')}</h1>
-      {/* First, because it decides whose every other setting on this page is. */}
-      <ProfileSettings />
-      <YouTubeAccountSettings />
+      {/* The profile and the YouTube connection are deliberately not here.
+          They have a place of their own — the Account group, on the rail and in
+          the phone's Settings alike — and this page went on rendering them as
+          well, so the desktop showed both panels twice over: once under their
+          own heading in the sidebar and once stacked at the top of Settings.
+          Two ways in is fine; two copies of the controls is not, because
+          changing one leaves somebody looking at the other. */}
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />

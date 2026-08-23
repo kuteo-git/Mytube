@@ -2,6 +2,7 @@ import { AdvancedSettings } from '@/features/settings/ui/AdvancedSettings'
 import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
 import { YouTubeAccountSettings } from '@/features/settings/ui/YouTubeAccountSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
+import { usePlayer } from '@/features/watch/application/player-context'
 import { NarrationSettings, TranslationSettings } from './SettingsPage'
 
 /**
@@ -49,18 +50,30 @@ export function AdvancedSettingsPage() {
   )
 }
 
+/**
+ * The two account screens, which are reached on a desktop as well as a phone.
+ *
+ * `headless` follows the device, and that is not a style choice: the back bar
+ * that names a bare screen is drawn only when the phone chrome is hidden
+ * (`chromeHidden` is mobile-only), so a desktop rendering these headless gets a
+ * panel with no title on it at all. The four /settings/* siblings can stay
+ * unconditionally headless — the desktop reaches those through the Settings
+ * page, which shows them under its own headings. These two are on the rail.
+ */
 export function ProfileSettingsPage() {
+  const { isMobile } = usePlayer()
   return (
-    <div className="px-4 pb-16">
-      <ProfileSettings headless />
+    <div className="mx-auto max-w-3xl px-4 pb-16">
+      <ProfileSettings headless={isMobile} />
     </div>
   )
 }
 
 export function YouTubeAccountPage() {
+  const { isMobile } = usePlayer()
   return (
-    <div className="px-4 pb-16">
-      <YouTubeAccountSettings headless />
+    <div className="mx-auto max-w-3xl px-4 pb-16">
+      <YouTubeAccountSettings headless={isMobile} />
     </div>
   )
 }
