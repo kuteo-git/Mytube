@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   cancelTranslationPass,
+  loadViSubtitles,
   narrationProgress,
+  resetNarration,
   startTranslationPass,
 } from './narration'
 import { setCachePartition } from '@/features/watch/infrastructure/narration-cache'
@@ -22,6 +24,10 @@ const settle = () => new Promise((r) => setTimeout(r, 0))
 describe('the steps before the first batch', () => {
   afterEach(() => {
     cancelTranslationPass()
+    // The cue list too, not just the pass. It is module state, so a test that
+    // left a fetch pending would otherwise decide the next test's answer — the
+    // same shared-state trap this whole file is about, one level up.
+    resetNarration()
     vi.unstubAllGlobals()
   })
 
@@ -61,14 +67,40 @@ describe('the steps before the first batch', () => {
   })
 
   it('waits for the cues only after the cache has been read', async () => {
+    // The cue fetch is left pending and the cache answers, so the pass is
+    // caught on the step this is about. It has to be a *real* pending fetch:
+    // waiting with nothing in flight is no longer a state the pass can be in,
+    // because that was the fault — a promise no code path could resolve.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) =>
+        url.endsWith('.vtt')
+          ? new Promise(() => {})
+          : { ok: true, json: async () => ({ entries: {} }) },
+      ),
+    )
+    setCachePartition('a-model')
+    loadViSubtitles('/subs/vid3.en.vtt', 'en')
+    startTranslationPass('vid3', 0)
+    await settle()
+
+    expect(narrationProgress().phase).toBe('waiting-subtitles')
+  })
+
+  it('does not sit on the cue step when nothing is fetching them', async () => {
+    // The regression. The video changed, which cleared the cue list, while the
+    // addresses did not, so the effect that reloads them never ran — and the
+    // pass waited on a fetch nobody had started, for the life of the page. The
+    // honest answer is that there are no cues; a later load announces them for
+    // the pass after this one.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({ ok: true, json: async () => ({ entries: {} }) })),
     )
     setCachePartition('a-model')
-    startTranslationPass('vid3', 0)
+    startTranslationPass('vid4', 0)
     await settle()
 
-    expect(narrationProgress().phase).toBe('waiting-subtitles')
+    expect(narrationProgress().phase).toBe('no-subtitles')
   })
 })

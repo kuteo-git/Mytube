@@ -1091,7 +1091,13 @@ export function Player({
     // — hands over a new reference with identical contents. Depending on it ran
     // this effect on data that had not changed, and the call below is not free
     // to repeat.
-  }, [narrationOn, captions, subtitleKey])
+    //
+    // `videoId` is in here because `resetNarration` clears the cue list on it,
+    // and nothing else brings them back. Two pieces of the same state reset by
+    // two different keys is how the pass ended up waiting on a fetch nobody had
+    // started — see whenCuesReady. Repeating the call is free: the same address
+    // is a no-op.
+  }, [narrationOn, captions, subtitleKey, videoId])
 
   // Tell narration which video it is for, so synthesised clips are filed beside
   // that video. Not folded into the translation pass: the realtime engine has

@@ -250,6 +250,19 @@ export function cancelTranslationPass() {
 
 export function whenCuesReady(): Promise<CueText[]> {
   if (_cues !== null) return Promise.resolve(_cues)
+  // Nothing is fetching, so nothing is ever going to resolve this. Waiting here
+  // was the whole of "Loading subtitles…" against a subtitle file on disk,
+  // served, and listed in the menu.
+  //
+  // The two halves are reset by different things: `resetNarration` clears the
+  // cues when the video changes, while the effect that reloads them fires on the
+  // subtitle *addresses* changing. Whenever those do not coincide the cue list
+  // was null with no request behind it, and this promise could not be resolved
+  // by any code path — the pass held there for the life of the page.
+  //
+  // An empty answer is the honest one and it is not final: it puts the pass on
+  // "no subtitles", and a later load announces cues for the pass after it.
+  if (!_cuesLoading) return Promise.resolve([])
   return new Promise((resolve) => _cuesWaiters.push(resolve))
 }
 
@@ -621,6 +634,9 @@ async function fetchTTS(
 
 let _cues: CueText[] | null = null
 let _cuesURL = ''
+// Whether a fetch for the cues is actually running. Without it, waiting was
+// indistinguishable from waiting for nobody — see whenCuesReady.
+let _cuesLoading = false
 let _sourceLang = 'vi' // 'vi' = cues are Vietnamese, 'en' = needs translation
 
 /** Index of the next cue to commit. Only ever moves forwards. */
@@ -761,6 +777,7 @@ export function loadViSubtitles(url: string, lang = 'vi') {
   stopEverything()
 
   const generation = _generation
+  _cuesLoading = true
   void fetch(url)
     .then(async (resp) => {
       if (!resp.ok) throw new Error(`VTT ${resp.status}`)
@@ -768,12 +785,14 @@ export function loadViSubtitles(url: string, lang = 'vi') {
     })
     .then((cues) => {
       if (generation !== _generation) return
+      _cuesLoading = false
       _cues = cues
       announceCues(cues)
       void saveNarrationCues(_passVideoId, cues)
     })
     .catch(() => {
       if (generation !== _generation) return
+      _cuesLoading = false
       // A video without narration is still a video.
       _cues = []
       announceCues([])
@@ -1182,6 +1201,7 @@ export function stopNarrationPlayback() {
 export function resetNarration() {
   _cues = null
   _cuesURL = ''
+  _cuesLoading = false
   stopNarrationPlayback()
 }
 
