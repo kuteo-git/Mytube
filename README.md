@@ -92,6 +92,29 @@ This is one household's library, published in case it is useful. It assumes a
 trusted LAN: media URLs are unprotected and profiles are a convenience rather
 than a login. Read [CLAUDE.md §6b](CLAUDE.md) before putting it anywhere else.
 
+### Disclaimer
+
+**This is a learning project.** It was written to work through microservices
+with ConnectRPC, clean architecture in Go, a heuristic recommender you can
+explain line by line, and a React client built without a component library. The
+code and the reasoning behind it — see [CLAUDE.md](CLAUDE.md) — are the point.
+
+- **Not affiliated with YouTube or Google**, and not endorsed by either. Product
+  names and trademarks belong to their owners; nothing here is theirs.
+- **It downloads material somebody else made.** Doing that may be against
+  YouTube's Terms of Service and, depending on the material and where you live,
+  against the law. Whoever runs this decides what to ingest and carries that
+  decision — the author does not, and nothing in this repository is advice that
+  any particular use is permitted.
+- **Personal use, on your own network.** Not for redistribution, not for public
+  or commercial streaming, and not for stripping other people's work of its
+  source. Support the creators you watch.
+- **No warranty of any kind.** It talks to a service that changes without
+  notice; it can break on a morning nobody touched it, and it can lose things
+  you cared about. Keep your own backups.
+
+Use it to learn from. Anything beyond that is on you.
+
 ---
 
 ## Tiếng Việt
@@ -180,3 +203,26 @@ cho hai service phụ tuỳ chọn.
 định mạng LAN đáng tin: link media không được bảo vệ, và hồ sơ người dùng là tiện
 lợi chứ không phải đăng nhập. Đọc [CLAUDE.md §6b](CLAUDE.md) trước khi đem nó đặt
 ở nơi khác.
+
+### Miễn trừ trách nhiệm
+
+**Đây là sản phẩm làm để học.** Viết ra để đi hết một vòng microservice với
+ConnectRPC, clean architecture bằng Go, một bộ gợi ý thuần quy tắc mà giải thích
+được từng dòng điểm số, và một client React dựng tay không dùng thư viện
+component. Phần đáng giá là code và lý do đằng sau nó — xem [CLAUDE.md](CLAUDE.md).
+
+- **Không liên kết với YouTube hay Google**, cũng không được hai bên đó bảo trợ.
+  Tên sản phẩm và nhãn hiệu thuộc về chủ của chúng; ở đây không có gì là của họ.
+- **Nó tải nội dung do người khác làm ra.** Việc đó có thể vi phạm Điều khoản dịch
+  vụ của YouTube, và tuỳ nội dung với nơi bạn sống, có thể vi phạm pháp luật. Ai
+  chạy phần mềm này thì tự quyết định nạp gì vào và tự chịu quyết định đó — tác
+  giả không chịu thay, và không có dòng nào trong repo này là lời khuyên rằng một
+  cách dùng cụ thể nào đó được phép.
+- **Dùng cá nhân, trong mạng nhà bạn.** Không phát tán lại, không phát công khai
+  hay kinh doanh, và không bóc công sức người khác khỏi nguồn của nó. Hãy ủng hộ
+  những kênh bạn xem.
+- **Không bảo hành gì hết.** Nó nói chuyện với một dịch vụ thay đổi không báo
+  trước; nó có thể hỏng vào một buổi sáng không ai đụng tới, và có thể làm mất thứ
+  bạn quý. Tự giữ bản sao lưu.
+
+Lấy nó mà học. Ngoài chuyện đó ra thì bạn tự chịu.
