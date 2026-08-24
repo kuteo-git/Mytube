@@ -1,3 +1,4 @@
+import { log } from '@/shared/api/log'
 import {
   createContext,
   useCallback,
@@ -66,7 +67,6 @@ export interface PlayerContextValue {
   mode: PlayerMode
   isMobile: boolean
   /** The home indicator's share of the bottom edge; zero without one. */
-  safeBottom: number
   /** Whether the viewer is on a watch page. Decides what "close" means. */
   isWatch: boolean
   /**
@@ -189,7 +189,6 @@ export function PlayerProvider({
   const { pathname } = location
   const [state, setState] = useState<PlayerState | null>(null)
   const [viewport, setViewport] = useState(readViewport)
-  const [safeBottom, setSafeBottom] = useState(() => readSafeInset('--safe-bottom'))
   const [safeTop, setSafeTop] = useState(() => readSafeInset('--safe-top'))
   const [slotEl, setSlotEl] = useState<HTMLDivElement | null>(null)
   const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null)
@@ -250,11 +249,56 @@ export function PlayerProvider({
     // inset is re-read alongside the viewport rather than measured once.
     const onResize = () => {
       setViewport(readViewport())
-      setSafeBottom(readSafeInset('--safe-bottom'))
       setSafeTop(readSafeInset('--safe-top'))
     }
+
+    /**
+     * Rotating is measured three times, not once.
+     *
+     * Reported on the phone: rotate to landscape, rotate back, and the
+     * miniplayer sits *under* the tab bar — a tab bar's height too low, which
+     * is what a viewport believed to be a tab bar's height too tall produces.
+     * The bar is placed at `viewportHeight - navHeight - height`, so every
+     * pixel of overestimate pushes it off the bottom of the screen.
+     *
+     * Safari answers `innerHeight` during a rotation with a figure that is not
+     * yet true — its own chrome has not finished resizing — and it does not
+     * always send a second `resize` once it is. So the reading is taken again
+     * on the next frame and once more after the animation has had time to
+     * finish. Re-reading costs a state set that usually changes nothing;
+     * missing the correction costs a control the viewer cannot reach.
+     */
+    let raf = 0
+    let settle = 0
+    const onRotate = () => {
+      // The two candidate numbers, side by side, because they disagree on iOS
+      // and only one of them is what a `fixed` element is laid out against.
+      // Whichever this turns out to be, it is measured rather than assumed.
+      log('viewport rotated', {
+        inner: window.innerHeight,
+        client: document.documentElement.clientHeight,
+        visual: Math.round(window.visualViewport?.height ?? 0),
+        width: window.innerWidth,
+      })
+      onResize()
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(onResize)
+      window.clearTimeout(settle)
+      settle = window.setTimeout(onResize, 400)
+    }
+
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    window.addEventListener('orientationchange', onRotate)
+    // The visual viewport is the one that actually moves when Safari's chrome
+    // does, and it reports the change when `resize` on the window does not.
+    window.visualViewport?.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('orientationchange', onRotate)
+      window.visualViewport?.removeEventListener('resize', onResize)
+      cancelAnimationFrame(raf)
+      window.clearTimeout(settle)
+    }
   }, [])
 
   // Measure the slot in document coordinates. Document rather than viewport is
@@ -361,10 +405,10 @@ export function PlayerProvider({
 
   const miniReserve = useMemo(() => {
     const rect = isMobile
-      ? miniRectMobile(viewport.width, viewport.height, navHeight, safeBottom)
+      ? miniRectMobile(viewport.width, viewport.height, navHeight)
       : miniRectDesktop(viewport.width, viewport.height)
-    return rect.height + MINI_MARGIN * 2 + (isMobile ? navHeight + safeBottom : 0)
-  }, [isMobile, viewport, safeBottom, navHeight])
+    return rect.height + MINI_MARGIN * 2 + (isMobile ? navHeight : 0)
+  }, [isMobile, viewport, navHeight])
 
   const mode: PlayerMode = deriveMode(Boolean(state), isWatch, pinnedMini)
 
@@ -374,7 +418,6 @@ export function PlayerProvider({
       isMobile,
       slotDocRect,
       viewport,
-      safeBottom,
       safeTop,
       navHeight,
       scrollY: 0,
@@ -392,7 +435,6 @@ export function PlayerProvider({
     isMobile,
     slotDocRect,
     viewport,
-    safeBottom,
     safeTop,
     navHeight,
     landingNavHeight,
@@ -410,7 +452,6 @@ export function PlayerProvider({
             isMobile,
             slotDocRect,
             viewport,
-            safeBottom,
             safeTop,
             navHeight,
             scrollY: 0,
@@ -462,7 +503,6 @@ export function PlayerProvider({
       state,
       mode,
       isMobile,
-      safeBottom,
       isWatch,
       chromeHidden,
       background,
@@ -486,7 +526,6 @@ export function PlayerProvider({
       state,
       mode,
       isMobile,
-      safeBottom,
       isWatch,
       chromeHidden,
       background,
