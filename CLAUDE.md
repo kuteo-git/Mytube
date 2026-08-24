@@ -755,6 +755,54 @@ Auto-follow channels · `/tv` UI driven by D-pad · mobile app · *(optional)* f
 - 4 services (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + `logview` 8184 + web 5173.
 - Postgres 17, one schema and one role per service.
 - `scripts/dev.sh` runs the stack; `scripts/stop.sh` stops by port. `make check` = buf lint + tsc + go build.
+
+### The machine stays on, so the stack starts itself (2026-08-23)
+
+`com.luke.local-mytube`, a **LaunchAgent** — not a daemon. This needs the user's
+session: `$HOME` for the cookie jars and the speech server, and the external
+volume, which is not mounted for anything starting before login. So it starts on
+**login**, not on boot; a machine expected to come back on its own needs
+auto-login as well. Installed and removed by `scripts/install-agent.sh`.
+
+- **`scripts/boot.sh` waits before it starts anything.** launchd runs a login
+  agent the moment the session exists, which is before Postgres is listening and
+  — the one that actually bites — before `/Volumes/Data2` has mounted. A stack
+  started against an unmounted media root is §8 risk 1 happening on every
+  reboot, quietly. It waits up to five minutes for the volume and two for
+  `pg_isready`, then starts anyway rather than holding a login agent for ever.
+- **Postgres is its own agent** (`homebrew.mxcl.postgresql@17`) with no ordering
+  relationship to this one, so the wait is asked rather than declared.
+- **`KeepAlive` means `scripts/stop.sh` is undone in thirty seconds.** Stopping
+  for real is `launchctl bootout gui/$(id -u)/com.luke.local-mytube`.
+
+### Vite is a development server, and the household is not developing
+
+`scripts/serve.sh` builds `web/dist` and runs the stack with `SERVE_BUNDLE=1`;
+the gateway serves the bundle at `/`, beside `/api` and `/media`, and **nothing
+runs on :5173**. This is what the login agent starts. `scripts/dev.sh` on its own
+is unchanged.
+
+- **A flag on `dev.sh`, not a second script.** Everything around the last line —
+  the Postgres check, the port check, the media root, the yt-dlp pin, the five
+  services, the two Python servers — is the same stack either way, and a copy of
+  it is a copy that drifts.
+- **`WEB_DIST` unset serves nothing and says nothing**; set but missing its
+  `index.html` is logged as an error and the API still comes up. A missing
+  bundle means somebody has not run the build, and taking the API down over it
+  takes the reason down with it.
+- **The API is asked first, then the file, then `index.html`.** The other order
+  turns a mistyped `/api/` route into a 200 carrying HTML, which the client
+  reports as a JSON parse failure naming nothing. `/watch` and `/settings/feed`
+  are not files and never will be, so everything else falls through to the app.
+- **`/assets/` is immutable for a year; `index.html` is `no-store`.** Vite
+  fingerprints the former, and the latter is what names the current build — a
+  cached one asks for asset files the next build has already replaced.
+- **Caddy is still §3's answer and is still not installed.** This does not
+  replace it: TLS for the television is the half Caddy is really for, and the
+  day it arrives it takes `/` over exactly as it takes `/media` over. What was
+  in the way was serving the household's library through a dev server.
+- `serve.sh` rebuilds when `web/src` is newer than the bundle. Without it the
+  agent restarts, serves January's bundle, and nothing says so.
 - `dev.sh` refuses to start on a held port and prints `up`/`DOWN` per service.
 - `topics.yaml` is the feed's primary source; the scanner runs hourly.
 - ~8,000 videos in catalog. RSS backfills missing `published_at` for recent uploads; older gaps are filled by the metadata backfill.

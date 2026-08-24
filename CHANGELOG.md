@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.0.2 — 2026-08-24
+
+A day of faults found on the phone, and one change of how this is run at all.
+Every fix below was measured before it was made; three of them were
+instrumented first, because the fault produced no evidence and a label is not
+evidence.
+
+### The stack starts itself
+
+- **A LaunchAgent** (`scripts/install-agent.sh`), so the Mac coming back does
+  not need a terminal. It waits for `/Volumes/Data2` to mount and for Postgres
+  to answer before starting anything — a stack started against an unmounted
+  media root is [§8 risk 1](CLAUDE.md) happening on every reboot, quietly.
+  A login agent, not a daemon: this needs `$HOME` and a mounted volume, so it
+  starts on **login**, and a machine expected to return on its own needs
+  auto-login too.
+- **The gateway serves the built bundle** at `/`, beside `/api` and `/media`,
+  and nothing runs on `:5173` any more. Vite is a development server; the
+  household is not developing. The app is now at **`:8180`**, one origin.
+- Caddy is still §3's answer and is still not installed. What was in the way
+  was not TLS — it was serving the library through a dev server.
+
+### The home indicator was taking a band it does not need
+
+`env(safe-area-inset-bottom)` is 34pt, and the tab bar reserved all of it below
+its labels: most of a second tab bar of empty space, which reads as a gap under
+the app rather than as clearance. The indicator is a line the system draws
+*over* what is beneath it.
+
+- The bar is 3.5rem flat, the page reserves 3.5rem, and the **miniplayer rests
+  on the bar** instead of hovering a home indicator's height above it with the
+  page scrolling past in the gap. On a screen with no tab bar it is one bar
+  tall rather than a bar plus a band of bar-coloured nothing.
+- **Rotating no longer drops the miniplayer under the tab bar.** Safari answers
+  `innerHeight` mid-rotation with a figure that is not yet true and does not
+  always correct it, so the viewport is measured three times: now, next frame,
+  and once the animation has finished.
+
+### Narration
+
+- **"Speech not started" over a video that was speaking.** The status was
+  honest — the pre-generation sweep really had not begun — and it had been told
+  there were no cues by two different paths, on a video with 121 of them.
+  Cancelling the translation pass woke every waiter with a literal empty list;
+  and the sweep, whose effect is declared above the one that fetches cues, was
+  told "nobody is fetching" every single time it asked.
+- **Narration went silent after switching apps and could not be brought back.**
+  The `AudioContext` reports `running` with its clock stopped — measured at
+  53.0 seconds for two minutes of playback — so every clip is scheduled behind
+  a mark that never arrives and dropped as late. `resume()` cannot help a
+  context that believes it is running, and neither can the toggle; only a new
+  context has a running clock, which is why reloading was the only remedy.
+  The graph now notices its own clock has died and rebuilds itself, re-routing
+  both video layers and re-applying the equaliser and the room.
+- The sweep, the skipped cues, the audio state and the viewport all say what
+  they are doing in the server log now. Three of the faults above were invisible
+  for days because the working case and the broken case produced exactly the
+  same evidence: none.
+
 ## 0.0.1 — 2026-08-23
 
 The first tag. 406 commits, 2026-07-28 to 2026-08-23 — everything Phase 1 and
