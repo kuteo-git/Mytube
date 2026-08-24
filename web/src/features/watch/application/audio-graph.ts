@@ -36,6 +36,7 @@
  * failure is total and cannot be backed out of.
  */
 
+import { log } from '@/shared/api/log'
 import {
   BANDS,
   BAND_Q,
@@ -67,6 +68,15 @@ interface Graph {
 let graph: Graph | null = null
 
 /**
+ * How long a `running` context may leave its clock where it is.
+ *
+ * Generous on purpose: the number this has to clear is a browser that has been
+ * throttled, not one that has died, and a rebuild costs every scheduled clip.
+ */
+const CLOCK_STALL_SECONDS = 1.5
+const CLOCK_CHECK_MS = 2000
+
+/**
  * Set once the environment has been found to have no Web Audio at all.
  *
  * Separate from `graph` being null, which only means "not built yet". Without
@@ -87,7 +97,35 @@ let unavailable = false
 const elementGains = new WeakMap<HTMLMediaElement, GainNode>()
 
 /** Elements already routed, so the once-per-element rule is kept by the module. */
-const attached = new WeakSet<HTMLMediaElement>()
+let attached = new WeakSet<HTMLMediaElement>()
+
+/**
+ * The same elements again, strongly held, because a rebuild has to re-route
+ * them and a WeakSet cannot be walked.
+ *
+ * Two entries — the player's two layers — and the player holds them for its own
+ * life anyway, so this keeps nothing alive that was not already.
+ */
+let routed: HTMLMediaElement[] = []
+
+/** The last settings applied, so a rebuilt graph does not come back flat. */
+let lastEq: EqSettings | null = null
+let lastReverb: ReverbSettings | null = null
+
+/** Told when the graph is replaced, so the player can rebind to the new one. */
+const graphListeners = new Set<() => void>()
+
+/**
+ * Rebind to the graph after it has been replaced.
+ *
+ * Anything holding an `AudioContext` — the narration tick holds one for the
+ * life of its effect — is holding a dead one after a rebuild, and nothing in
+ * React re-runs on its own to notice.
+ */
+export function onAudioGraphChanged(fn: () => void): () => void {
+  graphListeners.add(fn)
+  return () => graphListeners.delete(fn)
+}
 
 function buildGraph(): Graph | null {
   const Ctor: typeof AudioContext | undefined =
@@ -157,6 +195,7 @@ function buildGraph(): Graph | null {
   preamp.connect(ctx.destination)
 
   armResume(ctx)
+  watchAudioClock(ctx)
   return { ctx, eqInput, filters, dry, convolver, wet, preamp }
 }
 
@@ -208,7 +247,111 @@ export function peekAudioContext(): AudioContext | null {
 export function resumeAudio(): void {
   const ctx = graph?.ctx
   if (!ctx || ctx.state === 'running') return
-  void ctx.resume().catch(() => undefined)
+  // Said out loud, because a context that will not start is total silence and
+  // the only evidence of it was the viewer reporting silence. iOS reports
+  // `interrupted` here, which is neither of the two states the spec names.
+  log('audio resume', { state: ctx.state })
+  void ctx.resume().then(
+    () => log('audio resumed', { state: ctx.state }),
+    () => {
+      log('audio resume refused', { state: ctx.state })
+      // A resume outside a gesture is refused on iOS, silently. Arming again
+      // here is what makes the viewer's next tap the repair — the arming
+      // otherwise depends on a `statechange` having fired, and a context that
+      // came back from a long interruption may never have fired one.
+      rearm?.()
+    },
+  )
+  // And arm anyway, without waiting to hear whether that resume worked: it is
+  // idempotent, and the failure this exists for is the one where nothing is
+  // listening for the tap at all.
+  rearm?.()
+}
+
+/**
+ * The context's state, for a log line. Never creates one.
+ *
+ * `null` where there is no graph, which is a different thing from a graph that
+ * is not running and reads differently in a log.
+ */
+export function audioState(): string | null {
+  return graph?.ctx.state ?? null
+}
+
+/**
+ * Throw the graph away and build another, routing the same elements through it.
+ *
+ * The context this replaces is not suspended or interrupted — it says
+ * `running`, and its clock has stopped. Measured on the phone: `state=running`
+ * with `currentTime` at 53.0 for two minutes while the video played on. Every
+ * scheduled clip is placed against that clock, so narration goes silent for
+ * good; `resume()` is no help, because by its own account there is nothing to
+ * resume. Only a new context has a running clock, which is why the viewer's
+ * only remedy was reloading the page.
+ *
+ * `createMediaElementSource` may be called once per element *per context*, so a
+ * new context is also what makes the two video layers routable again.
+ */
+function rebuildGraph(): void {
+  const dead = graph
+  const elements = routed
+  graph = null
+  routed = []
+  attached = new WeakSet()
+  // Closed rather than left behind: a context holds hardware, and Safari allows
+  // few of them. Best effort — a context that will not close is not a reason to
+  // refuse to build its replacement.
+  void dead?.ctx.close().catch(() => undefined)
+
+  const fresh = getGraph()
+  if (!fresh) return
+  elements.forEach((el) => attachElement(el))
+  // The viewer's own settings, which live in the nodes that were just thrown
+  // away. Without this the equaliser and the room come back flat and silently.
+  if (lastEq) applyEq(lastEq)
+  if (lastReverb) applyReverb(lastReverb)
+  graphListeners.forEach((fn) => fn())
+}
+
+/**
+ * Watch the clock, because `state` lies.
+ *
+ * A context whose state is `running` advances `currentTime` whether or not
+ * anything is playing, so a clock that has not moved across a stretch of wall
+ * time is a dead graph and never anything else. Sampled rather than subscribed
+ * to: there is no event for this.
+ *
+ * The wall clock is what it is compared against, so a browser that freezes
+ * timers along with the context — a backgrounded tab — is not mistaken for one
+ * that has died: both clocks stop, the difference stays small, nothing fires.
+ */
+function watchAudioClock(ctx: AudioContext): void {
+  let lastAudio = ctx.currentTime
+  let lastWall = Date.now()
+
+  const id = window.setInterval(() => {
+    if (graph?.ctx !== ctx) {
+      window.clearInterval(id)
+      return
+    }
+    const audio = ctx.currentTime
+    const wall = Date.now()
+    const audioMoved = audio - lastAudio
+    const wallMoved = (wall - lastWall) / 1000
+    lastAudio = audio
+    lastWall = wall
+
+    if (ctx.state !== 'running') return
+    if (wallMoved < CLOCK_STALL_SECONDS || audioMoved > 0.1) return
+
+    log('audio clock stopped', {
+      state: ctx.state,
+      audioClock: audio.toFixed(2),
+      wallMoved: wallMoved.toFixed(2),
+    })
+    window.clearInterval(id)
+    rebuildGraph()
+  }, CLOCK_CHECK_MS)
 }
 
 /**
@@ -219,6 +362,9 @@ export function resumeAudio(): void {
  * mute until a reload. The listeners are on `document` because the gesture that
  * matters is whichever one comes first, and pressing play is only the likeliest.
  */
+/** Set by `armResume`, so `resumeAudio` can arm again from outside. */
+let rearm: (() => void) | null = null
+
 function armResume(ctx: AudioContext): void {
   let armed = false
 
@@ -244,7 +390,10 @@ function armResume(ctx: AudioContext): void {
     document.addEventListener('keydown', start)
   }
 
+  rearm = arm
+
   ctx.addEventListener('statechange', () => {
+    log('audio statechange', { state: ctx.state })
     if (ctx.state === 'running') disarm()
     else arm()
   })
@@ -270,6 +419,7 @@ export function attachElement(el: HTMLMediaElement | null | undefined): boolean 
     const g = getGraph()
     if (!g) return false
     const source = g.ctx.createMediaElementSource(el)
+    if (!routed.includes(el)) routed.push(el)
     const gain = g.ctx.createGain()
     // Starts silent. The player sets the real value from `levelsFor` on the very
     // next effect, and starting at 1 would let a hidden layer that is already
@@ -319,6 +469,7 @@ export function isAttached(el: HTMLMediaElement | null | undefined): boolean {
  * chain — see `buildGraph` for why the path never changes shape.
  */
 export function applyEq(settings: EqSettings): void {
+  lastEq = settings
   const g = graph
   if (!g) return
   const now = g.ctx.currentTime
@@ -363,6 +514,7 @@ function impulseFor(ctx: BaseAudioContext, preset: ReverbPreset): AudioBuffer {
  * the slider is dragged rather than set.
  */
 export function applyReverb(settings: ReverbSettings): void {
+  lastReverb = settings
   const g = graph
   if (!g) return
   const now = g.ctx.currentTime

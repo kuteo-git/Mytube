@@ -69,6 +69,8 @@ import {
   getAudioContext,
   isAttached,
   resumeAudio,
+  audioState,
+  onAudioGraphChanged,
   setElementGain,
   applyEq,
   applyReverb,
@@ -823,6 +825,17 @@ export function Player({
   }, [])
 
   /**
+   * Rebuilt graph, rebound player.
+   *
+   * The graph replaces itself when its clock dies, and everything that held a
+   * node from the old one is holding something inaudible. The narration tick
+   * re-reads the context every 100ms and repairs itself; the element gains are
+   * set by an effect, and an effect has to be told.
+   */
+  const [audioEpoch, setAudioEpoch] = useState(0)
+  useEffect(() => onAudioGraphChanged(() => setAudioEpoch((n) => n + 1)), [])
+
+  /**
    * Two more chances to get the context running.
    *
    * A suspended context is now silence rather than a missing equaliser, so this
@@ -833,7 +846,13 @@ export function Player({
    */
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') resumeAudio()
+      if (document.visibilityState !== 'visible') return
+      // The state is read *before* the resume is attempted, because that is the
+      // number in question: narration stops for good after a long spell in the
+      // background and comes back only on a reload, and nothing here has ever
+      // said what the context looked like on the way in.
+      log('audio on return', { state: audioState() })
+      resumeAudio()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
@@ -1018,7 +1037,21 @@ export function Player({
     // A freshly attached element's gain starts at zero — so that a hidden layer
     // is never heard on the way in — and if this did not run again after that,
     // the fresh element would be the one in front and permanently silent.
-  }, [levels.video, muted, front, back, frontSrc, backSrcNow, frontIsA, playable])
+    // `audioEpoch` is in here because a rebuilt graph starts every element's
+    // gain at zero, and nothing else would ever set it back — the video would
+    // simply be mute from then on, which is a worse fault than the one the
+    // rebuild fixes.
+  }, [
+    levels.video,
+    muted,
+    front,
+    back,
+    frontSrc,
+    backSrcNow,
+    frontIsA,
+    playable,
+    audioEpoch,
+  ])
 
   // Reset narration state when moving to a new video.
   useEffect(() => { resetNarration() }, [videoId])
