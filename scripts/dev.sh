@@ -34,6 +34,20 @@ mkdir -p "$LOG_DIR"
 # export**. The other way round would be a trap: this line runs on every start,
 # so the setting would save, survive a restart, and change nothing, with nothing
 # anywhere to say why. See internal/mediaroot.
+# Serve the built bundle from the gateway instead of running Vite.
+#
+#   SERVE_BUNDLE=1 ./scripts/dev.sh     — one origin on :8180, no dev server
+#
+# This is what scripts/serve.sh and the login agent use. It is a flag on this
+# script rather than a second script, because everything above and below it —
+# the Postgres check, the port check, the media root, the yt-dlp pin, the five
+# services, the two Python servers — is the same stack either way, and a copy
+# of it would be a copy that drifts.
+SERVE_BUNDLE="${SERVE_BUNDLE:-}"
+if [ -n "$SERVE_BUNDLE" ]; then
+  export WEB_DIST="${WEB_DIST:-$(pwd)/web/dist}"
+fi
+
 export MEDIA_ROOT="${MEDIA_ROOT:-/Volumes/Data2/Youtube}"
 export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
@@ -233,5 +247,15 @@ for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:log
 done
 echo
 echo "logs in $LOG_DIR  —  and on http://localhost:8184"
-echo "starting web on :5173..."
-npm --prefix web run dev
+
+if [ -n "$SERVE_BUNDLE" ]; then
+  echo "web served by the gateway from $WEB_DIST  —  http://localhost:8180"
+  echo
+  # Hold the script open. Everything is a background job of this shell, so
+  # exiting here would take the whole stack with it through the trap — and the
+  # login agent needs exactly one process to watch.
+  wait
+else
+  echo "starting web on :5173..."
+  npm --prefix web run dev
+fi

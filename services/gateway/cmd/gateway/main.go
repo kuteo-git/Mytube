@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -90,7 +91,29 @@ func main() {
 	)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", gateway.Routes())
+
+	// The built web bundle, served from this same origin when there is one.
+	//
+	// Unset is the development case and stays exactly as it was: Vite serves the
+	// app on :5173 and proxies here. Set, there is no Vite in the picture at all
+	// — which is what makes the stack something a login agent can start and
+	// leave running, rather than a dev server rebuilding on file changes for a
+	// household that is only watching videos.
+	routes := gateway.Routes()
+	if webDist := env("WEB_DIST", ""); webDist != "" {
+		if _, err := os.Stat(filepath.Join(webDist, "index.html")); err != nil {
+			// Loud, and not fatal. A missing bundle means somebody has not run
+			// the build yet; taking the API down over it would take the reason
+			// down with it.
+			logger.Error("web bundle not served", "dir", webDist, "error", err)
+			mux.Handle("/", routes)
+		} else {
+			logger.Info("serving web bundle", "dir", webDist)
+			mux.Handle("/", api.WebHandler(webDist, routes))
+		}
+	} else {
+		mux.Handle("/", routes)
+	}
 
 	// Served here during development. In the LAN deployment Caddy takes this
 	// route over, since it handles range requests and caching better.
