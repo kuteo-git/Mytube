@@ -22,7 +22,6 @@ const base: PlacementInput = {
   isMobile: false,
   slotDocRect: { top: 500, left: 100, width: 1280, height: 720 },
   viewport: { width: 1440, height: 900 },
-  safeBottom: 0,
   safeTop: 0,
   navHeight: BOTTOM_NAV_HEIGHT,
   scrollY: 0,
@@ -115,21 +114,6 @@ describe('placementFor', () => {
     expect(p.rect).toEqual(miniRectDesktop(1440, 900))
   })
 
-  it('clears the home indicator as well as the navigation', () => {
-    // The navigation grows to sit above the indicator, so a bar that only knew
-    // about the navigation's nominal height would land back on top of its
-    // labels — the exact overlap this is meant to remove, moved up 34 pixels.
-    const inset = 34
-    const p = placementFor({
-      ...base,
-      mode: 'mini',
-      isMobile: true,
-      viewport: { width: 390, height: 844 },
-      safeBottom: inset,
-    })!
-    expect(p.rect.top + p.rect.height).toBe(844 - BOTTOM_NAV_HEIGHT - inset)
-  })
-
   it('rests on the bottom edge where there is no navigation', () => {
     // A channel and the watch layer draw their own chrome, so there is no tab
     // bar for the player to sit above. A fixed BOTTOM_NAV_HEIGHT left it
@@ -145,22 +129,21 @@ describe('placementFor', () => {
     expect(p.rect.top + p.rect.height).toBe(844)
   })
 
-  it('grows into the home indicator rather than stopping short of it', () => {
-    // Stopping short left a band of page background between the bar and the
-    // bottom of the screen, exactly the height of the home indicator, on every
-    // screen that draws its own chrome. The surface reaches the edge; the
-    // content stays above it, which the host's padding takes care of.
-    const inset = 34
+  it('is one bar tall where there is no navigation, not a bar plus an indicator', () => {
+    // It used to grow by the home indicator's height and pad its own content
+    // back up by the same amount, which put a band of bar-coloured nothing under
+    // the thumbnail on every screen that draws its own chrome. Reported on the
+    // Saved screen. The indicator is drawn over what is beneath it and needs no
+    // band of its own.
     const p = placementFor({
       ...base,
       mode: 'mini',
       isMobile: true,
       navHeight: 0,
-      safeBottom: inset,
       viewport: { width: 390, height: 844 },
     })!
     expect(p.rect.top + p.rect.height).toBe(844)
-    expect(p.rect.height).toBe(BAR_HEIGHT + inset)
+    expect(p.rect.height).toBe(BAR_HEIGHT)
   })
 
   it('makes the mobile miniplayer a bar above the navigation', () => {
@@ -191,7 +174,7 @@ describe('a drag towards the corner', () => {
     // the very bottom edge — and the bar rose to clear a tab bar the moment the
     // navigation landed. The overshoot and the spring back were one mistake
     // seen twice.
-    const landed = miniRectMobile(390, 844, BOTTOM_NAV_HEIGHT, 0)
+    const landed = miniRectMobile(390, 844, BOTTOM_NAV_HEIGHT)
     const atTheEnd = draggingPlacement(phone, 10_000, BOTTOM_NAV_HEIGHT)
 
     expect(atTheEnd.rect.top).toBeCloseTo(landed.top)
@@ -209,7 +192,7 @@ describe('a drag towards the corner', () => {
   it('aims at the bottom edge when the landing screen has no bar either', () => {
     // Opening a video from a channel and dragging it back down: the channel
     // draws its own chrome, so there is no tab bar to clear there either.
-    const landed = miniRectMobile(390, 844, 0, 0)
+    const landed = miniRectMobile(390, 844, 0)
     const atTheEnd = draggingPlacement(phone, 10_000, 0)
 
     expect(atTheEnd.rect.top).toBeCloseTo(landed.top)

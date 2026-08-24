@@ -60,7 +60,6 @@ function AppShellInner() {
     isMobile,
     mode,
     miniReserve,
-    safeBottom,
     scrollerRef,
     scrollerEl,
     dragOffset,
@@ -124,12 +123,13 @@ function AppShellInner() {
   //
   // Not reserved otherwise. Always leaving the gap would put an unexplained
   // stretch of nothing at the bottom of every page.
-  // The navigation's real height, which is more than the bar itself on a phone
-  // with a home indicator. Reserving only the nominal 3.5rem left the last row
-  // of every grid tucked under the labels.
+  // The navigation's height, which is now all it takes: the bar stopped
+  // reserving `--safe-bottom` (see BottomNav), so reserving it here too would
+  // leave the last row of every grid floating a home indicator's height above
+  // a bar that no longer reaches up to meet it.
   // No bar, no room for one. A screen that draws its own chrome — the watch
   // layer, a channel — would otherwise end in a band of nothing.
-  const navReserve = isMobile && !chromeHidden ? BOTTOM_NAV_HEIGHT + safeBottom : 0
+  const navReserve = isMobile && !chromeHidden ? BOTTOM_NAV_HEIGHT : 0
   const reservedBottom = mode === 'mini' || resuming ? miniReserve : navReserve || undefined
 
   // youtube.com hides the rail on the watch page to give the player room, and
@@ -358,7 +358,6 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
     scrollerEl: scroller,
     setDragOffset,
     dragFraction,
-    chromeHidden,
   } = usePlayer()
   const navigate = useNavigate()
 
@@ -440,12 +439,6 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
           : isMobile && mode === 'mini'
             ? '24px 24px 0 0'
             : 12,
-        // The bar reaches the bottom edge on a screen with no navigation, so
-        // its surface runs under the home indicator the way every other bar in
-        // the app does. Its *content* stays above it: the padding is inside the
-        // host, and the player fills what is left.
-        paddingBottom:
-          variant === 'bar' && chromeHidden ? 'var(--safe-bottom)' : undefined,
         transition: placement.animate
           ? 'top 300ms cubic-bezier(0.4, 0, 0.2, 1), left 300ms cubic-bezier(0.4, 0, 0.2, 1),' +
             ' width 300ms cubic-bezier(0.4, 0, 0.2, 1), height 300ms cubic-bezier(0.4, 0, 0.2, 1)'

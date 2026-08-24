@@ -51,11 +51,20 @@ export function BottomNav({ opacity = 1 }: { opacity?: number }) {
     <nav
       className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-stretch border-t border-white/10
                  bg-bg min-[700px]:hidden"
-      // The bar keeps its own height and grows underneath it, so the labels stay
-      // clear of the home indicator instead of sitting under it.
+      // The bar is its own 3.5rem and nothing more.
+      //
+      // It used to grow by `--safe-bottom` and pad the labels clear of the home
+      // indicator — 34pt on this phone, which is most of a second tab bar of
+      // empty space below the labels, and it read as a gap under the app rather
+      // than as clearance. The indicator is a thin translucent line that the
+      // system draws *over* whatever is beneath it; it does not need a band
+      // reserved for it, and the icons sit above the line it occupies.
+      //
+      // What the inset is genuinely for is content that would be *cut off* or
+      // made untappable at the very edge. These are 3.5rem tap targets whose
+      // labels end well above it, so the trade is the bottom few points of a
+      // target against a permanent stripe of nothing on every screen.
       style={{
-        paddingBottom: 'var(--safe-bottom)',
-        height: 'calc(3.5rem + var(--safe-bottom))',
         opacity,
         pointerEvents: arriving ? 'none' : undefined,
       }}

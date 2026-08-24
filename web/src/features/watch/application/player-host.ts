@@ -28,12 +28,6 @@ export interface PlacementInput {
   /** The watch page slot, in document coordinates. Null until measured. */
   slotDocRect: ViewRect | null
   viewport: { width: number; height: number }
-  /**
-   * The home indicator's share of the bottom edge, zero on anything without one.
-   * The bar rests on the navigation, and the navigation now grows to clear this,
-   * so the bar has to know about it too or it lands back on top of the labels.
-   */
-  safeBottom: number
   /** The status bar's share of the top edge; zero on anything without a notch. */
   safeTop: number
   /**
@@ -106,11 +100,11 @@ export function fullPlacement(input: PlacementInput): HostPlacement {
 }
 
 export function miniPlacement(input: PlacementInput): HostPlacement {
-  const { isMobile, viewport, safeBottom, navHeight } = input
+  const { isMobile, viewport, navHeight } = input
   return {
     position: 'fixed',
     rect: isMobile
-      ? miniRectMobile(viewport.width, viewport.height, navHeight, safeBottom)
+      ? miniRectMobile(viewport.width, viewport.height, navHeight)
       : miniRectDesktop(viewport.width, viewport.height),
     animate: true,
   }

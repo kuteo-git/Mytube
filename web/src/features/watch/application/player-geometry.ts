@@ -71,22 +71,25 @@ export function miniRectMobile(
   viewportWidth: number,
   viewportHeight: number,
   navHeight: number = BOTTOM_NAV_HEIGHT,
-  safeBottom = 0,
 ): ViewRect {
-  // Above the navigation where there is one — it already covers the home
-  // indicator itself, so the bar has nothing more to clear.
+  // Directly on the navigation where there is one, and nothing more.
   //
-  // Where there is none, the bar takes the bottom edge and **grows into the
-  // safe area** rather than stopping short of it. Stopping short left a band of
-  // page background between the bar and the bottom of the screen, the height of
-  // the home indicator, on every screen that draws its own chrome. Its content
-  // still sits in the top BAR_HEIGHT; what reaches the edge is the surface
-  // behind it, which is what a phone does with every bar it has.
-  const overNav = navHeight > 0
-  const height = BAR_HEIGHT + (overNav ? 0 : safeBottom)
-  const bottomInset = overNav ? navHeight + safeBottom : 0
+  // The bar used to clear `safeBottom` on top of the navigation's height, back
+  // when the navigation grew by that much to hold its labels above the home
+  // indicator. It no longer does — it is 3.5rem flat — so adding the inset here
+  // parks the miniplayer a home indicator's height above a bar it is meant to
+  // be resting on, with page scrolling past in the gap between them.
+  //
+  // Where there is no navigation the bar takes the bottom edge itself, and it
+  // is BAR_HEIGHT there too. It used to grow by `safeBottom` and pad its own
+  // content back up by the same amount, which put a band of bar-coloured
+  // nothing under the thumbnail on every screen that draws its own chrome — the
+  // tab bar's gap again, in the one place the tab bar is not. The home
+  // indicator is drawn over what is beneath it and needs no band of its own;
+  // the bar's controls are 3.5rem tall and end above the line it occupies.
+  const height = BAR_HEIGHT
   return {
-    top: viewportHeight - bottomInset - height,
+    top: viewportHeight - navHeight - height,
     left: 0,
     width: viewportWidth,
     height,
