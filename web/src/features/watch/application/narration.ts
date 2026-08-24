@@ -248,7 +248,20 @@ export function cancelTranslationPass() {
   _passPhase = 'idle'
   _passTotal = 0
   _passDone = 0
-  announceCues([])
+  // Woken with whatever the cue list actually is, which is usually not empty.
+  //
+  // This used to hand every waiter `[]`, and for the translation pass that was
+  // harmless — it bumps the generation first, so the pass exits at its
+  // generation check and never reads the list. The pre-generation sweep has no
+  // generation to check: it reads the length, concludes the video has no
+  // subtitles, and returns leaving its phase at `idle` for good. Measured on
+  // the phone — `pregen not started cues=0` on a video whose cues were loaded
+  // and audibly being read aloud, with the panel saying "Speech not started"
+  // beside the voice.
+  //
+  // An empty list is still what a waiter gets when there genuinely are no cues,
+  // which is the one case it is supposed to mean.
+  announceCues(_cues ?? [])
 }
 
 export function whenCuesReady(): Promise<CueText[]> {
@@ -267,6 +280,36 @@ export function whenCuesReady(): Promise<CueText[]> {
   // "no subtitles", and a later load announces cues for the pass after it.
   if (!_cuesLoading) return Promise.resolve([])
   return new Promise((resolve) => _cuesWaiters.push(resolve))
+}
+
+/**
+ * The cues, once there really are some.
+ *
+ * `whenCuesReady` answers `[]` the moment nothing is fetching, which is right
+ * for the translation pass — it turns into "no subtitles" on the status line,
+ * and a later load announces cues for the pass after it. It is wrong for the
+ * pre-generation sweep, which has one chance: an empty answer makes it return
+ * with its phase at `idle`, and nothing ever asks again.
+ *
+ * That is not a hypothetical ordering. The effect that starts the sweep is
+ * declared *above* the effect that fetches the cues, so on the render where
+ * narration turns on the sweep asks first and is told, correctly and uselessly,
+ * that nobody is fetching. Measured on the phone: `pregen not started cues=0`
+ * on a video whose 121 cues loaded a moment later and were read aloud.
+ *
+ * So this one waits for an announcement carrying cues, however many rounds of
+ * empty ones go past. A video that genuinely has no subtitles never resolves
+ * it, and that is the honest answer there: nothing to prepare.
+ */
+export function whenCuesArrive(): Promise<CueText[]> {
+  if (_cues !== null && _cues.length > 0) return Promise.resolve(_cues)
+  return new Promise((resolve) => {
+    const again = (cues: CueText[]) => {
+      if (cues.length > 0) resolve(cues)
+      else _cuesWaiters.push(again)
+    }
+    _cuesWaiters.push(again)
+  })
 }
 
 /** Index of the cue playing at `time`, or the next one due. */
@@ -699,6 +742,9 @@ let _scheduledUntil = 0
 const _activeSources = new Set<AudioBufferSourceNode>()
 
 let _masterGain: GainNode | null = null
+
+/** Which context `_masterGain` was made by. A new one makes it worthless. */
+let _gainCtx: AudioContext | null = null
 let _lastTime = 0
 
 /** Bumped whenever the timeline is abandoned, so in-flight work knows to stop. */
@@ -706,6 +752,9 @@ let _generation = 0
 
 /** Playback position when a clip was last placed, for the watchdog below. */
 let _lastSpokeAt = 0
+
+/** Playback position at which the quiet report below last said anything. */
+let _quietLoggedAt = -Infinity
 
 // ---- audio sink -------------------------------------------------------------
 
@@ -821,6 +870,7 @@ export function loadViSubtitles(url: string, lang = 'vi') {
   _pumping = false
   _lastTime = 0
   _masterGain = null
+  _gainCtx = null
   stopEverything()
 
   _cuesGeneration++
@@ -978,6 +1028,16 @@ async function pump(video: HTMLVideoElement, ctx: AudioContext) {
     if (tooLateToPlay(when, due)) {
       reportSkip(index, 'queued too far behind its cue', {
         lateBy: (when - due).toFixed(2),
+        // The three numbers the lateness is made of. `when` is pushed past
+        // `due` only by `_scheduledUntil`, and `_scheduledUntil` is measured
+        // against an audio clock that freezes when the context is interrupted
+        // and restarts at zero when a new one is built — so a figure left over
+        // from a previous clock makes every clip late for ever, and lateBy
+        // alone cannot tell that from a genuine overrun.
+        due: due.toFixed(2),
+        when: when.toFixed(2),
+        until: _scheduledUntil.toFixed(2),
+        audioClock: ctx.currentTime.toFixed(2),
       })
       continue
     }
@@ -1106,9 +1166,22 @@ function reportSwap(video: HTMLVideoElement, ctx: AudioContext) {
 }
 
 /** Why a cue produced no sound, when it produced none. */
+/** Playback position at which a skip was last reported. */
+let _skipLoggedAt = -Infinity
+
 function reportSkip(index: number, reason: string, detail?: unknown) {
-  if (!narrationDebug()) return
-  console.info('[narration] cue skipped', { index, reason, detail })
+  if (narrationDebug()) console.info('[narration] cue skipped', { index, reason, detail })
+  // And to the server, which is the only one of the two a phone can read.
+  //
+  // A skipped cue is the whole explanation for narration that is prepared,
+  // clocked, unmuted and silent — every clip present and every one of them
+  // dropped for arriving after its own moment. Throttled by playback position
+  // rather than by count: a video that skips one line an hour should still say
+  // so, and one that skips every line must not send a thousand lines about it.
+  const now = _lastTime
+  if (Math.abs(now - _skipLoggedAt) <= 5) return
+  _skipLoggedAt = now
+  log('narration skipped', { index, reason, detail: detail ?? '', at: Math.round(now) })
 }
 
 /**
@@ -1148,8 +1221,14 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
     return
   }
 
-  if (!_masterGain) {
+  // The gain belongs to a context, and the context can be replaced underneath
+  // this — see audio-graph's clock watchdog. A node from the old one is
+  // connected to a graph nobody can hear, and `!_masterGain` cannot see that.
+  if (!_masterGain || _gainCtx !== ctx) {
+    _generation++
+    stopEverything()
     _masterGain = ctx.createGain()
+    _gainCtx = ctx
     connectOutput(ctx, _masterGain)
   }
   _masterGain.gain.setValueAtTime(_narrationGain, ctx.currentTime)
@@ -1182,6 +1261,33 @@ export function tickNarration(video: HTMLVideoElement, ctx: AudioContext) {
   // re-asserting everything every second — see narration-watchdog.ts, and
   // CLAUDE.md §4 on why a general sweep is worse than the faults it hides.
   const atPlayhead = firstCueAtOrAfter(cues, now)
+
+  // Why nothing is being said, when nothing is being said.
+  //
+  // The tick had no logging at all, so a silent narration produced exactly as
+  // much evidence as a working one: none. Reported from the phone with every
+  // other signal green — 121 cues, 121 clips prepared, the sweep reporting
+  // "Speech ready", the context `running` — and no voice.
+  //
+  // Throttled rather than per tick: this runs twice a second, and a line that
+  // often is not a log, it is a denial-of-service on the thing being read.
+  if (_activeSources.size === 0 && _cursor < cues.length && Math.abs(now - _quietLoggedAt) > 5) {
+    _quietLoggedAt = now
+    log('narration quiet', {
+      now: Math.round(now),
+      cursor: _cursor,
+      atPlayhead,
+      cues: cues.length,
+      nextCueAt: Math.round(cues[Math.min(_cursor, cues.length - 1)].start),
+      pumping: _pumping,
+      silentFor: Math.round(now - _lastSpokeAt),
+      scheduledUntil: Math.round(_scheduledUntil),
+      audioClock: Math.round(ctx.currentTime),
+      gain: _narrationGain,
+      generation: _generation,
+    })
+  }
+
   if (
     hasStalled({
       wanted: true,
@@ -1281,6 +1387,7 @@ const _pregen = createPregen({
   clearTimer: (h) => window.clearTimeout(h as number),
   sleep: (ms) => new Promise((r) => window.setTimeout(r, ms)),
   now: () => Date.now(),
+  log,
 })
 
 /**
@@ -1332,10 +1439,22 @@ export function startNarrationPregen(videoId: string, atTime: number) {
     // player decides to narrate there is usually nothing here yet. Waiting on
     // the load has no deadline to get wrong — the same reasoning that replaced
     // the translation pass's ten-second poll.
-    const cues = await whenCuesReady()
-    // A video with no subtitles has nothing to say, and a video the viewer has
-    // already moved on from is not ours to prepare.
-    if (cues.length === 0 || videoId !== _passVideoId) return
+    const cues = await whenCuesArrive()
+    // A video the viewer has already moved on from is not ours to prepare.
+    // The empty case cannot arrive here any more — see whenCuesArrive.
+    //
+    // Said out loud, because both of these return leaving the phase at `idle`,
+    // and `idle` is drawn as "Speech not started" over a video that may well be
+    // narrating from the on-demand path beneath the sweep. Reported from the
+    // phone: the status said nothing had begun while the voice was speaking.
+    if (cues.length === 0 || videoId !== _passVideoId) {
+      log('pregen not started', {
+        videoId,
+        cues: cues.length,
+        passVideoId: _passVideoId,
+      })
+      return
+    }
     _pregen.start({
       videoId,
       lines: pregenLines(cues),

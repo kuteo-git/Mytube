@@ -83,6 +83,18 @@ export interface PregenDeps {
   sleep(ms: number): Promise<void>
   /** Injected for the same reason the timers are: tests must not wait. */
   now(): number
+  /**
+   * Where the sweep says what it is doing. Optional, and a dependency rather
+   * than an import for the same reason the timers are — this module stays free
+   * of the browser.
+   *
+   * It exists because the status line reported `idle` on a video that was
+   * audibly narrating, and nothing anywhere could say which of the several
+   * roads to `idle` had been taken: never started, cancelled by the video
+   * changing, or a sweep that returned before it set a phase. A label is not
+   * evidence; this is.
+   */
+  log?(event: string, fields: Record<string, unknown>): void
 }
 
 export interface PregenTarget {
@@ -174,6 +186,9 @@ export function createPregen(deps: PregenDeps): Pregen {
    * the sweep is followed by a check, so a superseded pass returns rather than
    * writing anything.
    */
+  const say = (event: string, fields: Record<string, unknown> = {}) =>
+    deps.log?.(event, { phase, videoId: target?.videoId ?? '', ...fields })
+
   const halt = () => {
     generation++
     abort?.abort()
@@ -229,11 +244,18 @@ export function createPregen(deps: PregenDeps): Pregen {
   }
 
   const sweep = async () => {
-    if (!target || running) return
+    if (!target || running) {
+      // Both of these leave the phase exactly as it was, which is the whole
+      // reason this is worth a line: a sweep that never began looks identical
+      // to one that has not been asked for.
+      say('pregen sweep refused', { hasTarget: target !== null, running })
+      return
+    }
     running = true
     const gen = generation
     abort = new AbortController()
     phase = 'sweeping'
+    say('pregen sweeping', { settled: settled.size })
     // Timed from here rather than from start(), because everything before this
     // was waiting — for the translator, or out a backoff — and counting it
     // would make every estimate gloomier than the work deserves.
@@ -292,6 +314,7 @@ export function createPregen(deps: PregenDeps): Pregen {
 
       if (consecutiveFailures >= GIVE_UP_AFTER) {
         phase = 'backing-off'
+      say('pregen phase')
         const wait = RETRY_BACKOFF_MS[Math.min(backoffStep, RETRY_BACKOFF_MS.length - 1)]
         backoffStep++
         later(() => void sweep(), wait)
@@ -300,17 +323,20 @@ export function createPregen(deps: PregenDeps): Pregen {
 
       if (deferred > 0) {
         phase = 'awaiting-translation'
+      say('pregen phase')
         later(() => void sweep(), TRANSLATION_POLL_MS)
         return
       }
 
       phase = 'done'
+      say('pregen phase')
     } catch {
       // An exception must not end the sweep for good. narration.ts records what
       // that costs: work that throws on the way out leaves a running flag set,
       // and a flag stuck true is the one state nothing can restart from.
       if (gen !== generation) return
       phase = 'backing-off'
+      say('pregen threw')
       const wait = RETRY_BACKOFF_MS[Math.min(backoffStep, RETRY_BACKOFF_MS.length - 1)]
       backoffStep++
       later(() => void sweep(), wait)
@@ -323,7 +349,11 @@ export function createPregen(deps: PregenDeps): Pregen {
     start(next: PregenTarget) {
       // Already sweeping this video: leave it be. Restarting would throw away
       // an in-flight clip and reorder a queue that is already correct.
-      if (target?.videoId === next.videoId && phase !== 'idle') return
+      if (target?.videoId === next.videoId && phase !== 'idle') {
+        say('pregen start ignored', { wanted: next.videoId })
+        return
+      }
+      say('pregen start', { wanted: next.videoId, lines: next.lines.length })
       halt()
       target = next
       settled = new Set()
@@ -340,6 +370,7 @@ export function createPregen(deps: PregenDeps): Pregen {
     },
 
     cancel() {
+      say('pregen cancel')
       halt()
       target = null
       phase = 'idle'
