@@ -266,9 +266,23 @@ export function useStreamPrefetch() {
       cancel()
       timer.current = window.setTimeout(() => {
         void queryClient.prefetchQuery({
-          // Same key the player will read, so pressing play finds the answer
-          // already in cache and never issues a request at all.
-          queryKey: ['stream', videoId],
+          // A key of its own, and this is the whole of the fix for a video that
+          // arrived with no subtitles.
+          //
+          // It used to be the player's own key, so that pressing play "finds
+          // the answer already in cache and never issues a request at all".
+          // That is exactly the fault: `?prefetch=1` deliberately does not
+          // fetch captions and does not queue a transfer — hovering a card is
+          // not choosing a video — and a hover answer sitting under the
+          // player's key for five minutes meant pressing play never asked the
+          // question that does. Measured on 2JajSt59wqc: every `/stream`
+          // request the gateway ever saw for it carried `prefetch=true`, and
+          // the video folder was never created at all.
+          //
+          // Nothing is lost by asking again. What the hover is really warming
+          // is ingest's resolve cache, which is on the server and shared by
+          // both requests; the second one is answered from it.
+          queryKey: ['stream', videoId, 'prefetch'],
           queryFn: () => repo.getStream(videoId, true),
           staleTime: 5 * 60_000,
         })
