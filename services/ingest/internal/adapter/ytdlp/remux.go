@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 )
 
 // RemuxStream is a live 1080p stream assembled on the fly.
@@ -166,7 +168,7 @@ func (d *Downloader) resolveRemuxURLsOnce(ctx context.Context, videoURL string, 
 		height = 1080
 	}
 
-	result, err := newCommand(purposeMedia).
+	result, err := newCommand(purposeMedia, proxycfg.Media).
 		Format(fmt.Sprintf(remuxFormat, height, height, height)).
 		GetURL().
 		NoPlaylist().

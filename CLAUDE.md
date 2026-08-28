@@ -309,6 +309,94 @@ this app refusing identically, which is what rules out the code.
   refusal and an absence left the same evidence: an empty folder and not one
   line anywhere. It cost a debugging session to learn the answer had been 429.
 
+### The block is on the address, so the setting is a proxy (2026-08-28)
+
+**YouTube refuses the caption endpoint by *public address*, and nothing about a
+request changes that.** Measured on four videos in one minute, one machine:
+asking directly was `IpBlocked` **4 of 4**; asking through a rotating
+residential proxy answered **4 of 4**. The library is unaffected throughout —
+videos play normally while captions are refused.
+
+This replaces the **Transcript** settings entirely, and the premise those were
+built on is worth recording as wrong. They asked *which other machine to ask*,
+reasoning that another machine is another address. Measured on this household's
+Home Assistant box: the same 429, in the same minute. **A second door in the
+same wall is not a second door.**
+
+- **The Python helper stays and stops being configurable.** It is on loopback
+  (`127.0.0.1:8009`), started by `dev.sh` from `.venv-transcript`, and holds no
+  credential. What it provides is not a different computer but
+  `youtube_transcript_api`, which can be pointed at a proxy — the Go side
+  cannot.
+- **The proxy is named per request, in a header** (`X-Transcript-Proxy`), not
+  read from that process's environment. Same rule the caption path already
+  followed and for the same reason: a fetch can be started by the retry sweep on
+  a timer, with no request to carry a setting on, so a value read once at
+  start-up would mean saving the form did nothing until somebody restarted a
+  *different* process. A header rather than a query string because it carries a
+  password and query strings land in access logs.
+- **The shared secret is gone.** It guarded a door that is now loopback-only; a
+  secret protecting nothing is one more thing to configure wrongly.
+
+**Which traffic goes through the proxy is chosen one kind at a time**, because a
+residential proxy is metered by the gigabyte and these differ by three orders of
+magnitude:
+
+| switch | per video |
+|---|---|
+| Subtitles | tens of KB — what this was built for |
+| Metadata & search | small, but 93 sources an hour |
+| Comments | small, only when opened |
+| Video downloads & playback | **hundreds of MB** |
+
+- **The media switch is off by default and asks before turning on.** Not hidden:
+  a geo-blocked video is a real reason to want it, and a switch that does not
+  exist cannot be used. But turning it on without saying the price is the
+  `instant` trap again — everything looks fine until the month's allowance is
+  gone. Turning it *off* never asks; a confirmation on the way out of an
+  expensive state is a toll on doing the safe thing.
+- **The switches are read per call, through `proxycfg`,** and the *use* is named
+  explicitly at each of the nine yt-dlp call sites. It cannot be derived from
+  `purpose`: `purposeMedia` covers resolving, downloading, subtitles **and**
+  comments, so deriving it would have moved every download onto a metered proxy
+  in order to move captions there.
+- **One URL field, `scheme://user:pass@host:port`.** What every provider hands
+  out and what both consumers take (`go-ytdlp`'s `.Proxy()`, Python's
+  `GenericProxyConfig`). Four boxes would mean everybody splits the string and
+  the server joins it again.
+- **The password is masked, not withheld.** Every other credential here is never
+  sent to the browser; this one lives *inside* the field somebody must be able
+  to read, and blanking it leaves them unable to tell which provider they
+  configured. So `http://user:••••@host:80` goes out, and a submitted URL
+  carrying the mask keeps the stored password — editing the host or port around
+  it still works.
+  - **A masked URL cannot be parsed.** `url.Parse` rejects the bullets outright
+    (`invalid userinfo`), so the parse-edit-print version silently returned the
+    mask *as the password* and would have saved it. It is string replacement
+    now, and a test says so.
+- **Test reports three things because three fail separately**: the address
+  without the proxy, the address through it, and one real caption fetch. Equal
+  addresses mean a proxy that carries the request and changes nothing — the
+  failure most easily mistaken for a broken proxy when it is doing exactly what
+  it was told, and invisible without both numbers. Codes, not sentences: the
+  server does not know what language the viewer reads.
+- **Which of two things failed is measured, not inferred from an exception
+  type.** `youtube_transcript_api` catches transport failures itself and
+  re-raises them as its own `IpBlocked` — measured with a deliberately wrong
+  password, the same request surfaced a raw `ProxyError` once and `IpBlocked`
+  the next time. So a proxy nobody could connect to was reported as YouTube
+  refusing the address, which is the worst available answer: it sends somebody
+  to wait out a block that does not exist. The helper now asks the proxy whether
+  it carries a request at all, on the failing path only.
+- **Measured end to end on the running stack**: yt-dlp refused with `429`, the
+  helper answered through the proxy, `outcome=landed langs=en` and the `.vtt` on
+  disk — 4 seconds later.
+
+**"Proxy" stays English in both dictionaries** (§4b's technical-term rule):
+every provider, operating system and application uses that word, and *máy chủ
+trung gian* is a phrase somebody would have to translate back before they could
+match it to their provider's dashboard. The sentences around it are translated.
+
 ### Where the library lives, and whether it is kept (2026-08-22)
 
 **The folder is a setting, and the saved value beats the environment.** `MEDIA_ROOT` is read at start-up by three services — ingest writes there, catalog deletes there, the gateway serves it — and used to be changeable only by editing `scripts/dev.sh`. It is now `data/storage.json`, resolved through `internal/mediaroot`.

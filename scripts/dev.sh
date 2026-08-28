@@ -4,7 +4,7 @@
 #   scripts/dev.sh
 #
 # Ports: gateway 8180 (the only one the browser talks to), catalog 8181,
-# recsys 8182, ingest 8183, TTS 8002, translate 8005, Vite 5173.
+# recsys 8182, ingest 8183, TTS 8002, translate 8005, transcript 8009, Vite 5173.
 # Chosen off the 808x block because other projects on this machine hold 8080
 # and 8082 permanently.
 # Requires Postgres to be running:
@@ -211,6 +211,33 @@ else
   echo "no translation server: narration will not translate" >&2
 fi
 
+# --- captions helper ---
+#
+# YouTube refuses the caption endpoint by public address, for hours at a time,
+# while videos keep playing. Nothing in the app's own requests gets past that,
+# so the way out is a proxy — and this tiny Python server is what can use one,
+# because youtube_transcript_api is the thing that keeps up with the shape of
+# YouTube's player response.
+#
+# On loopback and with nothing to configure. It used to be meant for another
+# machine, on the reasoning that another machine is another address; measured on
+# this household's Home Assistant box, that is false. The proxy is named per
+# request by the caller and is set on the Settings → Proxy screen.
+#
+# Not fatal when absent, like the two servers below it: captions fall back to
+# yt-dlp, which is refused in the same waves but costs nothing to try.
+TRANSCRIPT_VENV="${TRANSCRIPT_VENV:-$(pwd)/.venv-transcript}"
+if lsof -ti:8009 >/dev/null 2>&1; then
+  echo "captions helper already running on :8009, leaving it alone"
+elif [ -x "$TRANSCRIPT_VENV/bin/python" ]; then
+  echo "starting captions helper (port 8009)..."
+  "$TRANSCRIPT_VENV/bin/python" docs/transcript-server/transcript_server.py \
+    >>"$LOG_DIR/transcript.log" 2>&1 & pids+=($!)
+else
+  echo "no captions helper: create it with" >&2
+  echo "  python3 -m venv $TRANSCRIPT_VENV && $TRANSCRIPT_VENV/bin/pip install -r docs/transcript-server/requirements.txt" >&2
+fi
+
 # --- speech, for narration ---
 #
 # Lives in another repository, so this only starts it if that repository is
@@ -236,7 +263,7 @@ fi
 # of ports as though they were all listening.
 sleep 1
 echo
-for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8005:translate" "8002:speech"; do
+for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8005:translate" "8002:speech" "8009:transcript"; do
   port="${entry%%:*}"
   name="${entry##*:}"
   if lsof -ti:"$port" >/dev/null 2>&1; then

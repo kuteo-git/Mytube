@@ -4,8 +4,8 @@ import type { RankingSettings } from '@/features/settings/domain/ranking'
 import {
   settingsRepository,
   type StoredFeedMix,
-  type TranscriptConfig,
-  type TranscriptTestResult,
+  type ProxyConfig,
+  type ProxyTestResult,
   type TranslateConfig,
   type TranslateTestResult,
 } from '@/features/settings/infrastructure/settingsRepository'
@@ -146,31 +146,26 @@ export function useTranslateModels() {
   })
 }
 
-export function useTranscriptConfig() {
+export function useProxyConfig() {
   return useQuery({
-    queryKey: ['transcript-config'],
-    queryFn: () => settingsRepository.getTranscriptConfig(),
+    queryKey: ['proxy-config'],
+    queryFn: () => settingsRepository.getProxyConfig(),
   })
 }
 
-export function useSaveTranscriptConfig() {
+export function useSaveProxyConfig() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { baseUrl: string; apiKey: string; clearBaseUrl?: boolean }) =>
-      settingsRepository.saveTranscriptConfig(input),
-    onSuccess: (saved: TranscriptConfig) => {
-      client.setQueryData(['transcript-config'], saved)
+    mutationFn: (input: ProxyConfig) => settingsRepository.saveProxyConfig(input),
+    onSuccess: (saved: ProxyConfig) => {
+      client.setQueryData(['proxy-config'], saved)
     },
   })
 }
 
-export function useTestTranscript() {
-  return useMutation<
-    TranscriptTestResult,
-    Error,
-    { baseUrl: string; apiKey: string; videoId: string }
-  >({
-    mutationFn: (input) => settingsRepository.testTranscript(input),
+export function useTestProxy() {
+  return useMutation<ProxyTestResult, Error, ProxyConfig>({
+    mutationFn: (input) => settingsRepository.testProxy(input),
   })
 }
 

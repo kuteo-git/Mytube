@@ -44,35 +44,45 @@ export interface TranslateConfig {
 }
 
 /**
- * Where captions can be asked for when YouTube is refusing this address.
+ * The outbound proxy, and which traffic goes through it.
  *
- * The same three fields and the same key rule as TranslateConfig: the key is
- * stored on the server and never sent back, so the browser is told only whether
- * one exists and which one it is.
+ * The URL comes back with its password replaced by bullets and everything else
+ * intact — see the gateway's maskProxyURL. That is a deliberate softening of
+ * the rule the other credentials on this screen follow (never sent back at
+ * all): the password lives inside the one field somebody has to be able to
+ * read, and blanking the whole thing leaves them unable to tell which provider
+ * they configured.
  *
- * An empty `baseUrl` is the ordinary state and means "do not ask anybody else".
+ * Sending the masked URL back on save is normal and expected; the server puts
+ * the stored password back where the bullets are.
  */
-export interface TranscriptConfig {
-  baseUrl: string
-  hasKey: boolean
-  keyHint: string
+export interface ProxyConfig {
+  url: string
+  enabled: boolean
+  forCaptions: boolean
+  forListings: boolean
+  forMedia: boolean
+  forComments: boolean
 }
 
 /**
- * What one test fetch produced.
+ * What one proxy test measured.
  *
- * The language, the count and the first line rather than a verdict — a server
- * can answer 200 with an empty transcript or with the wrong language, and a
- * status code calls both of those success. The first line is the part a person
- * can look at and know.
+ * Three things fail separately and a single verdict answers none of them: the
+ * proxy may not carry a request at all, it may carry one and not change the
+ * address, and the address may be changed and still refused by YouTube. So both
+ * addresses come back, and the outcome of one real caption fetch beside them.
  */
-export interface TranscriptTestResult {
-  language?: string
-  generated?: boolean
+export interface ProxyTestResult {
+  directIp?: string
+  proxyIp?: string
+  /** A code, translated on this side — the server does not know the language. */
+  code?: string
+  captionsOk: boolean
+  captionsLang?: string
   cues?: number
-  firstLine?: string
-  ms?: number
-  error?: string
+  captionsCode?: string
+  tookMs: number
 }
 
 export interface TranslateTestResult {
@@ -207,38 +217,28 @@ export const settingsRepository = {
     return json<TranslateTestResult>(r)
   },
 
-  async getTranscriptConfig(): Promise<TranscriptConfig> {
-    return json<TranscriptConfig>(await apiFetch('/api/settings/transcript'))
+  async getProxyConfig(): Promise<ProxyConfig> {
+    return json<ProxyConfig>(await apiFetch('/api/settings/proxy'))
   },
 
-  async saveTranscriptConfig(input: {
-    baseUrl: string
-    apiKey: string
-    // An empty base URL is how the household turns this off, so it has to be
-    // told apart from "the field was not touched" — which is what an empty
-    // string means for every other field on this form.
-    clearBaseUrl?: boolean
-  }): Promise<TranscriptConfig> {
-    const r = await apiFetch('/api/settings/transcript', {
+  async saveProxyConfig(input: ProxyConfig): Promise<ProxyConfig> {
+    const r = await apiFetch('/api/settings/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
     })
-    return json<TranscriptConfig>(r)
+    return json<ProxyConfig>(r)
   },
 
-  async testTranscript(input: {
-    baseUrl: string
-    apiKey: string
-    videoId: string
-  }): Promise<TranscriptTestResult> {
-    const q = input.videoId ? `?video=${encodeURIComponent(input.videoId)}` : ''
-    const r = await apiFetch(`/api/settings/transcript/test${q}`, {
+  // Tests the values in the form, not the ones on disk: testing after saving is
+  // testing what you have already accepted.
+  async testProxy(input: ProxyConfig): Promise<ProxyTestResult> {
+    const r = await apiFetch('/api/settings/proxy/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseUrl: input.baseUrl, apiKey: input.apiKey }),
+      body: JSON.stringify(input),
     })
-    return json<TranscriptTestResult>(r)
+    return json<ProxyTestResult>(r)
   },
 
   async getFeedMix(): Promise<StoredFeedMix> {

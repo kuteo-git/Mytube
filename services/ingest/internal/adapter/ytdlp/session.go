@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lrstanley/go-ytdlp"
+
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 )
 
 // A yt-dlp command, built in one place.
@@ -16,6 +19,13 @@ import (
 // The two things that need saying — who we are asking as, and with whose
 // cookies — are exactly the things a refusal is answered with, and a refusal is
 // not a moment to be editing nine call sites.
+//
+// The proxy is a *second* axis and is named separately at every call site
+// (`proxycfg.Use`). It cannot be derived from the purpose: purposeMedia covers
+// resolving a stream, downloading it, its subtitles and its comments, and those
+// differ by three orders of magnitude in bytes — a switch that moved captions
+// onto a metered proxy by also moving every download onto it would be a
+// bandwidth bill nobody asked for.
 //
 // The split below is the point of the type. What upstream refuses is not evenly
 // spread: the requests that fetch *media* and comments are the ones that meet
@@ -93,6 +103,36 @@ var (
 	config     ytdlpConfig
 )
 
+// The proxy, read per command rather than per process.
+//
+// Deliberately not folded into ytdlpConfig, which is `sync.Once` over the
+// environment: this one is a setting somebody changes on a screen and expects to
+// take effect, and caching it for the life of the process is the trap
+// `internal/mediaroot` documents. See the proxycfg package.
+//
+// A package-level pointer because `newCommand` is called from nine places that
+// have no configuration of their own to thread it through, and giving all nine a
+// parameter to pass along is how the parameter gets passed wrongly.
+var proxyReader atomic.Pointer[proxycfg.Reader]
+
+// SetProxyConfig tells this package where the household's proxy setting lives.
+//
+// Called once at start-up by cmd/ingest. Without it there is no proxy, which is
+// the ordinary state and the state every install begins in — so forgetting to
+// call it degrades to today's behaviour rather than failing.
+func SetProxyConfig(reader *proxycfg.Reader) {
+	proxyReader.Store(reader)
+}
+
+// proxyFor is the proxy this kind of traffic should go out by, or "".
+func proxyFor(use proxycfg.Use) string {
+	reader := proxyReader.Load()
+	if reader == nil {
+		return ""
+	}
+	return reader.URLFor(use)
+}
+
 func loadConfig() ytdlpConfig {
 	configOnce.Do(func() { config = readConfig(os.Getenv) })
 	return config
@@ -133,8 +173,8 @@ func readConfig(getenv func(string) string) ytdlpConfig {
 //
 // The household-wide cookie file from YTDLP_COOKIES, where one is set. For a
 // particular person's own feeds, see newAccountCommand.
-func newCommand(p purpose) *ytdlp.Command {
-	return newCommandWithCookies(p, loadConfig().cookiesFile)
+func newCommand(p purpose, use proxycfg.Use) *ytdlp.Command {
+	return newCommandWithCookies(p, use, loadConfig().cookiesFile)
 }
 
 // newAccountCommand is a request made as one household member.
@@ -142,10 +182,14 @@ func newCommand(p purpose) *ytdlp.Command {
 // The path comes from the account store rather than the environment, so two
 // people's feeds are read with two different sessions in the same pass.
 func newAccountCommand(cookiesFile string) *ytdlp.Command {
-	return newCommandWithCookies(purposeAccount, cookiesFile)
+	// A member's own subscriptions and playlists: listing traffic that happens
+	// to carry a session, so it follows the listings switch. Deliberately not a
+	// fifth switch — one whose meaning has to be explained is worse than the
+	// fourth that already covers it.
+	return newCommandWithCookies(purposeAccount, proxycfg.Listings, cookiesFile)
 }
 
-func newCommandWithCookies(p purpose, cookiesFile string) *ytdlp.Command {
+func newCommandWithCookies(p purpose, use proxycfg.Use, cookiesFile string) *ytdlp.Command {
 	cmd := ytdlp.New()
 	cfg := loadConfig()
 
@@ -155,6 +199,15 @@ func newCommandWithCookies(p purpose, cookiesFile string) *ytdlp.Command {
 	// nothing here can play.
 	if cfg.binary != "" {
 		cmd = cmd.SetExecutable(cfg.binary)
+	}
+
+	// Also before it, and for a reason of its own: which *address* a request
+	// leaves by is not a question about credentials either. A listing is the
+	// traffic most likely to be refused for volume, and it is the traffic a
+	// household would most want to move off its own address without attaching
+	// an account to it — the two levers are independent and must stay so.
+	if proxyURL := proxyFor(use); proxyURL != "" {
+		cmd = cmd.Proxy(proxyURL)
 	}
 
 	// The whole of the account-safety rule, in one condition. Listings are the

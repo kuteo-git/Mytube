@@ -377,21 +377,43 @@ export const en = {
     videoVolumeWhileSpeaking: 'Video volume while speaking',
   },
 
-  transcriptSettings: {
-    title: 'Transcript',
+  proxySettings: {
+    title: 'Proxy',
     description:
-      'Somewhere else to ask for subtitles when YouTube is refusing this house. Videos keep playing when that happens — only captions are blocked, and only for this address.',
-    baseURL: 'Where to ask',
-    baseURLHint:
-      'A machine on your network running the small server in docs/transcript-server. Leave empty to ask nobody but YouTube directly.',
-    apiKey: 'Shared secret',
-    noKeyNeeded: 'Optional — only if that server asks for one.',
-    testVideo: 'Video to try',
-    testVideoHint: 'A YouTube id. Blank tries one known to have captions in both languages.',
-    gotCues: '{{language}} — {{count}} lines',
-    testFailed: 'Could not reach that server.',
-    saved: 'Saved. Used whenever YouTube refuses this address.',
-    turnedOff: 'Turned off. Captions come from YouTube only.',
+      'YouTube blocks by address, not by request — so when it refuses this house, the only thing that helps is asking from somewhere else. Measured here: subtitles were refused every time directly and answered every time through a proxy.',
+    url: 'Proxy',
+    urlHint:
+      'The whole address in one line, as your provider gives it: scheme://user:password@host:port. http, https, socks5 and socks5h all work. A rotating residential proxy is the kind that helps; datacentre ranges are blocked as a block.',
+    enabled: 'Use the proxy',
+    enabledHint: 'Off sends everything from this house as usual. Your address is kept.',
+    forCaptions: 'Subtitles',
+    forCaptionsHint: 'Tens of kilobytes a video. This is what the proxy is for.',
+    forListings: 'Metadata and search',
+    forListingsHint: 'Channel scans, search, playlists. Small, but a great many of them.',
+    forComments: 'Comments',
+    forCommentsHint: 'One video at a time, only when you open them.',
+    forMedia: 'Video downloads and playback',
+    forMediaHint: 'Hundreds of megabytes a video. Leave off unless you know why you need it.',
+    mediaWarning:
+      'Video is thousands of times larger than everything else here. A single film can spend more of your proxy allowance than a month of subtitles. Turn this on only for videos that will not download any other way.',
+    mediaConfirm: 'I understand, turn it on',
+    directAddress: 'Without proxy',
+    proxyAddress: 'Through proxy',
+    gotCues: 'Subtitles came back: {{language}}, {{count}} lines',
+    testFailed: 'The test could not be run.',
+    saved: 'Saved.',
+  },
+  proxyError: {
+    proxy_url_missing: 'Type a proxy address first.',
+    proxy_url_unparseable: 'That is not an address this can read.',
+    proxy_url_scheme: 'Start with http://, https://, socks5:// or socks5h://.',
+    proxy_url_no_host: 'The address has no host in it.',
+    proxy_unreachable:
+      'The proxy did not carry the request. Check the username, password and port.',
+    proxy_not_changing_address:
+      'The proxy works but leaves your address unchanged, so YouTube sees the same house. Ask your provider for a rotating residential endpoint.',
+    captions_refused: 'The proxy works, and YouTube still refused this address.',
+    captions_empty: 'Answered, but with no subtitles in it.',
   },
   translationSettings: {
     openaiFormat:

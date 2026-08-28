@@ -1,5 +1,76 @@
 # Changelog
 
+## 0.0.4 — 2026-08-28
+
+0.0.3 ended with a paragraph headed *"What is still not fixed, honestly"*: the
+block is on the **public address**, a second machine in the same house shares
+it, and none of that release's work could lift a block. This one lifts it.
+
+### What was measured
+
+Four videos, one minute, one machine — the only variable being which address the
+request left by:
+
+| | direct | through a rotating residential proxy |
+|---|---|---|
+| captions fetched | **0 of 4** (`IpBlocked`) | **4 of 4** |
+
+And end to end on the running stack afterwards: yt-dlp refused with `429`, the
+helper answered through the proxy, `outcome=landed langs=en`, the `.vtt` on disk
+four seconds later.
+
+### What changed
+
+- **Settings → Transcript is gone; Settings → Proxy replaces it.** The old
+  screen asked *which other machine to ask*, and that premise was wrong —
+  measured on this household's Home Assistant box, it was refused with the same
+  429 in the same minute. A second door in the same wall is not a second door.
+- **One field, `scheme://user:pass@host:port`**, which is what every provider
+  hands out and what both consumers take. http, https, socks5 and socks5h.
+  Nothing about it is Webshare-specific.
+- **Which traffic goes through it is chosen one kind at a time** — subtitles,
+  metadata & search, comments, video. They differ by three orders of magnitude
+  (tens of kilobytes against hundreds of megabytes) and a residential proxy is
+  metered by the gigabyte, so one switch covering both would be somebody turning
+  on captions and losing a month's allowance by morning.
+- **The video switch asks before it turns on**, and says what it costs. It is
+  not hidden: a geo-blocked video is a real reason to want it, and a control
+  that does not exist cannot be used. Turning it *off* never asks.
+- **The password is masked rather than withheld** — `http://user:••••@host:80`.
+  Every other credential here is never sent to the browser; this one lives
+  inside the field somebody must be able to read, and blanking it leaves them
+  unable to tell which provider they configured.
+- **Test reports three things, because three fail separately**: the address
+  without the proxy, the address through it, and one real caption fetch. Two
+  equal addresses mean a proxy that carries the request and changes nothing —
+  the failure most easily mistaken for a broken proxy when it is doing exactly
+  what it was told, and invisible without both numbers.
+- **The captions helper moved to loopback** (`127.0.0.1:8009`) and lost its
+  shared secret with the premise that needed one. `scripts/dev.sh` starts it;
+  nobody configures it. The proxy travels to it per request in a header, so
+  saving the form takes effect without restarting anything.
+
+### Two bugs that only measurement found
+
+- **A masked URL cannot be parsed.** `url.Parse` rejects the bullets outright,
+  so the obvious parse-edit-print version silently returned the mask *as the
+  password* — and would have saved four dots as the credential the first time
+  anybody toggled a switch.
+- **`youtube_transcript_api` swallows transport failures** and re-raises them as
+  its own `IpBlocked`. Catching `ProxyError` therefore reported a proxy nobody
+  could connect to as YouTube refusing the address: the worst available answer,
+  since it sends somebody to wait out a block that does not exist while their
+  password stays wrong. Which of the two happened is now measured, on the
+  failing path only.
+
+### Also
+
+- One switch implementation for the whole of settings (`ToggleRow`), rather than
+  the seventh hand-written one.
+- "Proxy" stays English in both dictionaries, under §4b's technical-term rule.
+
+No migrations.
+
 ## 0.0.3 — 2026-08-28
 
 One fault, chased to the bottom: **subtitles stopped arriving**. It turned out

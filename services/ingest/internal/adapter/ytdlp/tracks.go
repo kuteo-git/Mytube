@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
@@ -56,7 +57,7 @@ func (d *Downloader) ResolveTracks(ctx context.Context, videoURL string, height 
 }
 
 func (d *Downloader) resolveTracksOnce(ctx context.Context, videoURL string, height int32) (domain.MediaTracks, error) {
-	result, err := newCommand(purposeMedia).
+	result, err := newCommand(purposeMedia, proxycfg.Media).
 		SkipDownload().
 		NoPlaylist().
 		DumpJSON().
@@ -258,14 +259,14 @@ func preferAudio(current, next audioCandidate) bool {
 // formatTally is what a resolve saw, for the error it writes when it found
 // nothing usable.
 type formatTally struct {
-	total          int
-	noURL          int
-	notDirect      int
-	videoOnly      int
-	videoWrongExt  int
-	videoTooTall   int
-	audioOnly      int
-	audioWrongExt  int
+	total         int
+	noURL         int
+	notDirect     int
+	videoOnly     int
+	videoWrongExt int
+	videoTooTall  int
+	audioOnly     int
+	audioWrongExt int
 }
 
 func (t formatTally) String() string {
