@@ -145,6 +145,11 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings/tts", g.handleGetTTSConfig)
 	mux.HandleFunc("POST /api/settings/tts", g.handleSaveTTSConfig)
 	mux.HandleFunc("POST /api/settings/tts/test", g.handleTestTTS)
+	// Where captions can be asked for when this address is being refused. See
+	// transcript_config.go: the block is on the house, not on the request.
+	mux.HandleFunc("GET /api/settings/transcript", g.handleGetTranscriptConfig)
+	mux.HandleFunc("POST /api/settings/transcript", g.handleSaveTranscriptConfig)
+	mux.HandleFunc("POST /api/settings/transcript/test", g.handleTestTranscript)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)

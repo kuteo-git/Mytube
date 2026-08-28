@@ -43,6 +43,38 @@ export interface TranslateConfig {
   keyHint: string
 }
 
+/**
+ * Where captions can be asked for when YouTube is refusing this address.
+ *
+ * The same three fields and the same key rule as TranslateConfig: the key is
+ * stored on the server and never sent back, so the browser is told only whether
+ * one exists and which one it is.
+ *
+ * An empty `baseUrl` is the ordinary state and means "do not ask anybody else".
+ */
+export interface TranscriptConfig {
+  baseUrl: string
+  hasKey: boolean
+  keyHint: string
+}
+
+/**
+ * What one test fetch produced.
+ *
+ * The language, the count and the first line rather than a verdict — a server
+ * can answer 200 with an empty transcript or with the wrong language, and a
+ * status code calls both of those success. The first line is the part a person
+ * can look at and know.
+ */
+export interface TranscriptTestResult {
+  language?: string
+  generated?: boolean
+  cues?: number
+  firstLine?: string
+  ms?: number
+  error?: string
+}
+
 export interface TranslateTestResult {
   sample?: string
   translated?: string
@@ -173,6 +205,40 @@ export const settingsRepository = {
       body: JSON.stringify(input),
     })
     return json<TranslateTestResult>(r)
+  },
+
+  async getTranscriptConfig(): Promise<TranscriptConfig> {
+    return json<TranscriptConfig>(await apiFetch('/api/settings/transcript'))
+  },
+
+  async saveTranscriptConfig(input: {
+    baseUrl: string
+    apiKey: string
+    // An empty base URL is how the household turns this off, so it has to be
+    // told apart from "the field was not touched" — which is what an empty
+    // string means for every other field on this form.
+    clearBaseUrl?: boolean
+  }): Promise<TranscriptConfig> {
+    const r = await apiFetch('/api/settings/transcript', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    return json<TranscriptConfig>(r)
+  },
+
+  async testTranscript(input: {
+    baseUrl: string
+    apiKey: string
+    videoId: string
+  }): Promise<TranscriptTestResult> {
+    const q = input.videoId ? `?video=${encodeURIComponent(input.videoId)}` : ''
+    const r = await apiFetch(`/api/settings/transcript/test${q}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl: input.baseUrl, apiKey: input.apiKey }),
+    })
+    return json<TranscriptTestResult>(r)
   },
 
   async getFeedMix(): Promise<StoredFeedMix> {

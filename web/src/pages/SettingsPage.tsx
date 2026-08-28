@@ -1,6 +1,7 @@
 import {
   Activity,
   Bookmark,
+  Captions,
   ChevronRight,
   Clock,
   Eye,
@@ -17,6 +18,9 @@ import {
 import { useEffect, useState } from 'react'
 import {} from 'react-router-dom'
 import {
+  useSaveTranscriptConfig,
+  useTestTranscript,
+  useTranscriptConfig,
   useSaveTranslateConfig,
   useTestTranslate,
   useTranslateConfig,
@@ -82,6 +86,7 @@ export function SettingsPage() {
       <FeedMixSettings />
       <NarrationSettings />
       <TranslationSettings />
+      <TranscriptSettings />
       {/* Last, because it is the one section you arrive at having decided to
           change how the ranking behaves rather than what the page contains. */}
       <AdvancedSettings />
@@ -140,6 +145,7 @@ const PHONE_PREFS: MenuItem[] = [
   { to: '/settings/feed', icon: LayoutGrid, label: 'settings.feedMix.title' },
   { to: '/settings/narration', icon: Headphones, label: 'phoneSettings.narration' },
   { to: '/settings/translation', icon: Languages, label: 'phoneSettings.translation' },
+  { to: '/settings/transcript', icon: Captions, label: 'transcriptSettings.title' },
   { to: '/settings/advanced', icon: SlidersHorizontal, label: 'phoneSettings.advanced' },
 ]
 
@@ -379,6 +385,151 @@ export function NarrationSettings({ headless = false }: { headless?: boolean } =
           />
         </div>
       </div>
+    </SettingsSection>
+  )
+}
+
+/**
+ * Where captions can be asked for when YouTube is refusing this address.
+ *
+ * Its own section rather than a field inside Translation, because fetching
+ * subtitles and translating them are two jobs — and when one of them is broken,
+ * a viewer needs to be able to turn off the right one.
+ *
+ * The form is the same shape as Translation and Narration on purpose: a base
+ * URL, a key that is stored on the server and never sent back, a Test that
+ * returns what it got rather than a verdict. A household that has learned one
+ * of these should not have to learn another.
+ */
+export function TranscriptSettings({ headless = false }: { headless?: boolean } = {}) {
+  const { t } = useTranslation()
+  const { data: config } = useTranscriptConfig()
+  const save = useSaveTranscriptConfig()
+  const test = useTestTranscript()
+
+  const [baseUrl, setBaseUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [videoId, setVideoId] = useState('')
+
+  useEffect(() => {
+    if (!config) return
+    setBaseUrl(config.baseUrl)
+  }, [config])
+
+  const result = test.data
+  // Emptying the field is how this is switched off, and for every other field
+  // on these forms an empty string means "leave what you have alone". Saying so
+  // explicitly is the only way one input can mean both.
+  const clearBaseUrl = baseUrl.trim() === '' && Boolean(config?.baseUrl)
+
+  return (
+    <SettingsSection
+      headless={headless}
+      icon={<Captions size={18} />}
+      title={t('transcriptSettings.title')}
+      description={t('transcriptSettings.description')}
+    >
+      <SettingRow
+        label={t('transcriptSettings.baseURL')}
+        hint={t('transcriptSettings.baseURLHint')}
+      >
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
+          value={baseUrl}
+          placeholder="http://host:8009"
+          aria-label={t('transcriptSettings.baseURL')}
+          onChange={(e) => setBaseUrl(e.target.value)}
+        />
+      </SettingRow>
+
+      <SettingRow
+        label={t('transcriptSettings.apiKey')}
+        hint={
+          config?.hasKey
+            ? t('ui.keyStored', { hint: config.keyHint })
+            : t('transcriptSettings.noKeyNeeded')
+        }
+      >
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
+          type={showKey ? 'text' : 'password'}
+          value={apiKey}
+          placeholder={config?.hasKey ? '••••••••' : ''}
+          aria-label={t('transcriptSettings.apiKey')}
+          onChange={(e) => setApiKey(e.target.value)}
+        />
+        <button
+          type="button"
+          aria-label={showKey ? t('translationSettings.hideKey') : t('translationSettings.showKey')}
+          onClick={() => setShowKey((v) => !v)}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-surface-hover text-text-2 transition-colors duration-150 ease-out hover:text-text"
+        >
+          {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </SettingRow>
+
+      {/* The video to try, because a server can be reachable and still answer
+          nothing for the one video somebody actually cares about. Blank uses a
+          video known to carry captions in both languages. */}
+      <SettingRow
+        label={t('transcriptSettings.testVideo')}
+        hint={t('transcriptSettings.testVideoHint')}
+      >
+        <input
+          className="min-w-0 flex-1 rounded-lg bg-surface-input px-3 py-2 text-sm outline-none ring-1 ring-line focus:ring-2 focus:ring-ring"
+          value={videoId}
+          placeholder="dQw4w9WgXcQ"
+          aria-label={t('transcriptSettings.testVideo')}
+          onChange={(e) => setVideoId(e.target.value)}
+        />
+      </SettingRow>
+
+      <ActionBar>
+        <button
+          type="button"
+          onClick={() => test.mutate({ baseUrl, apiKey, videoId })}
+          disabled={test.isPending}
+          className="h-11 rounded-lg bg-surface-hover px-5 text-sm font-medium transition-colors duration-150 ease-out hover:bg-white/15 disabled:opacity-50"
+        >
+          {test.isPending ? t('ui.testing') : t('ui.test')}
+        </button>
+        <button
+          type="button"
+          onClick={() => save.mutate({ baseUrl, apiKey, clearBaseUrl })}
+          disabled={save.isPending}
+          className="h-11 rounded-lg bg-invert-bg px-5 text-sm font-medium text-invert-text transition-opacity duration-150 ease-out hover:opacity-90 disabled:opacity-50"
+        >
+          {save.isPending ? t('ui.saving') : t('common.save')}
+        </button>
+      </ActionBar>
+
+      {result && (
+        <div className="rounded-lg bg-surface-input p-3 text-sm">
+          {result.error ? (
+            <p className="text-brand">{result.error}</p>
+          ) : (
+            <>
+              <p className="text-xs text-text-2">
+                {t('transcriptSettings.gotCues', {
+                  language: result.language ?? '',
+                  count: result.cues ?? 0,
+                })}
+              </p>
+              <p className="mt-1">{result.firstLine}</p>
+              <p className="mt-1 text-xs text-text-2">
+                {t('more.milliseconds', { ms: result.ms ?? 0 })}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+      {test.isError && <p className="text-xs text-brand">{t('transcriptSettings.testFailed')}</p>}
+      {save.isSuccess && !save.isPending && (
+        <p className="text-xs text-text-2">
+          {clearBaseUrl ? t('transcriptSettings.turnedOff') : t('transcriptSettings.saved')}
+        </p>
+      )}
     </SettingsSection>
   )
 }

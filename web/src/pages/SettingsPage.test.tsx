@@ -16,6 +16,10 @@ vi.mock('@/features/settings/application/queries', () => ({
   useSaveTranslateConfig: () => ({ mutate: () => {}, isPending: false }),
   useTestTranslate: () => ({ mutate: () => {}, isPending: false, data: undefined }),
   useTranslateModels: () => ({ mutate: () => {}, data: [], isPending: false, isPaused: false }),
+  // Where captions can be asked for when YouTube is refusing this address.
+  useTranscriptConfig: () => ({ data: undefined }),
+  useSaveTranscriptConfig: () => ({ mutate: () => {}, isPending: false, isSuccess: false }),
+  useTestTranscript: () => ({ mutate: () => {}, isPending: false, data: undefined }),
   useRanking: () => ({ data: {}, isPending: false, isError: false, refetch: () => {} }),
   useSaveRanking: () => ({ mutate: () => {}, isPending: false }),
 }))
@@ -105,6 +109,7 @@ describe('Settings on a phone', () => {
       '/settings/feed',
       '/settings/narration',
       '/settings/translation',
+      '/settings/transcript',
       '/settings/advanced',
     ])
   })

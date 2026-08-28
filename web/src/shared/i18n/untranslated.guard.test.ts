@@ -95,6 +95,10 @@ const EXEMPT_TEXT = new Map<string, string>([
   // The name of the application.
   ['MyTube', 'the name of this app'],
   ['http://host:port', 'an example URL'],
+  ['http://host:8009', 'an example URL, with the transcript server default port'],
+  // A YouTube video id, shown so somebody knows what shape the field takes.
+  // Eleven characters of base64 are not a sentence in any language.
+  ['dQw4w9WgXcQ', 'a YouTube video id'],
   // A model name, shown as an example of what to type. Translating it would
   // suggest typing a Vietnamese string into a field that takes an identifier.
   ['gpt-4o-mini-tts', 'a model name'],

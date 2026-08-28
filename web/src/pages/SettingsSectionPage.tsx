@@ -3,7 +3,7 @@ import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
 import { YouTubeAccountSettings } from '@/features/settings/ui/YouTubeAccountSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { usePlayer } from '@/features/watch/application/player-context'
-import { NarrationSettings, TranslationSettings } from './SettingsPage'
+import { NarrationSettings, TranscriptSettings, TranslationSettings } from './SettingsPage'
 
 /**
  * One panel of Settings, on a screen of its own.
@@ -38,6 +38,14 @@ export function TranslationSettingsPage() {
   return (
     <div className="px-4 pb-16">
       <TranslationSettings headless />
+    </div>
+  )
+}
+
+export function TranscriptSettingsPage() {
+  return (
+    <div className="px-4 pb-16">
+      <TranscriptSettings headless />
     </div>
   )
 }

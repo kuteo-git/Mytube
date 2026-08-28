@@ -4,6 +4,8 @@ import type { RankingSettings } from '@/features/settings/domain/ranking'
 import {
   settingsRepository,
   type StoredFeedMix,
+  type TranscriptConfig,
+  type TranscriptTestResult,
   type TranslateConfig,
   type TranslateTestResult,
 } from '@/features/settings/infrastructure/settingsRepository'
@@ -141,6 +143,34 @@ export function useTranslateModels() {
   return useMutation({
     mutationFn: ({ baseUrl, apiKey }: { baseUrl: string; apiKey: string }) =>
       settingsRepository.listModels(baseUrl, apiKey),
+  })
+}
+
+export function useTranscriptConfig() {
+  return useQuery({
+    queryKey: ['transcript-config'],
+    queryFn: () => settingsRepository.getTranscriptConfig(),
+  })
+}
+
+export function useSaveTranscriptConfig() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { baseUrl: string; apiKey: string; clearBaseUrl?: boolean }) =>
+      settingsRepository.saveTranscriptConfig(input),
+    onSuccess: (saved: TranscriptConfig) => {
+      client.setQueryData(['transcript-config'], saved)
+    },
+  })
+}
+
+export function useTestTranscript() {
+  return useMutation<
+    TranscriptTestResult,
+    Error,
+    { baseUrl: string; apiKey: string; videoId: string }
+  >({
+    mutationFn: (input) => settingsRepository.testTranscript(input),
   })
 }
 

@@ -377,6 +377,22 @@ export const en = {
     videoVolumeWhileSpeaking: 'Video volume while speaking',
   },
 
+  transcriptSettings: {
+    title: 'Transcript',
+    description:
+      'Somewhere else to ask for subtitles when YouTube is refusing this house. Videos keep playing when that happens — only captions are blocked, and only for this address.',
+    baseURL: 'Where to ask',
+    baseURLHint:
+      'A machine on your network running the small server in docs/transcript-server. Leave empty to ask nobody but YouTube directly.',
+    apiKey: 'Shared secret',
+    noKeyNeeded: 'Optional — only if that server asks for one.',
+    testVideo: 'Video to try',
+    testVideoHint: 'A YouTube id. Blank tries one known to have captions in both languages.',
+    gotCues: '{{language}} — {{count}} lines',
+    testFailed: 'Could not reach that server.',
+    saved: 'Saved. Used whenever YouTube refuses this address.',
+    turnedOff: 'Turned off. Captions come from YouTube only.',
+  },
   translationSettings: {
     openaiFormat:
       "Anything that speaks OpenAI's chat completions API: its own /v1, or any service that copies it — OmniRouter, a local runner. The /v1 is optional here; both forms work.",

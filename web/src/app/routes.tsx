@@ -15,6 +15,7 @@ import {
   NarrationSettingsPage,
   ProfileSettingsPage,
   YouTubeAccountPage,
+  TranscriptSettingsPage,
   TranslationSettingsPage,
 } from '@/pages/SettingsSectionPage'
 import { SubscriptionsPage } from '@/pages/SubscriptionsPage'
@@ -64,6 +65,7 @@ export const pageRoutes = (
     <Route path="/settings/advanced" element={<AdvancedSettingsPage />} />
     <Route path="/settings/narration" element={<NarrationSettingsPage />} />
     <Route path="/settings/translation" element={<TranslationSettingsPage />} />
+    <Route path="/settings/transcript" element={<TranscriptSettingsPage />} />
     <Route path="/channel/:channelId" element={<ChannelPage />} />
     <Route path="/watch/:videoId" element={<WatchPage />} />
     <Route path="*" element={<Navigate to="/" replace />} />

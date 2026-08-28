@@ -408,6 +408,24 @@ export const vi: Dictionary = {
     videoVolumeWhileSpeaking: 'Âm lượng video khi đang đọc',
   },
 
+  transcriptSettings: {
+    title: 'Phụ đề',
+    // "nhà mình" chứ không phải "địa chỉ IP của bạn": YouTube chặn cả nhà, và
+    // đó là điều người đọc cần hiểu ngay để biết vì sao video vẫn xem được.
+    description:
+      'Chỗ khác để xin phụ đề khi YouTube chặn nhà mình. Lúc đó video vẫn xem bình thường — chỉ phụ đề bị chặn thôi.',
+    baseURL: 'Hỏi ở đâu',
+    baseURLHint:
+      'Một máy trong mạng đang chạy server nhỏ trong docs/transcript-server. Để trống thì chỉ hỏi thẳng YouTube.',
+    apiKey: 'Mã bí mật',
+    noKeyNeeded: 'Không bắt buộc — chỉ cần nếu server đó đòi.',
+    testVideo: 'Thử với video',
+    testVideoHint: 'Id của video YouTube. Để trống thì thử một video chắc chắn có phụ đề cả hai tiếng.',
+    gotCues: '{{language}} — {{count}} dòng',
+    testFailed: 'Không kết nối được tới server đó.',
+    saved: 'Đã lưu. Dùng mỗi khi YouTube chặn.',
+    turnedOff: 'Đã tắt. Phụ đề chỉ lấy từ YouTube.',
+  },
   translationSettings: {
     // Names the endpoint rather than saying "chuẩn OpenAI": somebody plugging
     // in their own service needs to know which of its APIs this uses.
