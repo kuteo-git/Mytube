@@ -1,5 +1,5 @@
 import type { StreamSources } from '@/features/catalog/infrastructure/catalogRepository'
-import type { QualityChoice } from '@/features/watch/application/autoplay'
+import { labelForHeight, type QualityChoice } from '@/features/watch/application/autoplay'
 import { shouldUseHLS } from '@/features/watch/application/hls-source'
 
 /**
@@ -68,6 +68,14 @@ export const PINNED_HEIGHT = 1080
 export function availableTiers(
   sources: StreamSources | undefined,
   choice: QualityChoice,
+  /**
+   * The tallest rung this device should be offered, or undefined for no cap.
+   *
+   * A phone's ceiling (CLAUDE.md §4: an iPhone 16e is 2532x1170, so 720p already
+   * exceeds its long edge). Passed in rather than read here so this file stays a
+   * pure function of a server answer and two preferences.
+   */
+  maxHeight?: number,
 ): Tier[] {
   if (!sources) return []
   const tiers: Tier[] = []
@@ -94,11 +102,16 @@ export function availableTiers(
   if (sources.hls && shouldUseHLS()) {
     tiers.push({
       name: 'hls',
-      url: sources.hls.url,
-      // Pinning the high rendition is an order. Auto keeps the server's own
-      // height: this tier only has to last until the copy lands — a median of
-      // thirteen seconds — and twice the bytes is twice the wait.
-      height: choice === 'high' ? PINNED_HEIGHT : (sources.hls.height ?? DEFAULT_LIVE_HEIGHT),
+      // The device ceiling travels on the URL, because on an iPhone it cannot
+      // travel anywhere else: HLS plays natively there and a page has no way to
+      // limit a level, so the rungs above the cap must simply not be written
+      // into the master playlist.
+      url: cappedHLSURL(sources.hls.url, maxHeight),
+      // What the viewer pinned, or the server's own height under Auto. Under
+      // Auto this is only a starting point: the ladder is real, so hls.js moves
+      // between its rungs on its own and what is on screen is reported by
+      // `LEVEL_SWITCHED` rather than predicted here.
+      height: typeof choice === 'number' ? choice : (sources.hls.height ?? DEFAULT_LIVE_HEIGHT),
     })
   }
 
@@ -131,13 +144,52 @@ export function targetTier(
   tiers: Tier[],
   current: TierName | undefined,
   localFailed: boolean,
+  /**
+   * The rung hls.js says it is playing, and the height of the file on disk.
+   *
+   * Both optional: neither is known on the first render, and where nothing is
+   * known this behaves exactly as it did before they existed.
+   */
+  playingHeight?: number,
+  localHeight?: number,
 ): Tier | undefined {
   const local = tiers.find((t) => t.name === 'local')
   // A file that will not load is not worth asking for again: the disk is not
   // going to change its mind between two polls of the same answer.
   const wanted = localFailed ? tiers.find((t) => t.name !== 'local') : (local ?? tiers[0])
   if (!wanted || wanted.name === current) return undefined
+
+  // A climb must not make the picture worse.
+  //
+  // The ladder now reaches 2160 and the file on disk is 1080p, so "the local
+  // copy has landed" and "the local copy is better" stopped being the same
+  // statement. Switching anyway would drop a viewer from 4K to 1080p mid-video —
+  // and every piece of tier machinery in this app exists to move the picture the
+  // other way.
+  //
+  // Only where the rung is genuinely taller. At equal heights the file still
+  // wins and still should: it is on the disk, needs nothing from upstream and
+  // cannot be refused halfway through.
+  if (
+    wanted.name === 'local' &&
+    playingHeight !== undefined &&
+    localHeight !== undefined &&
+    playingHeight > localHeight
+  ) {
+    return undefined
+  }
   return wanted
+}
+
+/**
+ * The master playlist URL with the device ceiling on it.
+ *
+ * `?max=720`, read by ingest when it writes the master. Exported so the one
+ * place that builds it is testable without a player.
+ */
+export function cappedHLSURL(url: string, maxHeight?: number): string {
+  if (!maxHeight) return url
+  return url + (url.includes('?') ? '&' : '?') + `max=${maxHeight}`
 }
 
 /**
@@ -147,8 +199,18 @@ export function targetTier(
  * one being streamed from upstream rather than read from the disk — the picture
  * is the same, but it can stop if the network does, and that is worth knowing.
  */
-export function tierLabel(tier: Tier | undefined, localHeight?: number): string {
+export function tierLabel(
+  tier: Tier | undefined,
+  localHeight?: number,
+  playingHeight?: number,
+): string {
   if (!tier) return ''
-  if (tier.name === 'local') return `${localHeight ?? PINNED_HEIGHT}p`
-  return `${tier.height ?? DEFAULT_LIVE_HEIGHT}p live`
+  if (tier.name === 'local') return labelForHeight(localHeight ?? PINNED_HEIGHT)
+  // The rung hls.js reports wins over anything this can work out for itself.
+  // Under Auto the tier's own height is where the ladder *started*, not where
+  // the player has moved to — so on a connection that dipped, this badge said
+  // "1080p live" over a 360p picture. Worse than saying nothing: the badge
+  // exists precisely so a viewer can tell a soft picture that will improve from
+  // one that is broken.
+  return `${labelForHeight(playingHeight ?? tier.height ?? DEFAULT_LIVE_HEIGHT)} live`
 }

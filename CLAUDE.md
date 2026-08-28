@@ -78,6 +78,93 @@ The player opens on the best tier the browser can play — `local` if it is ther
 - **A refused segment drops the cached URLs and resolves once more.** Only the playlist path did that, and the playlist is fetched once at the start — so a signed URL dying mid-video broke every remaining segment for the rest of the 90-minute TTL while nothing re-resolved, and the player could report only a stream that stopped.
 - **Autoplay still does not happen on iOS, and that is §5's decision, not a fault.** Audible autoplay needs a gesture Safari has not been given; the first frame sits still rather than the video playing muted.
 
+### The ladder goes to 4K, and the phone does not (2026-08-28)
+
+**HLS was already ABR and nothing could reach either end of it.** `maxRenditions`
+was 3 and the ceiling 1080, so the ladder was 1080/720/480 — no rung to drop to
+on a bad minute, and no rung above the file on disk. It is now **seven: 240 · 360
+· 480 · 720 · 1080 · 1440 · 2160**, measured on the running stack.
+
+- **The old floor argument named the wrong bottleneck.** It said "on a LAN the
+  moves that matter are the first two". The LAN is not the constraint; the road
+  from googlevideo to this gateway is, and §4 has it refusing this address in
+  waves. 144p is still absent — §7 cuts it, and an automatic ladder reaches
+  anything it can reach, so a rung never worth watching has to be gone rather
+  than last.
+- **Above 1080p there is no H.264 at all.** Measured on a real 4K upload: 1440p
+  and 2160p are published as vp9 and av01 and nothing else. So the ceiling could
+  not rise without letting another codec in.
+- **VP9 needed no rule.** YouTube ships it as webm over https or as vp09 in mp4
+  over m3u8, and the existing container and protocol filters remove both without
+  being asked. The change is AV1 only.
+- **Bitrate stopped being a quality comparison, and that was a live bug.** The
+  rule was "keep the best bitrate at each height", written when every candidate
+  at a height was H.264. At 1080p YouTube publishes both, and on one measured
+  video avc1 carries 3358k against av01's 1619k *for the same picture* — AV1 at
+  half the bits is the entire point of AV1. `preferRendition` now puts
+  compatibility first and lets bitrate break ties within a codec, so **1080p and
+  below are exactly what they were** and AV1 appears only where nothing else is
+  offered. Confirmed on the running stack: `avc1` at 1080/720/480/360/240,
+  `av01` at 1440/2160.
+- **Seven rungs cost no extra wall clock.** `ResolveTracks` verified every URL in
+  turn, 1 MiB apiece, in front of the viewer; the probes now run concurrently and
+  the first refusal cancels the rest. Every rung is still probed and one refusal
+  still fails the attempt — only the sum became the slowest.
+
+**A phone is capped at 720p, and the cap is enforced by the server.** That is not
+a preference: on iOS, HLS plays natively and a page has **no way to pin or limit
+a level** — Safari picks from whatever ladder it is handed. So the ceiling
+travels as `?max=720` on the master playlist URL and the rungs above it are never
+written. A condition in the player would work on Chrome and do nothing on the
+device it is for.
+
+- 720p already exceeds an iPhone 16e's long edge (2532×1170); everything above is
+  bytes spent on pixels the screen cannot draw, over the one road measured to be
+  refused in waves.
+- **Applied when the master is written, not when the tracks are resolved**, so a
+  phone and a desktop watching the same video share one resolve and one cache
+  entry.
+- **A cap below every rung a video publishes gives the whole ladder back.** A
+  picture larger than the screen is a waste; no picture is a fault.
+- **The gateway had to stop swallowing the query string.** `handleHLS` built its
+  target from the path alone, so `?max=720` would have arrived as no cap — a
+  phone quietly playing 4K with nothing anywhere saying why the setting did
+  nothing.
+- `coarse` decides what a phone is, reused from the control bar rather than
+  measured again, so the two cannot disagree.
+
+**The menu names the rungs this video publishes**: `Auto · 4K · 2K · 1080p ·
+720p · 480p`. 360 and 240 are on the ladder and deliberately not in the menu —
+they are an escape for a bad minute, not a preference, and a row for one is a row
+whose only honest use is admitting the connection is bad. `QualityChoice` is
+`'auto' | number`; a stored `'high'`/`'low'` migrates to 1080/360 rather than
+being reset.
+
+- **Auto says which rung it settled on** (`Auto (720p)`), in the menu and on the
+  badge over the picture. The badge already claimed to state "the resolution
+  actually on screen" and was reading the height the *server* started from, so it
+  said "1080p live" over a 360p picture. Without it a soft picture that will
+  improve and a broken one are indistinguishable.
+- **A pin outliving the video that could honour it was drawn as nothing at all.**
+  Pinning 4K and opening a 1080p video: hls.js is told 2160, finds no such rung
+  and goes to automatic — right, since substituting the nearest rung hands
+  somebody a different picture under the label of the one they asked for. But the
+  menu drew `value={2160}` against a list with no 2160 in it, so **no segment was
+  highlighted** and nothing said the player was on automatic. The control now
+  shows Auto with the rung beside it while the pin itself survives, so the next
+  video that does publish 4K plays 4K. Found by writing the test first; held by
+  it.
+
+**A climb must not make the picture worse.** The ladder reaches 2160 and the file
+on disk is 1080p, so "the copy has landed" and "the copy is better" stopped being
+the same statement — `targetTier` used to switch anyway and would drop a viewer
+from 4K to 1080p mid-video, which is the opposite of what every piece of tier
+machinery here exists to do. It now declines the local file only while a
+genuinely taller rung is playing; at equal heights the file still wins, because
+it is on the disk and cannot be refused halfway through. (The download is
+expected to go away entirely, which retires this question rather than
+complicating it.)
+
 ### A broadcast still on air is its own tier (2026-08-22)
 
 **A live video publishes no file, so nothing else here can play it.** Measured on `iipR5yUp36o` (ABC News Live, `is_live`, `duration: None`): **all seven formats are `m3u8_native`** — five video-only avc1 rungs from 144p to 720p, two audio-only — and **not one plain https URL among them**. `resolveTracksOnce` filters on https, so live resolved to nothing at all; the local, HLS and remux tiers all begin from a file with an index, and there is no file.

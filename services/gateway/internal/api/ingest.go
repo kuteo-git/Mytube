@@ -939,8 +939,17 @@ func (g *Gateway) handleRemuxStart(w http.ResponseWriter, r *http.Request) {
 // The Range header goes with it untouched: the player takes its ranges from a
 // playlist ingest wrote, so they are already exact, and rewriting them here
 // would only be a second place to get the arithmetic wrong.
+//
+// **The query string goes with it too**, and that is not decoration. It was
+// dropped here, silently, and `?max=720` — the per-device ceiling, which cannot
+// be applied in the browser on an iPhone — would have arrived at ingest as no
+// cap at all. The failure would have been a phone quietly playing 4K with
+// nothing anywhere saying why the setting did nothing.
 func (g *Gateway) handleHLS(w http.ResponseWriter, r *http.Request) {
 	target := g.ingestBaseURL + "/hls/" + url.PathEscape(r.PathValue("id")) + "/" + url.PathEscape(r.PathValue("name"))
+	if q := r.URL.RawQuery; q != "" {
+		target += "?" + q
+	}
 
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
 	if err != nil {

@@ -33,24 +33,56 @@ const attachMedia = vi.fn()
 const destroy = vi.fn()
 /** The rung hls.js was told to play; -1 is automatic. */
 let currentLevel = -1
+/** The ladder this video publishes, so a test can give one that lacks 4K. */
+let levelsForThisVideo: Array<{ height: number }> = []
 
 vi.mock('hls.js', () => {
   class FakeHls {
     static isSupported() {
       return true
     }
-    static Events = { ERROR: 'hlsError', MANIFEST_PARSED: 'hlsManifest' }
-    // The ladder the server resolved for this video, highest first.
-    levels = [{ height: 1080 }, { height: 720 }, { height: 480 }]
+    static Events = {
+      ERROR: 'hlsError',
+      MANIFEST_PARSED: 'hlsManifest',
+      LEVEL_SWITCHED: 'hlsLevelSwitched',
+    }
+    // The ladder the server resolved for this video, highest first. Seven rungs,
+    // matching ingest's `maxRenditions`, so what is under test is the menu the
+    // household actually gets — including the 360 and 240 that exist for ABR and
+    // are deliberately not named in it.
+    get levels() {
+      return levelsForThisVideo
+    }
     set currentLevel(v: number) {
       currentLevel = v
     }
     get currentLevel() {
       return currentLevel
     }
-    on() {}
+
+    // Handlers, kept rather than dropped: the menu is built from what the
+    // library *reports*, so a fake that never reports leaves the player looking
+    // at a video with no ladder — a different thing under test.
+    private handlers: Record<string, Array<(event: string, data: unknown) => void>> = {}
+    on(event: string, cb: (event: string, data: unknown) => void) {
+      ;(this.handlers[event] ??= []).push(cb)
+    }
+    private emit(event: string, data: unknown) {
+      for (const cb of this.handlers[event] ?? []) cb(event, data)
+    }
     loadSource(url: string) {
       loadSource(url)
+      // What the real library does: parse the manifest, announce the ladder,
+      // then announce which rung it settled on.
+      //
+      // 720p whatever the ladder is, found by height rather than by index — a
+      // literal index means one number for the seven-rung ladder and another for
+      // a video that tops out at 1080p, and a fake that reports a rung which
+      // does not exist teaches a test the wrong lesson.
+      this.emit(FakeHls.Events.MANIFEST_PARSED, {})
+      this.emit(FakeHls.Events.LEVEL_SWITCHED, {
+        level: levelsForThisVideo.findIndex((l) => l.height === 720),
+      })
     }
     attachMedia(el: HTMLVideoElement) {
       attachMedia(el)
@@ -131,6 +163,14 @@ vi.mock('@/features/catalog/infrastructure/catalogRepository', () => ({
 const settle = (ms = 30) => act(async () => void (await new Promise((r) => setTimeout(r, ms))))
 
 beforeEach(() => {
+  // The full ladder unless a test says otherwise, and reset per test so one that
+  // narrows it cannot decide the answer for the next.
+  levelsForThisVideo = [
+    { height: 2160 }, { height: 1440 }, { height: 1080 }, { height: 720 },
+    { height: 480 }, { height: 360 }, { height: 240 },
+  ]
+  window.localStorage.clear()
+
   // A desktop: MediaSource and no native HLS. Chrome, in other words.
   //
   // The vendor has to be set explicitly. jsdom reports
@@ -262,8 +302,86 @@ describe('the quality control where a rendition can actually be chosen', () => {
     // The rung changed on the running attachment. Nothing was re-attached and
     // no source was reloaded: hls.js switches at the next segment boundary, so
     // the picture does not restart to change quality.
-    expect(currentLevel).toBe(0)
+    //
+    // Index 2, because 1080p is the third rung of a ladder that now starts at
+    // 4K. The number was 0 while the ladder was 1080/720/480 — a test can encode
+    // the shape of a ladder without meaning to.
+    expect(currentLevel).toBe(2)
     expect(loadSource).toHaveBeenCalledTimes(1)
     expect(destroy).not.toHaveBeenCalled()
+  })
+
+  it('names the rungs somebody would choose, and not the ones they would not', async () => {
+    await mounted()
+    await waitFor(() => expect(loadSource).toHaveBeenCalled())
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+
+    const resolution = screen
+      .getAllByRole('radiogroup')
+      .find((g) => g.getAttribute('aria-label') === 'Resolution')!
+
+    // 4K and 2K rather than 2160p and 1440p, because those are the names people
+    // use. And 360/240 are absent although the ladder carries them: they exist
+    // so ABR has somewhere to go on a bad minute, and a menu row for one is a
+    // row whose only honest use is admitting the connection is bad.
+    const labels = within(resolution)
+      .getAllByRole('radio')
+      .map((b) => b.textContent)
+    expect(labels).toEqual(['Auto (720p)', '4K', '2K', '1080p', '720p', '480p'])
+  })
+
+  it('keeps a pinned rung on the next video, and says so when that video has none', async () => {
+    // A pinned choice is a standing preference: it lives in localStorage and
+    // survives from one video to the next, which is the whole reason it is
+    // stored. But the ladder belongs to the *video* — most uploads publish no
+    // 4K at all — so the question is what a menu should say when the rung
+    // somebody pinned does not exist here.
+    window.localStorage.setItem('quality', '2160')
+
+    // This video tops out at 1080p, like most of the library.
+    levelsForThisVideo = [{ height: 1080 }, { height: 720 }, { height: 480 }]
+
+    await mounted()
+    await waitFor(() => expect(loadSource).toHaveBeenCalled())
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+
+    const resolution = screen
+      .getAllByRole('radiogroup')
+      .find((g) => g.getAttribute('aria-label') === 'Resolution')!
+    const checked = within(resolution)
+      .getAllByRole('radio')
+      .filter((b) => b.getAttribute('aria-checked') === 'true')
+      .map((b) => b.textContent)
+
+    // hls.js was told 2160, found no such rung and went to automatic — the right
+    // thing, and documented on selectHeight. The menu has to say so: it drew
+    // `value={2160}` against a list with no 2160 in it, so nothing was
+    // highlighted at all and the viewer saw a row of unselected buttons while
+    // the player was quietly on automatic.
+    expect(checked).toEqual(['Auto (720p)'])
+
+    // And the pin survives. It is a standing preference; a single 1080p video
+    // must not be able to discard it.
+    expect(window.localStorage.getItem('quality')).toBe('2160')
+  })
+
+  it('says which rung Auto settled on', async () => {
+    await mounted()
+    await waitFor(() => expect(loadSource).toHaveBeenCalled())
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Settings'))
+    })
+
+    // The fake settled on level 3, which is 720p. Without this a viewer looking
+    // at a soft picture cannot tell a ladder that dropped for a slow minute from
+    // a video that is simply broken — both are "Auto" over a blurry frame.
+    expect(screen.getByText('Auto (720p)')).toBeTruthy()
   })
 })

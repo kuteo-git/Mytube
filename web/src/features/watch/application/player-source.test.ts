@@ -3,6 +3,7 @@ import {
   DEFAULT_LIVE_HEIGHT,
   PINNED_HEIGHT,
   availableTiers,
+  cappedHLSURL,
   openingTier,
   targetTier,
   tierLabel,
@@ -91,7 +92,7 @@ describe('availableTiers', () => {
 
   it('asks for the high rendition only when it was pinned', () => {
     expect(availableTiers({ hls }, 'auto')[0].height).toBe(DEFAULT_LIVE_HEIGHT)
-    expect(availableTiers({ hls }, 'high')[0].height).toBe(PINNED_HEIGHT)
+    expect(availableTiers({ hls }, 1080)[0].height).toBe(PINNED_HEIGHT)
   })
 })
 
@@ -142,5 +143,56 @@ describe('tierLabel', () => {
     expect(tierLabel({ name: 'hls', url: '', height: 1080 })).toBe('1080p live')
     expect(tierLabel({ name: 'local', url: '' }, 1080)).toBe('1080p')
     expect(tierLabel(undefined)).toBe('')
+  })
+})
+
+describe('the ceiling a device is given', () => {
+  const hls = { url: '/api/videos/abc/hls/master.m3u8', height: 720, seekable: true }
+
+  it('travels on the URL, because on an iPhone it cannot travel anywhere else', () => {
+    // Native HLS gives a page no way to pin or limit a level — Safari picks from
+    // whatever ladder it is handed. So the rungs above the cap must simply not
+    // be written into the master playlist, and the only way to say so is here.
+    const [tier] = availableTiers({ hls }, 'auto', 720)
+    expect(tier.url).toBe('/api/videos/abc/hls/master.m3u8?max=720')
+  })
+
+  it('is absent on a desktop', () => {
+    const [tier] = availableTiers({ hls }, 'auto')
+    expect(tier.url).toBe('/api/videos/abc/hls/master.m3u8')
+  })
+
+  it('appends rather than assuming there is no query yet', () => {
+    expect(cappedHLSURL('/hls/master.m3u8?v=2', 720)).toBe('/hls/master.m3u8?v=2&max=720')
+  })
+})
+
+describe('a climb must not make the picture worse', () => {
+  const local = { name: 'local' as const, url: '/media/abc/1080p.mp4' }
+  const streamed = { name: 'hls' as const, url: '/hls', height: 2160 }
+  const tiers = [local, streamed]
+
+  it('declines the local file while a taller rung is playing', () => {
+    // The ladder reaches 2160 and the file on disk is 1080p, so "the copy has
+    // landed" and "the copy is better" stopped being the same statement.
+    // Switching anyway drops a viewer from 4K to 1080p mid-video, which is the
+    // opposite of what every piece of tier machinery here exists to do.
+    expect(targetTier(tiers, 'hls', false, 2160, 1080)).toBeUndefined()
+  })
+
+  it('still takes the local file at the same height', () => {
+    // The file is on the disk, needs nothing from upstream and cannot be refused
+    // halfway through. At equal heights it wins and should.
+    expect(targetTier(tiers, 'hls', false, 1080, 1080)?.name).toBe('local')
+  })
+
+  it('still takes the local file when the rung is lower', () => {
+    expect(targetTier(tiers, 'hls', false, 480, 1080)?.name).toBe('local')
+  })
+
+  it('behaves as it always did when nothing has reported a rung', () => {
+    // Neither is known on the first render, and on native HLS the rung is never
+    // known at all.
+    expect(targetTier(tiers, 'hls', false)?.name).toBe('local')
   })
 })

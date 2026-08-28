@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
@@ -36,16 +38,25 @@ func (d *Downloader) ResolveTracks(ctx context.Context, videoURL string, height 
 		// second rung is dead is worse than one rung: the player switches down
 		// when the network dips — exactly when it can least afford a stall —
 		// and lands on a URL that was never going to answer.
+		//
+		// Concurrently, because this sits in front of the viewer. Each probe is
+		// a bounded 1 MiB request and the ladder is up to `maxRenditions` deep,
+		// so run in turn they were most of the wait before the first frame — for
+		// answers that have nothing to say to each other. The guarantee is
+		// unchanged: every URL is still probed and one refusal still fails the
+		// whole attempt. Only the wall clock moves, from the sum to the slowest.
 		urls := []string{tracks.Audio.URL}
 		for _, v := range tracks.Videos {
 			urls = append(urls, v.URL)
 		}
+		group, probeCtx := errgroup.WithContext(ctx)
 		for _, u := range urls {
-			if probeErr := verifyURL(ctx, u); probeErr != nil {
-				lastErr = probeErr
-				break
-			}
+			group.Go(func() error { return verifyURL(probeCtx, u) })
 		}
+		// The first refusal cancels the rest through the group's context, which
+		// keeps this from spending seven requests to learn what one of them has
+		// already answered.
+		lastErr = group.Wait()
 		if lastErr == nil {
 			return tracks, nil
 		}
@@ -99,19 +110,40 @@ func (d *Downloader) resolveTracksOnce(ctx context.Context, videoURL string, hei
 
 		switch {
 		case hasVideo && !hasAudio:
-			// H.264 only. A playlist may offer anything the device can decode,
-			// and this one is aimed at a television and an iPhone: VP9 and AV1
-			// are where those two disagree most.
+			// mp4 only, which in practice means H.264 up to 1080p and AV1 above
+			// it.
+			//
+			// This used to say "H.264 only" and never checked a codec — the
+			// container test was doing all the work, and AV1 in mp4 passed it
+			// silently. That was harmless while the ceiling was 1080p, where
+			// YouTube publishes avc1; it stops being harmless now the ceiling is
+			// 2160p, because **YouTube publishes no H.264 above 1080p at all**.
+			// Measured on a real 4K upload: 1440p and 2160p exist as vp9 and
+			// av01 and nothing else.
+			//
+			// VP9 needs no rule of its own. YouTube ships it as webm over https
+			// (excluded here) or as vp09 in mp4 over m3u8 (excluded by the
+			// https test above), so the container filter removes it without
+			// being asked to.
 			seen.videoOnly++
 			if deref(f.Extension) != "mp4" {
 				seen.videoWrongExt++
 				continue
 			}
-			if int32(deref(f.Height)) > height {
-				seen.videoTooTall++
+			height32 := int32(deref(f.Height))
+			if !usableRenditionHeight(height32, height) {
+				// One rule, asked once; the tally only reports which side of it
+				// this format fell off, because that is the difference between
+				// "the ceiling is too low" and "this video publishes nothing
+				// worth watching".
+				if height32 > height {
+					seen.videoTooTall++
+				} else {
+					seen.videoTooShort++
+				}
 				continue
 			}
-			h := int(deref(f.Height))
+			h := int(height32)
 			candidate := domain.MediaTrack{
 				URL:    f.URL,
 				Codec:  vcodec,
@@ -121,7 +153,7 @@ func (d *Downloader) resolveTracksOnce(ctx context.Context, videoURL string, hei
 				// bits, and BANDWIDTH is what a player budgets with.
 				Bitrate: int(deref(f.TBR) * 1000),
 			}
-			if existing, ok := byHeight[h]; !ok || candidate.Bitrate > existing.Bitrate {
+			if existing, ok := byHeight[h]; !ok || preferRendition(existing, candidate) {
 				byHeight[h] = candidate
 			}
 		case hasAudio && !hasVideo:
@@ -182,10 +214,69 @@ func (d *Downloader) resolveTracksOnce(ctx context.Context, videoURL string, hei
 
 // How many rungs the ladder may have.
 //
-// Three: the ceiling, one step down, and one more for a bad minute. The whole
-// point of a ladder is that the browser can move without asking, and on a LAN
-// the moves that matter are the first two.
-const maxRenditions = 3
+// Seven, so a video that publishes them all offers 240 · 360 · 480 · 720 ·
+// 1080 · 1440 · 2160.
+//
+// It was three, on the reasoning that "on a LAN the moves that matter are the
+// first two". The mistake in that is worth keeping written down: the bottleneck
+// is not the LAN. It is the road from googlevideo to this gateway, which §4 has
+// measured refusing this address in waves and which nothing here controls. With
+// three rungs the floor was 480p, so on a bad minute there was nowhere to go but
+// stop — and stopping is the one outcome a ladder exists to avoid.
+//
+// The cost is one URL to verify per rung on every resolve, against the address
+// §8 risk 6 counts. Since those probes now run concurrently (ResolveTracks) the
+// extra rungs cost no extra wall clock — only requests.
+const maxRenditions = 7
+
+// The lowest rung worth offering.
+//
+// 240 rather than 144, and it is a decision rather than an accident of what
+// YouTube publishes. CLAUDE.md §7 cuts 144p for good — "nobody watches 144p" —
+// and it is the one rung where closing the tab beats watching what arrives.
+//
+// So it must be absent rather than merely last. An automatic ladder reaches
+// anything it can reach, and on a bad minute it would: the viewer would then be
+// looking at 144p instead of at the pause that would have told them something
+// was wrong.
+const minRenditionHeight = 240
+
+// usableRenditionHeight reports whether a rung of this height belongs on the
+// ladder at all, given the ceiling asked for.
+//
+// A predicate rather than two inline comparisons, so the floor and the ceiling
+// can be asserted without a yt-dlp process between the test and the rule.
+func usableRenditionHeight(h, ceiling int32) bool {
+	return h <= ceiling && h >= minRenditionHeight
+}
+
+// preferRendition decides between two encodings of the same height.
+//
+// The old rule was "keep the best bitrate", and it was written when every
+// candidate at a height was H.264 — comparing two encodings of one codec, where
+// more bits is more picture. That stopped being true the moment the ceiling rose
+// past 1080p and AV1 joined the ladder: at 1080p YouTube publishes both, and on
+// one measured video avc1 carries 3358k against av01's 1619k for the same
+// picture. Bitrate across codecs is not a quality comparison at all — AV1 at
+// half the bits looks the same, which is the entire point of AV1.
+//
+// So compatibility decides first and bitrate only breaks ties within a codec.
+// H.264 plays on every device in this house and every television this is aimed
+// at; AV1 does not, and is here only because above 1080p there is nothing else.
+// The effect is that 1080p and below are exactly what they were before this
+// change, and AV1 appears only where it is the only thing on offer.
+func preferRendition(current, next domain.MediaTrack) bool {
+	currentH264 := isH264(current.Codec)
+	nextH264 := isH264(next.Codec)
+	if currentH264 != nextH264 {
+		return nextH264
+	}
+	return next.Bitrate > current.Bitrate
+}
+
+func isH264(codec string) bool {
+	return strings.HasPrefix(codec, "avc1") || strings.HasPrefix(codec, "avc3")
+}
 
 // audioCandidate is everything choosing between two audio tracks depends on.
 //
@@ -265,6 +356,7 @@ type formatTally struct {
 	videoOnly     int
 	videoWrongExt int
 	videoTooTall  int
+	videoTooShort int
 	audioOnly     int
 	audioWrongExt int
 }
@@ -272,9 +364,9 @@ type formatTally struct {
 func (t formatTally) String() string {
 	return fmt.Sprintf(
 		"%d formats: %d without a url, %d behind a manifest; "+
-			"video-only %d (%d wrong container, %d too tall); "+
+			"video-only %d (%d wrong container, %d too tall, %d too short); "+
 			"audio-only %d (%d wrong container)",
 		t.total, t.noURL, t.notDirect,
-		t.videoOnly, t.videoWrongExt, t.videoTooTall,
+		t.videoOnly, t.videoWrongExt, t.videoTooTall, t.videoTooShort,
 		t.audioOnly, t.audioWrongExt)
 }

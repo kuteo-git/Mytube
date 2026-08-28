@@ -152,6 +152,23 @@ export interface HLSAttachment {
    * a control stops meaning what it says.
    */
   selectHeight: (height: number | undefined) => void
+  /**
+   * The ladder this video publishes, heights only, highest first.
+   *
+   * Reported rather than assumed. Which rungs exist is a property of the video —
+   * YouTube does not publish every height for every upload, and above 1080p many
+   * publish nothing at all — so a menu built from a constant offers renditions
+   * this video does not have, which is §5's dead button wearing a number.
+   */
+  onLevels: (cb: (heights: number[]) => void) => void
+  /**
+   * The rung actually on screen, whenever it changes.
+   *
+   * Under Auto this is the only way to tell "the ladder dropped to 240p because
+   * the connection dipped" from "the video is broken", and it is what stops the
+   * player climbing down from a 4K stream to a 1080p file on disk.
+   */
+  onLevelSwitched: (cb: (height: number) => void) => void
 }
 
 /**
@@ -195,7 +212,7 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
   if (!Hls.isSupported()) {
     // Nothing can play it here. Said the way the player already listens for.
     el.dispatchEvent(new Event('error'))
-    return { detach: () => {}, selectHeight: () => {} }
+    return { detach: () => {}, selectHeight: () => {}, onLevels: () => {}, onLevelSwitched: () => {} }
   }
 
   const hls = new Hls({
@@ -235,6 +252,27 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
   }
   hls.on(Hls.Events.MANIFEST_PARSED, apply)
 
+  // Both reports are remembered, not merely forwarded. The caller attaches
+  // asynchronously — the library has to be fetched first — so hls.js can parse
+  // the manifest and settle on a rung before anyone has subscribed. Without
+  // replay the readout stayed a bare "Auto" until the ladder happened to move
+  // again, which on a good connection is never.
+  let levels: number[] | undefined
+  let onLevels: ((heights: number[]) => void) | undefined
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    levels = hls.levels.map((l) => l.height).sort((a, b) => b - a)
+    onLevels?.(levels)
+  })
+
+  let playing: number | undefined
+  let onLevelSwitched: ((height: number) => void) | undefined
+  hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+    const height = hls.levels[data.level]?.height
+    if (height === undefined) return
+    playing = height
+    onLevelSwitched?.(height)
+  })
+
   hls.loadSource(url)
   hls.attachMedia(el)
 
@@ -243,6 +281,14 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
     selectHeight: (height) => {
       wanted = height
       if (hls.levels.length > 0) apply()
+    },
+    onLevels: (cb) => {
+      onLevels = cb
+      if (levels) cb(levels)
+    },
+    onLevelSwitched: (cb) => {
+      onLevelSwitched = cb
+      if (playing !== undefined) cb(playing)
     },
   }
 }

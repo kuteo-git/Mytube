@@ -477,6 +477,7 @@ export const en = {
     advanced: 'Advanced',
     audio: 'Audio',
     auto: 'Auto',
+    autoAtHeight: 'Auto ({{height}})',
     autoplay: 'Autoplay',
     budget: 'Budget',
     categories: 'Categories',

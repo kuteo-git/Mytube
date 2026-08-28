@@ -25,7 +25,6 @@ import { log } from '@/shared/api/log'
 import { seekElement } from '@/features/watch/application/player-seek'
 import {
   type Tier,
-  PINNED_HEIGHT,
   availableTiers,
   openingTier,
   targetTier,
@@ -46,6 +45,9 @@ import {
   resetAutoplayChain,
   useAutoplayPreference,
   useQualityPreference,
+  OFFERED_HEIGHTS,
+  PHONE_MAX_HEIGHT,
+  labelForHeight,
 } from '@/features/watch/application/autoplay'
 import {
   bindNarration,
@@ -298,8 +300,14 @@ function useAttachedHLS(
   ref: React.RefObject<HTMLVideoElement | null>,
   src: string | undefined,
   height: number | undefined,
-) {
+): { levels: number[]; playing: number | undefined } {
   const attachment = useRef<HLSAttachment | undefined>(undefined)
+  // What the ladder turned out to be, and which rung is on screen. State rather
+  // than refs, unlike `heightRef` below: both are drawn — the first as the
+  // menu's rows, the second beside "Auto" and on the badge — so a change in
+  // either has to reach the screen.
+  const [levels, setLevels] = useState<number[]>([])
+  const [playing, setPlaying] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     const el = ref.current
@@ -319,12 +327,20 @@ function useAttachedHLS(
       // Apply whatever was already chosen. The viewer may have pinned a height
       // on the previous video, and the menu is read before this resolves.
       handle.selectHeight(heightRef.current)
+      handle.onLevels(setLevels)
+      handle.onLevelSwitched(setPlaying)
     })
 
     return () => {
       cancelled = true
       attachment.current?.detach()
       attachment.current = undefined
+      // The previous video's ladder must not be offered for this one. They are
+      // different videos and YouTube does not publish the same rungs for both;
+      // leaving them up means a menu row that quietly resolves to automatic when
+      // it is pressed — §5's dead button with a delay on it.
+      setLevels([])
+      setPlaying(undefined)
     }
   }, [ref, src])
 
@@ -337,6 +353,8 @@ function useAttachedHLS(
   useEffect(() => {
     attachment.current?.selectHeight(height)
   }, [height])
+
+  return { levels, playing }
 }
 
 export function Player({
@@ -450,10 +468,23 @@ export function Player({
   // undefined and the menu says so rather than offering a control that cannot
   // act (CLAUDE.md §5).
   const pinnedHeight =
-    quality === 'high' && canSelectHLSLevel() ? PINNED_HEIGHT : undefined
+    typeof quality === 'number' && canSelectHLSLevel() ? quality : undefined
   // After the preference, which it now reads: pinning the high rendition
   // changes what the muxed tier asks the server for.
-  const tiers = useMemo(() => availableTiers(sources, quality), [sources, quality])
+  // Whether this is a touch device, which decides two unrelated things: how big
+  // the settings' touch targets are, and — below — the ceiling on the ladder.
+  // One reading, so the two can never disagree about what a phone is.
+  const coarse = useCoarsePointer()
+
+  // A phone is capped at 720p, and the cap is applied by the *server* — see
+  // PHONE_MAX_HEIGHT. `coarse` is what decides, reused from the control bar
+  // rather than measured again, so the two can never disagree about what a
+  // phone is.
+  const deviceMaxHeight = coarse ? PHONE_MAX_HEIGHT : undefined
+  const tiers = useMemo(
+    () => availableTiers(sources, quality, deviceMaxHeight),
+    [sources, quality, deviceMaxHeight],
+  )
   // Bumped to send the climb round again when nothing else would — an
   // abandoned climb to the local file, which nothing else re-triggers once the
   // stream answer has stopped being polled.
@@ -1313,8 +1344,14 @@ export function Player({
   // The height is what the quality menu chose, or undefined for automatic.
   // Changing it moves the ladder without reloading anything: hls.js switches
   // rendition at the next segment boundary.
-  useAttachedHLS(videoARef, srcA, pinnedHeight)
-  useAttachedHLS(videoBRef, srcB, pinnedHeight)
+  const hlsA = useAttachedHLS(videoARef, srcA, pinnedHeight)
+  const hlsB = useAttachedHLS(videoBRef, srcB, pinnedHeight)
+
+  // The ladder of the layer the viewer is actually looking at. Both layers
+  // report, and during a handover they are playing different things — reading
+  // the wrong one would offer a menu belonging to the source being prepared
+  // behind the picture.
+  const hlsFront = frontIsA ? hlsA : hlsB
 
   // What this browser says it can play, said once.
   //
@@ -1391,7 +1428,10 @@ export function Player({
       return
     }
 
-    const wanted = targetTier(tiers, tier?.name, localFailed)
+    // The last two arguments are what stops a climb making the picture worse:
+    // the ladder now reaches 2160 and the file on disk is 1080p, so "the copy
+    // landed" and "the copy is better" are no longer the same statement.
+    const wanted = targetTier(tiers, tier?.name, localFailed, hlsFront.playing, remuxLabelHeight)
     if (!wanted) return
 
     // One attempt per tier at a time. Keyed on the tier rather than the URL,
@@ -1628,10 +1668,6 @@ export function Player({
    * interrupting what you were watching, every time, and dismissing them would
    * mean interrupting it again.
    */
-
-  // Declared here rather than beside the other layout state: the settings below
-  // size their touch targets from it, and they are built first.
-  const coarse = useCoarsePointer()
 
   // Polled in one place so the subtitle option and the line under it cannot
   // disagree about what the translator is doing. Only while a translation is
@@ -2104,29 +2140,67 @@ export function Player({
   }, [videoId, playable])
 
   // What is on screen, named the way a viewer would name it.
-  const tierLabel = labelForTier(tier, remuxLabelHeight)
+  const tierLabel = labelForTier(tier, remuxLabelHeight, hlsFront.playing)
 
-  // Only the choices this video can actually honour. A menu entry that cannot
-  // be delivered is worse than one that is missing.
-  const qualityOptions = useMemo(() => {
-    const options: { value: QualityChoice; label: string }[] = [{ value: 'auto', label: t('ui.auto') }]
-    // Offered only where pressing it does something.
-    //
-    // This was a dead button and it is worth saying how: the height was carried
-    // as a label on the tier, while the URL it pointed at was the same master
-    // playlist either way. Pressing 1080p relabelled a 720p picture. The
-    // playlist now describes a real ladder and hls.js can be told which rung —
-    // but only hls.js can. Native HLS gives a page no way to pin a level, so on
-    // Safari and iOS the honest menu is Auto alone, and on a LAN that costs
-    // nothing: the bandwidth estimate lands on the top rung anyway.
-    //
-    // "Low" is gone with the progressive rendition it named.
+  // The rungs this video actually publishes and somebody might choose.
+  //
+  // Reported by hls.js once the master playlist is parsed, not a constant:
+  // YouTube does not publish the same heights for every upload, and above 1080p
+  // most publish nothing at all, so a fixed list offers renditions that do not
+  // exist.
+  //
+  // Filtered to the ones worth naming. The ladder also carries 360 and 240 so
+  // ABR has somewhere to go on a bad minute, but nobody chooses those by hand —
+  // they are an escape, not a preference.
+  //
+  // Empty where pressing one would do nothing: native HLS gives a page no way to
+  // pin a level, so on iPhone the honest menu is Auto alone. That is a real
+  // difference between the platforms, not an omission, and it is why the phone's
+  // ceiling is enforced by the server instead.
+  const selectableHeights = useMemo(() => {
     const streamed = tiers.find((t) => t.name === 'hls')
-    if (streamed && canSelectHLSLevel()) {
-      options.push({ value: 'high', label: `${PINNED_HEIGHT}p` })
+    if (!streamed || !canSelectHLSLevel()) return []
+    return hlsFront.levels.filter((h) => OFFERED_HEIGHTS.includes(h))
+  }, [tiers, hlsFront.levels])
+
+  // What the control should show as chosen, which is not always what is pinned.
+  //
+  // A pin is a standing preference and survives from video to video — that is
+  // the point of storing it. But the ladder belongs to the *video*, and most
+  // uploads publish no 4K at all. hls.js is told the pinned height, finds no
+  // such rung and goes to automatic, which is right: substituting the nearest
+  // rung would hand somebody a different picture under the label of the one they
+  // asked for.
+  //
+  // What was wrong was the menu. It drew `value={2160}` against a list with no
+  // 2160 in it, so **no segment was highlighted at all** — the viewer saw a row
+  // of unselected buttons while the player was quietly on automatic, and nothing
+  // said so. Held by a test.
+  //
+  // The pin itself is untouched, so the next video that does publish 4K plays
+  // 4K without anyone having to ask twice.
+  const effectiveQuality: QualityChoice =
+    typeof quality === 'number' && selectableHeights.includes(quality) ? quality : 'auto'
+
+  const qualityOptions = useMemo(() => {
+    const options: { value: QualityChoice; label: string }[] = [
+      {
+        value: 'auto',
+        // Auto says which rung it settled on, because otherwise a soft picture
+        // and a broken one look the same from here. Keyed on the *effective*
+        // choice, so a video that cannot honour the pin says "Auto (1080p)"
+        // rather than a bare "Auto" beside nothing selected.
+        label:
+          effectiveQuality === 'auto' && hlsFront.playing !== undefined
+            ? t('ui.autoAtHeight', { height: labelForHeight(hlsFront.playing) })
+            : t('ui.auto'),
+      },
+    ]
+    for (const height of selectableHeights) {
+      options.push({ value: height, label: labelForHeight(height) })
     }
     return options
-  }, [tiers])
+  }, [selectableHeights, effectiveQuality, hlsFront.playing, t])
 
   /**
    * Resolution, as a segmented control like everything else in this panel.
@@ -2139,7 +2213,7 @@ export function Player({
     qualityOptions.length > 1 ? (
       <SegmentedSetting
         label={t('ui.resolution')}
-        value={quality}
+        value={effectiveQuality}
         tall={coarse}
         onSelect={(next: QualityChoice) => {
           // Choosing again is a fresh decision, so the attempt count starts
@@ -3626,7 +3700,7 @@ function NarrationStatus({
  * and what the alternatives are. Matches the Like/Dislike pair in the design
  * system (MASTER.md), which is segmented for the same reason.
  */
-function SegmentedSetting<T extends string>({
+function SegmentedSetting<T extends string | number>({
   label,
   options,
   value,

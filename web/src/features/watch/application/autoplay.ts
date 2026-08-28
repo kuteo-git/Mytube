@@ -59,8 +59,76 @@ export function autoplayChainExhausted(): boolean {
 
 const QUALITY_KEY = 'quality'
 
-/** What the viewer asked for. "auto" lets the player choose and change. */
-export type QualityChoice = 'auto' | 'high' | 'low'
+/**
+ * What the viewer asked for: `'auto'`, or the height of one rung of the ladder.
+ *
+ * It was `'auto' | 'high' | 'low'`, from a time when the ladder was a label
+ * rather than a real thing — `'high'` meant 1080 and `'low'` named the
+ * progressive rendition that stopped serving, so it had been a dead value for a
+ * release. A height is what hls.js is actually told, so carrying anything else
+ * means translating at every call site and having somewhere for the translation
+ * to be wrong.
+ */
+export type QualityChoice = 'auto' | number
+
+/**
+ * The rungs the menu will name, best first.
+ *
+ * The ladder itself goes lower — 360 and 240 exist so ABR has somewhere to go on
+ * a bad minute — but nobody chooses those by hand. They are an escape, not a
+ * preference, and a menu row for one is a row whose only honest use is admitting
+ * the connection is bad.
+ */
+export const OFFERED_HEIGHTS = [2160, 1440, 1080, 720, 480]
+
+/**
+ * What a rung is called on screen.
+ *
+ * "4K" and "2K" rather than "2160p" and "1440p", because those are the names
+ * people actually use for them and the ones every other player shows. Below
+ * that the p-form is what everybody says, so it stays: nobody calls 1080p "2K"
+ * even though the arithmetic almost allows it.
+ *
+ * A function rather than a table beside the heights, so a rung the ladder gains
+ * later gets a name automatically instead of a blank.
+ */
+export function labelForHeight(height: number): string {
+  if (height >= 2160) return '4K'
+  if (height >= 1440) return '2K'
+  return `${height}p`
+}
+
+/**
+ * The ceiling on a phone.
+ *
+ * An iPhone 16e is 2532x1170, so 720p already exceeds it across the long edge;
+ * everything above is bytes spent on pixels the screen cannot draw, over the one
+ * road (googlevideo to this gateway) that is measured to be refused in waves.
+ *
+ * **Enforced by the server, not here.** On iOS, HLS plays natively and a page
+ * has no way to pin or limit a level — Safari picks from whatever ladder it is
+ * handed. So this number travels as `?max=` on the master playlist URL and the
+ * rungs above it are never written. A condition in this file would work on
+ * Chrome and do nothing on the device it is for.
+ */
+export const PHONE_MAX_HEIGHT = 720
+
+/** Heights the app will accept from storage or a menu. */
+const KNOWN_HEIGHTS = [...OFFERED_HEIGHTS, 360, 240]
+
+/**
+ * What a stored preference from before heights existed meant.
+ *
+ * Mapped rather than discarded. Somebody in the house has already pinned a
+ * rendition, and silently resetting them to Auto is a change they did not ask
+ * for and would have no way to explain.
+ */
+export function migrate(stored: string | null): QualityChoice {
+  if (stored === 'high') return 1080
+  if (stored === 'low') return 360
+  const height = Number(stored)
+  return KNOWN_HEIGHTS.includes(height) ? height : 'auto'
+}
 
 /**
  * The viewer's quality choice, remembered across videos.
@@ -76,12 +144,19 @@ export type QualityChoice = 'auto' | 'high' | 'low'
  */
 export function useQualityPreference(): [QualityChoice, (next: QualityChoice) => void] {
   const [choice, setChoice] = useState<QualityChoice>(() => {
-    const stored = window.localStorage.getItem(QUALITY_KEY)
-    return stored === 'high' || stored === 'low' ? stored : 'auto'
+    try {
+      return migrate(window.localStorage.getItem(QUALITY_KEY))
+    } catch {
+      return 'auto'
+    }
   })
 
   const update = useCallback((next: QualityChoice) => {
-    window.localStorage.setItem(QUALITY_KEY, next)
+    try {
+      window.localStorage.setItem(QUALITY_KEY, String(next))
+    } catch {
+      // A device that refuses storage still gets the choice for this sitting.
+    }
     setChoice(next)
   }, [])
 
