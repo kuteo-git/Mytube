@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.0.7 — 2026-08-28
+
+**Some videos listed a subtitle track that showed nothing**, and the translation
+panel said "No subtitles available" over a file that was plainly on the disk.
+
+The caption track addresses YouTube hands out already carry a format —
+`fmt=srv3` — and the download appended `&fmt=vtt` rather than replacing it. Two
+`fmt` parameters, and YouTube takes the first. Measured on a real URL:
+appended answered `<?xml …><timedtext format="3">`, replaced answered `WEBVTT`.
+
+So an 81 KB file named `.vtt` was written holding XML. **Nothing failed anywhere
+along the way** — the fetch succeeded, the catalogue listed the track, `/media`
+served it 200, and the log said `outcome=landed`. The browser parsed zero cues
+out of it, which is the correct thing to do with XML.
+
+- **The format is replaced, never appended.**
+- **A body that does not begin `WEBVTT` is refused rather than written.** On disk
+  it is indistinguishable from a real subtitle file until somebody opens it, and
+  this app treats a file that exists as captions that arrived.
+- Measured on the video that reported it: **0 cues before, 807 after.**
+
+Existing bad files are replaced on the next caption fetch. To force one, delete
+the video's `.vtt` and open it again.
+
+No migrations.
+
 ## 0.0.6 — 2026-08-28
 
 **A port is not an identity.** The captions helper shipped on `:8009` in 0.0.4,

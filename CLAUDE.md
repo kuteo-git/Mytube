@@ -495,6 +495,40 @@ every provider, operating system and application uses that word, and *máy chủ
 trung gian* is a phrase somebody would have to translate back before they could
 match it to their provider's dashboard. The sentences around it are translated.
 
+### A file called `.vtt` holding XML (2026-08-28)
+
+**`fmt` was appended to a URL that already had one, and YouTube takes the
+first.** The caption track addresses in a player response carry `fmt=srv3`;
+`download` added `&fmt=vtt`, leaving two of them. Measured on a real track URL:
+
+| asked | answered |
+|---|---|
+| `…&fmt=srv3&fmt=vtt` | `<?xml …><timedtext format="3">` |
+| `…&fmt=vtt` (replaced) | `WEBVTT` |
+
+What reached the disk was an **81 KB file named `.vtt` holding XML**, and the
+reason it took a long evening to find is that **nothing failed**. The fetch
+succeeded, the file was written, the catalogue listed the track, `/media` served
+it 200, and the log said `outcome=landed langs=en`. The browser then parsed zero
+cues, the subtitle menu offered a track that displayed nothing, and the
+translation pass reported *"No subtitles available"* over a file plainly sitting
+there.
+
+- **`withFormat` sets the parameter rather than adding one**, and is its own
+  function so the rule can be asserted without a network.
+- **A body that does not begin `WEBVTT` is refused rather than written.** On disk
+  it is indistinguishable from a real subtitle file until somebody opens it, and
+  this app treats a file that exists as captions that arrived. The remote helper
+  already refused on the same test; this path did not.
+- **Two diagnoses were wrong before the right one, and both were wrong in the
+  same way** — reading code and reasoning about what *should* happen. The first
+  was "the client never asks again after captions land"; the client's own log
+  showed the pass re-running four times. The second was "the pass gives up
+  terminally"; the same log showed `cuesKnown=0`, not `-1`, which says the file
+  *was* fetched and parsed and yielded nothing. Only then did looking at the
+  bytes on disk answer it. The lesson is the one §4 keeps relearning: the
+  evidence is what the thing actually produced, not what the code says it does.
+
 ### Where the library lives, and whether it is kept (2026-08-22)
 
 **The folder is a setting, and the saved value beats the environment.** `MEDIA_ROOT` is read at start-up by three services — ingest writes there, catalog deletes there, the gateway serves it — and used to be changeable only by editing `scripts/dev.sh`. It is now `data/storage.json`, resolved through `internal/mediaroot`.

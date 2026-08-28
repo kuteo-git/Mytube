@@ -21,6 +21,7 @@
 package timedtext
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -253,8 +255,54 @@ func (c *Client) list(ctx context.Context, videoID string) ([]captionTrack, erro
 // `fmt=vtt` is what makes this a drop-in for the yt-dlp path: without it the
 // endpoint answers in YouTube's own XML and something here would have to
 // convert it, which is a second parser to keep correct for no gain.
+//
+// **Set, not appended, and that distinction was a live bug.** The track URLs in
+// a player response already carry a format — `fmt=srv3` — and appending a second
+// one leaves two `fmt` parameters in the query, of which YouTube takes the
+// first. Measured on the URL from a real video: `…&fmt=srv3&fmt=vtt` answers
+// `<?xml …><timedtext format="3">`, and the same URL with the single parameter
+// replaced answers `WEBVTT`.
+//
+// What that produced was an 81 KB file called `.vtt` holding XML. Everything
+// downstream did exactly what it should with it and the result was silence: the
+// browser parsed zero cues, the subtitle menu listed a track that showed
+// nothing, and the translation pass reported "no subtitles available" over a
+// file that was plainly there. Nothing logged an error anywhere, because
+// nothing had failed.
 func (c *Client) download(ctx context.Context, baseURL string) ([]byte, error) {
-	return c.get(ctx, baseURL+"&fmt=vtt")
+	asked, err := withFormat(baseURL, "vtt")
+	if err != nil {
+		return nil, err
+	}
+	body, err := c.get(ctx, asked)
+	if err != nil {
+		return nil, err
+	}
+	// A file that does not begin WEBVTT is not a subtitle file, whatever it is
+	// called. Refused here rather than written, because on disk it is
+	// indistinguishable from a real one until somebody opens it — and the app
+	// treats a file that exists as captions that arrived.
+	//
+	// The remote helper already refuses on the same test, for the same reason.
+	if !bytes.HasPrefix(bytes.TrimSpace(body), []byte("WEBVTT")) {
+		return nil, fmt.Errorf("timedtext answered with something that is not WebVTT")
+	}
+	return body, nil
+}
+
+// withFormat replaces the `fmt` parameter rather than adding one.
+//
+// Its own function so the rule can be asserted without a network. See download
+// for what appending cost.
+func withFormat(rawURL, format string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("timedtext url: %w", err)
+	}
+	q := u.Query()
+	q.Set("fmt", format)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 func (c *Client) get(ctx context.Context, url string) ([]byte, error) {
