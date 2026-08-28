@@ -11,6 +11,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,8 +69,27 @@ const streamTTL = 90 * time.Minute
 // would write dozens of files nobody reads.
 const subtitleLanguages = "en,vi"
 
+// How long to wait before asking for captions again, per attempt.
+//
+// Four attempts over about a minute and a half, inside the three-minute budget
+// the caller already allows (`subtitleFetchTimeout`). One entry per *wait*, so
+// the number of attempts is one more than the number of delays — written down
+// because the first version read `len(delays)-1` and gave two attempts five
+// seconds apart, which measured on 2JajSt59wqc was over before the wave was.
+//
+// Growing rather than flat: a refusal that survives twenty seconds is not the
+// same weather as one that clears in five, and asking again at the same rate is
+// how a wave becomes a ban (§8 risk 6).
+var subtitleRetryDelays = []time.Duration{5 * time.Second, 20 * time.Second, 60 * time.Second}
+
 type Downloader struct {
 	mediaRoot string
+	// Where the caption passes say what happened. They used to say nothing at
+	// all — `_, _ = cmd.Run(...)` — and a caption fetch that YouTube refused was
+	// indistinguishable from a video that has no captions: an empty folder
+	// either way, no line anywhere. It cost a debugging session to find out
+	// that the answer had been 429.
+	logger *slog.Logger
 }
 
 // New prepares the downloader, resolving yt-dlp on first use.
@@ -89,9 +109,9 @@ type Downloader struct {
 // adaptive formats at all — where 2026.07.04 returns the full ladder. Pinning
 // backwards would reintroduce that silently: playback would still work, just
 // never above 360p.
-func New(ctx context.Context, mediaRoot string) *Downloader {
+func New(ctx context.Context, mediaRoot string, logger *slog.Logger) *Downloader {
 	ytdlp.MustInstall(ctx, &ytdlp.InstallOptions{AllowVersionMismatch: true})
-	return &Downloader{mediaRoot: mediaRoot}
+	return &Downloader{mediaRoot: mediaRoot, logger: logger}
 }
 
 func deref[T any](p *T) T {
@@ -469,10 +489,10 @@ func (d *Downloader) mediaPaths(videoID string, height int32) (dir, target strin
 // before the media transfer: captions are tiny and the viewer is watching a
 // lower-quality upstream stream in the meantime, which is exactly when they are
 // most wanted.
-func (d *Downloader) FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) []domain.SubtitleTrack {
+func (d *Downloader) FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) ([]domain.SubtitleTrack, bool) {
 	dir, target := d.mediaPaths(videoID, height)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil
+		return nil, false
 	}
 	// Already on disk: nothing to fetch and nothing to publish. Two callers now
 	// reach this — the download worker and the request that starts playback —
@@ -482,7 +502,7 @@ func (d *Downloader) FetchSubtitles(ctx context.Context, videoURL, videoID strin
 	// the tracks it would be given here have already been published by the
 	// caller that fetched them.
 	if len(collectSubtitles(dir, videoID, true)) > 0 {
-		return nil
+		return nil, false
 	}
 	return d.fetchSubtitles(ctx, videoURL, dir, videoID, target)
 }
@@ -607,7 +627,7 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 // the same question by *place* instead, and neither has to wait.
 //
 // It never returns an error. A video without captions is a working video.
-func (d *Downloader) fetchSubtitles(ctx context.Context, videoURL, dir, videoID, target string) []domain.SubtitleTrack {
+func (d *Downloader) fetchSubtitles(ctx context.Context, videoURL, dir, videoID, target string) ([]domain.SubtitleTrack, bool) {
 	base := filepath.Base(target)
 	authoredDir := filepath.Join(dir, ".subs-authored")
 	autoDir := filepath.Join(dir, ".subs-auto")
@@ -616,29 +636,62 @@ func (d *Downloader) fetchSubtitles(ctx context.Context, videoURL, dir, videoID,
 	_ = os.RemoveAll(authoredDir)
 	_ = os.RemoveAll(autoDir)
 	if err := os.MkdirAll(authoredDir, 0o755); err != nil {
-		return nil
+		return nil, false
 	}
 	if err := os.MkdirAll(autoDir, 0o755); err != nil {
-		return nil
+		return nil, false
 	}
 	defer func() {
 		_ = os.RemoveAll(authoredDir)
 		_ = os.RemoveAll(autoDir)
 	}()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		d.runSubtitlePass(ctx, videoURL, filepath.Join(authoredDir, base), false)
-	}()
-	go func() {
-		defer wg.Done()
-		d.runSubtitlePass(ctx, videoURL, filepath.Join(autoDir, base), true)
-	}()
-	wg.Wait()
+	// Refused, not empty — so ask again.
+	//
+	// The caption endpoint answers 429 in waves, the way §4 records googlevideo
+	// doing for media, and a wave passes in seconds. Nothing retried: the error
+	// was thrown away, the folder was left empty, and the video had no captions
+	// for as long as the page stayed open — with the translation and the
+	// read-aloud, which are built on that .vtt, gone with them. Reported on
+	// tgjYMym_0-c, a video with automatic captions in both languages.
+	//
+	// Only when nothing at all landed *and* upstream said it was refusing. A
+	// video that genuinely has no captions is finished on the first pass and
+	// must not cost three full extracts every time somebody presses play.
+	for attempt := 0; ; attempt++ {
+		var wg sync.WaitGroup
+		var authoredRefused, autoRefused bool
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			authoredRefused = d.runSubtitlePass(ctx, videoURL, filepath.Join(authoredDir, base), false)
+		}()
+		go func() {
+			defer wg.Done()
+			autoRefused = d.runSubtitlePass(ctx, videoURL, filepath.Join(autoDir, base), true)
+		}()
+		wg.Wait()
 
-	return mergeSubtitlePasses(authoredDir, autoDir, dir, videoID)
+		tracks := mergeSubtitlePasses(authoredDir, autoDir, dir, videoID)
+		if len(tracks) > 0 || !(authoredRefused || autoRefused) {
+			return tracks, false
+		}
+		if attempt >= len(subtitleRetryDelays) {
+			// Refused throughout. Said out loud and reported upwards: the sweep
+			// asks again in minutes rather than in the seconds available here,
+			// which is the difference between a viewer's window and upstream's.
+			d.logger.Warn("subtitles refused", "url", videoURL, "attempts", attempt+1)
+			return tracks, true
+		}
+
+		wait := subtitleRetryDelays[attempt]
+		d.logger.Info("subtitles refused, waiting", "url", videoURL, "wait", wait)
+		select {
+		case <-ctx.Done():
+			return nil, false
+		case <-time.After(wait):
+		}
+	}
 }
 
 // mergeSubtitlePasses moves both passes' files into the video's directory,
@@ -669,15 +722,27 @@ func mergeSubtitlePasses(authoredDir, autoDir, dir, videoID string) []domain.Sub
 	return tracks
 }
 
-func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target string, automatic bool) {
+// runSubtitlePass reports whether upstream refused, which is not the same as
+// there being nothing to fetch.
+//
+// yt-dlp exits 0 in both cases and writes the refusal to stderr, so the caller
+// cannot tell them apart from the exit code or from an empty folder. It matters
+// because they want opposite responses: a video with no captions is finished,
+// and a video whose captions were refused is worth asking about again.
+func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target string, automatic bool) (refused bool) {
 	// YouTube rate-limits the caption endpoint far more aggressively than the
 	// media one and answers 429 readily. Pacing requests and retrying is what
 	// makes captions arrive at all; failing costs nothing.
+	//
+	// `--sleep-subtitles` is separate from `--sleep-requests` and this endpoint
+	// is exactly what it is for: measured on tgjYMym_0-c, the English track
+	// landed and the Vietnamese one was refused in the same run, a second apart.
 	cmd := newCommand(purposeMedia).
 		SkipDownload().
 		SubLangs(subtitleLanguages).
 		ConvertSubs("vtt").
 		SleepRequests(1).
+		SleepSubtitles(2).
 		Retries("3").
 		NoPlaylist().
 		NoWarnings().
@@ -689,7 +754,48 @@ func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target strin
 		cmd = cmd.WriteSubs()
 	}
 
-	_, _ = cmd.Run(ctx, videoURL)
+	kind := "authored"
+	if automatic {
+		kind = "automatic"
+	}
+
+	res, err := cmd.Run(ctx, videoURL)
+	stderr := ""
+	if res != nil {
+		stderr = strings.TrimSpace(res.Stderr)
+	}
+	if err != nil || stderr != "" {
+		d.logger.Warn("subtitle pass",
+			"kind", kind, "url", videoURL, "error", err, "stderr", tail(stderr, 512))
+	}
+	return isRateLimited(stderr) || isRateLimited(errString(err))
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+// tail keeps the end of a message, which is where yt-dlp puts the reason.
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
+// isRateLimited matches upstream's own wording for "ask again later".
+//
+// Narrow on purpose, like domain.ClassifyUnavailable: anything broader would
+// have a video that genuinely has no captions asked about three times, every
+// time somebody presses play on it, against the address §8 risk 6 counts.
+func isRateLimited(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "429") ||
+		strings.Contains(lower, "too many requests") ||
+		strings.Contains(lower, "rate limit")
 }
 
 // collectSubtitles reads back what yt-dlp wrote. The filenames follow

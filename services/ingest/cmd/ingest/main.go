@@ -30,7 +30,9 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/innertube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/recsysclient"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/remotetranscript"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/timedtext"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/topicfile"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/youtube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/ytdlp"
@@ -151,7 +153,17 @@ func main() {
 	}
 
 	logger.Info("preparing yt-dlp and ffmpeg")
-	downloader := ytdlp.New(ctx, mediaRoot)
+	downloader := ytdlp.New(ctx, mediaRoot, logger)
+
+	// Captions come from the cheap path first — one request to list what exists,
+	// one to take the best of it — with yt-dlp behind it. See the timedtext
+	// package for the four-to-one that motivates it.
+	captions := timedtext.NewFirst(
+		timedtext.New(mediaRoot, logger),
+		remotetranscript.New(mediaRoot, configDir, logger),
+		downloader,
+		logger,
+	)
 
 	// One client, shared: the browse API backs both channel browsing and the
 	// related-video layer of library expansion.
@@ -168,6 +180,7 @@ func main() {
 	)
 	// The same store keeps scan history; the Activity page lists it through the
 	// ingest use cases, while the scanner is what writes it.
+	ingest.SetCaptionSource(captions)
 	ingest.SetScanStore(jobStore)
 
 	// Reports the catalogue never received, finished now. A refusal is recorded
