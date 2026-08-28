@@ -48,7 +48,7 @@ describe('the live tier', () => {
     // The ladder is YouTube's own, read from the playlist by the player. There
     // is no height to ask the server for here, and inventing one would put a
     // number in a URL that means nothing on this route.
-    const tiers = availableTiers(liveOnly, 'high')
+    const tiers = availableTiers(liveOnly, 1080)
 
     expect(tiers).toHaveLength(1)
     expect(tiers[0].height).toBeUndefined()

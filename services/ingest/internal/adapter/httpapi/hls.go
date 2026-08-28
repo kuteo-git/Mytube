@@ -60,10 +60,59 @@ const hlsHeadBytesWide = 512 * 1024
 // the choice between them belongs to the player — which is the whole reason
 // CLAUDE.md §4 wanted HLS: "real ABR at ~0 CPU".
 //
-// 1080 because that is what goes on disk (`DEFAULT_HEIGHT`), so the stream and
-// the file it becomes are the same picture. Above it the disk budget is the
-// argument, not the bandwidth.
-const hlsMaxHeight = int32(1080)
+// **2160, and it used to be 1080 to match what goes on disk.** That argument
+// was real and has been overtaken: the download is on its way out, and until it
+// goes the player simply declines to climb down to a local file that is smaller
+// than the rung it is playing. Nothing about the disk budget is affected — this
+// ceiling governs bytes that are streamed and never stored.
+//
+// Above 1080p YouTube publishes only VP9 and AV1; see resolveTracksOnce for why
+// that resolves to AV1 alone and why 1080p and below are untouched by it.
+const hlsMaxHeight = int32(2160)
+
+// What a device may be capped to, named on the playlist URL as `?max=720`.
+//
+// It exists because **a cap cannot be applied in the browser on an iPhone**.
+// There, HLS plays natively and a page has no way to pin or limit a level —
+// Safari decides for itself from the ladder it is given. So the only place a
+// per-device ceiling can be enforced is the master playlist, by not writing the
+// rungs above it.
+//
+// Applied when the master is written rather than when the tracks are resolved,
+// so a phone and a desktop watching the same video share one resolve and one
+// cache entry. Resolving per cap would double the requests to upstream for a
+// difference that is three lines of text.
+func cappedRenditions(videos []domain.MediaTrack, max int32) []domain.MediaTrack {
+	if max <= 0 {
+		return videos
+	}
+	kept := make([]domain.MediaTrack, 0, len(videos))
+	for _, v := range videos {
+		if int32(v.Height) <= max {
+			kept = append(kept, v)
+		}
+	}
+	// A cap below every rung this video publishes would leave the player with
+	// nothing to play, which is worse than a picture larger than the screen.
+	if len(kept) == 0 {
+		return videos
+	}
+	return kept
+}
+
+// parseMaxHeight reads `?max=` and refuses anything that is not a rung.
+//
+// Absent means no cap, which is what a desktop sends.
+func parseMaxHeight(raw string) int32 {
+	if raw == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 || n > int(hlsMaxHeight) {
+		return 0
+	}
+	return int32(n)
+}
 
 // How long a resolved pair of track URLs is reused.
 //
@@ -189,7 +238,7 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case name == "master.m3u8":
-		h.writeMasterPlaylist(w, videoID, tracks)
+		h.writeMasterPlaylist(w, videoID, tracks, parseMaxHeight(r.URL.Query().Get("max")))
 	case strings.HasSuffix(name, ".m3u8"):
 		h.writeMediaPlaylist(w, r, videoID, key, tracks, strings.TrimSuffix(name, ".m3u8"))
 	default:
@@ -197,7 +246,9 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) writeMasterPlaylist(w http.ResponseWriter, videoID string, tracks domain.MediaTracks) {
+func (h *Handler) writeMasterPlaylist(
+	w http.ResponseWriter, videoID string, tracks domain.MediaTracks, maxHeight int32,
+) {
 	// Refused rather than written wrong. A player reads CODECS to decide
 	// whether it can play this at all, so a value it does not understand is a
 	// silent refusal — no request, no log line, a generic element error — and
@@ -214,8 +265,9 @@ func (h *Handler) writeMasterPlaylist(w http.ResponseWriter, videoID string, tra
 	// A rung whose codec cannot be described is dropped rather than taking the
 	// playlist down with it. The ladder is a convenience; the top rung playing
 	// is the requirement.
-	renditions := make([]domain.Rendition, 0, len(tracks.Videos))
-	for _, v := range tracks.Videos {
+	offered := cappedRenditions(tracks.Videos, maxHeight)
+	renditions := make([]domain.Rendition, 0, len(offered))
+	for _, v := range offered {
 		if !domain.ValidCodec(v.Codec) {
 			h.logger.Warn("hls rendition dropped, codec not usable",
 				"video", videoID, "height", v.Height, "codec", v.Codec)

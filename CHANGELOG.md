@@ -1,5 +1,78 @@
 # Changelog
 
+## 0.0.5 — 2026-08-28
+
+**Resolution is a control now.** The ladder was 1080/720/480 with nothing to
+choose from and nowhere to go, and it is seven rungs with a menu:
+`Auto · 4K · 2K · 1080p · 720p · 480p`.
+
+### Why it could not simply be raised
+
+Above 1080p **YouTube publishes no H.264 at all**. Measured on a real 4K upload:
+1440p and 2160p exist as vp9 and av01 and nothing else. So the ceiling could not
+move without letting another codec onto a ladder that was deliberately H.264
+only.
+
+- **VP9 needed no rule.** YouTube ships it as webm over https, or as vp09 in mp4
+  over m3u8 — the container and protocol filters already remove both. The change
+  is AV1 alone.
+- **Bitrate stopped being a quality comparison, and that was a live bug.** The
+  rule was "keep the best bitrate at each height", written when every candidate
+  at a height was H.264. At 1080p YouTube publishes both, and on one measured
+  video avc1 carries 3358k against av01's 1619k *for the same picture* — AV1 at
+  half the bits is the entire point of AV1. Compatibility decides first now, so
+  **1080p and below are byte for byte what they were** and AV1 appears only where
+  nothing else is offered. Confirmed on the running stack: `avc1` at
+  1080/720/480/360/240, `av01` at 1440/2160.
+
+### The phone is capped at 720p, by the server
+
+Not a preference. On iOS, HLS plays natively and a page has **no way to pin or
+limit a level** — Safari picks from whatever ladder it is handed. So the ceiling
+travels as `?max=720` on the playlist URL and the taller rungs are never written.
+A condition in the player would work on Chrome and do nothing on the device it is
+for.
+
+720p already exceeds an iPhone 16e's long edge (2532×1170); everything above is
+bytes spent on pixels the screen cannot draw, over the one road measured to be
+refused in waves.
+
+The gateway had to stop swallowing the query string on its way to ingest —
+without that fix `?max=720` would have arrived as no cap, and a phone would have
+played 4K with nothing anywhere saying why the setting did nothing.
+
+### Two things the ladder broke, and how they were found
+
+- **A climb could make the picture worse.** The ladder reaches 2160 and the file
+  on disk is 1080p, so "the copy has landed" and "the copy is better" stopped
+  being the same statement — and the player would have dropped a viewer from 4K
+  to 1080p mid-video, which is the opposite of what every tier in this app exists
+  to do. It now declines the local file only while a genuinely taller rung is
+  playing.
+- **A pin outliving the video that could honour it was drawn as nothing at all.**
+  Pin 4K, open a 1080p video: hls.js finds no 2160 rung and goes to automatic,
+  which is right. But the menu drew `value={2160}` against a list with no 2160 in
+  it, so **no segment was highlighted** and nothing said the player was on
+  automatic. It shows `Auto (1080p)` now, and the pin survives — the next video
+  that publishes 4K plays 4K. Found by writing the test first.
+
+### Also
+
+- **240p and 360p exist on the ladder and not in the menu.** They are an escape
+  for a bad minute, not a preference, and a row for one is a row whose only
+  honest use is admitting the connection is bad. 144p is absent entirely (§7).
+- **Auto says which rung it settled on**, in the menu and on the badge over the
+  picture. The badge already claimed to state "the resolution actually on screen"
+  and was reading the height the *server* started from, so it said "1080p live"
+  over a 360p picture.
+- **Seven rungs cost no extra wall clock.** The per-rendition probes run
+  concurrently and the first refusal cancels the rest; every rung is still
+  verified and one refusal still fails the attempt.
+- `QualityChoice` is `'auto' | number`; a stored `'high'`/`'low'` migrates to
+  1080/360 rather than being reset.
+
+No migrations.
+
 ## 0.0.4 — 2026-08-28
 
 0.0.3 ended with a paragraph headed *"What is still not fixed, honestly"*: the

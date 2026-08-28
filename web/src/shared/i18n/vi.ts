@@ -511,6 +511,7 @@ export const vi: Dictionary = {
     advanced: 'Nâng cao',
     audio: 'Âm thanh',
     auto: 'Tự động',
+    autoAtHeight: 'Tự động ({{height}})',
     autoplay: 'Tự phát',
     budget: 'Giới hạn',
     categories: 'Danh mục',
