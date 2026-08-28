@@ -34,7 +34,7 @@ __REQUIREMENTS_FILE = "requirements.txt"
 
 # Where the app will point at this machine. Kept here as well as in the server
 # so the log line says the same number the server binds.
-__PORT = "8009"
+__PORT = "8185"
 
 # Optional shared secret. Empty means anyone who can reach the port may ask —
 # which is fine on a home network and not fine if this box has a public address.

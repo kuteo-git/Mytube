@@ -16,6 +16,7 @@ What changes the address is the **proxy**, and the proxy is named per request by
 the caller — so there is nothing here to configure and nothing here to keep. See
 `X-Transcript-Proxy` below.
 
+    GET /health                      → {"service": "local-mytube-transcript"}
     GET /transcript?video_id=<id>&langs=vi,en
     X-Transcript-Proxy: http://user:pass@host:port      (optional)
 
@@ -44,7 +45,7 @@ Run it:
     pip install youtube-transcript-api
     python3 transcript_server.py
 
-`scripts/dev.sh` does that already, on :8009, and binds to loopback.
+`scripts/dev.sh` does that already, on :8185, and binds to loopback.
 """
 
 import json
@@ -58,7 +59,20 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
 from youtube_transcript_api.proxies import GenericProxyConfig
 
-PORT = int(os.environ.get("TRANSCRIPT_PORT", "8009"))
+PORT = int(os.environ.get("TRANSCRIPT_PORT", "8185"))
+
+# What this server calls itself, answered at /health.
+#
+# It exists because a port is not an identity. This ran on :8009 for one release
+# and another project on the same machine took that port while the stack was
+# stopped — after which `dev.sh` saw something listening, said "already running,
+# leaving it alone", and every caption fetch got a 404 from a stranger. The
+# symptom was captions silently not arriving; the cause was a startup script
+# treating "the port is busy" as "our server is up".
+#
+# So the port moved into this app's own 818x block, and this marker makes the
+# next collision loud instead of silent.
+SERVICE_NAME = "local-mytube-transcript"
 
 # Loopback only.
 #
@@ -178,7 +192,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path.rstrip("/") not in ("/transcript", ""):
+        path = parsed.path.rstrip("/")
+
+        # Who is listening on this port, for whoever is about to trust it.
+        if path == "/health":
+            self._send(200, {"service": SERVICE_NAME})
+            return
+
+        if path not in ("/transcript", ""):
             self._send(404, {"error": "unknown path"})
             return
 
@@ -216,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(
-        f"transcript server on {HOST}:{PORT} — "
+        f"{SERVICE_NAME} on {HOST}:{PORT} — "
         f"the proxy is named per request by the caller, not configured here",
         flush=True,
     )

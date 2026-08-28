@@ -18,7 +18,7 @@ import (
 // to loopback where it has no address of its own worth choosing, and the two
 // fields that used to be on the settings screen went with it. `scripts/dev.sh`
 // starts it; nobody configures it.
-const transcriptServerURL = "http://127.0.0.1:8009/transcript"
+const transcriptServerURL = "http://127.0.0.1:8185/transcript"
 
 // How the proxy reaches the Python side.
 //

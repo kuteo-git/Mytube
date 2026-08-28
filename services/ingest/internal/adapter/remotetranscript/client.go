@@ -67,7 +67,14 @@ const languages = "vi,en"
 // choosing, and `scripts/dev.sh` starts it beside the translation and speech
 // servers. What used to be two fields on a settings screen — which machine, and
 // the shared secret to reach it — are gone with the premise that put them there.
-const serverURL = "http://127.0.0.1:8009/transcript"
+//
+// **8185, in this app's own 818x block, and it was 8009 for one release.** A
+// port is not an identity: another project on this machine took 8009 while the
+// stack was stopped, dev.sh saw something listening and reported the helper as
+// up, and every caption fetch came back 404 from a stranger. dev.sh now asks
+// what is there rather than assuming; this constant moved so it is unlikely to
+// have to.
+const serverURL = "http://127.0.0.1:8185/transcript"
 
 // How the proxy reaches the Python side.
 //
@@ -199,6 +206,15 @@ func (c *Client) ask(ctx context.Context, proxy, videoID string) (answer, error)
 		return answer{}, err
 	}
 	if res.StatusCode != http.StatusOK {
+		// A 404 here almost always means the port is answering and the helper is
+		// not — some other process holding it. Said plainly, because the last
+		// time it happened the log read "server said 404 Not Found" and it took
+		// a look at `lsof` to learn that a different project's uvicorn app had
+		// taken the port while this stack was stopped.
+		if res.StatusCode == http.StatusNotFound {
+			return answer{}, fmt.Errorf(
+				"nothing answered at %s — is something else holding that port?", serverURL)
+		}
 		return answer{}, fmt.Errorf("server said %s", res.Status)
 	}
 
