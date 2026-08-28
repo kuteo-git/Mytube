@@ -1,10 +1,19 @@
-// Package remotetranscript asks another machine for a video's captions.
+// Package remotetranscript asks a local helper for a video's captions.
 //
 // YouTube rate-limits the caption endpoint by address, and measured on this one
 // it does so for hours — thirteen straight on 2026-08-27, while videos played
 // normally throughout. No amount of care with the request gets past that: the
-// refusal is about the house. Asking from somewhere else does, and this
-// household already runs a machine that can.
+// refusal is about the house.
+//
+// This package used to be about asking *another machine*, on the reasoning that
+// another machine is another address. That was measured and it is false: the
+// household's Home Assistant box was refused with exactly the same 429, in the
+// same minute. A second door in the same wall is not a second door.
+//
+// So the helper moved to loopback and stopped being configurable, and what is
+// configured instead is the **proxy** it goes out through (see the proxycfg
+// package). Measured 2026-08-28 across four videos in one minute: direct was
+// `IpBlocked` 4 of 4, and through a rotating residential proxy 4 of 4 answered.
 //
 // The contract is this project's own, because there is no standard for "give me
 // this video's captions" — OpenAI's `/v1/audio/transcriptions` is an audio
@@ -13,18 +22,20 @@
 // answers the question:
 //
 //	GET {base}/transcript?video_id=<id>&langs=vi,en
+//	X-Transcript-Proxy: http://user:pass@host:port   (optional)
 //	→ {"language":"vi","generated":true,"vtt":"WEBVTT\n\n..."}
-//	→ {"error":"..."} for anything that went wrong
+//	→ {"error":"...","kind":"proxy|upstream"} for anything that went wrong
 //
 // A GET so it can be typed into a browser, which is the difference between "the
-// server is down" and "I cannot tell what is wrong" for somebody setting this
-// up on another machine. VTT rather than cues, because that is what goes on
-// disk — anything else means a second parser here, and Python's
-// youtube_transcript_api already ships a WebVTTFormatter that writes it.
+// server is down" and "I cannot tell what is wrong" at nine in the evening. VTT
+// rather than cues, because that is what goes on disk — anything else means a
+// second parser here, and Python's youtube_transcript_api already ships a
+// WebVTTFormatter that writes it.
 //
 // `langs` is sent rather than left to the other end: "Vietnamese if there is
 // any, else English" is one rule, and two servers holding it separately is two
-// rules that agree until one of them is changed.
+// rules that agree until one of them is changed. The proxy travels the same way
+// and for a stronger version of the same reason — see Client.
 package remotetranscript
 
 import (
@@ -41,6 +52,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
@@ -49,74 +61,65 @@ import (
 // better than the translation this app would make from English.
 const languages = "vi,en"
 
-// Config is read from disk per request rather than held.
+// The helper, which is not a setting any more.
 //
-// The gateway owns the settings screen and writes the file; this reads it. Per
-// request because a caption fetch can be started by a timer nobody is waiting
-// on — the retry sweep — so there is no request to carry the setting on, and a
-// value read once at start-up would mean saving the form did nothing until the
-// next restart. That is the trap `internal/mediaroot` exists to document.
-type Config struct {
-	BaseURL string `json:"baseUrl"`
-	APIKey  string `json:"apiKey"`
+// Loopback and a fixed port: it holds no credential, has no address worth
+// choosing, and `scripts/dev.sh` starts it beside the translation and speech
+// servers. What used to be two fields on a settings screen — which machine, and
+// the shared secret to reach it — are gone with the premise that put them there.
+const serverURL = "http://127.0.0.1:8009/transcript"
+
+// How the proxy reaches the Python side.
+//
+// A header rather than a query parameter: it carries a password, and a query
+// string lands in access logs.
+//
+// Sent per request rather than read from that process's environment, which is
+// the same rule this file already followed for its own settings and for the same
+// reason: a caption fetch can be started by the retry sweep, on a timer, with no
+// request to carry anything on. A proxy read once at start-up on the Python side
+// would mean saving the settings form did nothing until somebody restarted a
+// different process — the trap `internal/mediaroot` exists to document.
+const proxyHeader = "X-Transcript-Proxy"
+
+// proxySource is the part of proxycfg this needs, named here so the dependency
+// points inward: this package asks a question, it does not depend on how the
+// answer is stored.
+type proxySource interface {
+	URLFor(proxycfg.Use) string
 }
 
 type Client struct {
-	http       *http.Client
-	root       string
-	configPath string
-	logger     *slog.Logger
+	http    *http.Client
+	root    string
+	proxies proxySource
+	logger  *slog.Logger
 }
 
-func New(mediaRoot, configDir string, logger *slog.Logger) *Client {
+func New(mediaRoot string, proxies proxySource, logger *slog.Logger) *Client {
 	return &Client{
-		http:       &http.Client{Timeout: 30 * time.Second},
-		root:       mediaRoot,
-		configPath: filepath.Join(configDir, "transcript-config.json"),
-		logger:     logger,
+		http:    &http.Client{Timeout: 30 * time.Second},
+		root:    mediaRoot,
+		proxies: proxies,
+		logger:  logger,
 	}
 }
 
-// Configured reports whether anybody has filled the form in. Empty is the
-// ordinary state and means "do not ask anybody else".
+// Configured reports whether asking is worth the request.
+//
+// The question moved with the setting. It used to be "has somebody named a
+// machine to ask"; it is now "is there a proxy to ask through", because asking
+// from this house's own address is measured to be refused — `IpBlocked` 4 of 4
+// on 2026-08-28. Going anyway would spend a request per video to be told no.
 func (c *Client) Configured() bool {
-	return endpointFor(c.load().BaseURL) != ""
+	return c.proxyURL() != ""
 }
 
-func (c *Client) load() Config {
-	cfg := Config{
-		BaseURL: os.Getenv("TRANSCRIPT_BASE_URL"),
-		APIKey:  os.Getenv("TRANSCRIPT_API_KEY"),
-	}
-	raw, err := os.ReadFile(c.configPath)
-	if err != nil {
-		return cfg
-	}
-	var saved Config
-	if err := json.Unmarshal(raw, &saved); err != nil {
-		return cfg
-	}
-	if saved.BaseURL != "" {
-		cfg.BaseURL = saved.BaseURL
-	}
-	if saved.APIKey != "" {
-		cfg.APIKey = saved.APIKey
-	}
-	return cfg
-}
-
-// endpointFor tolerates a base with or without the path, the same way the
-// gateway's speech field does, because the settings screen holds several of
-// these and somebody will paste one into the other.
-func endpointFor(base string) string {
-	trimmed := strings.TrimSuffix(strings.TrimSpace(base), "/")
-	if trimmed == "" {
+func (c *Client) proxyURL() string {
+	if c.proxies == nil {
 		return ""
 	}
-	if strings.HasSuffix(trimmed, "/transcript") {
-		return trimmed
-	}
-	return trimmed + "/transcript"
+	return c.proxies.URLFor(proxycfg.Captions)
 }
 
 type answer struct {
@@ -134,16 +137,15 @@ type answer struct {
 // retry queue; a helper on another machine failing says nothing about that and
 // must not stand in for it. The chain goes on to yt-dlp instead.
 func (c *Client) FetchSubtitles(ctx context.Context, _, videoID string, height int32) ([]domain.SubtitleTrack, bool) {
-	cfg := c.load()
-	endpoint := endpointFor(cfg.BaseURL)
-	if endpoint == "" {
+	proxy := c.proxyURL()
+	if proxy == "" {
 		return nil, false
 	}
 	if height <= 0 {
 		height = 1080
 	}
 
-	got, err := c.ask(ctx, cfg, endpoint, videoID)
+	got, err := c.ask(ctx, proxy, videoID)
 	if err != nil {
 		c.logger.Warn("remote transcript", "video", videoID, "error", err)
 		return nil, false
@@ -176,15 +178,13 @@ func (c *Client) FetchSubtitles(ctx context.Context, _, videoID string, height i
 	}}, false
 }
 
-func (c *Client) ask(ctx context.Context, cfg Config, endpoint, videoID string) (answer, error) {
+func (c *Client) ask(ctx context.Context, proxy, videoID string) (answer, error) {
 	q := url.Values{"video_id": {videoID}, "langs": {languages}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?"+q.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"?"+q.Encode(), nil)
 	if err != nil {
 		return answer{}, err
 	}
-	if cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	}
+	req.Header.Set(proxyHeader, proxy)
 
 	res, err := c.http.Do(req)
 	if err != nil {

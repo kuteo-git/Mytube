@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/lrstanley/go-ytdlp"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
@@ -267,7 +268,7 @@ func (d *Downloader) Search(ctx context.Context, query string, limit int32) ([]d
 
 	// A flat playlist search fetches listing metadata only: no formats are
 	// resolved, which is what keeps search fast and reduces upstream load.
-	result, err := newCommand(purposeListing).
+	result, err := newCommand(purposeListing, proxycfg.Listings).
 		FlatPlaylist().
 		DumpJSON().
 		NoWarnings().
@@ -292,7 +293,7 @@ func (d *Downloader) Search(ctx context.Context, query string, limit int32) ([]d
 }
 
 func (d *Downloader) Preview(ctx context.Context, url string) (domain.ExternalVideo, error) {
-	result, err := newCommand(purposeMedia).
+	result, err := newCommand(purposeMedia, proxycfg.Listings).
 		SkipDownload().
 		NoPlaylist().
 		DumpJSON().
@@ -325,7 +326,7 @@ func (d *Downloader) ListPlaylist(ctx context.Context, url string, offset, limit
 	start := offset + 1
 	end := offset + limit
 
-	result, err := newCommand(purposeListing).
+	result, err := newCommand(purposeListing, proxycfg.Listings).
 		FlatPlaylist().
 		DumpJSON().
 		PlaylistItems(fmt.Sprintf("%d:%d", start, end)).
@@ -390,7 +391,7 @@ func (d *Downloader) ResolveStream(ctx context.Context, videoURL string) (domain
 }
 
 func (d *Downloader) resolveStreamOnce(ctx context.Context, videoURL string) (domain.StreamLocation, error) {
-	result, err := newCommand(purposeMedia).
+	result, err := newCommand(purposeMedia, proxycfg.Media).
 		SkipDownload().
 		NoPlaylist().
 		DumpJSON().
@@ -523,7 +524,7 @@ func (d *Downloader) Download(ctx context.Context, videoURL, videoID string, hei
 		return domain.DownloadResult{}, err
 	}
 
-	cmd := newCommand(purposeMedia).
+	cmd := newCommand(purposeMedia, proxycfg.Media).
 		// Same codec preference as the live remux, and for the same reason.
 		//
 		// Without it yt-dlp takes whatever is "best", which on YouTube today
@@ -737,7 +738,7 @@ func (d *Downloader) runSubtitlePass(ctx context.Context, videoURL, target strin
 	// `--sleep-subtitles` is separate from `--sleep-requests` and this endpoint
 	// is exactly what it is for: measured on tgjYMym_0-c, the English track
 	// landed and the Vietnamese one was refused in the same run, a second apart.
-	cmd := newCommand(purposeMedia).
+	cmd := newCommand(purposeMedia, proxycfg.Captions).
 		SkipDownload().
 		SubLangs(subtitleLanguages).
 		ConvertSubs("vtt").
@@ -846,7 +847,7 @@ func subtitleLabel(language string) string {
 // URL with no entries at all. `--playlist-items 0` is the cheap way to do it:
 // it returns the container's metadata and skips every video in it.
 func (d *Downloader) ChannelInfo(ctx context.Context, channelURL string) (domain.ChannelMetadata, error) {
-	result, err := newCommand(purposeListing).
+	result, err := newCommand(purposeListing, proxycfg.Listings).
 		DumpSingleJSON().
 		FlatPlaylist().
 		PlaylistItems("0").
@@ -1058,7 +1059,7 @@ func (d *Downloader) FetchChannelFeed(ctx context.Context, channelID string) ([]
 }
 
 func (d *Downloader) FetchComments(ctx context.Context, videoURL string) ([]domain.YouTubeComment, error) {
-	result, err := newCommand(purposeMedia).
+	result, err := newCommand(purposeMedia, proxycfg.Comments).
 		SkipDownload().
 		WriteComments().
 		DumpJSON().

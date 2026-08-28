@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { apiJSON } from '@/shared/api/http'
 import { formatBytes } from '@/shared/lib/format'
 import { SettingsSection } from './SettingsSection'
+import { ToggleRow } from '@/features/settings/ui/ToggleRow'
 import { ActionBar } from './ActionBar'
 import { useTranslation } from 'react-i18next'
 
@@ -228,36 +229,19 @@ export function StorageSettings({ headless = false }: { headless?: boolean }) {
         </div>
       )}
 
-      {/* The same switch shape as the player's settings: the control is its own
-          feedback, so the row has no hover fill saying it a second time. */}
-      <button
-        type="button"
-        role="switch"
-        aria-checked={state?.cacheDisabled ?? false}
-        onClick={() => void setCache(!state?.cacheDisabled)}
-        disabled={!state}
-        className="mt-6 flex w-full items-center justify-between gap-4 text-left"
-      >
-        <span>
-          <span className="block text-sm">{t('storageMode.streamOnly')}</span>
-          <span className="block pt-0.5 text-xs text-text-2">
-            {t('more.streamOnlyHint')}
-          </span>
-        </span>
-        <span
-          className={clsx(
-            'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-150 ease-out',
-            state?.cacheDisabled ? 'bg-brand' : 'bg-surface-hover',
-          )}
-        >
-          <span
-            className={clsx(
-              'absolute top-1 h-4 w-4 rounded-full bg-white transition-transform duration-150 ease-out',
-              state?.cacheDisabled ? 'translate-x-6' : 'translate-x-1',
-            )}
-          />
-        </span>
-      </button>
+      {/* One switch implementation for the whole of settings. This was written
+          out by hand here, and the proxy screen would have been five more — at
+          which point the track, the knob, the disabled treatment and the
+          role="switch" are six chances to drift apart. */}
+      <div className="mt-6">
+        <ToggleRow
+          label={t('storageMode.streamOnly')}
+          hint={t('more.streamOnlyHint')}
+          on={state?.cacheDisabled ?? false}
+          disabled={!state}
+          onChange={(next) => void setCache(next)}
+        />
+      </div>
     </SettingsSection>
   )
 }

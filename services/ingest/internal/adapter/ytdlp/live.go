@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
@@ -28,7 +29,7 @@ func (d *Downloader) ResolveLive(
 		maxHeight = 1080
 	}
 
-	result, err := newCommand(purposeMedia).
+	result, err := newCommand(purposeMedia, proxycfg.Media).
 		SkipDownload().
 		NoPlaylist().
 		DumpJSON().

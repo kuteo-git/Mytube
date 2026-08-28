@@ -68,6 +68,15 @@ describe('the dictionaries', () => {
       'ui.preamp',
       'ui.dryWet',
       'ui.model',
+      // "Proxy" is the word every provider, every operating system and every
+      // other application uses, in both languages. §4b keeps technical terms in
+      // English precisely here: somebody configuring one already knows the
+      // word, and "máy chủ trung gian" would be a phrase they have to translate
+      // back before they can match it to their provider's dashboard. The
+      // sentences around it are translated, including the whole explanation of
+      // what it is for.
+      'proxySettings.title',
+      'proxySettings.url',
       // "ms" is the SI symbol. It is the same in both, as "GB" and "%" are.
       'more.milliseconds',
     ])

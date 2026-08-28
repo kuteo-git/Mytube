@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/lrstanley/go-ytdlp"
+
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 )
 
 // The rule that protects the household's accounts. Do not delete this test.
@@ -20,7 +22,7 @@ import (
 // mistake worth catching: somebody wiring the account store into a listing call
 // and finding it works.
 func TestListingsNeverCarryASession(t *testing.T) {
-	cmd := newCommandWithCookies(purposeListing, "/tmp/whoever.txt")
+	cmd := newCommandWithCookies(purposeListing, proxycfg.Listings, "/tmp/whoever.txt")
 
 	if args := commandArgs(t, cmd); containsAny(args, "--cookies") {
 		t.Fatalf("a listing request carried cookies: %v", args)
@@ -28,7 +30,7 @@ func TestListingsNeverCarryASession(t *testing.T) {
 }
 
 func TestMediaCarriesTheHouseholdSession(t *testing.T) {
-	cmd := newCommandWithCookies(purposeMedia, "/tmp/household.txt")
+	cmd := newCommandWithCookies(purposeMedia, proxycfg.Media, "/tmp/household.txt")
 
 	args := commandArgs(t, cmd)
 	if !containsAny(args, "--cookies") {

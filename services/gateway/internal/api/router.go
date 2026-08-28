@@ -146,10 +146,13 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/settings/tts", g.handleSaveTTSConfig)
 	mux.HandleFunc("POST /api/settings/tts/test", g.handleTestTTS)
 	// Where captions can be asked for when this address is being refused. See
-	// transcript_config.go: the block is on the house, not on the request.
-	mux.HandleFunc("GET /api/settings/transcript", g.handleGetTranscriptConfig)
-	mux.HandleFunc("POST /api/settings/transcript", g.handleSaveTranscriptConfig)
-	mux.HandleFunc("POST /api/settings/transcript/test", g.handleTestTranscript)
+	// proxy_config.go: YouTube refuses by public address, so the only thing
+	// that helps is asking from a different one. This replaced the transcript
+	// settings, which asked which *machine* to ask — measured, and another
+	// machine in the same house is the same address.
+	mux.HandleFunc("GET /api/settings/proxy", g.handleGetProxyConfig)
+	mux.HandleFunc("POST /api/settings/proxy", g.handleSaveProxyConfig)
+	mux.HandleFunc("POST /api/settings/proxy/test", g.handleTestProxy)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)

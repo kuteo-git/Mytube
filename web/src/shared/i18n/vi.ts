@@ -408,23 +408,42 @@ export const vi: Dictionary = {
     videoVolumeWhileSpeaking: 'Âm lượng video khi đang đọc',
   },
 
-  transcriptSettings: {
-    title: 'Phụ đề',
-    // "nhà mình" chứ không phải "địa chỉ IP của bạn": YouTube chặn cả nhà, và
-    // đó là điều người đọc cần hiểu ngay để biết vì sao video vẫn xem được.
+  proxySettings: {
+    title: 'Proxy',
     description:
-      'Chỗ khác để xin phụ đề khi YouTube chặn nhà mình. Lúc đó video vẫn xem bình thường — chỉ phụ đề bị chặn thôi.',
-    baseURL: 'Hỏi ở đâu',
-    baseURLHint:
-      'Một máy trong mạng đang chạy server nhỏ trong docs/transcript-server. Để trống thì chỉ hỏi thẳng YouTube.',
-    apiKey: 'Mã bí mật',
-    noKeyNeeded: 'Không bắt buộc — chỉ cần nếu server đó đòi.',
-    testVideo: 'Thử với video',
-    testVideoHint: 'Id của video YouTube. Để trống thì thử một video chắc chắn có phụ đề cả hai tiếng.',
-    gotCues: '{{language}} — {{count}} dòng',
-    testFailed: 'Không kết nối được tới server đó.',
-    saved: 'Đã lưu. Dùng mỗi khi YouTube chặn.',
-    turnedOff: 'Đã tắt. Phụ đề chỉ lấy từ YouTube.',
+      'YouTube chặn theo địa chỉ chứ không theo nội dung yêu cầu — nên khi nó từ chối nhà này, cách duy nhất là hỏi từ nơi khác. Đo tại đây: hỏi thẳng thì lần nào cũng bị từ chối, qua proxy thì lần nào cũng lấy được phụ đề.',
+    url: 'Proxy',
+    urlHint:
+      'Cả địa chỉ trong một dòng, đúng như nhà cung cấp đưa: scheme://user:mật-khẩu@host:port. Dùng được http, https, socks5 và socks5h. Loại giúp được là rotating residential; dải datacenter bị chặn cả cụm.',
+    enabled: 'Dùng proxy',
+    enabledHint: 'Tắt thì mọi thứ vẫn đi từ nhà như thường. Địa chỉ đã nhập được giữ lại.',
+    forCaptions: 'Phụ đề',
+    forCaptionsHint: 'Vài chục KB một video. Đây là thứ proxy sinh ra để làm.',
+    forListings: 'Metadata và tìm kiếm',
+    forListingsHint: 'Quét kênh, tìm kiếm, playlist. Nhỏ, nhưng rất nhiều.',
+    forComments: 'Bình luận',
+    forCommentsHint: 'Mỗi lần một video, chỉ khi mở ra xem.',
+    forMedia: 'Tải và phát video',
+    forMediaHint: 'Vài trăm MB một video. Đừng bật nếu chưa rõ vì sao cần.',
+    mediaWarning:
+      'Video nặng gấp hàng nghìn lần mọi thứ khác ở đây. Một phim có thể tốn nhiều băng thông proxy hơn cả tháng phụ đề. Chỉ bật khi có video không còn cách nào tải được.',
+    mediaConfirm: 'Tôi hiểu, cứ bật',
+    directAddress: 'Không proxy',
+    proxyAddress: 'Qua proxy',
+    gotCues: 'Lấy được phụ đề: {{language}}, {{count}} dòng',
+    testFailed: 'Không chạy được phép thử.',
+    saved: 'Đã lưu.',
+  },
+  proxyError: {
+    proxy_url_missing: 'Nhập địa chỉ proxy trước đã.',
+    proxy_url_unparseable: 'Đây không phải địa chỉ đọc được.',
+    proxy_url_scheme: 'Phải bắt đầu bằng http://, https://, socks5:// hoặc socks5h://.',
+    proxy_url_no_host: 'Địa chỉ thiếu phần host.',
+    proxy_unreachable: 'Proxy không tải nổi yêu cầu. Xem lại tên đăng nhập, mật khẩu và cổng.',
+    proxy_not_changing_address:
+      'Proxy chạy nhưng không đổi địa chỉ, nên YouTube vẫn thấy đúng nhà này. Hỏi nhà cung cấp về endpoint rotating residential.',
+    captions_refused: 'Proxy chạy, nhưng YouTube vẫn từ chối địa chỉ này.',
+    captions_empty: 'Có trả lời, nhưng không có phụ đề nào trong đó.',
   },
   translationSettings: {
     // Names the endpoint rather than saying "chuẩn OpenAI": somebody plugging

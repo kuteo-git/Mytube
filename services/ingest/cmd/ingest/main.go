@@ -29,6 +29,7 @@ import (
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/httpapi"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/innertube"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/postgres"
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/recsysclient"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/remotetranscript"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/rpc"
@@ -152,6 +153,14 @@ func main() {
 		Timeout: 30 * time.Second,
 	}
 
+	// Where the household's outbound proxy is configured. Told to the yt-dlp
+	// builder before anything runs through it: without this call there is no
+	// proxy, which is the ordinary state, so forgetting it degrades quietly to
+	// the old behaviour rather than failing loudly — hence it sits here, next to
+	// the thing it affects, rather than among the env reads at the top.
+	proxies := proxycfg.New(configDir)
+	ytdlp.SetProxyConfig(proxies)
+
 	logger.Info("preparing yt-dlp and ffmpeg")
 	downloader := ytdlp.New(ctx, mediaRoot, logger)
 
@@ -160,7 +169,7 @@ func main() {
 	// package for the four-to-one that motivates it.
 	captions := timedtext.NewFirst(
 		timedtext.New(mediaRoot, logger),
-		remotetranscript.New(mediaRoot, configDir, logger),
+		remotetranscript.New(mediaRoot, proxies, logger),
 		downloader,
 		logger,
 	)

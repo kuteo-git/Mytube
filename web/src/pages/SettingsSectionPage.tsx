@@ -3,7 +3,8 @@ import { ProfileSettings } from '@/features/identity/ui/ProfileSettings'
 import { YouTubeAccountSettings } from '@/features/settings/ui/YouTubeAccountSettings'
 import { FeedMixSettings } from '@/features/settings/ui/FeedMixSettings'
 import { usePlayer } from '@/features/watch/application/player-context'
-import { NarrationSettings, TranscriptSettings, TranslationSettings } from './SettingsPage'
+import { NarrationSettings, TranslationSettings } from './SettingsPage'
+import { ProxySettings } from '@/features/settings/ui/ProxySettings'
 
 /**
  * One panel of Settings, on a screen of its own.
@@ -42,10 +43,10 @@ export function TranslationSettingsPage() {
   )
 }
 
-export function TranscriptSettingsPage() {
+export function ProxySettingsPage() {
   return (
     <div className="px-4 pb-16">
-      <TranscriptSettings headless />
+      <ProxySettings headless />
     </div>
   )
 }

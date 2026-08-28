@@ -1,6 +1,8 @@
 package ytdlp
 
 import (
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
+
 	"context"
 	"os"
 	"path/filepath"
@@ -23,7 +25,14 @@ func args(t *testing.T, p purpose) string {
 	t.Helper()
 	// The builder holds no reader for its own flags, so it is asked to build the
 	// command it would run and that is read instead.
-	return strings.Join(newCommand(p).BuildCommand(context.Background()).Args, " ")
+	//
+	// The proxy use is whatever matches the purpose here; these tests are about
+	// credentials, and with no proxy configured it adds no flag either way.
+	use := proxycfg.Listings
+	if p == purposeMedia {
+		use = proxycfg.Media
+	}
+	return strings.Join(newCommand(p, use).BuildCommand(context.Background()).Args, " ")
 }
 
 // Credentials go to the requests that get refused, and to nothing else.

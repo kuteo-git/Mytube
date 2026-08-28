@@ -94,7 +94,6 @@ func TestPreferAudioDoesNotRankARealTrackBelowAnEmptyOne(t *testing.T) {
 	}
 }
 
-
 // A Vietnamese dub is what this household would rather hear, even over the
 // original — which is the whole point of the ordering.
 func TestPreferAudioTakesTheVietnameseDubAheadOfEverything(t *testing.T) {
