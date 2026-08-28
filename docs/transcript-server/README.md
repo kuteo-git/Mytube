@@ -34,9 +34,10 @@ keeping up with the shape of YouTube's player response.
 ## Running it anywhere
 
     pip install -r requirements.txt
-    TRANSCRIPT_PORT=8009 python3 transcript_server.py
+    TRANSCRIPT_PORT=8185 python3 transcript_server.py
 
-Then put `http://<that-machine>:8009` into **Settings → Transcript** in the app.
+It runs on loopback and there is nothing to configure in the app — the proxy is
+named per request by the caller. See **Settings → Proxy**.
 Press Test: it reports the language, the number of lines and the first line —
 not a verdict, because a server can answer 200 with an empty transcript.
 

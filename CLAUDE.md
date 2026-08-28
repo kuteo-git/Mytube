@@ -411,7 +411,7 @@ Home Assistant box: the same 429, in the same minute. **A second door in the
 same wall is not a second door.**
 
 - **The Python helper stays and stops being configurable.** It is on loopback
-  (`127.0.0.1:8009`), started by `dev.sh` from `.venv-transcript`, and holds no
+  (`127.0.0.1:8185`), started by `dev.sh` from `.venv-transcript`, and holds no
   credential. What it provides is not a different computer but
   `youtube_transcript_api`, which can be pointed at a proxy — the Go side
   cannot.
@@ -424,6 +424,17 @@ same wall is not a second door.**
   password and query strings land in access logs.
 - **The shared secret is gone.** It guarded a door that is now loopback-only; a
   secret protecting nothing is one more thing to configure wrongly.
+- **A port is not an identity, and treating it as one cost a release.** The
+  helper was on `:8009`; another project on this machine took that port while the
+  stack was stopped, and `dev.sh` — copying the speech server's "already running,
+  leaving it alone" — reported the helper as up. Every caption fetch then came
+  back **404 from a stranger**, so captions silently stopped arriving and nothing
+  named the cause. Two changes: the port moved into this app's own **818x** block
+  (`8185`), and what is listening is now **asked who it is** (`GET /health` →
+  `local-mytube-transcript`) rather than assumed. A port held by anything else is
+  reported loudly, with the command line of whatever is holding it. A 404 from
+  the helper is also named on the ingest side rather than logged as a bare
+  status.
 
 **Which traffic goes through the proxy is chosen one kind at a time**, because a
 residential proxy is metered by the gigabyte and these differ by three orders of

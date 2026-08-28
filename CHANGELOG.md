@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.0.6 — 2026-08-28
+
+**A port is not an identity.** The captions helper shipped on `:8009` in 0.0.4,
+and another project on this machine took that port while the stack was stopped.
+`dev.sh` saw something listening and reported the helper as up — a check copied
+from the speech server, where "leave it alone" is right because that server
+belongs to somebody else. Every caption fetch then came back **404 from a
+stranger**, and the log said only `server said 404 Not Found`.
+
+The symptom was captions silently not arriving, three hours after a release whose
+whole subject was captions arriving.
+
+- **The port moved into this app's own 818x block** (`8185`), beside the services
+  that already live there.
+- **What is listening is asked who it is.** `GET /health` answers
+  `{"service": "local-mytube-transcript"}`; `dev.sh` leaves the port alone only
+  when that is what comes back, and otherwise says so loudly and prints the
+  command line of whatever is holding it. `TRANSCRIPT_PORT` moves it.
+- **A 404 from the helper is named on the ingest side too**, rather than logged
+  as a bare status — "nothing answered at that address, is something else holding
+  the port?" is the sentence that would have saved the debugging.
+
+No migrations.
+
 ## 0.0.5 — 2026-08-28
 
 **Resolution is a control now.** The ladder was 1080/720/480 with nothing to

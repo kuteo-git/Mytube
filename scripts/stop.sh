@@ -15,7 +15,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 stopped=0
-for entry in "5173:web" "8180:gateway" "8183:ingest" "8182:recsys" "8181:catalog" "8184:logview" "8005:translate" "8009:transcript"; do
+for entry in "5173:web" "8180:gateway" "8183:ingest" "8182:recsys" "8181:catalog" "8184:logview" "8005:translate" "8185:transcript"; do
   port="${entry%%:*}"
   name="${entry##*:}"
   pids=$(lsof -ti:"$port" 2>/dev/null || true)
@@ -31,7 +31,7 @@ for entry in "5173:web" "8180:gateway" "8183:ingest" "8182:recsys" "8181:catalog
 done
 
 sleep 1
-for entry in "5173:web" "8180:gateway" "8183:ingest" "8182:recsys" "8181:catalog" "8184:logview" "8005:translate" "8009:transcript"; do
+for entry in "5173:web" "8180:gateway" "8183:ingest" "8182:recsys" "8181:catalog" "8184:logview" "8005:translate" "8185:transcript"; do
   port="${entry%%:*}"
   pids=$(lsof -ti:"$port" 2>/dev/null || true)
   [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true

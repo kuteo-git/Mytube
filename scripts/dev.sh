@@ -4,7 +4,8 @@
 #   scripts/dev.sh
 #
 # Ports: gateway 8180 (the only one the browser talks to), catalog 8181,
-# recsys 8182, ingest 8183, TTS 8002, translate 8005, transcript 8009, Vite 5173.
+# recsys 8182, ingest 8183, logview 8184, transcript 8185, TTS 8002,
+# translate 8005, Vite 5173.
 # Chosen off the 808x block because other projects on this machine hold 8080
 # and 8082 permanently.
 # Requires Postgres to be running:
@@ -227,11 +228,37 @@ fi
 # Not fatal when absent, like the two servers below it: captions fall back to
 # yt-dlp, which is refused in the same waves but costs nothing to try.
 TRANSCRIPT_VENV="${TRANSCRIPT_VENV:-$(pwd)/.venv-transcript}"
-if lsof -ti:8009 >/dev/null 2>&1; then
-  echo "captions helper already running on :8009, leaving it alone"
+TRANSCRIPT_PORT="${TRANSCRIPT_PORT:-8185}"
+
+# A port is not an identity, and treating it as one cost a release.
+#
+# This said `lsof -ti:PORT && echo "already running, leaving it alone"`, copied
+# from the speech server below. That pattern is safe there — the speech server
+# belongs to another project and is *meant* to be left alone — and it is wrong
+# here: on :8009 another project's uvicorn app took the port while this stack was
+# stopped, so the check saw something listening, said the helper was up, and
+# every caption fetch got a 404 from a stranger. Captions silently stopped
+# arriving and nothing anywhere named the cause.
+#
+# So the port moved into this app's own 818x block, and what is listening is
+# asked who it is rather than assumed.
+transcript_is_ours() {
+  curl -sf --max-time 2 "http://127.0.0.1:$TRANSCRIPT_PORT/health" 2>/dev/null \
+    | grep -q "local-mytube-transcript"
+}
+
+if lsof -ti:"$TRANSCRIPT_PORT" >/dev/null 2>&1; then
+  if transcript_is_ours; then
+    echo "captions helper already running on :$TRANSCRIPT_PORT, leaving it alone"
+  else
+    echo "PORT :$TRANSCRIPT_PORT IS HELD BY SOMETHING ELSE — captions will not work." >&2
+    echo "  what is there: $(lsof -ti:"$TRANSCRIPT_PORT" | head -1 | xargs -I{} ps -o command= -p {} 2>/dev/null)" >&2
+    echo "  set TRANSCRIPT_PORT to a free port and restart." >&2
+  fi
 elif [ -x "$TRANSCRIPT_VENV/bin/python" ]; then
-  echo "starting captions helper (port 8009)..."
-  "$TRANSCRIPT_VENV/bin/python" docs/transcript-server/transcript_server.py \
+  echo "starting captions helper (port $TRANSCRIPT_PORT)..."
+  TRANSCRIPT_PORT="$TRANSCRIPT_PORT" "$TRANSCRIPT_VENV/bin/python" \
+    docs/transcript-server/transcript_server.py \
     >>"$LOG_DIR/transcript.log" 2>&1 & pids+=($!)
 else
   echo "no captions helper: create it with" >&2
@@ -263,7 +290,7 @@ fi
 # of ports as though they were all listening.
 sleep 1
 echo
-for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8005:translate" "8002:speech" "8009:transcript"; do
+for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8005:translate" "8002:speech" "$TRANSCRIPT_PORT:transcript"; do
   port="${entry%%:*}"
   name="${entry##*:}"
   if lsof -ti:"$port" >/dev/null 2>&1; then
