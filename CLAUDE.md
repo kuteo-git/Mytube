@@ -254,6 +254,61 @@ Two rules, answering different questions, both reached through `Submit`:
 
 **The remux tier cannot be retried this way.** It already re-resolves once, 1.5s later, which is inside the same wave; waiting minutes is not something a viewer waiting for a picture can do. The answer there is the tier machinery: stay on the low rendition and climb to the local file when it lands.
 
+### Captions are refused by the hour, so they are asked for by the hour (2026-08-26)
+
+**YouTube rate-limits the `timedtext` endpoint by address and answers 429 in
+waves.** Measured across a dozen videos in one evening: the same video, the same
+flags, succeeding and failing minutes apart — and a plain `yt-dlp` run outside
+this app refusing identically, which is what rules out the code.
+
+- **It is not the tool, and no library is better here.** Anonymous InnerTube
+  `WEB` — the path every lightweight captions library takes — answers with
+  **zero caption tracks at all**; `ANDROID` and `IOS` answer 400. yt-dlp at
+  least *sees* the tracks and is then refused the file. Swapping it out would
+  see less, not more.
+- **It is not a PO token either, and that was measured rather than assumed.**
+  `bgutil-ytdlp-pot-provider` v1.3.2 was built and run, and it does mint tokens
+  (`Generated IntegrityToken`, `poToken: …`). Captions still 429ed on some
+  videos and not others, and `--list-subs` on the failing video listed **en and
+  vi with the provider on and with it off**. PO tokens gate the *player*
+  request; the caption file is fetched from a different endpoint that they do
+  not cover. The provider is kept at `~/.local/share/bgutil-pot-provider`,
+  **deliberately not at `~/bgutil-ytdlp-pot-provider`**, which is the path the
+  plugin's script providers default to — sitting there, a broken deno
+  invocation was prepended to the stderr of every caption pass in the log.
+- **The retries that happen while a viewer waits cannot be enough.** There are
+  four, over about ninety seconds (`subtitleRetryDelays`), and they ask the
+  viewer's window to coincide with upstream's. When it does not, the video has
+  no captions for as long as the page stays open — and with them the
+  translation and the read-aloud, both of which read the `.vtt`.
+- **So a refusal is written down and asked about again later**
+  (`ingest.subtitle_retries`, `0005_subtitle_retries.sql`). This is
+  `RequeueFailed` for captions and deliberately the same shape: one video at a
+  time, on the worker's existing sweep ticker, waits of **1 → 5 → 20 → 60
+  minutes**, then it stops. Shorter first wait than a transfer's because a
+  caption fetch holds no worker slot and costs tens of kilobytes.
+- **Not a row in `jobs`.** That table means "transfer a video", and every reader
+  of it — the activity page, the single worker slot, the Retry button — would
+  have to learn about a kind of job that transfers nothing.
+- **`refused` had to become a return value.** yt-dlp exits 0 both when upstream
+  turns it away and when the video has no captions, and writes which to stderr;
+  from the caller both look like an empty folder. They want opposite responses,
+  so `FetchSubtitles` now answers both questions. `isRateLimited` matches
+  upstream's own wording, narrowly — anything wider would spend four extra full
+  extracts on every video that simply has no captions, against the address §8
+  risk 6 counts.
+- **A hover must not answer the question pressing play asks.** `?prefetch=1`
+  fetches no captions and queues no transfer by design, and `useStreamPrefetch`
+  wrote its answer under the *player's* own query key with a five-minute
+  `staleTime` — so hovering a card and then opening it meant the real request
+  was never issued. Measured on `2JajSt59wqc`: every `/stream` request the
+  gateway ever saw for it carried `prefetch=true`, and its folder was never
+  created. The prefetch has a key of its own now; what the hover really warms is
+  ingest's resolve cache, which is on the server and shared by both.
+- **The caption pass says what happened.** It was `_, _ = cmd.Run(...)`, so a
+  refusal and an absence left the same evidence: an empty folder and not one
+  line anywhere. It cost a debugging session to learn the answer had been 429.
+
 ### Where the library lives, and whether it is kept (2026-08-22)
 
 **The folder is a setting, and the saved value beats the environment.** `MEDIA_ROOT` is read at start-up by three services — ingest writes there, catalog deletes there, the gateway serves it — and used to be changeable only by editing `scripts/dev.sh`. It is now `data/storage.json`, resolved through `internal/mediaroot`.

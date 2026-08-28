@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.0.3 — 2026-08-28
+
+One fault, chased to the bottom: **subtitles stopped arriving**. It turned out
+to be three separate things wearing the same symptom, and the last of them
+cannot be fixed from here at all.
+
+### What was actually wrong
+
+- **YouTube rate-limits the caption endpoint by address**, separately from
+  everything else. Video bytes come from googlevideo on signed URLs and were
+  never affected — which is exactly why videos kept playing while captions did
+  not, and why this took so long to see. Measured on 2026-08-27 it refused this
+  address for **thirteen hours straight**: 21 attempts, not one through.
+- **The app was spending four requests per video** where one would do — two
+  passes (authored and automatic) times two languages — so it reached the limit
+  four times faster than it needed to.
+- **A hover answered the question pressing play asks.** `?prefetch=1`
+  deliberately fetches no captions and queues no transfer, and the prefetch
+  wrote its answer under the player's own cache key. Hovering a card and then
+  opening it meant the real request was never issued: measured on one video,
+  every `/stream` request the gateway had ever seen for it carried
+  `prefetch=true` and its folder was never created.
+- **A refusal left no trace and was never retried.** `_, _ = cmd.Run(...)`, so
+  "upstream said no" and "this video has no captions" were the same empty
+  folder and the same silence.
+
+### What changed
+
+- **One request instead of four.** One player call lists what exists, one
+  download takes the best of it — Vietnamese if YouTube has it, since its own
+  translation beats the one this app would make, English otherwise.
+- **A refusal is written down and asked about again**, on the worker's existing
+  sweep: 1 min → 5 → 20 → 60 → 3 h → 6 h, and the last step repeats rather than
+  giving up. It did give up after four tries at first; the block outlasted that
+  by eleven hours and five videos were abandoned mid-outage.
+- **Leaving the watch page stops the asking.** A video opened by mistake and
+  left after three seconds was being asked about for ever.
+- **The caption path says what it is doing**, always — `outcome=landed`,
+  `refused` or `none`, with the languages that landed. Every failure had a line
+  and success had none, which makes "is this working" a question about the disk
+  rather than about the log.
+- **A second machine can be asked**, configured in Settings → Transcript beside
+  Translation. It sits between the local path and yt-dlp because it answers the
+  one failure neither can: both of those leave by the same front door.
+  `docs/transcript-server` carries a small server that answers it and a Pyscript
+  file that starts it on a Home Assistant box.
+
+### What is still not fixed, honestly
+
+The block is on the **public address**. A second machine in the same house
+shares it — measured, and refused with the same 429 in the same minute. That
+server helps only through a rotating residential proxy, or on a different
+connection entirely; it says which at startup rather than looking like it is
+helping. Everything above makes the app reach the limit far more slowly and
+recover on its own when a block lifts. None of it lifts a block.
+
+Requires `services/ingest/migrations/0005_subtitle_retries.sql`.
+
 ## 0.0.2 — 2026-08-24
 
 A day of faults found on the phone, and one change of how this is run at all.
