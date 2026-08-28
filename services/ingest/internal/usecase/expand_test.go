@@ -130,8 +130,8 @@ func (d *deepenDownloader) ListPlaylist(_ context.Context, _ string, offset, _ i
 func (d *deepenDownloader) ResolveStream(context.Context, string) (domain.StreamLocation, error) {
 	return domain.StreamLocation{}, nil
 }
-func (d *deepenDownloader) FetchSubtitles(context.Context, string, string, int32) []domain.SubtitleTrack {
-	return nil
+func (d *deepenDownloader) FetchSubtitles(context.Context, string, string, int32) ([]domain.SubtitleTrack, bool) {
+	return nil, false
 }
 func (d *deepenDownloader) Download(context.Context, string, string, int32, func(domain.Progress)) (domain.DownloadResult, error) {
 	return domain.DownloadResult{}, nil

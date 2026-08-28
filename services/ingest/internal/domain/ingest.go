@@ -189,7 +189,12 @@ type Downloader interface {
 	// FetchSubtitles runs ahead of the media transfer so captions are usable
 	// while the viewer is still watching the upstream stream. It never returns
 	// an error: a video without captions is a working video.
-	FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) []SubtitleTrack
+	//
+	// `refused` separates the two outcomes that look identical from here and
+	// want opposite responses — upstream turning the request away, which is
+	// worth asking about again later, from a video that simply has no captions,
+	// which is finished. yt-dlp exits 0 for both and says which in its stderr.
+	FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) (tracks []SubtitleTrack, refused bool)
 	Download(ctx context.Context, videoURL, videoID string, height int32, onProgress func(Progress)) (DownloadResult, error)
 	// ChannelInfo reads a channel's own metadata — artwork, handle, subscriber
 	// count — none of which appears in a flat playlist listing.
@@ -254,6 +259,18 @@ type JobStore interface {
 	// once only produces a burst of requests to an address that has just been
 	// refusing them.
 	RequeueFailed(ctx context.Context, backoff []time.Duration) (Job, bool, error)
+
+	// Caption fetches upstream refused, kept so they can be asked for again
+	// after the wave has passed rather than only while a viewer is waiting.
+	RecordSubtitleRefusal(ctx context.Context, r SubtitleRetry) error
+	ClearSubtitleRetry(ctx context.Context, sourceURL string) error
+	// ClearSubtitleRetryForVideo is the same thing reached from the other side:
+	// leaving the watch page knows the video id, not the URL it was stored under.
+	ClearSubtitleRetryForVideo(ctx context.Context, videoID string) error
+	// DueSubtitleRetry hands back one video whose wait has elapsed, oldest
+	// first. False means none was due. One at a time, for RequeueFailed's
+	// reason: one address, and a burst is what upstream is already refusing.
+	DueSubtitleRetry(ctx context.Context, backoff []time.Duration) (SubtitleRetry, bool, error)
 
 	// LastFailureFor reports when the most recent failed transfer of a URL
 	// finished. Found is false when none ever has.
@@ -469,4 +486,20 @@ type LiveRendition struct {
 type LiveStream struct {
 	IsLive     bool
 	Renditions []LiveRendition
+}
+
+// SubtitleRetry is a caption fetch upstream turned away, waiting to be asked
+// again.
+//
+// Not a Job. `jobs` is about transferring a video, and every reader of it — the
+// activity page, the worker's single slot, the Retry button — would have to
+// learn about a kind of job that transfers nothing.
+type SubtitleRetry struct {
+	SourceURL string
+	VideoID   string
+	// The rendition the caption filenames are derived from, so a retry writes
+	// the names the first attempt would have.
+	Height    int32
+	Attempts  int32
+	LastError string
 }

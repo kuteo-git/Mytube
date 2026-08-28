@@ -32,9 +32,9 @@ func (f *fakeDownloader) ResolveStream(context.Context, string) (domain.StreamLo
 	return domain.StreamLocation{}, nil
 }
 
-func (f *fakeDownloader) FetchSubtitles(context.Context, string, string, int32) []domain.SubtitleTrack {
+func (f *fakeDownloader) FetchSubtitles(context.Context, string, string, int32) ([]domain.SubtitleTrack, bool) {
 	f.calls = append(f.calls, "subtitles")
-	return []domain.SubtitleTrack{{Language: "en", Label: "English", Path: "vid1/1080p.en.vtt"}}
+	return []domain.SubtitleTrack{{Language: "en", Label: "English", Path: "vid1/1080p.en.vtt"}}, false
 }
 
 func (f *fakeDownloader) Download(context.Context, string, string, int32, func(domain.Progress)) (domain.DownloadResult, error) {
@@ -112,6 +112,14 @@ func (fakeStore) LastFailureFor(context.Context, string) (time.Time, bool, error
 // Nothing is ever due for another go, unless a test says otherwise.
 func (fakeStore) RequeueFailed(context.Context, []time.Duration) (domain.Job, bool, error) {
 	return domain.Job{}, false, nil
+}
+
+// Nothing refused, nothing due. The retry table has its own test.
+func (fakeStore) RecordSubtitleRefusal(context.Context, domain.SubtitleRetry) error { return nil }
+func (fakeStore) ClearSubtitleRetry(context.Context, string) error                  { return nil }
+func (fakeStore) ClearSubtitleRetryForVideo(context.Context, string) error          { return nil }
+func (fakeStore) DueSubtitleRetry(context.Context, []time.Duration) (domain.SubtitleRetry, bool, error) {
+	return domain.SubtitleRetry{}, false, nil
 }
 func (fakeStore) Get(context.Context, string) (domain.Job, error) { return domain.Job{}, nil }
 func (fakeStore) List(context.Context, bool, bool, int32) ([]domain.Job, error) {

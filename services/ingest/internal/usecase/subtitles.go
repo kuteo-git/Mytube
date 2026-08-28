@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
 // Captions, fetched the moment playback is asked for.
@@ -102,12 +104,58 @@ func (i *Ingest) fetchSubtitlesOnce(ctx context.Context, sourceURL, videoID stri
 
 // fetchAndPublishSubtitles assumes the claim is already held.
 func (i *Ingest) fetchAndPublishSubtitles(ctx context.Context, sourceURL, videoID string, height int32) {
-	tracks := i.downloader.FetchSubtitles(ctx, sourceURL, videoID, height)
-	if len(tracks) == 0 {
-		// Either there are no captions, or they are already on disk from an
-		// earlier run. Neither is worth publishing.
+	started := time.Now()
+	tracks, refused := i.captions.FetchSubtitles(ctx, sourceURL, videoID, height)
+
+	// One line per attempt, whatever happened.
+	//
+	// Every failure had a line already and success had none, so the log could
+	// say why captions did not arrive and could not say that they had — which
+	// makes "is this working" a question about the disk rather than about the
+	// log. It is also the only place the three outcomes are named side by side:
+	// landed, refused, and the video simply having none.
+	outcome := "none"
+	switch {
+	case refused:
+		outcome = "refused"
+	case len(tracks) > 0:
+		outcome = "landed"
+	}
+	i.logger.Info("captions",
+		"video", videoID,
+		"outcome", outcome,
+		"langs", trackLanguages(tracks),
+		"took", time.Since(started).Round(time.Millisecond),
+	)
+
+	// Refused is not empty, and the two want opposite responses.
+	//
+	// The attempts made here all happen while somebody is watching — four of
+	// them over about ninety seconds — and upstream refuses the caption endpoint
+	// in waves that outlast that. Asking the viewer's window to coincide with
+	// upstream's is what left a video with no captions for as long as the page
+	// stayed open, and with them the translation and the read-aloud, which are
+	// both built on the .vtt. Written down here; the sweep asks again later.
+	if refused {
+		if err := i.store.RecordSubtitleRefusal(ctx, domain.SubtitleRetry{
+			SourceURL: sourceURL,
+			VideoID:   videoID,
+			Height:    height,
+			LastError: "upstream refused the caption endpoint",
+		}); err != nil {
+			i.logger.Warn("record subtitle refusal", "video", videoID, "error", err)
+		}
 		return
 	}
+
+	if len(tracks) == 0 {
+		// Either there are no captions, or they are already on disk from an
+		// earlier run. Neither is worth publishing, and neither is worth asking
+		// about again: a video with no captions is finished.
+		i.forgetSubtitleRetry(ctx, sourceURL)
+		return
+	}
+	i.forgetSubtitleRetry(ctx, sourceURL)
 
 	// Downloading is what pressing play means: Submit has already queued the
 	// job that will set exactly this state itself. Saying it a few seconds
@@ -137,4 +185,51 @@ func videoIDFromURL(raw string) string {
 		return strings.Trim(parsed.Path, "/")
 	}
 	return ""
+}
+
+// forgetSubtitleRetry drops a video from the retry table once the question has
+// been answered — captions landed, or there are none to land.
+func (i *Ingest) forgetSubtitleRetry(ctx context.Context, sourceURL string) {
+	if err := i.store.ClearSubtitleRetry(ctx, sourceURL); err != nil {
+		i.logger.Warn("clear subtitle retry", "url", sourceURL, "error", err)
+	}
+}
+
+// RetrySubtitlesOnce asks again for one video whose captions upstream refused.
+//
+// Called from the worker's sweep, on the same ticker that returns abandoned
+// jobs and requeues failed transfers — the three are the same kind of chore and
+// a fourth ticker would be a fourth thing to reason about.
+//
+// It goes through fetchSubtitlesOnce, so it shares the claim with the play-time
+// path: a viewer opening the video at the same moment does not become a second
+// set of requests upstream.
+func (i *Ingest) RetrySubtitlesOnce(ctx context.Context, backoff []time.Duration) {
+	r, due, err := i.store.DueSubtitleRetry(ctx, backoff)
+	if err != nil {
+		i.logger.Warn("due subtitle retries", "error", err)
+		return
+	}
+	if !due {
+		return
+	}
+
+	height := r.Height
+	if height <= 0 {
+		height = i.defaultHeight
+	}
+	i.logger.Info("asking for captions again",
+		"video", r.VideoID, "url", r.SourceURL, "attempt", r.Attempts+1)
+	i.fetchSubtitlesOnce(ctx, r.SourceURL, r.VideoID, height)
+}
+
+// trackLanguages names what landed, for the log line above. Empty is honest:
+// a refusal and a video with no captions both produce nothing, and the outcome
+// beside it is what tells them apart.
+func trackLanguages(tracks []domain.SubtitleTrack) string {
+	out := make([]string, 0, len(tracks))
+	for _, t := range tracks {
+		out = append(out, t.Language)
+	}
+	return strings.Join(out, ",")
 }

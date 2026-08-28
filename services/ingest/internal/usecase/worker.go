@@ -87,6 +87,11 @@ func (w *Worker) sweep(ctx context.Context) {
 			}
 
 			w.retryFailed(ctx)
+			// Captions refused by upstream, asked for again. On this ticker
+			// rather than one of its own: it is the same kind of chore as the
+			// two above, and a fourth timer would be a fourth thing to reason
+			// about when the address is being refused.
+			w.ingest.RetrySubtitlesOnce(ctx, subtitleRetryBackoff)
 		}
 	}
 }
@@ -103,6 +108,34 @@ func (w *Worker) sweep(ctx context.Context) {
 // stops being a retry and becomes a promise nobody is watching for; the job
 // stays FAILED with the Retry button it always had.
 var retryBackoff = []time.Duration{2 * time.Minute, 10 * time.Minute, 30 * time.Minute}
+
+// The same shape for captions, with two differences, both measured.
+//
+// It starts sooner: captions are tens of kilobytes, no worker slot is held, and
+// two requests is the whole cost of asking — so the first go can be a minute
+// rather than two.
+//
+// And it does not give up, which is the correction. This ended after four
+// tries, on the reasoning that "a wave that has outlasted an hour is not a
+// wave". That was wrong about this endpoint: measured on 2026-08-27, captions
+// were refused for **thirteen hours straight** — 21 attempts, not one through
+// — while videos played normally the whole time. Five videos had exhausted
+// their attempts and been abandoned while the block was still on, which is the
+// fault this table was built to end, reappearing an hour later than before.
+//
+// So the last step repeats: once a video is six hours into being refused, it is
+// asked about twice a day for as long as it takes. Two requests every six hours
+// is nothing next to a scanner that walks 427 sources an hour, and the
+// alternative is a video that silently never gets captions because the block
+// happened to outlast a constant somebody guessed.
+var subtitleRetryBackoff = []time.Duration{
+	1 * time.Minute,
+	5 * time.Minute,
+	20 * time.Minute,
+	60 * time.Minute,
+	3 * time.Hour,
+	6 * time.Hour,
+}
 
 // How long the second attempt inside one job waits before resolving again.
 //

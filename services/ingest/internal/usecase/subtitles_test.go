@@ -39,7 +39,7 @@ func (c *captionDownloader) FetchComments(_ context.Context, _ string) ([]domain
 	return nil, nil
 }
 
-func (c *captionDownloader) FetchSubtitles(context.Context, string, string, int32) []domain.SubtitleTrack {
+func (c *captionDownloader) FetchSubtitles(context.Context, string, string, int32) ([]domain.SubtitleTrack, bool) {
 	c.mu.Lock()
 	c.started++
 	c.mu.Unlock()
@@ -49,7 +49,7 @@ func (c *captionDownloader) FetchSubtitles(context.Context, string, string, int3
 	if c.release != nil {
 		<-c.release
 	}
-	return nil
+	return nil, false
 }
 
 func (c *captionDownloader) count() int {

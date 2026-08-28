@@ -441,3 +441,98 @@ func (s *Store) RequeueFailed(ctx context.Context, backoff []time.Duration) (dom
 	}
 	return j, true, nil
 }
+
+// RecordSubtitleRefusal remembers a caption fetch upstream turned away, so the
+// sweep can ask again when the wave has passed.
+//
+// The count grows on every refusal and the timestamp moves with it: together
+// they are what `DueSubtitleRetry` reads to decide how long this one has earned
+// before being asked again.
+func (s *Store) RecordSubtitleRefusal(ctx context.Context, r domain.SubtitleRetry) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO subtitle_retries (source_url, video_id, height, attempts, last_error)
+		VALUES ($1, $2, $3, 1, $4)
+		ON CONFLICT (source_url) DO UPDATE
+		SET attempts = subtitle_retries.attempts + 1,
+		    last_attempt_at = now(),
+		    last_error = EXCLUDED.last_error,
+		    -- Filled in if the first refusal did not know them. first_seen_at is
+		    -- deliberately left where it was: it is the only record of when this
+		    -- started, and rewriting it would lose that.
+		    video_id = CASE WHEN subtitle_retries.video_id = ''
+		                    THEN EXCLUDED.video_id ELSE subtitle_retries.video_id END,
+		    height = CASE WHEN subtitle_retries.height = 0
+		                  THEN EXCLUDED.height ELSE subtitle_retries.height END`,
+		r.SourceURL, r.VideoID, r.Height, r.LastError)
+	return err
+}
+
+// ClearSubtitleRetryForVideo forgets a video by its id.
+//
+// By id rather than by URL because that is what leaving the watch page knows,
+// and reconstructing the URL would be a second opinion about how source URLs
+// are spelled — one that agrees with the first until somebody stores a
+// youtu.be link.
+func (s *Store) ClearSubtitleRetryForVideo(ctx context.Context, videoID string) error {
+	if videoID == "" {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM subtitle_retries WHERE video_id = $1`, videoID)
+	return err
+}
+
+// ClearSubtitleRetry forgets a video whose captions have landed.
+func (s *Store) ClearSubtitleRetry(ctx context.Context, sourceURL string) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM subtitle_retries WHERE source_url = $1`, sourceURL)
+	return err
+}
+
+// DueSubtitleRetry hands back one video whose wait has elapsed, oldest first.
+//
+// One at a time, exactly like RequeueFailed and for the same reason: there is a
+// single address here, and handing back ten at once produces a burst at an
+// endpoint that has just been refusing them.
+//
+// A row past the last step keeps being asked about, at the last step's rate.
+//
+// It used to stop there, and that was measured wrong: the block this waits out
+// ran for thirteen hours, so "past the last step" arrived while upstream was
+// still refusing and five videos were abandoned mid-block. Repeating the final
+// wait costs two requests every six hours per video and removes the whole class
+// of "captions never arrived because the outage outlasted a constant".
+func (s *Store) DueSubtitleRetry(ctx context.Context, backoff []time.Duration) (domain.SubtitleRetry, bool, error) {
+	if len(backoff) == 0 {
+		return domain.SubtitleRetry{}, false, nil
+	}
+	waits := make([]string, 0, len(backoff))
+	args := make([]any, 0, len(backoff))
+	for i, d := range backoff {
+		waits = append(waits, fmt.Sprintf("WHEN attempts <= %d THEN $%d::interval", i+1, i+1))
+		args = append(args, d.String())
+	}
+	// No upper bound on attempts, and the CASE ends with the last wait as its
+	// ELSE — so a row that has run out of steps waits that long, for ever,
+	// rather than dropping out of the query.
+	last := fmt.Sprintf("ELSE $%d::interval", len(backoff))
+
+	var r domain.SubtitleRetry
+	err := s.pool.QueryRow(ctx, `
+		SELECT source_url, video_id, height, attempts, last_error
+		FROM subtitle_retries
+		WHERE last_attempt_at < now() - (CASE `+strings.Join(waits, " ")+` `+last+` END)
+		  AND NOT EXISTS (
+		      SELECT 1 FROM unavailable_sources u WHERE u.source_url = subtitle_retries.source_url
+		  )
+		ORDER BY last_attempt_at
+		LIMIT 1`, args...).
+		Scan(&r.SourceURL, &r.VideoID, &r.Height, &r.Attempts, &r.LastError)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SubtitleRetry{}, false, nil
+	}
+	if err != nil {
+		return domain.SubtitleRetry{}, false, err
+	}
+	return r, true, nil
+}

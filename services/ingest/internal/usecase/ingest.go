@@ -17,6 +17,10 @@ import (
 )
 
 type Ingest struct {
+	// Where captions come from. The download path is untouched by this: yt-dlp
+	// fetches the video either way, and only the caption question has a cheaper
+	// answer.
+	captions   captionSource
 	downloader domain.Downloader
 	channels   domain.ChannelSource
 	store      domain.JobStore
@@ -63,7 +67,11 @@ func New(
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return &Ingest{
-		downloader:    downloader,
+		downloader: downloader,
+		// Captions come from the downloader unless somebody supplies a cheaper
+		// way — see SetCaptionSource. Defaulting to it means every test and
+		// every caller that does not care keeps working unchanged.
+		captions:      downloader,
 		channels:      channels,
 		store:         store,
 		library:       library,
@@ -615,6 +623,23 @@ func (i *Ingest) CancelVideoDownload(ctx context.Context, videoID string) (int, 
 	if cancelled > 0 {
 		i.logger.Info("download cancelled on leaving", "video", videoID, "jobs", cancelled)
 	}
+
+	// And stop asking for its captions.
+	//
+	// This route already means "nobody is waiting for this video any more", and
+	// the retry queue was ignoring that: a video somebody opened by mistake and
+	// left after three seconds went on being asked about every few hours, for
+	// ever, against an address YouTube was already refusing. The reasoning for
+	// keeping it — a library holds its files, so next time the captions are
+	// there — is much weaker with streaming only switched on, where the video
+	// itself is not kept either.
+	//
+	// Nothing is lost that pressing play does not bring straight back: the
+	// fetch runs again on the next play, and the queue is only ever an
+	// alternative to sitting in front of a video waiting.
+	if err := i.store.ClearSubtitleRetryForVideo(ctx, videoID); err != nil {
+		i.logger.Warn("clear subtitle retry", "video", videoID, "error", err)
+	}
 	return cancelled, nil
 }
 
@@ -729,4 +754,19 @@ func (i *Ingest) Refusal(ctx context.Context, sourceURL string) (domain.Unavaila
 		return domain.UnavailableSource{}, false
 	}
 	return u, found
+}
+
+// captionSource is the one thing the two ways of fetching captions share.
+type captionSource interface {
+	FetchSubtitles(ctx context.Context, videoURL, videoID string, height int32) ([]domain.SubtitleTrack, bool)
+}
+
+// SetCaptionSource points captions at something other than the downloader.
+//
+// A setter rather than another argument to New, which already takes six and is
+// called from a dozen tests that have nothing to say about captions.
+func (i *Ingest) SetCaptionSource(c captionSource) {
+	if c != nil {
+		i.captions = c
+	}
 }
