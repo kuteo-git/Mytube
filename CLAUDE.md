@@ -1087,3 +1087,60 @@ is unchanged.
 
 - What make is the TV at home? (it affects how certificates have to be handled)
 - ~~Is there an external SSD?~~ Yes — `/Volumes/Data2/Youtube`, 437 GiB. See §2.
+
+### The narration pass moved to the server (2026-08-29)
+
+`POST /api/videos/{id}/narration` starts a pass; `GET` reports how far it has
+got and returns the clips ready so far; `DELETE` cancels one. Measured on the
+running stack, one 8-minute video: **242 cues, 238 clips, 176 seconds**, with the
+first clip playable after about a second and `1.6077s` of audio fitted into a
+`1.60s` slot.
+
+**Why it moved.** Narration lives in the browser — about three thousand lines
+under `web/src/features/watch/application/` — and that is not being replaced; it
+works there. What it cannot do is run on a phone with the screen off, and §8's
+risk 4 is exactly that: a thousand text-to-speech requests from a backgrounded
+app is the work an operating system suspends. A manifest and some audio files is
+ordinary playback.
+
+- **The VTT parser was ported, not rewritten** (`narration_vtt.go`), together
+  with the browser suite's own cases. The one thing the port had to get right
+  that TypeScript got for free is that **offsets are runes**: the original counts
+  UTF-16 code units and slices the joined text by them, and counting bytes would
+  put every clause cut in the wrong place the moment a line contains a
+  Vietnamese vowel. There is a test that fails on the byte version.
+- **It reuses the browser's own translation cache**, under the same partition key
+  (`omniroute:<model>`). So a video already narrated in the browser is already
+  translated for the app, and the reverse — and a restarted pass is cheap. It
+  reuses `synthesise`, `atempo`, `tempoFor` and the TTS cache too, which is why a
+  clip fitted here is byte-for-byte the file the browser would have fetched, at
+  the same path.
+- **The pass is detached from the request that starts it.** `POST` answers 202
+  and returns; a request held open for minutes dies to a phone locking its
+  screen and takes the pass with it. So the context is `Background()`, not the
+  request's — tying it to the request would cancel the pass the instant the
+  handler returned.
+- **Progressive, not all-or-nothing.** Waiting for a whole video is minutes of
+  silence; the clips already fitted are playable now, and the client polls for
+  the rest exactly as it polls for a stream.
+- **Registry in memory, work on disk.** A pass cannot survive a restart, so
+  neither should the claim that one is running — but everything expensive is on
+  disk, so a restarted pass is fast rather than repeated.
+- **No translation model configured is a refusal, not an attempt.** Translating
+  into a partition named after nothing is worse than a cold cache: the answers
+  land where they will later be read back as another model's work.
+- **A line that cannot be said in its slot is dropped**, the same rule
+  `serveFitted` already follows: squeezing to the maximum costs two lines to keep
+  one — unintelligible at that tempo, and it overruns into the next cue. Four of
+  the 242 went that way.
+- **The slot is the gap to the next cue's start, not the cue's own length.** A
+  line may be written short and still have the silence after it to be said in;
+  fitting to the shorter of the two speeds up lines that had time to spare.
+- **`durationSeconds` in the manifest is the slot, not the audio's length.** It
+  is what the client ducks by, and ducking has to end when the line's time is up
+  rather than when its file happens to stop.
+- **The clips are served by `/media`**, so the bytes never pass through the
+  handler. Their WAV headers carry `0xFFFFFFFF` sizes — ffmpeg writes atempo
+  output as a stream — which `ffprobe` and both platforms' players read
+  correctly, and Python's `wave` module does not. Recorded because it looks like
+  a corrupt file to anything that trusts the header.

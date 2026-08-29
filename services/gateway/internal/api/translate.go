@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,8 +22,17 @@ type sidecarBatchResponse struct {
 // answer. Shared by the batch route and the settings page's Test button, so the
 // two cannot drift apart about how a batch is sent.
 func (g *Gateway) postSidecarBatch(r *http.Request, body []byte) (sidecarBatchResponse, error) {
+	return g.postSidecarBatchCtx(r.Context(), body)
+}
+
+// postSidecarBatchCtx is the same call without a request to take a context from.
+//
+// The narration pass has none: it is started by a request that has already
+// answered 202 and outlives it deliberately, so tying it to that request's
+// context would cancel the pass the instant the handler returned.
+func (g *Gateway) postSidecarBatchCtx(ctx context.Context, body []byte) (sidecarBatchResponse, error) {
 	var out sidecarBatchResponse
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost,
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		"http://localhost:8005/translate/batch", bytes.NewReader(body))
 	if err != nil {
 		return out, err

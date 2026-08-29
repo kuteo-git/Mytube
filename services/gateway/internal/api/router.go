@@ -66,6 +66,12 @@ type Gateway struct {
 	// changes, because a forgotten flag here looks exactly like a serious bug —
 	// a library full of downloaded videos that all insist on streaming.
 	skipLocalTier bool
+	// narration holds the passes translating and speaking each video, one per
+	// video. In memory on purpose: a pass cannot survive a restart, so neither
+	// should the claim that one is running. What is expensive — the
+	// translations and the clips — is on disk, so a restarted pass is fast
+	// rather than repeated.
+	narration *narrationRegistry
 }
 
 func NewGateway(
@@ -97,6 +103,7 @@ func NewGateway(
 		mediaRoot:     mediaRoot,
 		configDir:     configDir,
 		skipLocalTier: skipLocal,
+		narration:     newNarrationRegistry(),
 	}
 }
 
@@ -153,6 +160,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings/proxy", g.handleGetProxyConfig)
 	mux.HandleFunc("POST /api/settings/proxy", g.handleSaveProxyConfig)
 	mux.HandleFunc("POST /api/settings/proxy/test", g.handleTestProxy)
+	mux.HandleFunc("POST /api/videos/{id}/narration", g.handleStartNarration)
+	mux.HandleFunc("GET /api/videos/{id}/narration", g.handleGetNarration)
+	mux.HandleFunc("DELETE /api/videos/{id}/narration", g.handleStopNarration)
 	mux.HandleFunc("GET /api/videos/{id}/narration-cache", g.handleGetNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cache", g.handlePutNarrationCache)
 	mux.HandleFunc("POST /api/videos/{id}/narration-cues", g.handlePutNarrationCues)
