@@ -273,7 +273,7 @@ fi
 # reason is a service somebody forgot to start in a second terminal.
 #
 # Not fatal when absent. Narration is one feature; the library is the app.
-TTS_SERVER="${TTS_SERVER:-$HOME/Documents/git/robot-esp32/services/vieneu_server.py}"
+TTS_SERVER="${TTS_SERVER:-/Volumes/Data2/git/robot-esp32/services/vieneu_server.py}"
 if lsof -ti:8002 >/dev/null 2>&1; then
   echo "speech already running on :8002, leaving it alone"
 elif [ -f "$TTS_SERVER" ]; then

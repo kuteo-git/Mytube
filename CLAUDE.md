@@ -1144,3 +1144,54 @@ ordinary playback.
   output as a stream — which `ffprobe` and both platforms' players read
   correctly, and Python's `wave` module does not. Recorded because it looks like
   a corrupt file to anything that trusts the header.
+
+### The repositories moved to the external volume (2026-08-30)
+
+`~/Documents/git` is now `/Volumes/Data2/git` — all nine repositories, 17 GB,
+210,784 files. The internal disk went from **504 MB free to 35 GiB**, which is
+why this happened: the iOS simulator runtime (§ below) is an OS-managed asset in
+`/System/Library/AssetsV2` that cannot be relocated, and there was no other 8 GB
+to give it.
+
+- **`rsync` was the wrong tool and failed quietly.** macOS ships openrsync
+  (`rsync version 2.6.9 compatible`), which does not accept `-X`; given it, the
+  command printed its usage and **exited 0**, having copied nothing. With `-E`
+  instead it aborted partway on a file carrying extended attributes —
+  `Permission denied` on a `-r--r--r--@` git object, then `unexpected end of
+  file` — and again exited 0, having copied 58 of 210,784 files. Both failures
+  are indistinguishable from success at the shell. `ditto` is the macOS-native
+  tool for this and copied everything, verified directory by directory.
+- **Twenty-one LaunchAgents pointed at the old path**, this stack's among them.
+  They were booted out first, rewritten, and bootstrapped back — 20 loaded;
+  `com.luke.meeting-llm` failed, and had also failed to *boot out* beforehand,
+  so it was already not running and this move is not what broke it.
+- **Eight Python venvs carry the absolute path in every `bin/` shebang.** The
+  first pass found five by guessing at names and missed three; `find . -name
+  pyvenv.cfg` found all eight, and the three missed ones held 160 scripts
+  between them. A venv whose shebang points at a path that no longer exists is
+  an interpreter that cannot start, so this had to be exhaustive rather than
+  representative.
+- **A git worktree keeps its link in two files, both absolute.**
+  `VieNeu-TTS-v305/.git` names the worktree's admin directory and
+  `VieNeu-TTS/.git/worktrees/*/gitdir` names the checkout. Rewriting one leaves
+  a worktree git will not open.
+- **`dev.sh` wrote `$HOME/Documents/git`, not the absolute path**, so the pass
+  that rewrote `/Users/lucnguyen/Documents/git` skipped it in silence and the
+  speech server would have been unreachable — the failure §5 records as the
+  worst kind, since narration going silent points at everything except a path.
+- **`Owners: Disabled` on this volume does not lose file modes.** Checked
+  deliberately before trusting it with the cookie jars: `data/cookies` is still
+  `0700` and every jar `0600`, and the SSH key still `0600`. §6b's protection is
+  file mode, so a volume that dropped it would have published the household's
+  Google sessions to anything running as any user.
+- **The source was deleted only after counting files per directory** — nine
+  directories, all equal — and after confirming the venvs start, every
+  repository resolves its HEAD, the worktree opens, and all eight ports answer.
+
+**§8 risk 1 now reaches the build and the boot.** The volume dropping already
+meant losing the library; it now also means no repository, no toolchain, and a
+login agent whose `boot.sh` is *itself* on the missing volume. That last part
+degrades correctly rather than silently: launchd cannot find the script, the
+agent fails, and `KeepAlive` with `ThrottleInterval 30` retries every thirty
+seconds until the volume mounts. `boot.sh`'s own five-minute wait for
+`/Volumes/Data2` is now a second line of defence rather than the first.
