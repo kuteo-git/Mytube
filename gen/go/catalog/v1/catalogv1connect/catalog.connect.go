@@ -116,6 +116,18 @@ const (
 	// CatalogServiceCreatePlaylistProcedure is the fully-qualified name of the CatalogService's
 	// CreatePlaylist RPC.
 	CatalogServiceCreatePlaylistProcedure = "/catalog.v1.CatalogService/CreatePlaylist"
+	// CatalogServiceAddPlaylistItemProcedure is the fully-qualified name of the CatalogService's
+	// AddPlaylistItem RPC.
+	CatalogServiceAddPlaylistItemProcedure = "/catalog.v1.CatalogService/AddPlaylistItem"
+	// CatalogServiceRemovePlaylistItemProcedure is the fully-qualified name of the CatalogService's
+	// RemovePlaylistItem RPC.
+	CatalogServiceRemovePlaylistItemProcedure = "/catalog.v1.CatalogService/RemovePlaylistItem"
+	// CatalogServiceUpdatePlaylistProcedure is the fully-qualified name of the CatalogService's
+	// UpdatePlaylist RPC.
+	CatalogServiceUpdatePlaylistProcedure = "/catalog.v1.CatalogService/UpdatePlaylist"
+	// CatalogServiceDeletePlaylistProcedure is the fully-qualified name of the CatalogService's
+	// DeletePlaylist RPC.
+	CatalogServiceDeletePlaylistProcedure = "/catalog.v1.CatalogService/DeletePlaylist"
 	// CatalogServiceImportPlaylistItemsProcedure is the fully-qualified name of the CatalogService's
 	// ImportPlaylistItems RPC.
 	CatalogServiceImportPlaylistItemsProcedure = "/catalog.v1.CatalogService/ImportPlaylistItems"
@@ -217,6 +229,16 @@ type CatalogServiceClient interface {
 	ListPlaylists(context.Context, *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error)
 	GetPlaylist(context.Context, *connect.Request[v1.GetPlaylistRequest]) (*connect.Response[v1.GetPlaylistResponse], error)
 	CreatePlaylist(context.Context, *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error)
+	// Somebody adding one video to one of their own lists, from a client.
+	// Distinct from ImportPlaylistItems, which is the account importer's bulk
+	// write and carries a `complete` flag this has no meaning for.
+	AddPlaylistItem(context.Context, *connect.Request[v1.AddPlaylistItemRequest]) (*connect.Response[v1.AddPlaylistItemResponse], error)
+	RemovePlaylistItem(context.Context, *connect.Request[v1.RemovePlaylistItemRequest]) (*connect.Response[v1.RemovePlaylistItemResponse], error)
+	// Title and description together, rather than a RenamePlaylist: creation
+	// already carries both, and an RPC that changes half of what creation set is
+	// one that grows a sibling later.
+	UpdatePlaylist(context.Context, *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error)
+	DeletePlaylist(context.Context, *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error)
 	// The account importer's write. Appends, never removes: YouTube answering
 	// with a short list must not empty a playlist here, the same rule the
 	// subscription import follows.
@@ -430,6 +452,30 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("CreatePlaylist")),
 			connect.WithClientOptions(opts...),
 		),
+		addPlaylistItem: connect.NewClient[v1.AddPlaylistItemRequest, v1.AddPlaylistItemResponse](
+			httpClient,
+			baseURL+CatalogServiceAddPlaylistItemProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("AddPlaylistItem")),
+			connect.WithClientOptions(opts...),
+		),
+		removePlaylistItem: connect.NewClient[v1.RemovePlaylistItemRequest, v1.RemovePlaylistItemResponse](
+			httpClient,
+			baseURL+CatalogServiceRemovePlaylistItemProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("RemovePlaylistItem")),
+			connect.WithClientOptions(opts...),
+		),
+		updatePlaylist: connect.NewClient[v1.UpdatePlaylistRequest, v1.UpdatePlaylistResponse](
+			httpClient,
+			baseURL+CatalogServiceUpdatePlaylistProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("UpdatePlaylist")),
+			connect.WithClientOptions(opts...),
+		),
+		deletePlaylist: connect.NewClient[v1.DeletePlaylistRequest, v1.DeletePlaylistResponse](
+			httpClient,
+			baseURL+CatalogServiceDeletePlaylistProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("DeletePlaylist")),
+			connect.WithClientOptions(opts...),
+		),
 		importPlaylistItems: connect.NewClient[v1.ImportPlaylistItemsRequest, v1.ImportPlaylistItemsResponse](
 			httpClient,
 			baseURL+CatalogServiceImportPlaylistItemsProcedure,
@@ -512,6 +558,10 @@ type catalogServiceClient struct {
 	listPlaylists           *connect.Client[v1.ListPlaylistsRequest, v1.ListPlaylistsResponse]
 	getPlaylist             *connect.Client[v1.GetPlaylistRequest, v1.GetPlaylistResponse]
 	createPlaylist          *connect.Client[v1.CreatePlaylistRequest, v1.CreatePlaylistResponse]
+	addPlaylistItem         *connect.Client[v1.AddPlaylistItemRequest, v1.AddPlaylistItemResponse]
+	removePlaylistItem      *connect.Client[v1.RemovePlaylistItemRequest, v1.RemovePlaylistItemResponse]
+	updatePlaylist          *connect.Client[v1.UpdatePlaylistRequest, v1.UpdatePlaylistResponse]
+	deletePlaylist          *connect.Client[v1.DeletePlaylistRequest, v1.DeletePlaylistResponse]
 	importPlaylistItems     *connect.Client[v1.ImportPlaylistItemsRequest, v1.ImportPlaylistItemsResponse]
 	listStalePlaylists      *connect.Client[v1.ListStalePlaylistsRequest, v1.ListStalePlaylistsResponse]
 	listUnreadPlaylists     *connect.Client[v1.ListUnreadPlaylistsRequest, v1.ListUnreadPlaylistsResponse]
@@ -667,6 +717,26 @@ func (c *catalogServiceClient) CreatePlaylist(ctx context.Context, req *connect.
 	return c.createPlaylist.CallUnary(ctx, req)
 }
 
+// AddPlaylistItem calls catalog.v1.CatalogService.AddPlaylistItem.
+func (c *catalogServiceClient) AddPlaylistItem(ctx context.Context, req *connect.Request[v1.AddPlaylistItemRequest]) (*connect.Response[v1.AddPlaylistItemResponse], error) {
+	return c.addPlaylistItem.CallUnary(ctx, req)
+}
+
+// RemovePlaylistItem calls catalog.v1.CatalogService.RemovePlaylistItem.
+func (c *catalogServiceClient) RemovePlaylistItem(ctx context.Context, req *connect.Request[v1.RemovePlaylistItemRequest]) (*connect.Response[v1.RemovePlaylistItemResponse], error) {
+	return c.removePlaylistItem.CallUnary(ctx, req)
+}
+
+// UpdatePlaylist calls catalog.v1.CatalogService.UpdatePlaylist.
+func (c *catalogServiceClient) UpdatePlaylist(ctx context.Context, req *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error) {
+	return c.updatePlaylist.CallUnary(ctx, req)
+}
+
+// DeletePlaylist calls catalog.v1.CatalogService.DeletePlaylist.
+func (c *catalogServiceClient) DeletePlaylist(ctx context.Context, req *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error) {
+	return c.deletePlaylist.CallUnary(ctx, req)
+}
+
 // ImportPlaylistItems calls catalog.v1.CatalogService.ImportPlaylistItems.
 func (c *catalogServiceClient) ImportPlaylistItems(ctx context.Context, req *connect.Request[v1.ImportPlaylistItemsRequest]) (*connect.Response[v1.ImportPlaylistItemsResponse], error) {
 	return c.importPlaylistItems.CallUnary(ctx, req)
@@ -782,6 +852,16 @@ type CatalogServiceHandler interface {
 	ListPlaylists(context.Context, *connect.Request[v1.ListPlaylistsRequest]) (*connect.Response[v1.ListPlaylistsResponse], error)
 	GetPlaylist(context.Context, *connect.Request[v1.GetPlaylistRequest]) (*connect.Response[v1.GetPlaylistResponse], error)
 	CreatePlaylist(context.Context, *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error)
+	// Somebody adding one video to one of their own lists, from a client.
+	// Distinct from ImportPlaylistItems, which is the account importer's bulk
+	// write and carries a `complete` flag this has no meaning for.
+	AddPlaylistItem(context.Context, *connect.Request[v1.AddPlaylistItemRequest]) (*connect.Response[v1.AddPlaylistItemResponse], error)
+	RemovePlaylistItem(context.Context, *connect.Request[v1.RemovePlaylistItemRequest]) (*connect.Response[v1.RemovePlaylistItemResponse], error)
+	// Title and description together, rather than a RenamePlaylist: creation
+	// already carries both, and an RPC that changes half of what creation set is
+	// one that grows a sibling later.
+	UpdatePlaylist(context.Context, *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error)
+	DeletePlaylist(context.Context, *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error)
 	// The account importer's write. Appends, never removes: YouTube answering
 	// with a short list must not empty a playlist here, the same rule the
 	// subscription import follows.
@@ -991,6 +1071,30 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("CreatePlaylist")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceAddPlaylistItemHandler := connect.NewUnaryHandler(
+		CatalogServiceAddPlaylistItemProcedure,
+		svc.AddPlaylistItem,
+		connect.WithSchema(catalogServiceMethods.ByName("AddPlaylistItem")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceRemovePlaylistItemHandler := connect.NewUnaryHandler(
+		CatalogServiceRemovePlaylistItemProcedure,
+		svc.RemovePlaylistItem,
+		connect.WithSchema(catalogServiceMethods.ByName("RemovePlaylistItem")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceUpdatePlaylistHandler := connect.NewUnaryHandler(
+		CatalogServiceUpdatePlaylistProcedure,
+		svc.UpdatePlaylist,
+		connect.WithSchema(catalogServiceMethods.ByName("UpdatePlaylist")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceDeletePlaylistHandler := connect.NewUnaryHandler(
+		CatalogServiceDeletePlaylistProcedure,
+		svc.DeletePlaylist,
+		connect.WithSchema(catalogServiceMethods.ByName("DeletePlaylist")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceImportPlaylistItemsHandler := connect.NewUnaryHandler(
 		CatalogServiceImportPlaylistItemsProcedure,
 		svc.ImportPlaylistItems,
@@ -1099,6 +1203,14 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceGetPlaylistHandler.ServeHTTP(w, r)
 		case CatalogServiceCreatePlaylistProcedure:
 			catalogServiceCreatePlaylistHandler.ServeHTTP(w, r)
+		case CatalogServiceAddPlaylistItemProcedure:
+			catalogServiceAddPlaylistItemHandler.ServeHTTP(w, r)
+		case CatalogServiceRemovePlaylistItemProcedure:
+			catalogServiceRemovePlaylistItemHandler.ServeHTTP(w, r)
+		case CatalogServiceUpdatePlaylistProcedure:
+			catalogServiceUpdatePlaylistHandler.ServeHTTP(w, r)
+		case CatalogServiceDeletePlaylistProcedure:
+			catalogServiceDeletePlaylistHandler.ServeHTTP(w, r)
 		case CatalogServiceImportPlaylistItemsProcedure:
 			catalogServiceImportPlaylistItemsHandler.ServeHTTP(w, r)
 		case CatalogServiceListStalePlaylistsProcedure:
@@ -1238,6 +1350,22 @@ func (UnimplementedCatalogServiceHandler) GetPlaylist(context.Context, *connect.
 
 func (UnimplementedCatalogServiceHandler) CreatePlaylist(context.Context, *connect.Request[v1.CreatePlaylistRequest]) (*connect.Response[v1.CreatePlaylistResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.CreatePlaylist is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) AddPlaylistItem(context.Context, *connect.Request[v1.AddPlaylistItemRequest]) (*connect.Response[v1.AddPlaylistItemResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.AddPlaylistItem is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) RemovePlaylistItem(context.Context, *connect.Request[v1.RemovePlaylistItemRequest]) (*connect.Response[v1.RemovePlaylistItemResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.RemovePlaylistItem is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) UpdatePlaylist(context.Context, *connect.Request[v1.UpdatePlaylistRequest]) (*connect.Response[v1.UpdatePlaylistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.UpdatePlaylist is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) DeletePlaylist(context.Context, *connect.Request[v1.DeletePlaylistRequest]) (*connect.Response[v1.DeletePlaylistResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.DeletePlaylist is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ImportPlaylistItems(context.Context, *connect.Request[v1.ImportPlaylistItemsRequest]) (*connect.Response[v1.ImportPlaylistItemsResponse], error) {

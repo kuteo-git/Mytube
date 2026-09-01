@@ -92,6 +92,16 @@ service CatalogService {
   rpc ListPlaylists(ListPlaylistsRequest) returns (ListPlaylistsResponse);
   rpc GetPlaylist(GetPlaylistRequest) returns (GetPlaylistResponse);
   rpc CreatePlaylist(CreatePlaylistRequest) returns (CreatePlaylistResponse);
+  // Somebody adding one video to one of their own lists, from a client.
+  // Distinct from ImportPlaylistItems, which is the account importer's bulk
+  // write and carries a `complete` flag this has no meaning for.
+  rpc AddPlaylistItem(AddPlaylistItemRequest) returns (AddPlaylistItemResponse);
+  rpc RemovePlaylistItem(RemovePlaylistItemRequest) returns (RemovePlaylistItemResponse);
+  // Title and description together, rather than a RenamePlaylist: creation
+  // already carries both, and an RPC that changes half of what creation set is
+  // one that grows a sibling later.
+  rpc UpdatePlaylist(UpdatePlaylistRequest) returns (UpdatePlaylistResponse);
+  rpc DeletePlaylist(DeletePlaylistRequest) returns (DeletePlaylistResponse);
   // The account importer's write. Appends, never removes: YouTube answering
   // with a short list must not empty a playlist here, the same rule the
   // subscription import follows.
@@ -688,10 +698,17 @@ message Playlist {
   // is empty for a while — and an empty playlist looks broken rather than
   // pending. The page says which it is.
   bool items_synced = 8;
+  // Whether the video ListPlaylistsRequest.video_id names is already in this
+  // playlist. False, and meaningless, when that field was not sent.
+  bool contains_video = 10;
 }
 
 message ListPlaylistsRequest {
   string user_id = 1;
+  // Optional. When set, every playlist carries contains_video, so the sheet
+  // that asks "which lists are there, and which hold this video" is one call.
+  // Fetching each playlist's contents to answer that would be N.
+  string video_id = 2;
 }
 
 message ListPlaylistsResponse {
@@ -724,6 +741,47 @@ message CreatePlaylistRequest {
 message CreatePlaylistResponse {
   Playlist playlist = 1;
 }
+
+message AddPlaylistItemRequest {
+  string playlist_id = 1;
+  // A playlist belongs to a member: the id alone must never be enough to reach
+  // one, so every write here is keyed by both.
+  string user_id = 2;
+  string video_id = 3;
+}
+
+// Adding a video the list already holds is success, not an error. The sheet
+// that drives this may be saved twice, and a duplicate key must not surface as
+// a failure.
+message AddPlaylistItemResponse {}
+
+message RemovePlaylistItemRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+  string video_id = 3;
+}
+
+// Removing something absent is success too, for the same reason.
+message RemovePlaylistItemResponse {}
+
+message UpdatePlaylistRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+  string title = 3;
+  string description = 4;
+}
+
+message UpdatePlaylistResponse {
+  Playlist playlist = 1;
+}
+
+message DeletePlaylistRequest {
+  string playlist_id = 1;
+  string user_id = 2;
+}
+
+// playlist_items has ON DELETE CASCADE, so the items go with it.
+message DeletePlaylistResponse {}
 
 message MarkPlaylistUnavailableRequest {
   string playlist_id = 1;

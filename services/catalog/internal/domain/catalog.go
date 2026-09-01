@@ -209,6 +209,9 @@ type Playlist struct {
 	ItemsSynced bool
 	// Upstream lists it but will not hand it over.
 	Unavailable bool
+	// Whether the video ListPlaylists was asked about is already in this list.
+	// Meaningless, and false, when it was asked about none.
+	ContainsVideo bool
 }
 
 // StalePlaylist is what the importer needs to go and read one again: which
@@ -286,12 +289,22 @@ type Repository interface {
 	RecordWatchProgress(ctx context.Context, userID, videoID string, positionSeconds int32, watchedFraction float32) error
 	SetReaction(ctx context.Context, userID, videoID string, reaction Reaction) (int64, error)
 
-	ListPlaylists(ctx context.Context, userID string) ([]Playlist, error)
+	// ListPlaylists answers "which lists does this member have". A non-empty
+	// videoID also answers "and which of them hold this video", on every row —
+	// one query rather than one per playlist.
+	ListPlaylists(ctx context.Context, userID, videoID string) ([]Playlist, error)
 	GetPlaylist(ctx context.Context, playlistID, userID string) (Playlist, error)
 	ListPlaylistVideos(ctx context.Context, playlistID, userID string, page Page) ([]Video, error)
 	CreatePlaylist(ctx context.Context, p Playlist) (Playlist, error)
-	// SetPlaylistItem appends a video to the end of the playlist, or removes it.
-	// Appending rather than inserting is what keeps an imported order intact.
+	// AddPlaylistItem appends a video to the end of the playlist. Appending
+	// rather than inserting is what keeps an imported order intact. Adding a
+	// video the list already holds is success and changes nothing.
+	AddPlaylistItem(ctx context.Context, playlistID, userID, videoID string) error
+	// RemovePlaylistItem takes a video out. Removing an absent one is success.
+	RemovePlaylistItem(ctx context.Context, playlistID, userID, videoID string) error
+	UpdatePlaylist(ctx context.Context, playlistID, userID, title, description string) (Playlist, error)
+	// DeletePlaylist drops the playlist; playlist_items cascades with it.
+	DeletePlaylist(ctx context.Context, playlistID, userID string) error
 	// ImportPlaylistItems appends the given videos in order, skipping any the
 	// playlist already holds, and records that the contents were read now.
 	ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) (int32, error)

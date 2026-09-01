@@ -239,6 +239,10 @@ type playlistDTO struct {
 	ItemsSynced bool     `json:"itemsSynced"`
 	Unavailable bool     `json:"unavailable"`
 	Thumbnails  []string `json:"thumbnails"`
+	// Whether the video ?videoId= named is already in this list. Absent from
+	// the question, absent from the answer — so every existing caller of
+	// GET /api/playlists is unaffected by it.
+	ContainsVideo bool `json:"containsVideo"`
 }
 
 type playlistsResponse struct {
@@ -266,5 +270,7 @@ func toPlaylistDTO(p *catalogv1.Playlist) playlistDTO {
 		ItemsSynced: p.GetItemsSynced(),
 		Unavailable: p.GetUnavailable(),
 		Thumbnails:  thumbnails,
+
+		ContainsVideo: p.GetContainsVideo(),
 	}
 }

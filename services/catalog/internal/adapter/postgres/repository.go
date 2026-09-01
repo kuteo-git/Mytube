@@ -1357,7 +1357,7 @@ func scanPlaylist(row pgx.Row) (domain.Playlist, error) {
 	return p, err
 }
 
-func (r *Repository) ListPlaylists(ctx context.Context, userID string) ([]domain.Playlist, error) {
+func (r *Repository) ListPlaylists(ctx context.Context, userID, videoID string) ([]domain.Playlist, error) {
 	rows, err := r.pool.Query(ctx, playlistSelect+`
 		WHERE p.user_id = $1
 		ORDER BY p.updated_at DESC`, userID)
@@ -1374,7 +1374,149 @@ func (r *Repository) ListPlaylists(ctx context.Context, userID string) ([]domain
 		}
 		out = append(out, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if videoID == "" {
+		return out, nil
+	}
+	holding, err := r.playlistIDsContaining(ctx, userID, videoID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].ContainsVideo = holding[out[i].ID]
+	}
+	return out, nil
+}
+
+// playlistIDsContaining answers "which of this member's lists hold this video"
+// in one query. Reading each playlist's contents instead would be one query per
+// playlist for a single bit each.
+func (r *Repository) playlistIDsContaining(ctx context.Context, userID, videoID string) (map[string]bool, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT i.playlist_id
+		FROM playlist_items i
+		JOIN playlists p ON p.id = i.playlist_id
+		WHERE p.user_id = $1 AND i.video_id = $2`, userID, videoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
 	return out, rows.Err()
+}
+
+// AddPlaylistItem appends one video to a playlist the member owns.
+//
+// The position is computed inside the INSERT rather than read and then written:
+// two clients adding at once would otherwise pick the same number. Ownership is
+// part of the statement for the reason GetPlaylist's is — a check written
+// separately from the query is one the next call site forgets.
+//
+// The rows come FROM playlists, not from playlist_items with an EXISTS beside
+// the aggregate. Measured: that shape inserts into somebody else's playlist,
+// because an aggregate SELECT with no GROUP BY returns one row however the
+// WHERE went — MAX of nothing is NULL, position 0, and the guard never fires.
+// Selecting from the ownership check itself is what makes "not yours" mean no
+// row at all.
+func (r *Repository) AddPlaylistItem(ctx context.Context, playlistID, userID, videoID string) error {
+	tag, err := r.pool.Exec(ctx, `
+		INSERT INTO playlist_items (playlist_id, video_id, position)
+		SELECT $1, $3, (
+		  SELECT COALESCE(MAX(i.position), -1) + 1
+		  FROM playlist_items i WHERE i.playlist_id = $1
+		)
+		FROM playlists p
+		WHERE p.id = $1 AND p.user_id = $2
+		ON CONFLICT (playlist_id, video_id) DO NOTHING`,
+		playlistID, userID, videoID)
+	if err != nil {
+		return err
+	}
+	// Nothing inserted is either "already there" or "not this member's list",
+	// and those must not answer the same way. Ask which.
+	if tag.RowsAffected() == 0 {
+		if err := r.requirePlaylist(ctx, playlistID, userID); err != nil {
+			return err
+		}
+		return nil
+	}
+	return r.touchPlaylist(ctx, playlistID, userID)
+}
+
+func (r *Repository) RemovePlaylistItem(ctx context.Context, playlistID, userID, videoID string) error {
+	if err := r.requirePlaylist(ctx, playlistID, userID); err != nil {
+		return err
+	}
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM playlist_items i
+		USING playlists p
+		WHERE p.id = i.playlist_id
+		  AND i.playlist_id = $1 AND p.user_id = $2 AND i.video_id = $3`,
+		playlistID, userID, videoID)
+	if err != nil {
+		return err
+	}
+	return r.touchPlaylist(ctx, playlistID, userID)
+}
+
+func (r *Repository) UpdatePlaylist(
+	ctx context.Context, playlistID, userID, title, description string,
+) (domain.Playlist, error) {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE playlists SET title = $3, description = $4, updated_at = now()
+		WHERE id = $1 AND user_id = $2`, playlistID, userID, title, description)
+	if err != nil {
+		return domain.Playlist{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.Playlist{}, fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
+	}
+	return r.GetPlaylist(ctx, playlistID, userID)
+}
+
+func (r *Repository) DeletePlaylist(ctx context.Context, playlistID, userID string) error {
+	tag, err := r.pool.Exec(ctx, `
+		DELETE FROM playlists WHERE id = $1 AND user_id = $2`, playlistID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+// requirePlaylist turns "not this member's" into not found, so the id alone
+// never reveals that somebody else's playlist exists.
+func (r *Repository) requirePlaylist(ctx context.Context, playlistID, userID string) error {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2)`,
+		playlistID, userID).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("playlist %s: %w", playlistID, domain.ErrNotFound)
+	}
+	return nil
+}
+
+func (r *Repository) touchPlaylist(ctx context.Context, playlistID, userID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE playlists SET updated_at = now() WHERE id = $1 AND user_id = $2`,
+		playlistID, userID)
+	return err
 }
 
 // GetPlaylist reads one playlist, scoped to its owner.

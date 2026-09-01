@@ -183,7 +183,12 @@ func (g *Gateway) Routes() http.Handler {
 	// Broadcasts on air now. Not under /feed: it is a list, not a ranking.
 	mux.HandleFunc("GET /api/live", g.handleLiveList)
 	mux.HandleFunc("GET /api/playlists", g.handleListPlaylists)
+	mux.HandleFunc("POST /api/playlists", g.handleCreatePlaylist)
 	mux.HandleFunc("GET /api/playlists/{id}", g.handleGetPlaylist)
+	mux.HandleFunc("PATCH /api/playlists/{id}", g.handleUpdatePlaylist)
+	mux.HandleFunc("DELETE /api/playlists/{id}", g.handleDeletePlaylist)
+	mux.HandleFunc("POST /api/playlists/{id}/items", g.handleAddPlaylistItem)
+	mux.HandleFunc("DELETE /api/playlists/{id}/items/{videoId}", g.handleRemovePlaylistItem)
 	mux.HandleFunc("POST /api/videos/{id}/pinned", g.handleSetPinned)
 	mux.HandleFunc("POST /api/videos/{id}/not-interested", g.handleNotInterested)
 	mux.HandleFunc("GET /api/storage", g.handleStorage)
@@ -1103,8 +1108,12 @@ func unavailableReason(message string) string {
 // ---------------------------------------------------------------------------
 
 func (g *Gateway) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
+	// ?videoId= makes this the sheet's one call: which lists are there, and
+	// which of them already hold this video. A second route answering only the
+	// second half would be useless without the first.
 	resp, err := g.catalog.ListPlaylists(r.Context(), connect.NewRequest(&catalogv1.ListPlaylistsRequest{
-		UserId: g.userID(r),
+		UserId:  g.userID(r),
+		VideoId: r.URL.Query().Get("videoId"),
 	}))
 	if err != nil {
 		g.writeErr(w, r, err)
@@ -1116,6 +1125,96 @@ func (g *Gateway) handleListPlaylists(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toPlaylistDTO(p))
 	}
 	writeJSON(w, http.StatusOK, playlistsResponse{Playlists: out})
+}
+
+func (g *Gateway) handleCreatePlaylist(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	// sourceUrl is deliberately not accepted: a playlist made here belongs to
+	// nobody upstream, and the importer is the only caller that may claim one.
+	resp, err := g.catalog.CreatePlaylist(r.Context(), connect.NewRequest(&catalogv1.CreatePlaylistRequest{
+		UserId:      g.userID(r),
+		Title:       body.Title,
+		Description: body.Description,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toPlaylistDTO(resp.Msg.GetPlaylist()))
+}
+
+func (g *Gateway) handleUpdatePlaylist(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	resp, err := g.catalog.UpdatePlaylist(r.Context(), connect.NewRequest(&catalogv1.UpdatePlaylistRequest{
+		PlaylistId:  r.PathValue("id"),
+		UserId:      g.userID(r),
+		Title:       body.Title,
+		Description: body.Description,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toPlaylistDTO(resp.Msg.GetPlaylist()))
+}
+
+func (g *Gateway) handleDeletePlaylist(w http.ResponseWriter, r *http.Request) {
+	_, err := g.catalog.DeletePlaylist(r.Context(), connect.NewRequest(&catalogv1.DeletePlaylistRequest{
+		PlaylistId: r.PathValue("id"),
+		UserId:     g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleAddPlaylistItem(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		VideoID string `json:"videoId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	_, err := g.catalog.AddPlaylistItem(r.Context(), connect.NewRequest(&catalogv1.AddPlaylistItemRequest{
+		PlaylistId: r.PathValue("id"),
+		UserId:     g.userID(r),
+		VideoId:    body.VideoID,
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (g *Gateway) handleRemovePlaylistItem(w http.ResponseWriter, r *http.Request) {
+	_, err := g.catalog.RemovePlaylistItem(r.Context(), connect.NewRequest(&catalogv1.RemovePlaylistItemRequest{
+		PlaylistId: r.PathValue("id"),
+		UserId:     g.userID(r),
+		VideoId:    r.PathValue("videoId"),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (g *Gateway) handleGetPlaylist(w http.ResponseWriter, r *http.Request) {

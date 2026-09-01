@@ -367,11 +367,11 @@ func (c *Catalog) ListPinnedVideos(ctx context.Context, userID string, size, off
 // Playlists
 // ---------------------------------------------------------------------------
 
-func (c *Catalog) ListPlaylists(ctx context.Context, userID string) ([]domain.Playlist, error) {
+func (c *Catalog) ListPlaylists(ctx context.Context, userID, videoID string) ([]domain.Playlist, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("%w: user_id is required", domain.ErrInvalid)
 	}
-	return c.repo.ListPlaylists(ctx, userID)
+	return c.repo.ListPlaylists(ctx, userID, videoID)
 }
 
 func (c *Catalog) GetPlaylist(ctx context.Context, playlistID, userID string, size, offset int32) (domain.Playlist, []domain.Video, error) {
@@ -403,6 +403,47 @@ func (c *Catalog) CreatePlaylist(ctx context.Context, userID, title, description
 		Description: strings.TrimSpace(description),
 		SourceURL:   sourceURL,
 	})
+}
+
+// AddPlaylistItem puts one video into one of the member's own playlists.
+// Adding one that is already there is success: the sheet driving this may be
+// saved twice, and a duplicate must not read as a failure.
+func (c *Catalog) AddPlaylistItem(ctx context.Context, playlistID, userID, videoID string) error {
+	if playlistID == "" || userID == "" || videoID == "" {
+		return fmt.Errorf("%w: playlist_id, user_id and video_id are required", domain.ErrInvalid)
+	}
+	return c.repo.AddPlaylistItem(ctx, playlistID, userID, videoID)
+}
+
+// RemovePlaylistItem takes one video out. Removing an absent one is success,
+// for the same reason.
+func (c *Catalog) RemovePlaylistItem(ctx context.Context, playlistID, userID, videoID string) error {
+	if playlistID == "" || userID == "" || videoID == "" {
+		return fmt.Errorf("%w: playlist_id, user_id and video_id are required", domain.ErrInvalid)
+	}
+	return c.repo.RemovePlaylistItem(ctx, playlistID, userID, videoID)
+}
+
+func (c *Catalog) UpdatePlaylist(
+	ctx context.Context, playlistID, userID, title, description string,
+) (domain.Playlist, error) {
+	title = strings.TrimSpace(title)
+	if playlistID == "" || userID == "" {
+		return domain.Playlist{}, fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
+	}
+	// The same rule CreatePlaylist states: a list with no name cannot be told
+	// from another on the playlists page.
+	if title == "" {
+		return domain.Playlist{}, fmt.Errorf("%w: title is required", domain.ErrInvalid)
+	}
+	return c.repo.UpdatePlaylist(ctx, playlistID, userID, title, strings.TrimSpace(description))
+}
+
+func (c *Catalog) DeletePlaylist(ctx context.Context, playlistID, userID string) error {
+	if playlistID == "" || userID == "" {
+		return fmt.Errorf("%w: playlist_id and user_id are required", domain.ErrInvalid)
+	}
+	return c.repo.DeletePlaylist(ctx, playlistID, userID)
 }
 
 func (c *Catalog) ImportPlaylistItems(ctx context.Context, playlistID, userID string, videoIDs []string, complete bool) (int32, error) {
