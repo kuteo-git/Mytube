@@ -18,6 +18,14 @@ service RecommendationService {
   rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
   // Ranked ids for the watch page "Next" rail.
   rpc GetUpNext(GetUpNextRequest) returns (GetUpNextResponse);
+  // New uploads from followed channels that this viewer has not watched.
+  //
+  // Separate from GetFeed because it answers a different question. That one
+  // asks "what should this household see", and its fresh-subscribed slot holds
+  // a tenth of a page — enough that something new usually appears, and not a
+  // list anybody can read to the end. This asks "did I miss anything", which
+  // has an answer that runs out, and running out is the point of it.
+  rpc GetMissed(GetMissedRequest) returns (GetMissedResponse);
 
   // The videos this user has spent the most time on. Watch signals accumulate
   // during playback, so this measures time watched, not times opened.
@@ -116,6 +124,23 @@ message GetFeedResponse {
   string next_page_token = 2;
   // How many ranked videos are left after this page. The gateway uses it to
   // decide when to go looking for more material, before the viewer hits the end.
+  int32 remaining_count = 3;
+}
+
+message GetMissedRequest {
+  string user_id = 1;
+  // How far back to look. Zero means the server's own default.
+  int32 within_hours = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+  // Language codes the viewer wants to see. Empty means no filter.
+  repeated string languages = 5;
+}
+
+message GetMissedResponse {
+  repeated RankedVideo videos = 1;
+  string next_page_token = 2;
+  // How many are left after this page.
   int32 remaining_count = 3;
 }
 

@@ -3,6 +3,8 @@ package rpc
 
 import (
 	"context"
+	"strconv"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -77,6 +79,44 @@ func (s *Server) GetFeed(ctx context.Context, req *connect.Request[recsysv1.GetF
 		next = encodeToken(page.SnapshotID, offset+int32(len(page.Videos)))
 	}
 	return connect.NewResponse(&recsysv1.GetFeedResponse{
+		Videos:         toProto(page.Videos),
+		NextPageToken:  next,
+		RemainingCount: int32(page.Remaining),
+	}), nil
+}
+
+// GetMissed pages a plain ordering rather than a frozen one, so its token
+// carries only two things: which channel the list started at, and how far into
+// it the reader is. See usecase.GetMissed for why there is no snapshot to name.
+//
+// **The rotation is minted here, on the first page of a pull, and then carried.**
+// A refresh arrives with no token and gets a new one, which is what makes
+// pulling the list down change it; every later page of that same pull sends the
+// token back and keeps the ordering it started reading. Choosing it per request
+// instead would reshuffle underneath a reader between page one and page two.
+//
+// The clock is the source. Nothing here needs randomness that anybody could not
+// predict — it needs a different number than last time, and the nanosecond is
+// that with no seeded generator to hold.
+func (s *Server) GetMissed(ctx context.Context, req *connect.Request[recsysv1.GetMissedRequest]) (*connect.Response[recsysv1.GetMissedResponse], error) {
+	carried, offset := decodeToken(req.Msg.GetPageToken())
+	rotation, err := strconv.ParseInt(carried, 10, 64)
+	if err != nil || rotation < 0 {
+		rotation = time.Now().UnixNano()
+	}
+
+	page, err := s.ranker.GetMissed(ctx, req.Msg.GetUserId(),
+		time.Duration(req.Msg.GetWithinHours())*time.Hour,
+		req.Msg.GetPageSize(), offset, req.Msg.GetLanguages(), rotation)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	next := ""
+	if page.Remaining > 0 {
+		next = encodeToken(strconv.FormatInt(rotation, 10), offset+int32(len(page.Videos)))
+	}
+	return connect.NewResponse(&recsysv1.GetMissedResponse{
 		Videos:         toProto(page.Videos),
 		NextPageToken:  next,
 		RemainingCount: int32(page.Remaining),

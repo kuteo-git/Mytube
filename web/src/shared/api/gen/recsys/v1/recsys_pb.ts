@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file recsys/v1/recsys.proto.
  */
 export const file_recsys_v1_recsys: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWNzeXMvdjEvcmVjc3lzLnByb3RvEglyZWNzeXMudjEiXwoLUmFua2VkVmlkZW8SEAoIdmlkZW9faWQYASABKAkSDQoFc2NvcmUYAiABKAISLwoGcmVhc29uGAMgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uIloKB0ZlZWRNaXgSGgoSc3Vic2NyaWJlZF9wZXJjZW50GAEgASgFEhgKEGFmZmluaXR5X3BlcmNlbnQYAiABKAUSGQoRZGlzY292ZXJ5X3BlcmNlbnQYAyABKAUizQEKDkdldEZlZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEwoLY2xpZW50X2hvdXIYBSABKAUSHwoDbWl4GAYgASgLMhIucmVjc3lzLnYxLkZlZWRNaXgSEQoJbGFuZ3VhZ2VzGAcgAygJEigKBnR1bmluZxgIIAEoCzIYLnJlY3N5cy52MS5SYW5raW5nVHVuaW5nImsKD0dldEZlZWRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3JlbWFpbmluZ19jb3VudBgDIAEoBSI3ChVHZXRNb3N0V2F0Y2hlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBSJAChZHZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEiYKBnZpZGVvcxgBIAMoCzIWLnJlY3N5cy52MS5SYW5rZWRWaWRlbyJ8ChBHZXRVcE5leHRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSGAoQY3VycmVudF92aWRlb19pZBgCIAEoCRIWCg5jaGFubmVsX2ZpbHRlchgDIAEoCRIRCglwYWdlX3NpemUYBCABKAUSEgoKcGFnZV90b2tlbhgFIAEoBSJUChFHZXRVcE5leHRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgFIrcBChNSZWNvcmRTaWduYWxSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSIwoEdHlwZRgCIAEoDjIVLnJlY3N5cy52MS5TaWduYWxUeXBlEhAKCHZpZGVvX2lkGAMgASgJEg0KBXF1ZXJ5GAQgASgJEhgKEHdhdGNoZWRfZnJhY3Rpb24YBSABKAISLwoLb2NjdXJyZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIhYKFFJlY29yZFNpZ25hbFJlc3BvbnNlIj4KGFJlY29yZEltcHJlc3Npb25zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCXZpZGVvX2lkcxgCIAMoCSIbChlSZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlIjkKFURlbGV0ZVVzZXJEYXRhUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEg8KB2RyeV9ydW4YAiABKAgiPgoWRGVsZXRlVXNlckRhdGFSZXNwb25zZRIPCgdzaWduYWxzGAEgASgDEhMKC2ltcHJlc3Npb25zGAIgASgDIpUBChJFeHBsYWluRmVlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIfCgNtaXgYAyABKAsyEi5yZWNzeXMudjEuRmVlZE1peBIRCglsYW5ndWFnZXMYBCADKAkSKAoGdHVuaW5nGAUgASgLMhgucmVjc3lzLnYxLlJhbmtpbmdUdW5pbmcikQIKEFZpZGVvRXhwbGFuYXRpb24SEAoIdmlkZW9faWQYASABKAkSFwoPZXhjbHVkZWRfcmVhc29uGAIgASgJEj8KCmNvbXBvbmVudHMYAyADKAsyKy5yZWNzeXMudjEuVmlkZW9FeHBsYW5hdGlvbi5Db21wb25lbnRzRW50cnkSDQoFc2NvcmUYBCABKAESLwoGcmVhc29uGAUgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uEgwKBHNsb3QYBiABKAkSEAoIcG9zaXRpb24YByABKAUaMQoPQ29tcG9uZW50c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiQgoTRXhwbGFpbkZlZWRSZXNwb25zZRIrCgZ2aWRlb3MYASADKAsyGy5yZWNzeXMudjEuVmlkZW9FeHBsYW5hdGlvbiKvAwoNUmFua2luZ1R1bmluZxIaCg1zZXNzaW9uX2JsZW5kGAEgASgBSACIAQESJQoYZnJlc2hfc3Vic2NyaWJlZF9wZXJjZW50GAIgASgFSAGIAQESIwoWZnJlc2huZXNzX3dpbmRvd19ob3VycxgDIAEoBUgCiAEBEiMKFm1heF9wdWJsaXNoZWRfYWdlX2RheXMYBCABKAVIA4gBARIjChZyZWNlbmN5X2hhbGZfbGlmZV9kYXlzGAUgASgBSASIAQESIAoTc29mdG1heF90ZW1wZXJhdHVyZRgGIAEoAUgFiAEBEh0KEHNhbXBsZV9wb29sX3NpemUYByABKAVIBogBAUIQCg5fc2Vzc2lvbl9ibGVuZEIbChlfZnJlc2hfc3Vic2NyaWJlZF9wZXJjZW50QhkKF19mcmVzaG5lc3Nfd2luZG93X2hvdXJzQhkKF19tYXhfcHVibGlzaGVkX2FnZV9kYXlzQhkKF19yZWNlbmN5X2hhbGZfbGlmZV9kYXlzQhYKFF9zb2Z0bWF4X3RlbXBlcmF0dXJlQhMKEV9zYW1wbGVfcG9vbF9zaXplKqUDChRSZWNvbW1lbmRhdGlvblJlYXNvbhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fVU5TUEVDSUZJRUQQABIrCidSRUNPTU1FTkRBVElPTl9SRUFTT05fQ09OVElOVUVfV0FUQ0hJTkcQARIoCiRSRUNPTU1FTkRBVElPTl9SRUFTT05fUkVDRU5UTFlfQURERUQQAhInCiNSRUNPTU1FTkRBVElPTl9SRUFTT05fTkVWRVJfV0FUQ0hFRBADEiwKKFJFQ09NTUVOREFUSU9OX1JFQVNPTl9TVUJTQ1JJQkVEX0NIQU5ORUwQBBIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fUkVXQVRDSBAFEiYKIlJFQ09NTUVOREFUSU9OX1JFQVNPTl9TQU1FX0NIQU5ORUwQBhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fU0hBUkVEX1RBR1MQBxIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fQk9VTkNFRBAIEiMKH1JFQ09NTUVOREFUSU9OX1JFQVNPTl9ESVNDT1ZFUlkQCSrVAQoKU2lnbmFsVHlwZRIbChdTSUdOQUxfVFlQRV9VTlNQRUNJRklFRBAAEhUKEVNJR05BTF9UWVBFX1dBVENIEAESFAoQU0lHTkFMX1RZUEVfTElLRRACEhcKE1NJR05BTF9UWVBFX0RJU0xJS0UQAxIZChVTSUdOQUxfVFlQRV9TVUJTQ1JJQkUQBBIbChdTSUdOQUxfVFlQRV9VTlNVQlNDUklCRRAFEhYKElNJR05BTF9UWVBFX1NFQVJDSBAGEhQKEFNJR05BTF9UWVBFX1NLSVAQBzLOBAoVUmVjb21tZW5kYXRpb25TZXJ2aWNlEkAKB0dldEZlZWQSGS5yZWNzeXMudjEuR2V0RmVlZFJlcXVlc3QaGi5yZWNzeXMudjEuR2V0RmVlZFJlc3BvbnNlEkYKCUdldFVwTmV4dBIbLnJlY3N5cy52MS5HZXRVcE5leHRSZXF1ZXN0GhwucmVjc3lzLnYxLkdldFVwTmV4dFJlc3BvbnNlElUKDkdldE1vc3RXYXRjaGVkEiAucmVjc3lzLnYxLkdldE1vc3RXYXRjaGVkUmVxdWVzdBohLnJlY3N5cy52MS5HZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEk8KDFJlY29yZFNpZ25hbBIeLnJlY3N5cy52MS5SZWNvcmRTaWduYWxSZXF1ZXN0Gh8ucmVjc3lzLnYxLlJlY29yZFNpZ25hbFJlc3BvbnNlEl4KEVJlY29yZEltcHJlc3Npb25zEiMucmVjc3lzLnYxLlJlY29yZEltcHJlc3Npb25zUmVxdWVzdBokLnJlY3N5cy52MS5SZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlElUKDkRlbGV0ZVVzZXJEYXRhEiAucmVjc3lzLnYxLkRlbGV0ZVVzZXJEYXRhUmVxdWVzdBohLnJlY3N5cy52MS5EZWxldGVVc2VyRGF0YVJlc3BvbnNlEkwKC0V4cGxhaW5GZWVkEh0ucmVjc3lzLnYxLkV4cGxhaW5GZWVkUmVxdWVzdBoeLnJlY3N5cy52MS5FeHBsYWluRmVlZFJlc3BvbnNlQp8BCg1jb20ucmVjc3lzLnYxQgtSZWNzeXNQcm90b1ABWjxnaXRodWIuY29tL2x1Y25ndXllbi9sb2NhbC15b3V0dWJlL2dlbi9nby9yZWNzeXMvdjE7cmVjc3lzdjGiAgNSWFiqAglSZWNzeXMuVjHKAglSZWNzeXNcVjHiAhVSZWNzeXNcVjFcR1BCTWV0YWRhdGHqAgpSZWNzeXM6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChZyZWNzeXMvdjEvcmVjc3lzLnByb3RvEglyZWNzeXMudjEiXwoLUmFua2VkVmlkZW8SEAoIdmlkZW9faWQYASABKAkSDQoFc2NvcmUYAiABKAISLwoGcmVhc29uGAMgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uIloKB0ZlZWRNaXgSGgoSc3Vic2NyaWJlZF9wZXJjZW50GAEgASgFEhgKEGFmZmluaXR5X3BlcmNlbnQYAiABKAUSGQoRZGlzY292ZXJ5X3BlcmNlbnQYAyABKAUizQEKDkdldEZlZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSEwoLY2xpZW50X2hvdXIYBSABKAUSHwoDbWl4GAYgASgLMhIucmVjc3lzLnYxLkZlZWRNaXgSEQoJbGFuZ3VhZ2VzGAcgAygJEigKBnR1bmluZxgIIAEoCzIYLnJlY3N5cy52MS5SYW5raW5nVHVuaW5nImsKD0dldEZlZWRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3JlbWFpbmluZ19jb3VudBgDIAEoBSJzChBHZXRNaXNzZWRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSFAoMd2l0aGluX2hvdXJzGAIgASgFEhEKCXBhZ2Vfc2l6ZRgDIAEoBRISCgpwYWdlX3Rva2VuGAQgASgJEhEKCWxhbmd1YWdlcxgFIAMoCSJtChFHZXRNaXNzZWRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3JlbWFpbmluZ19jb3VudBgDIAEoBSI3ChVHZXRNb3N0V2F0Y2hlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBSJAChZHZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEiYKBnZpZGVvcxgBIAMoCzIWLnJlY3N5cy52MS5SYW5rZWRWaWRlbyJ8ChBHZXRVcE5leHRSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSGAoQY3VycmVudF92aWRlb19pZBgCIAEoCRIWCg5jaGFubmVsX2ZpbHRlchgDIAEoCRIRCglwYWdlX3NpemUYBCABKAUSEgoKcGFnZV90b2tlbhgFIAEoBSJUChFHZXRVcE5leHRSZXNwb25zZRImCgZ2aWRlb3MYASADKAsyFi5yZWNzeXMudjEuUmFua2VkVmlkZW8SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgFIrcBChNSZWNvcmRTaWduYWxSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSIwoEdHlwZRgCIAEoDjIVLnJlY3N5cy52MS5TaWduYWxUeXBlEhAKCHZpZGVvX2lkGAMgASgJEg0KBXF1ZXJ5GAQgASgJEhgKEHdhdGNoZWRfZnJhY3Rpb24YBSABKAISLwoLb2NjdXJyZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIhYKFFJlY29yZFNpZ25hbFJlc3BvbnNlIj4KGFJlY29yZEltcHJlc3Npb25zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCXZpZGVvX2lkcxgCIAMoCSIbChlSZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlIjkKFURlbGV0ZVVzZXJEYXRhUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEg8KB2RyeV9ydW4YAiABKAgiPgoWRGVsZXRlVXNlckRhdGFSZXNwb25zZRIPCgdzaWduYWxzGAEgASgDEhMKC2ltcHJlc3Npb25zGAIgASgDIpUBChJFeHBsYWluRmVlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIfCgNtaXgYAyABKAsyEi5yZWNzeXMudjEuRmVlZE1peBIRCglsYW5ndWFnZXMYBCADKAkSKAoGdHVuaW5nGAUgASgLMhgucmVjc3lzLnYxLlJhbmtpbmdUdW5pbmcikQIKEFZpZGVvRXhwbGFuYXRpb24SEAoIdmlkZW9faWQYASABKAkSFwoPZXhjbHVkZWRfcmVhc29uGAIgASgJEj8KCmNvbXBvbmVudHMYAyADKAsyKy5yZWNzeXMudjEuVmlkZW9FeHBsYW5hdGlvbi5Db21wb25lbnRzRW50cnkSDQoFc2NvcmUYBCABKAESLwoGcmVhc29uGAUgASgOMh8ucmVjc3lzLnYxLlJlY29tbWVuZGF0aW9uUmVhc29uEgwKBHNsb3QYBiABKAkSEAoIcG9zaXRpb24YByABKAUaMQoPQ29tcG9uZW50c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAToCOAEiQgoTRXhwbGFpbkZlZWRSZXNwb25zZRIrCgZ2aWRlb3MYASADKAsyGy5yZWNzeXMudjEuVmlkZW9FeHBsYW5hdGlvbiKvAwoNUmFua2luZ1R1bmluZxIaCg1zZXNzaW9uX2JsZW5kGAEgASgBSACIAQESJQoYZnJlc2hfc3Vic2NyaWJlZF9wZXJjZW50GAIgASgFSAGIAQESIwoWZnJlc2huZXNzX3dpbmRvd19ob3VycxgDIAEoBUgCiAEBEiMKFm1heF9wdWJsaXNoZWRfYWdlX2RheXMYBCABKAVIA4gBARIjChZyZWNlbmN5X2hhbGZfbGlmZV9kYXlzGAUgASgBSASIAQESIAoTc29mdG1heF90ZW1wZXJhdHVyZRgGIAEoAUgFiAEBEh0KEHNhbXBsZV9wb29sX3NpemUYByABKAVIBogBAUIQCg5fc2Vzc2lvbl9ibGVuZEIbChlfZnJlc2hfc3Vic2NyaWJlZF9wZXJjZW50QhkKF19mcmVzaG5lc3Nfd2luZG93X2hvdXJzQhkKF19tYXhfcHVibGlzaGVkX2FnZV9kYXlzQhkKF19yZWNlbmN5X2hhbGZfbGlmZV9kYXlzQhYKFF9zb2Z0bWF4X3RlbXBlcmF0dXJlQhMKEV9zYW1wbGVfcG9vbF9zaXplKqUDChRSZWNvbW1lbmRhdGlvblJlYXNvbhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fVU5TUEVDSUZJRUQQABIrCidSRUNPTU1FTkRBVElPTl9SRUFTT05fQ09OVElOVUVfV0FUQ0hJTkcQARIoCiRSRUNPTU1FTkRBVElPTl9SRUFTT05fUkVDRU5UTFlfQURERUQQAhInCiNSRUNPTU1FTkRBVElPTl9SRUFTT05fTkVWRVJfV0FUQ0hFRBADEiwKKFJFQ09NTUVOREFUSU9OX1JFQVNPTl9TVUJTQ1JJQkVEX0NIQU5ORUwQBBIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fUkVXQVRDSBAFEiYKIlJFQ09NTUVOREFUSU9OX1JFQVNPTl9TQU1FX0NIQU5ORUwQBhIlCiFSRUNPTU1FTkRBVElPTl9SRUFTT05fU0hBUkVEX1RBR1MQBxIhCh1SRUNPTU1FTkRBVElPTl9SRUFTT05fQk9VTkNFRBAIEiMKH1JFQ09NTUVOREFUSU9OX1JFQVNPTl9ESVNDT1ZFUlkQCSrVAQoKU2lnbmFsVHlwZRIbChdTSUdOQUxfVFlQRV9VTlNQRUNJRklFRBAAEhUKEVNJR05BTF9UWVBFX1dBVENIEAESFAoQU0lHTkFMX1RZUEVfTElLRRACEhcKE1NJR05BTF9UWVBFX0RJU0xJS0UQAxIZChVTSUdOQUxfVFlQRV9TVUJTQ1JJQkUQBBIbChdTSUdOQUxfVFlQRV9VTlNVQlNDUklCRRAFEhYKElNJR05BTF9UWVBFX1NFQVJDSBAGEhQKEFNJR05BTF9UWVBFX1NLSVAQBzKWBQoVUmVjb21tZW5kYXRpb25TZXJ2aWNlEkAKB0dldEZlZWQSGS5yZWNzeXMudjEuR2V0RmVlZFJlcXVlc3QaGi5yZWNzeXMudjEuR2V0RmVlZFJlc3BvbnNlEkYKCUdldFVwTmV4dBIbLnJlY3N5cy52MS5HZXRVcE5leHRSZXF1ZXN0GhwucmVjc3lzLnYxLkdldFVwTmV4dFJlc3BvbnNlEkYKCUdldE1pc3NlZBIbLnJlY3N5cy52MS5HZXRNaXNzZWRSZXF1ZXN0GhwucmVjc3lzLnYxLkdldE1pc3NlZFJlc3BvbnNlElUKDkdldE1vc3RXYXRjaGVkEiAucmVjc3lzLnYxLkdldE1vc3RXYXRjaGVkUmVxdWVzdBohLnJlY3N5cy52MS5HZXRNb3N0V2F0Y2hlZFJlc3BvbnNlEk8KDFJlY29yZFNpZ25hbBIeLnJlY3N5cy52MS5SZWNvcmRTaWduYWxSZXF1ZXN0Gh8ucmVjc3lzLnYxLlJlY29yZFNpZ25hbFJlc3BvbnNlEl4KEVJlY29yZEltcHJlc3Npb25zEiMucmVjc3lzLnYxLlJlY29yZEltcHJlc3Npb25zUmVxdWVzdBokLnJlY3N5cy52MS5SZWNvcmRJbXByZXNzaW9uc1Jlc3BvbnNlElUKDkRlbGV0ZVVzZXJEYXRhEiAucmVjc3lzLnYxLkRlbGV0ZVVzZXJEYXRhUmVxdWVzdBohLnJlY3N5cy52MS5EZWxldGVVc2VyRGF0YVJlc3BvbnNlEkwKC0V4cGxhaW5GZWVkEh0ucmVjc3lzLnYxLkV4cGxhaW5GZWVkUmVxdWVzdBoeLnJlY3N5cy52MS5FeHBsYWluRmVlZFJlc3BvbnNlQp8BCg1jb20ucmVjc3lzLnYxQgtSZWNzeXNQcm90b1ABWjxnaXRodWIuY29tL2x1Y25ndXllbi9sb2NhbC15b3V0dWJlL2dlbi9nby9yZWNzeXMvdjE7cmVjc3lzdjGiAgNSWFiqAglSZWNzeXMuVjHKAglSZWNzeXNcVjHiAhVSZWNzeXNcVjFcR1BCTWV0YWRhdGHqAgpSZWNzeXM6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message recsys.v1.RankedVideo
@@ -181,6 +181,76 @@ export const GetFeedResponseSchema: GenMessage<GetFeedResponse> = /*@__PURE__*/
   messageDesc(file_recsys_v1_recsys, 3);
 
 /**
+ * @generated from message recsys.v1.GetMissedRequest
+ */
+export type GetMissedRequest = Message<"recsys.v1.GetMissedRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * How far back to look. Zero means the server's own default.
+   *
+   * @generated from field: int32 within_hours = 2;
+   */
+  withinHours: number;
+
+  /**
+   * @generated from field: int32 page_size = 3;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 4;
+   */
+  pageToken: string;
+
+  /**
+   * Language codes the viewer wants to see. Empty means no filter.
+   *
+   * @generated from field: repeated string languages = 5;
+   */
+  languages: string[];
+};
+
+/**
+ * Describes the message recsys.v1.GetMissedRequest.
+ * Use `create(GetMissedRequestSchema)` to create a new message.
+ */
+export const GetMissedRequestSchema: GenMessage<GetMissedRequest> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 4);
+
+/**
+ * @generated from message recsys.v1.GetMissedResponse
+ */
+export type GetMissedResponse = Message<"recsys.v1.GetMissedResponse"> & {
+  /**
+   * @generated from field: repeated recsys.v1.RankedVideo videos = 1;
+   */
+  videos: RankedVideo[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * How many are left after this page.
+   *
+   * @generated from field: int32 remaining_count = 3;
+   */
+  remainingCount: number;
+};
+
+/**
+ * Describes the message recsys.v1.GetMissedResponse.
+ * Use `create(GetMissedResponseSchema)` to create a new message.
+ */
+export const GetMissedResponseSchema: GenMessage<GetMissedResponse> = /*@__PURE__*/
+  messageDesc(file_recsys_v1_recsys, 5);
+
+/**
  * @generated from message recsys.v1.GetMostWatchedRequest
  */
 export type GetMostWatchedRequest = Message<"recsys.v1.GetMostWatchedRequest"> & {
@@ -200,7 +270,7 @@ export type GetMostWatchedRequest = Message<"recsys.v1.GetMostWatchedRequest"> &
  * Use `create(GetMostWatchedRequestSchema)` to create a new message.
  */
 export const GetMostWatchedRequestSchema: GenMessage<GetMostWatchedRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 4);
+  messageDesc(file_recsys_v1_recsys, 6);
 
 /**
  * @generated from message recsys.v1.GetMostWatchedResponse
@@ -217,7 +287,7 @@ export type GetMostWatchedResponse = Message<"recsys.v1.GetMostWatchedResponse">
  * Use `create(GetMostWatchedResponseSchema)` to create a new message.
  */
 export const GetMostWatchedResponseSchema: GenMessage<GetMostWatchedResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 5);
+  messageDesc(file_recsys_v1_recsys, 7);
 
 /**
  * @generated from message recsys.v1.GetUpNextRequest
@@ -258,7 +328,7 @@ export type GetUpNextRequest = Message<"recsys.v1.GetUpNextRequest"> & {
  * Use `create(GetUpNextRequestSchema)` to create a new message.
  */
 export const GetUpNextRequestSchema: GenMessage<GetUpNextRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 6);
+  messageDesc(file_recsys_v1_recsys, 8);
 
 /**
  * @generated from message recsys.v1.GetUpNextResponse
@@ -282,7 +352,7 @@ export type GetUpNextResponse = Message<"recsys.v1.GetUpNextResponse"> & {
  * Use `create(GetUpNextResponseSchema)` to create a new message.
  */
 export const GetUpNextResponseSchema: GenMessage<GetUpNextResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 7);
+  messageDesc(file_recsys_v1_recsys, 9);
 
 /**
  * @generated from message recsys.v1.RecordSignalRequest
@@ -330,7 +400,7 @@ export type RecordSignalRequest = Message<"recsys.v1.RecordSignalRequest"> & {
  * Use `create(RecordSignalRequestSchema)` to create a new message.
  */
 export const RecordSignalRequestSchema: GenMessage<RecordSignalRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 8);
+  messageDesc(file_recsys_v1_recsys, 10);
 
 /**
  * @generated from message recsys.v1.RecordSignalResponse
@@ -343,7 +413,7 @@ export type RecordSignalResponse = Message<"recsys.v1.RecordSignalResponse"> & {
  * Use `create(RecordSignalResponseSchema)` to create a new message.
  */
 export const RecordSignalResponseSchema: GenMessage<RecordSignalResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 9);
+  messageDesc(file_recsys_v1_recsys, 11);
 
 /**
  * @generated from message recsys.v1.RecordImpressionsRequest
@@ -365,7 +435,7 @@ export type RecordImpressionsRequest = Message<"recsys.v1.RecordImpressionsReque
  * Use `create(RecordImpressionsRequestSchema)` to create a new message.
  */
 export const RecordImpressionsRequestSchema: GenMessage<RecordImpressionsRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 10);
+  messageDesc(file_recsys_v1_recsys, 12);
 
 /**
  * @generated from message recsys.v1.RecordImpressionsResponse
@@ -378,7 +448,7 @@ export type RecordImpressionsResponse = Message<"recsys.v1.RecordImpressionsResp
  * Use `create(RecordImpressionsResponseSchema)` to create a new message.
  */
 export const RecordImpressionsResponseSchema: GenMessage<RecordImpressionsResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 11);
+  messageDesc(file_recsys_v1_recsys, 13);
 
 /**
  * @generated from message recsys.v1.DeleteUserDataRequest
@@ -400,7 +470,7 @@ export type DeleteUserDataRequest = Message<"recsys.v1.DeleteUserDataRequest"> &
  * Use `create(DeleteUserDataRequestSchema)` to create a new message.
  */
 export const DeleteUserDataRequestSchema: GenMessage<DeleteUserDataRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 12);
+  messageDesc(file_recsys_v1_recsys, 14);
 
 /**
  * @generated from message recsys.v1.DeleteUserDataResponse
@@ -422,7 +492,7 @@ export type DeleteUserDataResponse = Message<"recsys.v1.DeleteUserDataResponse">
  * Use `create(DeleteUserDataResponseSchema)` to create a new message.
  */
 export const DeleteUserDataResponseSchema: GenMessage<DeleteUserDataResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 13);
+  messageDesc(file_recsys_v1_recsys, 15);
 
 /**
  * @generated from message recsys.v1.ExplainFeedRequest
@@ -462,7 +532,7 @@ export type ExplainFeedRequest = Message<"recsys.v1.ExplainFeedRequest"> & {
  * Use `create(ExplainFeedRequestSchema)` to create a new message.
  */
 export const ExplainFeedRequestSchema: GenMessage<ExplainFeedRequest> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 14);
+  messageDesc(file_recsys_v1_recsys, 16);
 
 /**
  * One video's score with its working shown.
@@ -527,7 +597,7 @@ export type VideoExplanation = Message<"recsys.v1.VideoExplanation"> & {
  * Use `create(VideoExplanationSchema)` to create a new message.
  */
 export const VideoExplanationSchema: GenMessage<VideoExplanation> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 15);
+  messageDesc(file_recsys_v1_recsys, 17);
 
 /**
  * @generated from message recsys.v1.ExplainFeedResponse
@@ -547,7 +617,7 @@ export type ExplainFeedResponse = Message<"recsys.v1.ExplainFeedResponse"> & {
  * Use `create(ExplainFeedResponseSchema)` to create a new message.
  */
 export const ExplainFeedResponseSchema: GenMessage<ExplainFeedResponse> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 16);
+  messageDesc(file_recsys_v1_recsys, 18);
 
 /**
  * Ranking constants the household can move without a rebuild.
@@ -627,7 +697,7 @@ export type RankingTuning = Message<"recsys.v1.RankingTuning"> & {
  * Use `create(RankingTuningSchema)` to create a new message.
  */
 export const RankingTuningSchema: GenMessage<RankingTuning> = /*@__PURE__*/
-  messageDesc(file_recsys_v1_recsys, 17);
+  messageDesc(file_recsys_v1_recsys, 19);
 
 /**
  * Why a video was surfaced. Sent to the client for debugging and to let the UI
@@ -781,6 +851,22 @@ export const RecommendationService: GenService<{
     methodKind: "unary";
     input: typeof GetUpNextRequestSchema;
     output: typeof GetUpNextResponseSchema;
+  },
+  /**
+   * New uploads from followed channels that this viewer has not watched.
+   *
+   * Separate from GetFeed because it answers a different question. That one
+   * asks "what should this household see", and its fresh-subscribed slot holds
+   * a tenth of a page — enough that something new usually appears, and not a
+   * list anybody can read to the end. This asks "did I miss anything", which
+   * has an answer that runs out, and running out is the point of it.
+   *
+   * @generated from rpc recsys.v1.RecommendationService.GetMissed
+   */
+  getMissed: {
+    methodKind: "unary";
+    input: typeof GetMissedRequestSchema;
+    output: typeof GetMissedResponseSchema;
   },
   /**
    * The videos this user has spent the most time on. Watch signals accumulate

@@ -829,6 +829,62 @@ eqMac's "Environment" is macOS's `AVAudioUnitReverb` with a preset and its `wetD
 
 The remaining 28% is fixed: continue watching 10% + rewatch 8% + **new from followed channels 10%**.
 
+### "Did I miss anything" is a list, not a share — `GET /api/feed/missed` (2026-09-02)
+
+The fresh-subscribed slot above is 10% of a mixed page: enough that something new
+usually appears, and never a list anybody can read to the end. So a new upload
+from a followed channel competed with the whole library and was easy to walk
+past. The route answers the question directly, for the phone app's "Missed" chip.
+
+- **Its own RPC (`GetMissed`) and its own route**, not a flag on `/api/feed`.
+  That one answers "what should this household see"; this one answers "what is
+  new that I have not dealt with", and it is allowed to run out — running out is
+  the point of it.
+- **Subscribed channels only, published inside the window, watched at most 10%.**
+  The threshold is deliberately not `isWatched` (0.95) or `watchedEnoughThreshold`
+  (0.85): those ask whether somebody *finished* something, and this asks whether
+  they have dealt with it. Showing something already seen costs a row; hiding
+  something never seen is the whole failure this was built to prevent.
+- **Publication, not ingestion.** A video imported today and published last year
+  was never there to miss.
+- **The window is `missedWindowHours` in `ranking.json`**, read per request, with
+  `?hours=` overriding it. Not in `toProto` — it is not a ranking constant recsys
+  applies to the feed, it is one number this route passes down.
+- **No impressions, no library expansion.** An impression means "this was offered
+  as part of the mix"; recording one here would teach the ranker that a video has
+  been shown when the whole point is that it has not been dealt with. And an
+  empty answer means nothing was missed, not that the library is short.
+- **No snapshot.** The candidate set is a day of uploads from the channels one
+  household follows — tens of videos — over a stable score, so freezing an
+  ordering would be machinery guarding against nothing.
+
+#### One channel at a time, and a different one each pull
+
+Measured against the running library before it existed: **100 results held 6
+channels, and 3 of them took 97 of the 100 rows.** A single upload from a channel
+the household follows for one thing sat below forty news clips — the exact
+failure the list was written to prevent. Scoring cannot fix that, because the
+channels drowning the page are the ones genuinely watched most; what is wrong is
+that any channel is allowed a run.
+
+So channels keep the order their best video earned and each gives up one video
+per round. Measured after: **100 results, 100 channels.**
+
+Then the second half of it, asked for directly: a refresh answered with the
+identical list, which is correct and useless as a gesture. **The rotation moves
+which channel opens the list, and nothing else.**
+
+- **Not a shuffle.** That throws away the ordering that decides what is worth
+  seeing first, *and* breaks paging — the page token is an offset into this
+  ordering, so reshuffling between page one and page two repeats some videos and
+  skips others.
+- **Minted on the first page of a pull and carried in the token.** Choosing it
+  per request would reorder the list underneath somebody who is scrolling.
+  `time.Now().UnixNano()` is the source: nothing here needs unpredictability, it
+  needs a different number than last time.
+- Measured: three refreshes led with three different channels, and two pages of
+  one pull overlapped by nothing.
+
 The last of those (`slotFreshSubscribed`: subscribed channel, published within `freshnessWindow`) is fixed for the same reason as the other two — it is not a taste. It is also the one slot exempt from the per-channel cap, because a channel that posted twice this morning is not the thing that cap was written to stop.
 
 - `feedSlot` is separate from `Reason`.

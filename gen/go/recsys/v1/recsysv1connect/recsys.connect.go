@@ -39,6 +39,9 @@ const (
 	// RecommendationServiceGetUpNextProcedure is the fully-qualified name of the
 	// RecommendationService's GetUpNext RPC.
 	RecommendationServiceGetUpNextProcedure = "/recsys.v1.RecommendationService/GetUpNext"
+	// RecommendationServiceGetMissedProcedure is the fully-qualified name of the
+	// RecommendationService's GetMissed RPC.
+	RecommendationServiceGetMissedProcedure = "/recsys.v1.RecommendationService/GetMissed"
 	// RecommendationServiceGetMostWatchedProcedure is the fully-qualified name of the
 	// RecommendationService's GetMostWatched RPC.
 	RecommendationServiceGetMostWatchedProcedure = "/recsys.v1.RecommendationService/GetMostWatched"
@@ -62,6 +65,14 @@ type RecommendationServiceClient interface {
 	GetFeed(context.Context, *connect.Request[v1.GetFeedRequest]) (*connect.Response[v1.GetFeedResponse], error)
 	// Ranked ids for the watch page "Next" rail.
 	GetUpNext(context.Context, *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error)
+	// New uploads from followed channels that this viewer has not watched.
+	//
+	// Separate from GetFeed because it answers a different question. That one
+	// asks "what should this household see", and its fresh-subscribed slot holds
+	// a tenth of a page — enough that something new usually appears, and not a
+	// list anybody can read to the end. This asks "did I miss anything", which
+	// has an answer that runs out, and running out is the point of it.
+	GetMissed(context.Context, *connect.Request[v1.GetMissedRequest]) (*connect.Response[v1.GetMissedResponse], error)
 	// The videos this user has spent the most time on. Watch signals accumulate
 	// during playback, so this measures time watched, not times opened.
 	GetMostWatched(context.Context, *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error)
@@ -112,6 +123,12 @@ func NewRecommendationServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(recommendationServiceMethods.ByName("GetUpNext")),
 			connect.WithClientOptions(opts...),
 		),
+		getMissed: connect.NewClient[v1.GetMissedRequest, v1.GetMissedResponse](
+			httpClient,
+			baseURL+RecommendationServiceGetMissedProcedure,
+			connect.WithSchema(recommendationServiceMethods.ByName("GetMissed")),
+			connect.WithClientOptions(opts...),
+		),
 		getMostWatched: connect.NewClient[v1.GetMostWatchedRequest, v1.GetMostWatchedResponse](
 			httpClient,
 			baseURL+RecommendationServiceGetMostWatchedProcedure,
@@ -149,6 +166,7 @@ func NewRecommendationServiceClient(httpClient connect.HTTPClient, baseURL strin
 type recommendationServiceClient struct {
 	getFeed           *connect.Client[v1.GetFeedRequest, v1.GetFeedResponse]
 	getUpNext         *connect.Client[v1.GetUpNextRequest, v1.GetUpNextResponse]
+	getMissed         *connect.Client[v1.GetMissedRequest, v1.GetMissedResponse]
 	getMostWatched    *connect.Client[v1.GetMostWatchedRequest, v1.GetMostWatchedResponse]
 	recordSignal      *connect.Client[v1.RecordSignalRequest, v1.RecordSignalResponse]
 	recordImpressions *connect.Client[v1.RecordImpressionsRequest, v1.RecordImpressionsResponse]
@@ -164,6 +182,11 @@ func (c *recommendationServiceClient) GetFeed(ctx context.Context, req *connect.
 // GetUpNext calls recsys.v1.RecommendationService.GetUpNext.
 func (c *recommendationServiceClient) GetUpNext(ctx context.Context, req *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error) {
 	return c.getUpNext.CallUnary(ctx, req)
+}
+
+// GetMissed calls recsys.v1.RecommendationService.GetMissed.
+func (c *recommendationServiceClient) GetMissed(ctx context.Context, req *connect.Request[v1.GetMissedRequest]) (*connect.Response[v1.GetMissedResponse], error) {
+	return c.getMissed.CallUnary(ctx, req)
 }
 
 // GetMostWatched calls recsys.v1.RecommendationService.GetMostWatched.
@@ -197,6 +220,14 @@ type RecommendationServiceHandler interface {
 	GetFeed(context.Context, *connect.Request[v1.GetFeedRequest]) (*connect.Response[v1.GetFeedResponse], error)
 	// Ranked ids for the watch page "Next" rail.
 	GetUpNext(context.Context, *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error)
+	// New uploads from followed channels that this viewer has not watched.
+	//
+	// Separate from GetFeed because it answers a different question. That one
+	// asks "what should this household see", and its fresh-subscribed slot holds
+	// a tenth of a page — enough that something new usually appears, and not a
+	// list anybody can read to the end. This asks "did I miss anything", which
+	// has an answer that runs out, and running out is the point of it.
+	GetMissed(context.Context, *connect.Request[v1.GetMissedRequest]) (*connect.Response[v1.GetMissedResponse], error)
 	// The videos this user has spent the most time on. Watch signals accumulate
 	// during playback, so this measures time watched, not times opened.
 	GetMostWatched(context.Context, *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error)
@@ -243,6 +274,12 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 		connect.WithSchema(recommendationServiceMethods.ByName("GetUpNext")),
 		connect.WithHandlerOptions(opts...),
 	)
+	recommendationServiceGetMissedHandler := connect.NewUnaryHandler(
+		RecommendationServiceGetMissedProcedure,
+		svc.GetMissed,
+		connect.WithSchema(recommendationServiceMethods.ByName("GetMissed")),
+		connect.WithHandlerOptions(opts...),
+	)
 	recommendationServiceGetMostWatchedHandler := connect.NewUnaryHandler(
 		RecommendationServiceGetMostWatchedProcedure,
 		svc.GetMostWatched,
@@ -279,6 +316,8 @@ func NewRecommendationServiceHandler(svc RecommendationServiceHandler, opts ...c
 			recommendationServiceGetFeedHandler.ServeHTTP(w, r)
 		case RecommendationServiceGetUpNextProcedure:
 			recommendationServiceGetUpNextHandler.ServeHTTP(w, r)
+		case RecommendationServiceGetMissedProcedure:
+			recommendationServiceGetMissedHandler.ServeHTTP(w, r)
 		case RecommendationServiceGetMostWatchedProcedure:
 			recommendationServiceGetMostWatchedHandler.ServeHTTP(w, r)
 		case RecommendationServiceRecordSignalProcedure:
@@ -304,6 +343,10 @@ func (UnimplementedRecommendationServiceHandler) GetFeed(context.Context, *conne
 
 func (UnimplementedRecommendationServiceHandler) GetUpNext(context.Context, *connect.Request[v1.GetUpNextRequest]) (*connect.Response[v1.GetUpNextResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.GetUpNext is not implemented"))
+}
+
+func (UnimplementedRecommendationServiceHandler) GetMissed(context.Context, *connect.Request[v1.GetMissedRequest]) (*connect.Response[v1.GetMissedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("recsys.v1.RecommendationService.GetMissed is not implemented"))
 }
 
 func (UnimplementedRecommendationServiceHandler) GetMostWatched(context.Context, *connect.Request[v1.GetMostWatchedRequest]) (*connect.Response[v1.GetMostWatchedResponse], error) {

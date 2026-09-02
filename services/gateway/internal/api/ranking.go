@@ -30,6 +30,15 @@ type rankingConfig struct {
 	RecencyHalfLifeDays    *float64 `json:"recencyHalfLifeDays,omitempty"`
 	SoftmaxTemperature     *float64 `json:"softmaxTemperature,omitempty"`
 	SamplePoolSize         *int     `json:"samplePoolSize,omitempty"`
+	// How far back /api/feed/missed looks, in hours.
+	//
+	// Here rather than in recsys because that service keeps no configuration of
+	// its own (CLAUDE.md §3), and here rather than in the app because a
+	// household that decides a day is too short should not need a release to
+	// say so. It is deliberately *not* in toProto: this is not a ranking
+	// constant recsys applies to the feed, it is one number the missed route
+	// passes down with its request.
+	MissedWindowHours *int `json:"missedWindowHours,omitempty"`
 }
 
 func (g *Gateway) rankingPath() string {

@@ -112,6 +112,7 @@ func (g *Gateway) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/feed", g.handleFeed)
 	mux.HandleFunc("GET /api/feed/explain", g.handleExplainFeed)
+	mux.HandleFunc("GET /api/feed/missed", g.handleMissed)
 	mux.HandleFunc("GET /api/profiles", g.handleProfiles)
 	mux.HandleFunc("GET /api/settings/youtube-account", g.handleYouTubeAccount)
 	mux.HandleFunc("PUT /api/settings/youtube-account", g.handleYouTubeAccount)
