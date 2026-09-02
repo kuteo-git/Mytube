@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Bookmark, ListVideo, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { Dialog, PromptDialog } from '@/shared/ui/dialog'
 import {
   useCreatePlaylist,
   usePlaylists,
@@ -60,7 +61,6 @@ export function SaveToPlaylistDialog({
   const [ticks, setTicks] = useState<Record<string, boolean> | null>(null)
   const [pinnedTick, setPinnedTick] = useState(saved)
   const [naming, setNaming] = useState(false)
-  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
 
   const baseline = useMemo(() => {
@@ -75,22 +75,12 @@ export function SaveToPlaylistDialog({
     if (playlists && ticks === null) setTicks(baseline)
   }, [playlists, ticks, baseline])
 
-  useEffect(() => {
-    const escape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', escape)
-    return () => document.removeEventListener('keydown', escape)
-  }, [onClose])
-
   const current = ticks ?? baseline
   const changed =
     pinnedTick !== saved ||
     Object.keys(current).some((id) => current[id] !== baseline[id])
 
-  const create = async () => {
-    const title = name.trim()
-    if (!title) return
+  const create = async (title: string) => {
     setBusy(true)
     try {
       // Created **and** the video put in it, in one press. Leaving the add to a
@@ -98,8 +88,10 @@ export function SaveToPlaylistDialog({
       // cancelling — and that press is not even on screen yet.
       const made = await createPlaylist.mutateAsync({ title })
       await setInPlaylist.mutateAsync({ id: made.id, videoId, member: true })
+      // Ticked *and* part of what Save compares against, so pressing Save
+      // afterwards sends nothing about a video that is already in the list it
+      // was just put in.
       setTicks({ ...current, [made.id]: true })
-      setName('')
       setNaming(false)
     } finally {
       setBusy(false)
@@ -122,107 +114,90 @@ export function SaveToPlaylistDialog({
     }
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-[60] grid place-items-center bg-black/60 px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('playlists.saveTo')}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">{t('playlists.saveTo')}</h2>
-          <button
-            type="button"
-            onClick={() => setNaming(true)}
-            aria-label={t('playlists.newPlaylist')}
-            className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-surface-hover"
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-
-        {naming && (
-          <div className="flex gap-2 pt-3">
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                // Return confirms. Without it the key does nothing and the
-                // button that was always going to be pressed next is one more
-                // reach away.
-                if (e.key === 'Enter') void create()
-              }}
-              placeholder={t('playlists.namePlaceholder')}
-              className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-text-2"
-            />
-            <button
-              type="button"
-              disabled={!name.trim() || busy}
-              onClick={() => void create()}
-              className="rounded-lg bg-text px-3 py-2 text-sm font-medium text-bg disabled:opacity-40"
-            >
-              {t('common.create')}
-            </button>
-          </div>
-        )}
-
-        {isError ? (
-          <p className="py-6 text-sm text-text-2">
-            {t('empty.couldNotLoad', { what: t('empty.what_playlists') })}
-          </p>
-        ) : (
-          <ul className="max-h-[45vh] overflow-y-auto py-3">
-            {/* The shelf, first and fixed. */}
-            <Row
-              label={t('nav.saved')}
-              icon={<Bookmark size={16} />}
-              ticked={pinnedTick}
-              onToggle={() => setPinnedTick((v) => !v)}
-            />
-            {isPending
-              ? null
-              : (playlists ?? []).map((p) => (
-                  <Row
-                    key={p.id}
-                    label={p.title}
-                    detail={t('playlists.count', { count: p.itemCount })}
-                    icon={<ListVideo size={16} />}
-                    ticked={Boolean(current[p.id])}
-                    onToggle={() =>
-                      setTicks({ ...current, [p.id]: !current[p.id] })
-                    }
-                  />
-                ))}
-          </ul>
-        )}
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-3 py-2 text-sm hover:bg-surface-hover"
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            // Nothing to apply means nothing to press. A Save that sends no
-            // requests and closes the dialog looks exactly like one that
-            // worked, which is how a control that does nothing goes unnoticed.
-            disabled={!changed || busy}
-            onClick={() => void save()}
-            className="rounded-lg bg-text px-3 py-2 text-sm font-medium text-bg disabled:opacity-40"
-          >
-            {t('common.save')}
-          </button>
-        </div>
-      </div>
+  // **The dialog stands down while the name is being asked**, rather than
+  // opening a second pane over itself: two panes, one asking which lists and
+  // one asking for a name, is two questions on screen at once — and the lower
+  // one is not answerable while the upper one is. The phone's sheet does the
+  // same thing for the same reason.
+  //
+  // A branch in the returned tree rather than an early `return` above it, and
+  // that is not a style preference: the untranslated guard reads everything
+  // between a `>` and the next `<` as text, so a bare `if (naming) {` sitting
+  // between an arrow function and a tag is reported as English copy. Measured —
+  // it failed exactly that way.
+  return naming ? (
+    <PromptDialog
+      title={t('playlists.newPlaylist')}
+      confirmLabel={t('common.create')}
+      placeholder={t('playlists.namePlaceholder')}
+      onConfirm={(title) => void create(title)}
+      onClose={() => setNaming(false)}
+    />
+  ) : (
+    <Dialog label={t('playlists.saveTo')} onClose={onClose}>
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-lg font-medium">{t('playlists.saveTo')}</h2>
+      <button
+        type="button"
+        onClick={() => setNaming(true)}
+        aria-label={t('playlists.newPlaylist')}
+        className="grid h-9 w-9 place-items-center rounded-full transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <Plus size={18} />
+      </button>
     </div>
+
+    {isError ? (
+      <p className="py-6 text-sm text-text-2">
+        {t('empty.couldNotLoad', { what: t('empty.what_playlists') })}
+      </p>
+    ) : (
+      <ul className="max-h-[45vh] overflow-y-auto py-3">
+        {/* The shelf, first and fixed. */}
+        <Row
+          label={t('nav.saved')}
+          icon={<Bookmark size={16} />}
+          ticked={pinnedTick}
+          onToggle={() => setPinnedTick((v) => !v)}
+        />
+        {isPending
+          ? null
+          : (playlists ?? []).map((p) => (
+              <Row
+                key={p.id}
+                label={p.title}
+                detail={t('playlists.count', { count: p.itemCount })}
+                icon={<ListVideo size={16} />}
+                ticked={Boolean(current[p.id])}
+                onToggle={() =>
+                  setTicks({ ...current, [p.id]: !current[p.id] })
+                }
+              />
+            ))}
+      </ul>
+    )}
+
+    <div className="flex justify-end gap-2 pt-2">
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-lg px-3 py-2 text-sm hover:bg-surface-hover"
+      >
+        {t('common.cancel')}
+      </button>
+      <button
+        type="button"
+        // Nothing to apply means nothing to press. A Save that sends no
+        // requests and closes the dialog looks exactly like one that
+        // worked, which is how a control that does nothing goes unnoticed.
+        disabled={!changed || busy}
+        onClick={() => void save()}
+        className="rounded-lg bg-text px-3 py-2 text-sm font-medium text-bg disabled:opacity-40"
+      >
+        {t('common.save')}
+      </button>
+  </div>
+    </Dialog>
   )
 }
 

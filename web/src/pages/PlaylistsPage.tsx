@@ -15,6 +15,7 @@ import { mediaURL } from '@/shared/lib/media'
 import { useTranslation } from 'react-i18next'
 import { PageLink } from '@/shared/ui/PageLink'
 import { PageHeading } from '@/shared/ui/PageHeading'
+import { ConfirmDialog, PromptDialog } from '@/shared/ui/dialog'
 
 /**
  * The member's collections.
@@ -40,15 +41,6 @@ export function PlaylistsPage() {
   const { signedOut } = useAccountState()
   const createPlaylist = useCreatePlaylist()
   const [naming, setNaming] = useState(false)
-  const [name, setName] = useState('')
-
-  const make = async () => {
-    const title = name.trim()
-    if (!title) return
-    await createPlaylist.mutateAsync({ title })
-    setName('')
-    setNaming(false)
-  }
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
@@ -65,27 +57,13 @@ export function PlaylistsPage() {
       </div>
 
       {naming && (
-        <div className="flex gap-2 pb-4">
-          <input
-            autoFocus
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void make()
-              if (e.key === 'Escape') setNaming(false)
-            }}
-            placeholder={t('playlists.namePlaceholder')}
-            className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-text-2 min-[700px]:max-w-sm"
-          />
-          <button
-            type="button"
-            disabled={!name.trim()}
-            onClick={() => void make()}
-            className="rounded-lg bg-text px-3 py-2 text-sm font-medium text-bg disabled:opacity-40"
-          >
-            {t('common.create')}
-          </button>
-        </div>
+        <PromptDialog
+          title={t('playlists.newPlaylist')}
+          confirmLabel={t('common.create')}
+          placeholder={t('playlists.namePlaceholder')}
+          onConfirm={(title) => createPlaylist.mutate({ title })}
+          onClose={() => setNaming(false)}
+        />
       )}
 
       {isError ? (
@@ -126,57 +104,38 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
   const cover = playlist.thumbnails[0]
   const rename = useRenamePlaylist()
   const remove = useDeletePlaylist()
-  const [editing, setEditing] = useState(false)
-  const [title, setTitle] = useState(playlist.title)
-
-  // The name in place of the card's own heading while it is being changed —
-  // not a dialog. A rename is one field and one word; a modal for it is more
-  // ceremony than the thing being done.
-  if (editing) {
-    return (
-      <div>
-        <ThumbnailSurface hue={hueFromId(playlist.id)}>
-          {cover ? (
-            <img src={mediaURL(cover)} alt="" loading="lazy" className="h-full w-full object-cover" />
-          ) : null}
-        </ThumbnailSurface>
-        <input
-          autoFocus
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && title.trim()) {
-              rename.mutate({ id: playlist.id, title: title.trim() })
-              setEditing(false)
-            }
-            if (e.key === 'Escape') {
-              setTitle(playlist.title)
-              setEditing(false)
-            }
-          }}
-          onBlur={() => {
-            setTitle(playlist.title)
-            setEditing(false)
-          }}
-          className="mt-2 w-full rounded-lg border border-line bg-bg px-2 py-1 text-sm outline-none focus:border-text-2"
-        />
-      </div>
-    )
-  }
+  const [renaming, setRenaming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   return (
     <div className="group relative">
-      <PlaylistMenu
-        onRename={() => setEditing(true)}
-        onDelete={() => {
-          // Asked before it happens, because there is nothing to undo. The
-          // videos stay in the library — only the collection goes — and the
-          // question says so rather than leaving it to be guessed.
-          if (window.confirm(`${t('playlists.deleteTitle')}\n\n${t('playlists.deleteDetail')}`)) {
-            remove.mutate({ id: playlist.id })
-          }
-        }}
-      />
+      <PlaylistMenu onRename={() => setRenaming(true)} onDelete={() => setDeleting(true)} />
+
+      {/* Both are dialogs now, and the delete one is asked before it happens
+          because there is nothing to undo. It was `window.confirm`, which works
+          and is the *browser's* dialog rather than this app's — another
+          typeface, another button order, the page's URL printed above the
+          question, and on a television a system alert on a screen with no
+          keyboard. */}
+      {renaming && (
+        <PromptDialog
+          title={t('common.rename')}
+          confirmLabel={t('common.save')}
+          initial={playlist.title}
+          placeholder={t('playlists.namePlaceholder')}
+          onConfirm={(next) => rename.mutate({ id: playlist.id, title: next })}
+          onClose={() => setRenaming(false)}
+        />
+      )}
+      {deleting && (
+        <ConfirmDialog
+          title={t('playlists.deleteTitle')}
+          detail={t('playlists.deleteDetail')}
+          confirmLabel={t('common.delete')}
+          onConfirm={() => remove.mutate({ id: playlist.id })}
+          onClose={() => setDeleting(false)}
+        />
+      )}
       <PageLink to={`/playlist/${playlist.id}`} className="block">
       {/* Keyed on the playlist's own id, like every other card in the app. It
           matters more here than elsewhere: a playlist whose contents have not
