@@ -135,6 +135,55 @@ def aligned_or_none(parsed: dict[int, str], want: int) -> list[str] | None:
     return [parsed[i] for i in range(1, want + 1)]
 
 
+# How much longer than its source a translation may be before the line is read
+# as two cues merged into one.
+#
+# Vietnamese runs longer than English for the same meaning, so the threshold is
+# generous: the fault being caught doubles a line, and a merge of two cues of
+# any length lands far past this. The constant term keeps very short lines out
+# of it — "Yeah." to "Ừ, đúng rồi đấy." is a ratio of 3 and is not a merge.
+MERGE_RATIO = 2.4
+MERGE_FLOOR = 24
+
+
+def misaligned(cues: list[str], out: list[str]) -> str:
+    """Why this batch's lines do not belong to these cues, or "".
+
+    Counting the lines is not checking the alignment, and the difference cost a
+    library of narration read one sentence ahead of the film. Measured on a real
+    answer: the model merged cues 1 and 2 into line 1, then repeated line 2 as
+    line 3 to keep the count right. Every number was present, every number was
+    in order, and from line 2 on every cue spoke the *next* cue's words — which
+    is heard as narration arriving before the speaker does.
+
+    Both signatures below are of that one fault. A model that shifts the content
+    has to make up a line somewhere to keep the count, and it either repeats one
+    it has already written or joins two into the line before.
+    """
+    # A line repeated for two cues that are not themselves the same line. This
+    # is the padding a shift leaves behind. Blank answers are excluded: an
+    # untranslated line is already handled as absence by the caller.
+    seen: dict[str, int] = {}
+    for i, line in enumerate(out):
+        key = line.strip().casefold()
+        if not key:
+            continue
+        first = seen.get(key)
+        if first is not None and cues[first].strip() != cues[i].strip():
+            return f"line {first + 1} repeated as line {i + 1}"
+        seen.setdefault(key, i)
+
+    # A line far longer than the one it translates, which is two cues joined.
+    for i, line in enumerate(out):
+        source = len(cues[i].strip())
+        if not source:
+            continue
+        if len(line.strip()) > MERGE_FLOOR + MERGE_RATIO * source:
+            return f"line {i + 1} is {len(line.strip())} chars for {source}"
+
+    return ""
+
+
 def openai_content(payload: dict) -> str:
     """The assistant's answer out of an OpenAI-shaped response.
 
@@ -213,7 +262,18 @@ def omniroute_batch(
     data = _post_chat(chat_url(base_url), payload, api_key)
     if data is None:
         return None
-    return aligned_or_none(parse_numbered(openai_content(data)), len(cues))
+    out = aligned_or_none(parse_numbered(openai_content(data)), len(cues))
+    if out is None:
+        return None
+    # Only a batch can be misaligned. A single cue has no ordering to get wrong,
+    # and it is what the caller retries with when this refuses — so applying the
+    # check there would turn one suspicious batch into no translation at all.
+    if len(cues) > 1:
+        why = misaligned(cues, out)
+        if why:
+            print(f"[batch {model}] refused: {why}", flush=True)
+            return None
+    return out
 
 
 def _post_chat(url: str, payload: dict, api_key: str):

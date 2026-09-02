@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.0.9 — 2026-09-02
+
+**Narration was read one sentence ahead of the film**, and the batch translator
+had been checking the wrong thing for as long as it had existed.
+
+A batch asks the model for N numbered lines and `aligned_or_none` verified that
+N came back, in order, with no gaps. A model that merged two cues into line 1
+then had to invent a line to keep the count — it repeated one it had already
+written — and every check passed. From that point on each cue carried the *next*
+cue's words, which is heard as the narrator speaking before anybody on screen
+does. Reported from both clients at once, because both read the same cache.
+
+Measured on `_01Sm2lWwgM`, where the answer that shipped is still on disk:
+
+| cue | English | the line it was given |
+|---|---|---|
+| 0.24s | "So, you may or may not know this about me," | cues 1 **and** 2, joined |
+| 1.839s | "but I've been a huge Pokemon fanatic…" | "Tôi còn nhớ hồi năm 1999…" — the *next* cue |
+| 5.359s | "I remember back in 1999…" | the same line again |
+
+- **Counting the lines is not checking the alignment.** `misaligned` now refuses
+  a batch on either signature of a shift: a line repeated for two cues that are
+  not themselves the same line, and a line far longer than the one it
+  translates. Both are what a model must do to keep the count after moving the
+  content.
+- **A refused batch already had somewhere to go.** It falls back to translating
+  one cue at a time, where there is no ordering left to get wrong — so this is a
+  stricter guard rather than a new path.
+- **Numbering the lines by hash would not have helped**, and that was the first
+  fix considered. The model returned every number correctly; it put the wrong
+  text under the right number. Only the content can catch that.
+- `scripts/narration-audit.py` finds videos whose stored answers are already
+  shifted, and with `--delete` removes their translation cache and `vi-mt`
+  subtitle so the next pass asks again. The synthesised WAVs are keyed by the
+  text that produced them, so a wrong line's audio is simply never asked for
+  again. **Measured on this library: 6 of 207.**
+  - The first version of that check compared every line against every other and
+    reported 87 — almost all wrong, because "Yeah." and "Yep." both translate to
+    "Ừ." A repeat is only evidence inside one batch of fifteen, and only for a
+    line long enough not to collide by chance.
+
+No migrations.
+
 ## 0.0.7 — 2026-08-28
 
 **Some videos listed a subtitle track that showed nothing**, and the translation

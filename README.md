@@ -41,6 +41,17 @@ one set of use cases, not two front ends.
   <img src="docs/screenshots/phone-watch.png" alt="Watching on a phone" width="270">
 </p>
 
+### There is also a native app
+
+**[Mytube Mobile](https://github.com/kuteo-git/Mytube-Mobile)** — Android and
+iOS, Kotlin Multiplatform, talking to this server over the house wifi.
+
+It exists for the one thing this web app cannot do, and it is risk 4 in the
+charter: **background playback on iOS is impossible from the browser.** Media
+Session and picture-in-picture are where the web stops, so audio with the screen
+off needed a native client. It is not a clone of this app — on a desktop this
+one is better, and stays the primary client.
+
 ### Getting started
 
 | | |
@@ -158,6 +169,17 @@ một bộ use case, không phải hai front end.
   <img src="docs/screenshots/phone-home.png" alt="Trang chủ trên điện thoại" width="270">
   <img src="docs/screenshots/phone-watch.png" alt="Xem video trên điện thoại" width="270">
 </p>
+
+### Còn có một app gốc nữa
+
+**[Mytube Mobile](https://github.com/kuteo-git/Mytube-Mobile)** — Android và
+iOS, viết bằng Kotlin Multiplatform, nói chuyện với máy chủ này qua wifi nhà.
+
+Nó tồn tại vì đúng một việc web app này không làm được, và đó là rủi ro số 4
+trong charter: **trên iOS, trình duyệt không thể phát nền.** Media Session và
+picture-in-picture là giới hạn của web, nên muốn nghe tiếp khi màn hình đã tắt
+thì phải có app gốc. Nó không phải bản sao của app này — trên máy tính thì bản
+web vẫn tốt hơn và vẫn là bản chính.
 
 ### Bắt đầu
 

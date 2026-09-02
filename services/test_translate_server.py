@@ -11,6 +11,7 @@ from translate_server import (
     OMNIROUTE_MODEL,
     aligned_or_none,
     build_body,
+    misaligned,
     openai_content,
     parse_numbered,
     resolve_config,
@@ -202,3 +203,55 @@ def test_strip_budget_removes_only_the_leading_one():
 def test_parse_numbered_strips_the_budget_from_every_line():
     out = parse_numbered("1. [2.4s] một\n2. [1.0s] hai")
     assert out == {1: "một", 2: "hai"}
+
+
+# ---- alignment of content, not of count -------------------------------------
+#
+# The cues and answers below are copied from a real pass over _01Sm2lWwgM, where
+# the model merged two cues into line 1 and repeated line 2 as line 3 to keep the
+# count. Every check that existed at the time passed it.
+
+REAL_CUES = [
+    "So, you may or may not know this about me,",
+    "but Ive been a huge Pokemon fanatic since the very beginning.",
+    "I remember back in 1999 walking into a Best Buy with my dad "
+    "and picking up my very first version of Pokemon Blue.",
+]
+
+REAL_ANSWER = [
+    "Bạn có thể biết hoặc không biết về tôi, nhưng tôi là một fan cuồng "
+    "Pokemon từ rất lâu rồi.",
+    "Tôi còn nhớ hồi năm 1999, tôi đi vào cửa hàng Best Buy cùng bố và lấy "
+    "phiên bản Pokemon Blue đầu tiên của mình.",
+    "Tôi còn nhớ hồi năm 1999, tôi đi vào cửa hàng Best Buy cùng bố và lấy "
+    "phiên bản Pokemon Blue đầu tiên của mình.",
+]
+
+
+def test_misaligned_catches_the_answer_that_shipped():
+    assert misaligned(REAL_CUES, REAL_ANSWER)
+
+
+def test_misaligned_passes_an_ordinary_batch():
+    cues = ["Hello there.", "How are you?", "Fine, thanks."]
+    out = ["Chào bạn.", "Bạn khỏe không?", "Mình ổn, cảm ơn."]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_repeat_is_allowed_when_the_cues_repeat_too():
+    # The model is not wrong to answer the same line twice for the same words.
+    cues = ["Yeah.", "Something else.", "Yeah."]
+    out = ["Ừ.", "Chuyện khác.", "Ừ."]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_blank_line_is_not_a_repeat():
+    # An untranslated line is absence, and two absences are not a shift.
+    cues = ["One.", "Two.", "Three."]
+    out = ["Một.", "", ""]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_short_line_may_translate_long():
+    # "Yeah." to a full Vietnamese phrase is a ratio of three and is not a merge.
+    assert misaligned(["Yeah."], ["Ừ, đúng rồi đấy bạn ạ."]) == ""
