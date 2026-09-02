@@ -107,6 +107,21 @@ func (r *Ranker) GetMissed(
 		if profile.WatchedFraction[f.VideoID] > missedWatchedThreshold {
 			continue
 		}
+		// Shorts are not something anybody misses.
+		//
+		// The feed excludes them outright (see explain.go) and this list is
+		// stricter, not looser: a channel that posts six Shorts a day would
+		// otherwise take six of its rounds here, and the uploads somebody
+		// followed the channel for would be behind them.
+		//
+		// **Never inferred from duration.** The flag is catalog's answer from
+		// YouTube, and the measurement behind that rule is recorded beside the
+		// feed's own check: 14- and 9-second videos are ordinary clips, while
+		// 40- and 59-second ones are Shorts. Length is what a Short usually
+		// has, not what it is.
+		if f.IsShort {
+			continue
+		}
 		if len(wanted) > 0 && f.Language != "" && !wanted[f.Language] {
 			continue
 		}

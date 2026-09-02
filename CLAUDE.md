@@ -680,7 +680,9 @@ Every element either does something real or is dropped.
 - `catalog.watch_later` and `videoSelect`'s read of it have existed since `0001_init`, so every video has always reported `user_state.in_watch_later` — **nothing could write it**, so it answered false for everybody, forever. The account import read `:ytwatchlater` and stored its videos as ordinary ones, so a list somebody had built deliberately arrived as an anonymous handful of new videos. Nothing here is new but the writing and the page.
 - **Not told to the ranker.** Putting something aside is not a statement about taste, and unlike a like it is meant to be undone.
 
-**Watch later and Playlists are a read-only mirror of the member's YouTube account.** Nothing in this app edits them — no create, no rename, no delete, no add or remove, and no write route at the gateway. An edit here would be reverted by the next account scan, which is §5's dead button reached through a control that appears to work for an hour. They sit in the **Account** sidebar group, apart from Saved and History, which are this library's own records and can be changed. That group was called *From YouTube* and meant exactly "read-only mirror"; it now also holds the profile and the YouTube connection, so the promise moved from the heading onto these two items — see "The account has one place" below.
+**Watch later is a read-only mirror of the member's YouTube account.** Nothing in this app edits it — no add, no remove, no write route at the gateway — because an edit here would be reverted by the next account scan, which is §5's dead button reached through a control that appears to work for an hour. It sits in the **Account** sidebar group, apart from Saved and History, which are this library's own records and can be changed. That group was called *From YouTube* and meant exactly "read-only mirror"; it now also holds the profile and the YouTube connection, so the promise moved from the heading onto that item — see "The account has one place" below.
+
+~~**Playlists are a read-only mirror too.**~~ **Not any longer** (2026-09-02). The gateway grew the four writes the schema was always built for, and both clients grew the screens for them: a playlist is a row in this household's own table, and one imported by a scan and one made here are the same kind of thing once it exists. Renaming and deleting are offered on the playlists page, taking a video out on the playlist's own page, and putting one in through **Save to playlist** — which is the bookmark's press now, on a card's menu and on the watch page's pill. See "The bookmark asks which collection" below.
 
 - **The mirror removes as well as adds — but only as far as the read actually saw.** The read is bounded (`playlistItemLimit` = 50, `accountFeedLimit` = 50), so a long list comes back truncated, and mirroring a truncated read would delete everything past the cap. `complete` — the caller's answer to "was this the whole list", true when fewer than the cap came back — decides: a complete read replaces the contents *and rewrites the positions* to match upstream, a truncated one only appends. An **empty** answer never removes anything: a list that answers with nothing is far likelier to be a refusal than a list somebody emptied.
 - **A playlist deleted upstream is deleted here** (`PruneImportedPlaylists`), and that is not optional: nothing in this app can delete one, so without it a vanished playlist stays for ever. Same guard — an empty answer prunes nothing.
@@ -1251,3 +1253,51 @@ degrades correctly rather than silently: launchd cannot find the script, the
 agent fails, and `KeepAlive` with `ThrottleInterval 30` retries every thirty
 seconds until the volume mounts. `boot.sh`'s own five-minute wait for
 `/Volumes/Data2` is now a second line of defence rather than the first.
+
+## Playlists and Missed reach the web (2026-09-02)
+
+Both were built on the phone first and both are the server's work as much as the
+client's, so the web was a release behind on two features the household uses
+daily. It is not now, and the logic is the phone's rather than a second reading
+of it.
+
+### Playlists
+
+The four routes (`POST /api/playlists`, `PATCH`, `DELETE`, `POST /{id}/items`,
+`DELETE /{id}/items/{videoId}`) were already there; the web called none of them
+and its pages said, at length, that a write would be undone by the next account
+scan. That was true when the only playlists were an account mirror and it is the
+comment that had to change first — a stale reason is worse than none, because it
+argues against fixing the thing it describes.
+
+- **`GET /api/playlists?videoId=` is what makes the dialog one request.** Every
+  row comes back with `containsVideo`, so a screen that cannot draw the lists
+  without the ticks, or the ticks without the lists, asks once.
+- **The first row is the saved shelf**, which is the pinned set and not a row in
+  `playlists`. That is *why* it cannot be renamed or deleted, rather than a rule
+  invented for the dialog.
+- **Save applies the difference, one request per change** — not one call carrying
+  the final state, which is the shape that empties a playlist the day a client is
+  wrong about what was in it.
+- **A new playlist is created *and* filled in one press.** Leaving the add to a
+  later press of Save would make a named-but-empty list the outcome of
+  cancelling.
+- **The card menu says "Save to playlist" whatever the answer is.** It used to
+  write one bit and say "Saved"; a video already on the shelf can still be wanted
+  in a collection, and a label that follows the bit says the question has been
+  answered when it has not been asked.
+- **A playlist row is its own card variant.** It was `fromYouTube`, which is
+  right for Watch later and wrong here now: one of them can be edited and the
+  other cannot, and one variant for both is one chance for that to be forgotten.
+
+### Missed
+
+`GET /api/feed/missed`, as a chip beside All and Live, and every rule the phone
+settled holds here: the request runs on every visit to Home because whether the
+chip exists is decided by whether it comes back empty; the answer that draws the
+chip is the page it shows; and paging asks the same route rather than the feed.
+
+**Its identity is `__missed`, not `Missed`.** `All` and `Live` are short enough
+to pass the untranslated guard and a third English word here fails it — rightly,
+since the guard cannot tell an identity from a label by looking. The phone's chip
+key is the same string for the same reason.

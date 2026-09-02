@@ -9,11 +9,17 @@ import {
   useStorage,
   useTopPlayed,
   useLive,
+  useMissed,
   useTopics,
 } from '@/features/catalog/application/queries'
 import { isInProgress } from '@/features/catalog/domain/video'
 import { useHiddenVideos } from '@/features/catalog/application/hidden'
-import { ALL_CATEGORY, ChipBar, LIVE_CATEGORY } from '@/features/catalog/ui/ChipBar'
+import {
+  ALL_CATEGORY,
+  ChipBar,
+  LIVE_CATEGORY,
+  MISSED_CATEGORY,
+} from '@/features/catalog/ui/ChipBar'
 import { ExternalVideoCard } from '@/features/catalog/ui/ExternalVideoCard'
 import { StorageBanner } from '@/features/catalog/ui/StorageBanner'
 import { TopPlayedCard } from '@/features/catalog/ui/TopPlayedCard'
@@ -96,6 +102,12 @@ export function HomePage() {
 
   const { data, isPending, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useFeed(active)
+  const {
+    data: missed,
+    hasNextPage: missedHasMore,
+    isFetchingNextPage: missedFetching,
+    fetchNextPage: fetchMoreMissed,
+  } = useMissed()
   const { data: live } = useLive()
   const { data: topics } = useTopics()
   const { data: storage } = useStorage()
@@ -125,7 +137,8 @@ export function HomePage() {
     .slice(0, 12)
   // When browsing a topic, also show what YouTube has for it. The library is
   // what the topics chose to bring in; YouTube search stretches past that.
-  const isTopic = active !== 'All' && active !== LIVE_CATEGORY
+  const isTopic =
+    active !== ALL_CATEGORY && active !== LIVE_CATEGORY && active !== MISSED_CATEGORY
   const { data: youtubeVideos } = useDiscover(isTopic ? active : '', 6)
 
   // Both extra rows belong to the unfiltered home. Under a topic the page is
@@ -134,6 +147,7 @@ export function HomePage() {
   const railShown = showCollections && continueWatching.length > 0
 
   const videos = data?.pages.flatMap((page) => page.videos) ?? []
+  const missedVideos = missed?.pages.flatMap((page) => page.videos) ?? []
 
   // "All" leads; the rest are topics that actually have videos, so a chip can
   // never produce an empty grid.
@@ -142,8 +156,17 @@ export function HomePage() {
   // is always there and usually empty would be worse than none: a red dot is a
   // claim that something is happening, and one that is lit over an empty grid
   // teaches people to stop believing it.
+  // Missed sits straight after All, and only when something was missed.
+  //
+  // The same rule Live follows and for the same reason: a chip that leads to an
+  // empty grid is a dead button wearing a name. "Nothing was missed" is a true
+  // and useful answer, and it is said by the chip not being there.
+  //
+  // Before Live, because it is a way of reading the whole library rather than a
+  // subject, and it answers the question people open the app to ask.
   const chips = [
     ALL_CATEGORY,
+    ...(missedVideos.length > 0 ? [MISSED_CATEGORY] : []),
     ...(live && live.length > 0 ? [LIVE_CATEGORY] : []),
     ...(topics ?? []).map((t) => t.name),
   ]
@@ -152,6 +175,7 @@ export function HomePage() {
   // feed query at all. Nothing here is scored, sampled or diversity-capped:
   // "everything on air" is a promise the ranker has no way to keep.
   const showingLive = active === LIVE_CATEGORY
+  const showingMissed = active === MISSED_CATEGORY
 
   return (
     // `relative` so the indicator has something to be positioned against, and
@@ -233,6 +257,8 @@ export function HomePage() {
             )}
             {showingLive ? (
               (live ?? []).map((video) => <VideoCard key={video.id} video={video} />)
+            ) : showingMissed ? (
+              visible(missedVideos).map((video) => <VideoCard key={video.id} video={video} />)
             ) : isPending ? (
               Array.from({ length: 8 }, (_, i) => <VideoCardSkeleton key={i} />)
             ) : (
@@ -240,10 +266,15 @@ export function HomePage() {
             )}
           </div>
 
+          {/* Whichever list is showing brings its own pages. Live has none —
+              "everything on air" arrives in one answer — so it asks for
+              nothing. */}
           <InfiniteList
-            hasMore={Boolean(hasNextPage)}
-            isLoading={isFetchingNextPage}
-            onLoadMore={() => void fetchNextPage()}
+            hasMore={showingLive ? false : showingMissed ? Boolean(missedHasMore) : Boolean(hasNextPage)}
+            isLoading={showingMissed ? missedFetching : isFetchingNextPage}
+            onLoadMore={() =>
+              void (showingMissed ? fetchMoreMissed() : fetchNextPage())
+            }
           />
 
           {/* The feed can now genuinely run out. A share set to 0% removes those

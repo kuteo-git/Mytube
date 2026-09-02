@@ -61,7 +61,12 @@ export function PlaylistPage() {
 <VideoCard
                     key={video.id}
                     video={video}
-                    variant="fromYouTube"
+                    // Its own variant, so the menu can offer to take the video
+                    // out of *this* list. It was `fromYouTube`, which is right
+                    // for Watch later and no longer right here: a playlist is a
+                    // row in this household's own table and can be edited.
+                    variant="playlist"
+                    playlistId={playlistId}
                     // Opening a video here plays the playlist, in the
                     // playlist's order: next is the next entry rather than a
                     // recommendation. Without it a playlist is only a way of
@@ -85,7 +90,14 @@ export function PlaylistPage() {
             ? t('pages.playlists.wontOpenLong')
             : playlist && !playlist.itemsSynced
               ? t('pages.playlists.notReadYetLong')
-              : t('pages.playlists.emptyUpstream')}
+              : // A playlist made here and not filled yet is empty because
+                // nobody has put anything in it, not because YouTube gave
+                // nothing — and the two need different sentences. `sourceUrl`
+                // is what tells them apart: it is absent on a playlist made
+                // here.
+                playlist?.sourceUrl
+                ? t('pages.playlists.emptyUpstream')
+                : `${t('playlists.empty')} ${t('playlists.emptyDetail')}`}
         </p>
       )}
     </div>

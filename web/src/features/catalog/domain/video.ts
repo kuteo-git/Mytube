@@ -137,6 +137,14 @@ export interface Playlist {
   /** YouTube lists it but will not hand it over. Asked once, then left alone. */
   unavailable: boolean
   thumbnails: string[]
+  /**
+   * Whether this playlist already holds the video that was asked about.
+   *
+   * Only meaningful when the list was fetched with a video in mind — see
+   * `listPlaylists(videoId)`. False otherwise, which is what a caller that did
+   * not ask should read it as.
+   */
+  containsVideo: boolean
 }
 
 export interface StorageUsage {

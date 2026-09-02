@@ -1,5 +1,12 @@
 import {} from 'react-router-dom'
-import { usePlaylists } from '@/features/catalog/application/queries'
+import { useState } from 'react'
+import { MoreVertical, Plus } from 'lucide-react'
+import {
+  useCreatePlaylist,
+  useDeletePlaylist,
+  usePlaylists,
+  useRenamePlaylist,
+} from '@/features/catalog/application/queries'
 import { useAccountState } from '@/features/settings/application/account-state'
 import type { Playlist } from '@/features/catalog/domain/video'
 import { ThumbnailSurface } from '@/shared/ui/primitives'
@@ -10,12 +17,16 @@ import { PageLink } from '@/shared/ui/PageLink'
 import { PageHeading } from '@/shared/ui/PageHeading'
 
 /**
- * The member's playlists, as their YouTube account has them.
+ * The member's collections.
  *
- * Read-only, and that is the whole design. These are a mirror refreshed on every
- * account scan, so a rename or a deletion made here would be silently undone by
- * the next pass — §5's rule against a control that does not do what it says,
- * reached through a control that appears to work for an hour.
+ * **Two sources, one list.** Some arrive from a YouTube account on a scan and
+ * some are made here, and once a row exists the difference stops mattering:
+ * both can be renamed, emptied and deleted, because both are rows in this
+ * household's own `playlists` table.
+ *
+ * That is new. This page was read-only and said so at length, on the sound
+ * reasoning that a write would be undone by the next account scan — the gateway
+ * simply had no routes to write with. It has them now.
  *
  * Per member: the same division the rest of the schema draws, where videos and
  * channels are the household's and what somebody assembled is theirs.
@@ -27,10 +38,55 @@ export function PlaylistsPage() {
   // on the next pass, because there will not be one until somebody pastes a
   // fresh session. This is the screen where that is noticed.
   const { signedOut } = useAccountState()
+  const createPlaylist = useCreatePlaylist()
+  const [naming, setNaming] = useState(false)
+  const [name, setName] = useState('')
+
+  const make = async () => {
+    const title = name.trim()
+    if (!title) return
+    await createPlaylist.mutateAsync({ title })
+    setName('')
+    setNaming(false)
+  }
 
   return (
     <div className="px-4 pb-16 min-[700px]:px-6">
-      <PageHeading>{t('nav.playlists')}</PageHeading>
+      <div className="flex items-center justify-between gap-3">
+        <PageHeading>{t('nav.playlists')}</PageHeading>
+        <button
+          type="button"
+          onClick={() => setNaming(true)}
+          className="flex shrink-0 items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm hover:bg-surface-hover"
+        >
+          <Plus size={16} />
+          {t('playlists.newPlaylist')}
+        </button>
+      </div>
+
+      {naming && (
+        <div className="flex gap-2 pb-4">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void make()
+              if (e.key === 'Escape') setNaming(false)
+            }}
+            placeholder={t('playlists.namePlaceholder')}
+            className="min-w-0 flex-1 rounded-lg border border-line bg-bg px-3 py-2 text-sm outline-none focus:border-text-2 min-[700px]:max-w-sm"
+          />
+          <button
+            type="button"
+            disabled={!name.trim()}
+            onClick={() => void make()}
+            className="rounded-lg bg-text px-3 py-2 text-sm font-medium text-bg disabled:opacity-40"
+          >
+            {t('common.create')}
+          </button>
+        </div>
+      )}
 
       {isError ? (
         <p className="py-16 text-center text-text-2">
@@ -68,9 +124,60 @@ export function PlaylistsPage() {
 function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: boolean }) {
   const { t } = useTranslation()
   const cover = playlist.thumbnails[0]
+  const rename = useRenamePlaylist()
+  const remove = useDeletePlaylist()
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(playlist.title)
+
+  // The name in place of the card's own heading while it is being changed —
+  // not a dialog. A rename is one field and one word; a modal for it is more
+  // ceremony than the thing being done.
+  if (editing) {
+    return (
+      <div>
+        <ThumbnailSurface hue={hueFromId(playlist.id)}>
+          {cover ? (
+            <img src={mediaURL(cover)} alt="" loading="lazy" className="h-full w-full object-cover" />
+          ) : null}
+        </ThumbnailSurface>
+        <input
+          autoFocus
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && title.trim()) {
+              rename.mutate({ id: playlist.id, title: title.trim() })
+              setEditing(false)
+            }
+            if (e.key === 'Escape') {
+              setTitle(playlist.title)
+              setEditing(false)
+            }
+          }}
+          onBlur={() => {
+            setTitle(playlist.title)
+            setEditing(false)
+          }}
+          className="mt-2 w-full rounded-lg border border-line bg-bg px-2 py-1 text-sm outline-none focus:border-text-2"
+        />
+      </div>
+    )
+  }
 
   return (
-    <PageLink to={`/playlist/${playlist.id}`} className="block">
+    <div className="group relative">
+      <PlaylistMenu
+        onRename={() => setEditing(true)}
+        onDelete={() => {
+          // Asked before it happens, because there is nothing to undo. The
+          // videos stay in the library — only the collection goes — and the
+          // question says so rather than leaving it to be guessed.
+          if (window.confirm(`${t('playlists.deleteTitle')}\n\n${t('playlists.deleteDetail')}`)) {
+            remove.mutate({ id: playlist.id })
+          }
+        }}
+      />
+      <PageLink to={`/playlist/${playlist.id}`} className="block">
       {/* Keyed on the playlist's own id, like every other card in the app. It
           matters more here than elsewhere: a playlist whose contents have not
           been read yet has no cover at all, so the gradient is the whole of what
@@ -97,6 +204,61 @@ function PlaylistCard({ playlist, signedOut }: { playlist: Playlist; signedOut: 
               ? t('pages.playlists.waitingSession')
               : t('pages.playlists.notReadYet')}
       </p>
-    </PageLink>
+      </PageLink>
+    </div>
+  )
+}
+
+/** Rename and delete, on the card they act on. */
+function PlaylistMenu({ onRename, onDelete }: { onRename: () => void; onDelete: () => void }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="absolute top-2 right-2 z-10">
+      <button
+        type="button"
+        aria-label={t('common.moreOptions')}
+        onClick={(e) => {
+          // The card is a link, and a menu drawn on top of one is still inside
+          // it: without this, opening the menu also opens the playlist.
+          e.preventDefault()
+          setOpen((o) => !o)
+        }}
+        className="grid h-8 w-8 place-items-center rounded-full bg-black/60 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <MoreVertical size={16} />
+      </button>
+      {open && (
+        <ul className="absolute right-0 mt-1 min-w-40 overflow-hidden rounded-lg bg-surface py-1 text-sm shadow-lg ring-1 ring-line">
+          <li>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                setOpen(false)
+                onRename()
+              }}
+              className="w-full px-4 py-2.5 text-left hover:bg-surface-hover"
+            >
+              {t('common.rename')}
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                setOpen(false)
+                onDelete()
+              }}
+              className="w-full px-4 py-2.5 text-left hover:bg-surface-hover"
+            >
+              {t('common.delete')}
+            </button>
+          </li>
+        </ul>
+      )}
+    </div>
   )
 }

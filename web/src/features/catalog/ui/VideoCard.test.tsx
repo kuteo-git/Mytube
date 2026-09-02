@@ -88,15 +88,18 @@ describe('card menu by variant', () => {
     openMenu()
     expect(screen.getByText('Watched')).toBeInTheDocument()
     expect(screen.getByText('Not interested')).toBeInTheDocument()
-    expect(screen.queryByText('Save')).not.toBeInTheDocument()
+    expect(screen.queryByText('Save to playlist')).not.toBeInTheDocument()
     expect(screen.queryByText('Unsave')).not.toBeInTheDocument()
   })
 
-  it('feed shows Watched, Save, and Not interested', () => {
+  // "Save to playlist", not "Save". The entry used to write one bit and say so;
+  // it opens the question of *which* collection now, and a video already on the
+  // shelf can still be wanted in one.
+  it('feed shows Watched, Save to playlist, and Not interested', () => {
     renderCard('feed')
     openMenu()
     expect(screen.getByText('Watched')).toBeInTheDocument()
-    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.getByText('Save to playlist')).toBeInTheDocument()
     expect(screen.getByText('Not interested')).toBeInTheDocument()
   })
 
@@ -104,35 +107,45 @@ describe('card menu by variant', () => {
     renderCard('saved')
     openMenu()
     expect(screen.getByText('Unsave')).toBeInTheDocument()
-    expect(screen.queryByText('Save')).not.toBeInTheDocument()
+    expect(screen.queryByText('Save to playlist')).not.toBeInTheDocument()
     expect(screen.queryByText('Watched')).not.toBeInTheDocument()
   })
 
-  it('history shows Save', () => {
+  it('history shows Save to playlist', () => {
     renderCard('history')
     openMenu()
-    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.getByText('Save to playlist')).toBeInTheDocument()
     expect(screen.queryByText('Watched')).not.toBeInTheDocument()
     expect(screen.queryByText('Not interested')).not.toBeInTheDocument()
   })
 
-  // One variant for Watch later and for a playlist, because both are read-only
-  // mirrors of the YouTube account: the menu offers only what belongs to this
-  // library, and two variants would be two chances for them to drift apart.
+  // Watch later is still a read-only mirror of the YouTube account, so its
+  // cards offer only what belongs to this library. A *playlist* is no longer
+  // that — see the test below — and the two are separate variants now because
+  // the difference became real.
   it('a mirrored list offers Watched and Save, and nothing that edits it', () => {
     renderCard('fromYouTube')
     openMenu()
     expect(screen.getByText('Watched')).toBeInTheDocument()
-    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.getByText('Save to playlist')).toBeInTheDocument()
     expect(screen.queryByText('Watch later')).not.toBeInTheDocument()
-    expect(screen.queryByText('Add to playlist')).not.toBeInTheDocument()
     expect(screen.queryByText('Remove from playlist')).not.toBeInTheDocument()
   })
 
-  it('storage shows Save', () => {
+  // A row of a collection can be taken out of it. This is the entry that could
+  // not exist while the gateway had no writes, and the one thing a playlist
+  // card offers that a Watch later card must not.
+  it('a playlist row offers Remove from playlist', () => {
+    renderCard('playlist')
+    openMenu()
+    expect(screen.getByText('Remove from playlist')).toBeInTheDocument()
+    expect(screen.getByText('Save to playlist')).toBeInTheDocument()
+  })
+
+  it('storage shows Save to playlist', () => {
     renderCard('storage')
     openMenu()
-    expect(screen.getByText('Save')).toBeInTheDocument()
+    expect(screen.getByText('Save to playlist')).toBeInTheDocument()
     expect(screen.queryByText('Watched')).not.toBeInTheDocument()
     expect(screen.queryByText('Not interested')).not.toBeInTheDocument()
   })

@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { videoItemBleed, videoItemHover } from '@/features/catalog/ui/video-item-hover'
-import { Bookmark, BookmarkMinus, CheckCircle, EyeOff, MoreVertical } from 'lucide-react'
+import { Bookmark, BookmarkMinus, CheckCircle, EyeOff, ListX, MoreVertical } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {} from 'react-router-dom'
 import type { Video } from '../domain/video'
@@ -8,6 +8,7 @@ import { watchProgress } from '../domain/video'
 import {
   useMarkWatched,
   useNotInterested,
+  useSetInPlaylist,
   useSetPinned,
   useStreamPrefetch,
 } from '../application/queries'
@@ -19,6 +20,7 @@ import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
 import { useFormat } from '@/shared/lib/useFormat'
 import { useTranslation } from 'react-i18next'
+import { SaveToPlaylistDialog } from './SaveToPlaylistDialog'
 import { PageLink } from '@/shared/ui/PageLink'
 
 export type VideoCardVariant =
@@ -29,6 +31,14 @@ export type VideoCardVariant =
   // mirrors of the member's YouTube account, so a card in either offers exactly
   // the same things — and two variants would be two chances for them to drift.
   | 'fromYouTube'
+  /**
+   * A row of a playlist made or kept here, which can be taken out of it.
+   *
+   * Separate from `fromYouTube` because the difference is real now: Watch later
+   * is still a mirror nothing here may edit, and a playlist is a row in this
+   * household's own table.
+   */
+  | 'playlist'
   | 'history'
   | 'storage'
 
@@ -36,10 +46,13 @@ export type VideoCardVariant =
 export function VideoCard({
   video,
   variant = 'feed',
+  /** Which playlist this card is a row of, for the `playlist` variant's menu. */
+  playlistId = '',
   queueSearch = '',
 }: {
   video: Video
   variant?: VideoCardVariant
+  playlistId?: string
   /**
    * `?list=…` to append to this card's links, so opening the video plays the
    * list it came from rather than an unrelated recommendation. Empty means the
@@ -52,6 +65,9 @@ export function VideoCard({
   const progress = watchProgress(video)
   const { prefetch, cancel } = useStreamPrefetch()
   const [menuOpen, setMenuOpen] = useState(false)
+  // Owned by the card rather than by the menu: the menu closes the moment the
+  // entry is pressed, and a dialog rendered inside it would go with it.
+  const [saving, setSaving] = useState(false)
   const coarse = useCoarsePointer()
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -184,9 +200,27 @@ export function VideoCard({
           >
             <MoreVertical size={20} />
           </button>
-          {menuOpen && <CardMenu video={video} variant={variant} close={() => setMenuOpen(false)} />}
+          {menuOpen && (
+            <CardMenu
+              video={video}
+              variant={variant}
+              playlistId={playlistId}
+              close={() => setMenuOpen(false)}
+              openSave={() => setSaving(true)}
+            />
+          )}
         </div>
       </div>
+
+      {/* Outside the menu, and rendered by the card, so pressing the entry can
+          close the menu without taking the dialog with it. */}
+      {saving && (
+        <SaveToPlaylistDialog
+          videoId={video.id}
+          saved={Boolean(video.pinned)}
+          onClose={() => setSaving(false)}
+        />
+      )}
     </article>
   )
 }
@@ -229,15 +263,23 @@ export function VideoCardSkeleton() {
 function CardMenu({
   video,
   variant,
+  playlistId,
   close,
+  openSave,
 }: {
   video: Video
   variant: VideoCardVariant
+  playlistId: string
   close: () => void
+  /** Opens the collections dialog, which the card owns — see [VideoCard]. */
+  openSave: () => void
 }) {
   const { t } = useTranslation()
   const notInterested = useNotInterested()
   const markWatched = useMarkWatched()
+  const setInPlaylist = useSetInPlaylist()
+  // Still needed by the saved shelf's own card, which takes a video *off* the
+  // shelf — one bit, and the only place that is still the whole question.
   const setPinned = useSetPinned()
   const toast = useToast()
 
@@ -278,19 +320,23 @@ function CardMenu({
     </li>
   )
 
+  // "Save to playlist", whatever the answer to *is it already saved* is.
+  //
+  // It used to write one bit and say "Saved". A video already on the shelf can
+  // still be wanted in a collection, and a label that follows the bit says the
+  // question has been answered when it has not even been asked.
   const saveItem = (
     <li key="save">
       <button
         type="button"
         onClick={() => {
-          setPinned.mutate({ videoId: video.id, pinned: true })
-          toast(t('common.saved'))
+          openSave()
           close()
         }}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
       >
         <Bookmark size={16} />
-        {t('common.save')}
+        {t('playlists.saveTo')}
       </button>
     </li>
   )
@@ -315,10 +361,32 @@ function CardMenu({
   // Putting a video aside and keeping its bytes are two different intentions,
   // so they are two entries. Watch later is a note about this evening; Save is
   // an instruction to the eviction sweep.
-  // No "add to playlist" and no "remove from playlist". Watch later and the
-  // playlists are a read-only mirror of the member's YouTube account, refreshed
-  // on every account scan: an edit made here would be reverted by the next pass,
-  // which is worse than not offering it.
+  // Watch later is still absent, and that reason has not changed: it is a
+  // read-only mirror of the member's YouTube account, refreshed on every account
+  // scan, so an edit here would be reverted by the next pass. Playlists are not
+  // that any more — the gateway grew the writes, and "Save to playlist" above is
+  // the one entry that covers both the shelf and every collection.
+
+  // Removing really removes, and the row goes at once rather than after a
+  // refetch: this page *is* the playlist, so a video still in it that is not
+  // drawn is the screen lying about its own contents. The mutation invalidates
+  // the list behind it, which is what puts the truth back if the request failed.
+  const removeItem = (
+    <li key="remove">
+      <button
+        type="button"
+        onClick={() => {
+          setInPlaylist.mutate({ id: playlistId, videoId: video.id, member: false })
+          toast(t('playlists.removeFrom'))
+          close()
+        }}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 ease-out hover:bg-surface-hover"
+      >
+        <ListX size={16} />
+        {t('playlists.removeFrom')}
+      </button>
+    </li>
+  )
 
   switch (variant) {
     case 'continueWatching':
@@ -334,6 +402,9 @@ function CardMenu({
     // library: marking it watched, and keeping its bytes.
     case 'fromYouTube':
       items.push(watchedItem, saveItem)
+      break
+    case 'playlist':
+      items.push(saveItem, removeItem)
       break
     case 'history':
       items.push(saveItem)

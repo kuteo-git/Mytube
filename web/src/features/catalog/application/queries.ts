@@ -32,6 +32,28 @@ export function useFeed(topic: string) {
 }
 
 /**
+ * What the followed channels posted that this member has not watched.
+ *
+ * Asked on every visit to Home, not only when its chip is chosen: whether the
+ * chip exists at all is decided by whether this comes back empty, so the
+ * question has to be asked before anybody can press it. One request, two jobs —
+ * it draws the chip, and when the chip is the one selected it *is* the page.
+ *
+ * A shorter `staleTime` than most: the whole list is "what is new", and it goes
+ * out of date by being watched.
+ */
+export function useMissed() {
+  const me = useProfileScope()
+  return useInfiniteQuery({
+    queryKey: ['missed', me],
+    queryFn: ({ pageParam }) => repo.listMissed(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken || undefined,
+    staleTime: 60_000,
+  })
+}
+
+/**
  * What is on air, for this member.
  *
  * Refetched on a timer because it is the one list here that goes out of date on
@@ -452,11 +474,14 @@ export function useSaved() {
 
 // Playlists are a small list read whole, so a plain query rather than an
 // infinite one. The videos inside a playlist page, and that query is separate.
-export function usePlaylists() {
+export function usePlaylists(videoId?: string) {
   const me = useProfileScope()
   return useQuery({
-    queryKey: ['playlists', me],
-    queryFn: () => repo.listPlaylists(),
+    // The video is part of the key: the answer carries `containsVideo`, so the
+    // same list asked about two different videos is two different answers and
+    // must not share a cache entry.
+    queryKey: ['playlists', me, videoId ?? ''],
+    queryFn: () => repo.listPlaylists(videoId),
   })
 }
 
@@ -471,9 +496,65 @@ export function usePlaylist(id: string) {
   })
 }
 
-// No create, rename, delete, or add/remove hooks. Playlists and Watch later are
-// a read-only mirror of the member's YouTube account, refreshed on every account
-// scan — a write here would be reverted by the next pass.
+/**
+ * The four writes the database was always built for.
+ *
+ * They did not exist here because the gateway did not expose them: playlists
+ * were a read-only mirror of a YouTube account, and a write would have been
+ * undone by the next scan. That changed — the routes are real, they write to
+ * this household's own rows, and an imported playlist and one made here are the
+ * same kind of thing once it exists.
+ *
+ * Every one of them invalidates `['playlists']` **by prefix**, which catches the
+ * per-video entries the dialog reads as well as the bare list: a playlist made
+ * from a card is one the next card's dialog must also see.
+ */
+export function useCreatePlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ title }: { title: string }) => repo.createPlaylist(title),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['playlists'] }),
+  })
+}
+
+export function useRenamePlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      repo.updatePlaylist(id, title),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: ['playlists'] })
+      void queryClient.invalidateQueries({ queryKey: ['playlist', id] })
+    },
+  })
+}
+
+export function useDeletePlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => repo.deletePlaylist(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['playlists'] }),
+  })
+}
+
+/**
+ * Add and remove, as one hook with a direction.
+ *
+ * They are one gesture from the dialog's point of view — a tick going on or off
+ * — and splitting them would mean every caller choosing between two mutations
+ * from a boolean it already has.
+ */
+export function useSetInPlaylist() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, videoId, member }: { id: string; videoId: string; member: boolean }) =>
+      member ? repo.addToPlaylist(id, videoId) : repo.removeFromPlaylist(id, videoId),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: ['playlists'] })
+      void queryClient.invalidateQueries({ queryKey: ['playlist', id] })
+    },
+  })
+}
 
 // `enabled` exists for the playback queue, which calls this unconditionally —
 // hooks must be — but only wants the request when Watch later is the list being

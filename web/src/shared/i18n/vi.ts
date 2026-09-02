@@ -28,6 +28,8 @@ export const vi: Dictionary = {
     deleteSelf: 'Chuyển sang hồ sơ khác rồi mới xoá được hồ sơ này.',
     deleteLast: 'Đây là hồ sơ duy nhất. Thêm một hồ sơ khác rồi mới xoá được.',
     cancel: 'Huỷ',
+    create: 'Tạo',
+    rename: 'Đổi tên',
     save: 'Lưu',
     saved: 'Đã lưu',
     retry: 'Thử lại',
@@ -60,8 +62,23 @@ export const vi: Dictionary = {
     profile: 'Hồ sơ',
   },
 
+  playlists: {
+    saveTo: 'Lưu vào playlist',
+    newPlaylist: 'Playlist mới',
+    namePlaceholder: 'Tên',
+    count: '{{count}} video',
+    removeFrom: 'Bỏ khỏi playlist',
+    deleteTitle: 'Xoá playlist này?',
+    deleteDetail: 'Video vẫn ở trong thư viện; chỉ bộ sưu tập bị xoá.',
+    empty: 'Playlist này chưa có gì.',
+    emptyDetail: 'Dùng "Lưu vào playlist" ở bất kỳ video nào.',
+    noneYet: 'Chưa có playlist nào.',
+    noneYetDetail: 'Tạo từ một video bất kỳ, hoặc bằng nút ở trên.',
+  },
+
   chips: {
     all: 'Tất cả',
+    missed: 'Bỏ lỡ',
     live: 'Trực tiếp',
     scrollLeft: 'Cuộn danh mục sang trái',
     scrollRight: 'Cuộn danh mục sang phải',

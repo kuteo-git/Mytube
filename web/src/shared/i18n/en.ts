@@ -17,6 +17,8 @@ export const en = {
     deleteSelf: 'Switch to another profile before deleting this one.',
     deleteLast: 'This is the only profile. Add another before deleting it.',
     cancel: 'Cancel',
+    create: 'Create',
+    rename: 'Rename',
     save: 'Save',
     saved: 'Saved',
     retry: 'Retry',
@@ -49,8 +51,23 @@ export const en = {
     profile: 'Profile',
   },
 
+  playlists: {
+    saveTo: 'Save to playlist',
+    newPlaylist: 'New playlist',
+    namePlaceholder: 'Name',
+    count: '{{count}} videos',
+    removeFrom: 'Remove from playlist',
+    deleteTitle: 'Delete this playlist?',
+    deleteDetail: 'The videos stay in the library; only the collection goes.',
+    empty: 'Nothing in this playlist yet.',
+    emptyDetail: 'Use "Save to playlist" on any video.',
+    noneYet: 'No playlists yet.',
+    noneYetDetail: 'Make one from any video, or with the button above.',
+  },
+
   chips: {
     all: 'All',
+    missed: 'Missed',
     live: 'Live',
     scrollLeft: 'Scroll categories left',
     scrollRight: 'Scroll categories right',

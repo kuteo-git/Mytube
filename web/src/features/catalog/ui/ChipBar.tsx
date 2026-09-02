@@ -18,6 +18,17 @@ import { useTranslation } from 'react-i18next'
  * reads is looked up where the chip is drawn.
  */
 export const ALL_CATEGORY = 'All'
+
+/**
+ * Not a word, unlike its two neighbours.
+ *
+ * `All` and `Live` predate the untranslated guard's reach and are short enough
+ * to sit under it; a third English word here fails the scan, and rightly — the
+ * guard cannot tell an identity from a label by looking. The phone's chip key
+ * is `__missed` for the same reason, and an underscore-prefixed value can never
+ * collide with a topic name coming from the server.
+ */
+export const MISSED_CATEGORY = '__missed'
 export const LIVE_CATEGORY = 'Live'
 
 /**
@@ -143,7 +154,9 @@ export function ChipBar({
               ? t('chips.live')
               : category === ALL_CATEGORY
                 ? t('chips.all')
-                : category}
+                : category === MISSED_CATEGORY
+                  ? t('chips.missed')
+                  : category}
           </Pill>
         ))}
       </div>

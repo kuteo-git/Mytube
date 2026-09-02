@@ -167,6 +167,43 @@ func TestMissedGivesEveryChannelARowBeforeAnySecond(t *testing.T) {
 	}
 }
 
+// A Short is not something anybody misses, however popular.
+//
+// Read from catalog's flag, never from the duration: the feed's own check
+// records the measurement — 14- and 9-second videos are ordinary clips while
+// 40- and 59-second ones are Shorts.
+func TestMissedLeavesOutShorts(t *testing.T) {
+	now := time.Now()
+	features := []domain.VideoFeatures{
+		{VideoID: "upload", ChannelID: "c", PublishedAt: now.Add(-time.Hour), ViewCount: 10},
+		{
+			VideoID: "short", ChannelID: "c", PublishedAt: now.Add(-time.Hour),
+			ViewCount: 2_000_000, DurationSeconds: 45, IsShort: true,
+		},
+		// The other half of the rule: a short *video* that YouTube does not call
+		// a Short stays, so nothing here is deciding by length.
+		{
+			VideoID: "brief", ChannelID: "c", PublishedAt: now.Add(-time.Hour),
+			ViewCount: 20, DurationSeconds: 9,
+		},
+	}
+	r := missedRanker(features, missedProfile([]string{"c"}, nil), now)
+
+	page, err := r.GetMissed(context.Background(), "u", 0, 24, 0, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := missedIDs(t, page)
+	if len(got) != 2 {
+		t.Fatalf("got %v, want the two that are not Shorts", got)
+	}
+	for _, id := range got {
+		if id == "short" {
+			t.Errorf("a Short reached the list: %v", got)
+		}
+	}
+}
+
 // Among channels watched equally, the busier video leads.
 func TestMissedBreaksAffinityTiesOnViews(t *testing.T) {
 	now := time.Now()

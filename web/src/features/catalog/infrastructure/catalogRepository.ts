@@ -17,6 +17,17 @@ export interface CatalogRepository {
   listFeed(topic: string, pageToken?: string): Promise<Feed>
   /** Broadcasts on air now, from channels this member follows. */
   listLive(): Promise<Video[]>
+  /**
+   * New uploads from followed channels this member has not watched.
+   *
+   * A page like the feed's, from its own route rather than a filter on that
+   * one: the feed answers "what should this household see", which is a mix with
+   * a tenth of a page reserved for new uploads, and this answers "did I miss
+   * anything", which is a list that runs out. The window it looks back over is
+   * the server's, from its own config — nothing is sent from here, because a
+   * number the browser carries is one that needs a deploy to change.
+   */
+  listMissed(pageToken?: string): Promise<Feed>
   getVideo(id: string): Promise<Video>
   /**
    * The video, creating its catalog row first if it has none.
@@ -53,10 +64,25 @@ export interface CatalogRepository {
   listPinned(pageToken?: string): Promise<Feed>
   setPinned(videoId: string, pinned: boolean): Promise<void>
   /**
-   * The member's playlists, as their YouTube account has them. Read-only: this
-   * is a mirror refreshed on every account scan, so there is nothing to write.
+   * The member's playlists.
+   *
+   * Two sources, one list: those imported from a YouTube account by a scan, and
+   * those made here. **It is no longer read-only** — the gateway grew the four
+   * writes below, and this app grew the screens for them.
+   *
+   * A `videoId` also answers *which of them already hold that video*, on every
+   * row. That is one question with two halves and it is one call: a dialog
+   * cannot draw the ticks without the lists, and cannot draw the lists without
+   * knowing which are ticked.
    */
-  listPlaylists(): Promise<Playlist[]>
+  listPlaylists(videoId?: string): Promise<Playlist[]>
+  createPlaylist(title: string, description?: string): Promise<Playlist>
+  updatePlaylist(id: string, title: string, description?: string): Promise<void>
+  deletePlaylist(id: string): Promise<void>
+  /** Idempotent: adding what is already there is success, not a duplicate. */
+  addToPlaylist(id: string, videoId: string): Promise<void>
+  /** Idempotent the same way — removing what is not there is the outcome asked for. */
+  removeFromPlaylist(id: string, videoId: string): Promise<void>
   getPlaylist(id: string, pageToken?: string): Promise<{ playlist: Playlist; videos: Video[]; nextPageToken?: string }>
   /** The member's Watch later, from the same mirror. Read-only for the same reason. */
   listWatchLater(pageToken?: string): Promise<Feed>
@@ -370,6 +396,10 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<Feed>(`/feed${query({ topic: value, pageToken })}`)
   },
 
+  listMissed(pageToken) {
+    return request<Feed>(`/feed/missed${query({ pageToken })}`)
+  },
+
   listLive() {
     // No page token: "everything on air" is the whole promise, and the set is a
     // few dozen at the outside.
@@ -475,8 +505,42 @@ export const httpCatalogRepository: CatalogRepository = {
     })
   },
 
-  listPlaylists() {
-    return request<{ playlists: Playlist[] }>('/playlists').then((r) => r.playlists)
+  listPlaylists(videoId) {
+    return request<{ playlists: Playlist[] }>(`/playlists${query({ videoId })}`).then(
+      (r) => r.playlists,
+    )
+  },
+
+  createPlaylist(title, description) {
+    return request<Playlist>('/playlists', {
+      method: 'POST',
+      body: JSON.stringify({ title, description: description ?? '' }),
+    })
+  },
+
+  updatePlaylist(id, title, description) {
+    return request<void>(`/playlists/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title, description: description ?? '' }),
+    })
+  },
+
+  deletePlaylist(id) {
+    return request<void>(`/playlists/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  addToPlaylist(id, videoId) {
+    return request<void>(`/playlists/${encodeURIComponent(id)}/items`, {
+      method: 'POST',
+      body: JSON.stringify({ videoId }),
+    })
+  },
+
+  removeFromPlaylist(id, videoId) {
+    return request<void>(
+      `/playlists/${encodeURIComponent(id)}/items/${encodeURIComponent(videoId)}`,
+      { method: 'DELETE' },
+    )
   },
 
   getPlaylist(id, pageToken) {

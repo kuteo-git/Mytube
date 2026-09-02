@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { Bookmark, CheckCircle, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import {} from 'react-router-dom'
 import type { Video } from '@/features/catalog/domain/video'
-import { useSetPinned, useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
+import { useSetReaction, useSetSubscription } from '@/features/catalog/application/queries'
+import { SaveToPlaylistDialog } from '@/features/catalog/ui/SaveToPlaylistDialog'
 import { Avatar } from '@/shared/ui/primitives'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { useToast } from '@/shared/ui/toast'
@@ -15,6 +16,7 @@ import {
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
 import { useFormat } from '@/shared/lib/useFormat'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageLink } from '@/shared/ui/PageLink'
 
@@ -33,7 +35,7 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
   const reaction = video.userState?.reaction ?? 'NONE'
   const setReaction = useSetReaction(video.id)
   const setSubscription = useSetSubscription(video.channel.id)
-  const setPinned = useSetPinned()
+  const [saving, setSaving] = useState(false)
 
   // A share sheet where there is one, the clipboard where there is not.
   //
@@ -132,15 +134,29 @@ export function VideoActions({ video, likeCount }: { video: Video; likeCount: nu
         {/* No Watch later button. That list is a read-only mirror of the
             member's YouTube account, refreshed on every account scan, so a
             press here would be undone by the next pass. */}
+        {/* The bookmark asks *which* collection now.
+            It used to write one bit — keep this file when the disk fills — and
+            there was nowhere to say which list, so a household could not keep
+            music apart from news. The pill still lights from `pinned`, because
+            that is the bit it always showed; what changed is that pressing it
+            opens the question rather than answering it. */}
         <ActionPill
           icon={<Bookmark size={20} fill={video.pinned ? 'currentColor' : 'none'} />}
           label={video.pinned ? t('common.saved') : t('common.save')}
-          onClick={() => setPinned.mutate({ videoId: video.id, pinned: !video.pinned })}
+          onClick={() => setSaving(true)}
         />
 
         {/* No overflow menu. It opened nothing — a button that looks like a
             control and is not one is the single thing §5 forbids outright. */}
       </div>
+
+      {saving && (
+        <SaveToPlaylistDialog
+          videoId={video.id}
+          saved={video.pinned}
+          onClose={() => setSaving(false)}
+        />
+      )}
     </div>
   )
 }
