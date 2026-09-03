@@ -196,3 +196,40 @@ func TestWavDurationMissingDataChunk(t *testing.T) {
 		t.Fatal("a WAV with no data chunk has no duration")
 	}
 }
+
+// cueIndexAt decides where a pass begins, and getting it wrong is a viewer
+// hearing the wrong line first — so the edges are held here rather than
+// discovered on a phone.
+func TestCueIndexAtStartsInsideTheLineBeingSpoken(t *testing.T) {
+	cues := []vttCue{
+		{Start: 0, End: 2, Text: "one"},
+		{Start: 2, End: 4, Text: "two"},
+		{Start: 4, End: 6, Text: "three"},
+	}
+
+	// Sitting inside "two" wants "two", not the line after it.
+	if got := cueIndexAt(cues, 3); got != 1 {
+		t.Fatalf("inside the second cue: got %d, want 1", got)
+	}
+	// Exactly on a boundary is the cue that begins there.
+	if got := cueIndexAt(cues, 4); got != 2 {
+		t.Fatalf("on the third cue's start: got %d, want 2", got)
+	}
+	if got := cueIndexAt(cues, 0); got != 0 {
+		t.Fatalf("at the beginning: got %d, want 0", got)
+	}
+}
+
+func TestCueIndexAtPastTheEndAsksForTheWholeVideo(t *testing.T) {
+	cues := []vttCue{{Start: 0, End: 2, Text: "one"}}
+	// A stale position must not mean "narrate nothing".
+	if got := cueIndexAt(cues, 900); got != 0 {
+		t.Fatalf("past the end: got %d, want 0", got)
+	}
+}
+
+func TestCueIndexAtOnAnEmptyListIsZero(t *testing.T) {
+	if got := cueIndexAt(nil, 12); got != 0 {
+		t.Fatalf("no cues: got %d, want 0", got)
+	}
+}

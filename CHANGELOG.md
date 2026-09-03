@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.0.10 — 2026-09-03
+
+**A narration pass now begins where the viewer is.**
+
+Reported by comparing the two clients. In the browser, seeking to 1:20 and
+turning narration on translates and speaks from 1:20; `POST
+/api/videos/{id}/narration` ran cue 0 to the end and nothing else, so the mobile
+app's first spoken line was always the opening of a video the picture had long
+left behind. A pass takes minutes, and all of them were being spent on lines
+already gone past.
+
+- **`?from=<seconds>`**, absent meaning the beginning — every existing caller is
+  untouched.
+- **From there to the end, then back for the start.** Not a filter: the earlier
+  half is wanted by anybody who seeks backwards, and by then it is already paid
+  for.
+- **A start on a running pass retargets it** when the position has moved more
+  than 30 seconds, and does nothing when it has not. The threshold is here and
+  only here, so a client can ask on every seek without carrying a second rule
+  that can disagree with this one.
+- **Nothing is thrown away by a retarget.** Every translated and spoken line is
+  on disk and is skipped; what is abandoned is the order, not the work.
+- **The clips a retarget inherits are kept.** A client replaces its whole list
+  from each poll, so emptying them would silence a narration that is playing
+  correctly.
+- **A cancelled run can no longer write over its replacement.** It sits between
+  two cues when the cancel lands and would otherwise report the new pass idle;
+  each goroutine now checks a generation number before touching the registry.
+- **The manifest is sorted by start, one clip per cue.** A retargeted pass walks
+  the cues in a different order and some of them twice, and a client that buffers
+  the next clip by taking the first one after the playhead would otherwise fetch
+  the wrong file.
+
+No migrations.
+
 ## 0.0.9 — 2026-09-02
 
 **Narration was read one sentence ahead of the film**, and the batch translator

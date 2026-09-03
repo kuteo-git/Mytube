@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +48,13 @@ import (
 // full batch was measured at about twenty seconds, and twenty seconds of silence
 // after switching narration on reads as broken.
 const (
+	// How far a viewer must move before the pass is worth reordering.
+	//
+	// A seek of a few seconds is somebody catching a line again, and reordering
+	// for it would restart the sequence on every nudge of the bar. Half a minute
+	// is past anything that is not deliberately skipping.
+	narrationRetargetSeconds = 30.0
+
 	narrationFirstBatch = 3
 	narrationBatchSize  = 15
 	narrationContext    = 3
@@ -85,6 +94,18 @@ type narrationPass struct {
 	Clips  []narrationClip `json:"cues"`
 
 	cancel context.CancelFunc
+
+	// gen tells a goroutine whether it is still the pass.
+	//
+	// Retargeting cancels the running one and starts another over the *same*
+	// pass object, so the client keeps the clips it already has. The cancelled
+	// goroutine is still between cues when that happens, and without this it
+	// would report itself idle over its own replacement.
+	gen int
+
+	// startedAt is the position the current run began from, so asking again for
+	// the same place is not a reason to start over.
+	startedAt float64
 }
 
 type narrationRegistry struct {
@@ -109,24 +130,63 @@ func (g *Gateway) handleStartNarration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	from := narrationStartAt(r)
+
 	g.narration.mu.Lock()
-	existing := g.narration.passes[videoID]
-	if existing != nil && existing.Status == narrationRunning {
-		g.narration.mu.Unlock()
-		writeJSON(w, http.StatusAccepted, existing)
-		return
+	pass := g.narration.passes[videoID]
+	if pass != nil && pass.Status == narrationRunning {
+		// Already running from here. Pressing the switch twice, or a poll
+		// racing a start, must not begin the work again.
+		if math.Abs(pass.startedAt-from) < narrationRetargetSeconds {
+			g.narration.mu.Unlock()
+			writeJSON(w, http.StatusAccepted, pass)
+			return
+		}
+		// Somewhere else now: the viewer has seeked far enough that the order
+		// this pass is working in is the wrong order. Nothing is thrown away —
+		// every line already translated and spoken is on disk and is skipped —
+		// so what is abandoned is the sequence, not the work.
+		pass.cancel()
+	} else {
+		pass = &narrationPass{}
+		g.narration.passes[videoID] = pass
 	}
 
-	pass := &narrationPass{Status: narrationRunning}
+	pass.Status = narrationRunning
+	pass.Error = ""
+	// Done counts this run, which walks every cue again from a new place.
+	// `Clips` deliberately does not reset: the client replaces its list from
+	// every poll, and emptying it here would silence a narration that is
+	// already playing correctly.
+	pass.Done = 0
+	pass.startedAt = from
+	pass.gen++
+	gen := pass.gen
+
 	// Detached from the request's context, deliberately. The request is about to
 	// return 202; a pass tied to it would be cancelled the instant it did.
 	ctx, cancel := context.WithCancel(context.Background())
 	pass.cancel = cancel
-	g.narration.passes[videoID] = pass
 	g.narration.mu.Unlock()
 
-	go g.runNarration(ctx, videoID)
+	go g.runNarration(ctx, videoID, gen, from)
 	writeJSON(w, http.StatusAccepted, pass)
+}
+
+// narrationStartAt reads where the viewer is, in seconds.
+//
+// Absent or unreadable means the beginning, which is what every caller sent
+// before this existed.
+func narrationStartAt(r *http.Request) float64 {
+	raw := r.URL.Query().Get("from")
+	if raw == "" {
+		return 0
+	}
+	at, err := strconv.ParseFloat(raw, 64)
+	if err != nil || at < 0 {
+		return 0
+	}
+	return at
 }
 
 // handleGetNarration reports what is ready so far.
@@ -175,23 +235,23 @@ func (g *Gateway) handleStopNarration(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (g *Gateway) runNarration(ctx context.Context, videoID string) {
+func (g *Gateway) runNarration(ctx context.Context, videoID string, gen int, fromSeconds float64) {
 	start := time.Now()
 
 	cues, err := g.narrationCues(videoID)
 	if err != nil {
-		g.failNarration(videoID, err.Error())
+		g.failNarration(videoID, gen, err.Error())
 		return
 	}
 	if len(cues) == 0 {
 		// Not a failure. A video with no captions has nothing to narrate, and
 		// saying "failed" would send somebody looking for a fault.
-		g.finishNarration(videoID, narrationDone)
+		g.finishNarration(videoID, gen, narrationDone)
 		return
 	}
 
 	g.narration.mu.Lock()
-	if pass := g.narration.passes[videoID]; pass != nil {
+	if pass := g.narration.passes[videoID]; pass != nil && pass.gen == gen {
 		pass.Total = len(cues)
 	}
 	g.narration.mu.Unlock()
@@ -201,7 +261,7 @@ func (g *Gateway) runNarration(ctx context.Context, videoID string) {
 		// Refused rather than attempted. Translating into a partition named
 		// after nothing is worse than a cold cache: the answers land somewhere
 		// they will later be read back as another model's work.
-		g.failNarration(videoID, "no translation model configured")
+		g.failNarration(videoID, gen, "no translation model configured")
 		return
 	}
 	partition := "omniroute:" + cfg.Model
@@ -213,33 +273,88 @@ func (g *Gateway) runNarration(ctx context.Context, videoID string) {
 
 	voice := loadTTSConfig(g.ttsConfigPath()).Voice
 
-	for i := 0; i < len(cues); {
+	// From where the viewer is, then back to fill in the start.
+	//
+	// A pass takes minutes and somebody who has seeked to 1:20 is waiting for
+	// 1:20 — running from zero spends all of it on lines they have already gone
+	// past, and the first thing they hear is a voice reading the opening while
+	// the picture is somewhere else entirely. This is what the web app does, and
+	// what this endpoint did not.
+	//
+	// The earlier half is not abandoned: seeking backwards afterwards, or
+	// watching it again tomorrow, wants those lines, and they are already paid
+	// for by the time anybody looks.
+	first := cueIndexAt(cues, fromSeconds)
+	if !g.narrateRange(ctx, videoID, gen, cues, first, len(cues), translations, voice, partition) {
+		return
+	}
+	if !g.narrateRange(ctx, videoID, gen, cues, 0, first, translations, voice, partition) {
+		return
+	}
+
+	g.finishNarration(videoID, gen, narrationDone)
+	g.logger.Info("narration pass", "video", videoID, "cues", len(cues),
+		"seconds", int(time.Since(start).Seconds()))
+}
+
+// cueIndexAt is the first cue that has not finished by this moment.
+//
+// Not the nearest cue: a viewer sitting inside a line wants that line spoken,
+// not the one after it. Past the end of the video it answers 0, so a stale
+// position asks for the whole thing from the start rather than for nothing.
+func cueIndexAt(cues []vttCue, seconds float64) int {
+	if seconds <= 0 {
+		return 0
+	}
+	for i, cue := range cues {
+		if slotFor(cues, i)+cue.Start > seconds {
+			return i
+		}
+	}
+	return 0
+}
+
+// narrateRange translates and speaks cues[from:to], in batches.
+//
+// Reports whether it finished. A cancelled pass has already been recorded as
+// idle by the time this answers false, so the caller stops rather than deciding
+// anything.
+func (g *Gateway) narrateRange(
+	ctx context.Context,
+	videoID string,
+	gen int,
+	cues []vttCue,
+	from, to int,
+	translations map[string]string,
+	voice, partition string,
+) bool {
+	for i := from; i < to; {
 		if ctx.Err() != nil {
-			g.finishNarration(videoID, narrationIdle)
-			return
+			g.finishNarration(videoID, gen, narrationIdle)
+			return false
 		}
 
 		size := narrationBatchSize
-		if i == 0 {
+		// A small first batch so the first clips arrive in seconds rather than
+		// after a full batch — and it is the first batch *of this range*,
+		// because that is the one somebody is waiting on.
+		if i == from {
 			size = narrationFirstBatch
 		}
-		end := min(i+size, len(cues))
+		end := min(i+size, to)
 
 		g.translateInto(ctx, cues[i:end], cues, i, translations, videoID, partition)
 
 		for k := i; k < end; k++ {
 			if ctx.Err() != nil {
-				g.finishNarration(videoID, narrationIdle)
-				return
+				g.finishNarration(videoID, gen, narrationIdle)
+				return false
 			}
-			g.speakCue(ctx, videoID, cues, k, translations, voice)
+			g.speakCue(ctx, videoID, gen, cues, k, translations, voice)
 		}
 		i = end
 	}
-
-	g.finishNarration(videoID, narrationDone)
-	g.logger.Info("narration pass", "video", videoID, "cues", len(cues),
-		"seconds", int(time.Since(start).Seconds()))
+	return true
 }
 
 // narrationCues reads the video's caption file and turns it into lines.
@@ -385,12 +500,13 @@ func slotFor(cues []vttCue, i int) float64 {
 func (g *Gateway) speakCue(
 	ctx context.Context,
 	videoID string,
+	gen int,
 	cues []vttCue,
 	i int,
 	translations map[string]string,
 	voice string,
 ) {
-	defer g.advanceNarration(videoID)
+	defer g.advanceNarration(videoID, gen)
 
 	line := translations[cues[i].Text]
 	if line == "" {
@@ -450,7 +566,7 @@ func (g *Gateway) speakCue(
 		}
 	}
 
-	g.addNarrationClip(videoID, narrationClip{
+	g.addNarrationClip(videoID, gen, narrationClip{
 		StartSeconds: cues[i].Start,
 		// The slot, not the audio's own length. It is what the client uses to
 		// duck the video's sound, and ducking has to end when the line's time
@@ -462,36 +578,68 @@ func (g *Gateway) speakCue(
 	})
 }
 
-func (g *Gateway) addNarrationClip(videoID string, clip narrationClip) {
-	g.narration.mu.Lock()
-	defer g.narration.mu.Unlock()
-	if pass := g.narration.passes[videoID]; pass != nil {
-		pass.Clips = append(pass.Clips, clip)
+// current is the pass this goroutine is still allowed to write to.
+//
+// Nil once it has been retargeted: a cancelled run is somewhere between two
+// cues when that happens, and every write below would otherwise land on its
+// replacement. Callers must hold the lock.
+func (g *Gateway) current(videoID string, gen int) *narrationPass {
+	pass := g.narration.passes[videoID]
+	if pass == nil || pass.gen != gen {
+		return nil
 	}
+	return pass
 }
 
-func (g *Gateway) advanceNarration(videoID string) {
+// addNarrationClip records one spoken line, in order and at most once.
+//
+// Sorted by start rather than appended, and replacing a clip that already
+// covers this moment. A retargeted pass walks the cues in a different order and
+// walks some of them twice, and the client reads this list two ways: `clipAt`
+// scans it for the moment now, which does not care, and `nextClipAfter` takes
+// the *first* clip beginning after the playhead in order to buffer it — which
+// on an unsorted list buffers the wrong file.
+func (g *Gateway) addNarrationClip(videoID string, gen int, clip narrationClip) {
 	g.narration.mu.Lock()
 	defer g.narration.mu.Unlock()
-	if pass := g.narration.passes[videoID]; pass != nil {
+	pass := g.current(videoID, gen)
+	if pass == nil {
+		return
+	}
+	at := sort.Search(len(pass.Clips), func(i int) bool {
+		return pass.Clips[i].StartSeconds >= clip.StartSeconds
+	})
+	if at < len(pass.Clips) && pass.Clips[at].StartSeconds == clip.StartSeconds {
+		pass.Clips[at] = clip
+		return
+	}
+	pass.Clips = append(pass.Clips, narrationClip{})
+	copy(pass.Clips[at+1:], pass.Clips[at:])
+	pass.Clips[at] = clip
+}
+
+func (g *Gateway) advanceNarration(videoID string, gen int) {
+	g.narration.mu.Lock()
+	defer g.narration.mu.Unlock()
+	if pass := g.current(videoID, gen); pass != nil {
 		pass.Done++
 	}
 }
 
-func (g *Gateway) failNarration(videoID, reason string) {
+func (g *Gateway) failNarration(videoID string, gen int, reason string) {
 	g.narration.mu.Lock()
 	defer g.narration.mu.Unlock()
-	if pass := g.narration.passes[videoID]; pass != nil {
+	if pass := g.current(videoID, gen); pass != nil {
 		pass.Status = narrationFailed
 		pass.Error = reason
 	}
 	g.logger.Warn("narration pass", "video", videoID, "error", reason)
 }
 
-func (g *Gateway) finishNarration(videoID string, status narrationStatus) {
+func (g *Gateway) finishNarration(videoID string, gen int, status narrationStatus) {
 	g.narration.mu.Lock()
 	defer g.narration.mu.Unlock()
-	if pass := g.narration.passes[videoID]; pass != nil {
+	if pass := g.current(videoID, gen); pass != nil {
 		pass.Status = status
 	}
 }
