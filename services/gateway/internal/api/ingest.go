@@ -117,6 +117,9 @@ type streamDTO struct {
 	//
 	// Only meaningful beside `Live`.
 	LiveCaptions bool `json:"liveCaptions,omitempty"`
+	// The language of those captions, so a client can name the track it is
+	// offering rather than calling it "Subtitles".
+	LiveCaptionsLang string `json:"liveCaptionsLang,omitempty"`
 	// The downloaded file. Present only once it is on disk; the best source
 	// whenever it is there.
 	Local *sourceDTO `json:"local,omitempty"`
@@ -639,9 +642,10 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		// A failure here is not a failure of the stream: the video plays and
 		// the narration control is simply not offered, which is the honest
 		// answer to a question that could not be asked.
-		captions := false
+		captions, captionsLang := false, ""
 		if live, err := g.resolveLive(r.Context(), v.GetSourceUrl()); err == nil {
 			captions = live.GetCaptionsUrl() != ""
+			captionsLang = live.GetCaptionsLang()
 		} else {
 			g.logger.Warn("live captions", "video", videoID, "error", err)
 		}
@@ -649,7 +653,8 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		g.logger.Info("stream offered", "video", videoID, "tier", "live",
 			"captions", captions)
 		writeJSON(w, http.StatusOK, streamDTO{
-			LiveCaptions: captions,
+			LiveCaptions:     captions,
+			LiveCaptionsLang: captionsLang,
 			Live: &sourceDTO{
 				URL:      "/api/live/" + url.PathEscape(videoID) + "/master.m3u8",
 				MimeType: "application/vnd.apple.mpegurl",
