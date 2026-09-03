@@ -58,15 +58,13 @@ func (g *Gateway) handleLiveMaster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	live, err := g.ingest.ResolveLive(ctx, connect.NewRequest(&ingestv1.ResolveLiveRequest{
-		Url: video.Msg.GetVideo().GetSourceUrl(),
-	}))
+	live, err := g.resolveLive(ctx, video.Msg.GetVideo().GetSourceUrl())
 	if err != nil {
 		g.logger.Warn("resolve live", "video", videoID, "error", err)
 		http.Error(w, "cannot resolve broadcast", http.StatusBadGateway)
 		return
 	}
-	if !live.Msg.GetIsLive() {
+	if !live.GetIsLive() {
 		// Not an error, and not this route's business: a finished broadcast is
 		// an ordinary video and /stream already knows what to do with one.
 		http.Error(w, "not broadcasting", http.StatusNotFound)
@@ -75,7 +73,7 @@ func (g *Gateway) handleLiveMaster(w http.ResponseWriter, r *http.Request) {
 
 	var audio *ingestv1.LiveRendition
 	video480 := make([]*ingestv1.LiveRendition, 0, 4)
-	for _, rend := range live.Msg.GetRenditions() {
+	for _, rend := range live.GetRenditions() {
 		if rend.GetAudioOnly() {
 			if audio == nil {
 				audio = rend

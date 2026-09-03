@@ -199,6 +199,19 @@ message LiveRendition {
 message ResolveLiveResponse {
   bool is_live = 1;
   repeated LiveRendition renditions = 2;
+
+  // The broadcast's live caption feed, empty when it publishes none.
+  //
+  // Not every stream has one: measured while three were on air, Al Jazeera
+  // English carried an `en` automatic track and Sky News carried nothing. So
+  // this is what lets a client draw a narration control for the first and omit
+  // it for the second, rather than offering a button that fails on press.
+  //
+  // It is a rolling HLS playlist rather than a file — five-second segments,
+  // each its own small WebVTT — and it costs nothing to report, because
+  // ResolveLive already parses the `--dump-json` this comes out of.
+  string captions_url = 3;
+  string captions_lang = 4;
 }
 
 message ResolveChannelRequest {

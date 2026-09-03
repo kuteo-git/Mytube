@@ -415,6 +415,7 @@ func (s *Server) ResolveLive(ctx context.Context, req *connect.Request[ingestv1.
 	}
 	return connect.NewResponse(&ingestv1.ResolveLiveResponse{
 		IsLive: live.IsLive, Renditions: out,
+		CaptionsUrl: live.CaptionsURL, CaptionsLang: live.CaptionsLang,
 	}), nil
 }
 
