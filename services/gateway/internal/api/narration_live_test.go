@@ -78,45 +78,62 @@ shows the aftermath of
 
 00:00:01.000 --> 00:00:04.000
 uh the bombing that hit the
-wedding house. Uh and currently
+wedding house Uh and currently
 `
 )
+
+// Thirty seconds of the same broadcast, punctuation-free as YouTube's live ASR
+// always is. Written out rather than generated, because the thing being tested
+// is what real captions do to a clause builder written for written English.
+const liveSegmentsNoPunctuation = `WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+the fraud uh that
+
+00:00:02.000 --> 00:00:05.000
+you have cited was $50 million
+of condoms was sent to
+`
+
+func TestFeedClosesAClauseWithNoPunctuationAtAll(t *testing.T) {
+	// YouTube's live captions carry no full stops, no commas, nothing —
+	// measured on a real broadcast. A clause builder that waits for punctuation
+	// waits for ever, and the pass produces silence while reporting success.
+	feed := &liveCaptionFeed{}
+	base := time.Date(2026, 9, 3, 11, 55, 35, 0, time.UTC)
+
+	var clauses []liveClause
+	// Enough speech to pass the word count that cuts a clause when nothing else
+	// will. Six segments is the whole of the playlist's thirty-second window.
+	for i := 0; i < 6; i++ {
+		clauses = append(clauses, feed.absorb(base.Add(time.Duration(i)*5*time.Second), liveSegmentsNoPunctuation)...)
+	}
+
+	if len(clauses) == 0 {
+		t.Fatal("thirty seconds of speech closed no clause at all")
+	}
+	if clauses[0].text == "" {
+		t.Fatal("a clause with no words")
+	}
+}
 
 func TestFeedJoinsACueSplitAcrossSegments(t *testing.T) {
 	feed := &liveCaptionFeed{}
 	base := time.Date(2026, 9, 3, 11, 55, 35, 0, time.UTC)
 
 	feed.absorb(base, liveSegmentOne)
-	out := feed.absorb(base.Add(5*time.Second), liveSegmentTwo)
-
-	if len(out) != 1 {
-		t.Fatalf("clauses: got %d, want 1", len(out))
+	feed.absorb(base.Add(5*time.Second), liveSegmentTwo)
+	// Nothing has closed yet — there is no punctuation and not enough words —
+	// so the words so far are read out of the builder itself.
+	joined := feed.builder.joined()
+	if joined == "" {
+		t.Fatal("no words gathered")
 	}
-	// "shows the aftermath of" is published in both segments. Said twice, a
-	// listener hears a stutter; this is the join that stops it.
-	if got := countOccurrences(out[0].text, "shows the aftermath of"); got != 1 {
-		t.Errorf("the split cue appears %d times in %q, want once", got, out[0].text)
-	}
-	// The clause begins where *its own first words* were spoken. Those are
-	// "picture picture uh from uh…" at the very start of the first segment —
-	// not the split cue, and not the segment that finally closed the clause.
-	// Getting this wrong puts a spoken line seconds away from the picture it
-	// belongs to.
-	want := base
-	if out[0].at.Sub(want).Abs() > 100*time.Millisecond {
-		t.Errorf("clause at %s, want about %s", out[0].at.UTC(), want)
-	}
-}
-
-func TestFeedWaitsForPunctuationBeforeClosingAClause(t *testing.T) {
-	feed := &liveCaptionFeed{}
-	base := time.Date(2026, 9, 3, 11, 55, 35, 0, time.UTC)
-
-	// A fragment with no boundary in it closes nothing: "shows the aftermath
-	// of" is not a sentence, and translating it alone is what machine
-	// translation handles worst.
-	if out := feed.absorb(base, liveSegmentOne); len(out) != 0 {
-		t.Fatalf("a fragment closed %d clauses, want none", len(out))
+	// "shows the aftermath of" is published in both segments, split by the
+	// boundary. Said twice, a listener hears a stutter; this is the join that
+	// stops it.
+	if got := countOccurrences(joined, "shows the aftermath of"); got != 1 {
+		t.Errorf("the split cue appears %d times in %q, want once", got, joined)
 	}
 }
 

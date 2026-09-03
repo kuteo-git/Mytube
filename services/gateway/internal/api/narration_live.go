@@ -125,6 +125,11 @@ func (g *Gateway) runLiveNarration(
 			failures = 0
 			pending = append(pending, fresh...)
 		}
+		if err != nil {
+			g.logger.Warn("live captions poll", "video", videoID, "error", err)
+		}
+		g.logger.Info("live captions", "video", videoID,
+			"seq", feed.lastSequence, "fresh", len(fresh), "pending", len(pending))
 
 		pending = g.speakSettled(ctx, videoID, gen, pending, translations, voice, partition)
 
@@ -149,7 +154,23 @@ func (g *Gateway) speakSettled(
 	translations map[string]string,
 	voice, partition string,
 ) []liveClause {
-	for len(pending) >= 2 {
+	// Everything already too late goes first, in one sweep and without a
+	// request. Reaching a stale line only after translating the ones before it
+	// is how a pass that has fallen behind stays behind.
+	kept := pending[:0]
+	for _, clause := range pending {
+		if time.Since(clause.at) > liveStaleAfter {
+			g.advanceNarration(videoID, gen)
+			continue
+		}
+		kept = append(kept, clause)
+	}
+	pending = kept
+
+	// At most one line per poll. Translation and speech are the slow half of
+	// this, and doing all of a backlog before looking at the feed again lets
+	// the feed run away — the poll is what keeps the two in step.
+	for spoken := 0; spoken < 1 && len(pending) >= 2; spoken++ {
 		if ctx.Err() != nil {
 			return pending
 		}
@@ -242,6 +263,18 @@ func (g *Gateway) readLiveCaptions(
 	}
 
 	segments := parseLivePlaylist(string(raw))
+
+	// The first playlist places the feed at the live edge rather than being
+	// read. See [liveCaptionFeed.started]: a caption playlist can carry hours.
+	if !feed.started {
+		feed.started = true
+		if n := len(segments); n > 0 {
+			at := max(0, n-1-liveEdgeLookback)
+			feed.lastSequence = segments[at].sequence
+		}
+		return nil, nil
+	}
+
 	var out []liveClause
 	for _, seg := range segments {
 		if seg.sequence <= feed.lastSequence {

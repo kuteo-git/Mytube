@@ -9,6 +9,13 @@ import (
 
 var errLivePlaylist = errors.New("caption playlist refused")
 
+// How far back from the live edge a pass begins.
+//
+// Two segments, about ten seconds: enough that the first clause has a
+// predecessor to be joined to, and short enough that nothing is spoken about a
+// picture already gone.
+const liveEdgeLookback = 2
+
 // liveSegment is one entry of the caption playlist, with the wall clock it
 // begins at.
 type liveSegment struct {
@@ -92,6 +99,19 @@ func parseLivePlaylist(raw string) []liveSegment {
 // finished yet.
 type liveCaptionFeed struct {
 	lastSequence int
+
+	// started is false until the first playlist has been seen.
+	//
+	// A caption playlist is not a thirty-second window. Measured on a real
+	// broadcast it listed **2880 segments** — four hours of DVR — so a feed
+	// that begins by reading everything it is offered begins four hours behind
+	// the picture, and then spends the LLM and the synthesiser catching up on
+	// speech nobody is listening to. The first playlist is therefore used to
+	// find the live edge and nothing else.
+	//
+	// This is the same lesson as a recorded pass starting where the viewer is
+	// rather than at zero, arriving from the other direction.
+	started bool
 
 	// builder gathers word groups into clauses on punctuation, exactly as the
 	// recorded path does. Live captions arrive as fragments — "shows the
