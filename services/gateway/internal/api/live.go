@@ -92,14 +92,41 @@ func (g *Gateway) handleLiveMaster(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b,
 		"#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio\",DEFAULT=YES,AUTOSELECT=YES,URI=%q\n",
 		livePlaylistURL(videoID, audio.GetUrl()))
+	// The broadcast's own captions, when it publishes any.
+	//
+	// YouTube offers them as one more media playlist and names them nowhere;
+	// this master is the only place the picture, the sound and the words are
+	// described together, so it is where they are joined. Nothing on the client
+	// changes — a player draws its own CC control off this.
+	//
+	// The words are the broadcast's, untranslated. Narration reads the same
+	// feed and does something else with it entirely: this hands the player text
+	// to draw, that one translates and speaks. One source, two paths.
+	subtitles := ""
+	if url := live.GetCaptionsUrl(); url != "" {
+		subtitles = ",SUBTITLES=\"subs\""
+		lang := live.GetCaptionsLang()
+		if lang == "" {
+			lang = "en"
+		}
+		// AUTOSELECT without DEFAULT: a viewer who has asked their player for
+		// captions gets them, and one who has not is not given subtitles
+		// nobody switched on — the rule the recorded ladder already follows by
+		// refusing SELECTION_FLAG_DEFAULT.
+		fmt.Fprintf(&b,
+			"#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=%q,LANGUAGE=%q,"+
+				"DEFAULT=NO,AUTOSELECT=YES,URI=%q\n",
+			strings.ToUpper(lang), lang, livePlaylistURL(videoID, url))
+	}
+
 	for _, rend := range video480 {
 		// CODECS carries the picture only. yt-dlp leaves the sound's codec
 		// blank on YouTube's HLS audio playlists, and a guessed value in this
 		// attribute is worse than a missing one — a player reads it to decide
 		// whether it can play the stream before fetching a byte.
-		fmt.Fprintf(&b, "#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS=%q,RESOLUTION=%dx%d,AUDIO=\"audio\"\n",
+		fmt.Fprintf(&b, "#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS=%q,RESOLUTION=%dx%d,AUDIO=\"audio\"%s\n",
 			rend.GetBitrate()+audio.GetBitrate(), rend.GetCodec(),
-			rend.GetWidth(), rend.GetHeight())
+			rend.GetWidth(), rend.GetHeight(), subtitles)
 		b.WriteString(livePlaylistURL(videoID, rend.GetUrl()) + "\n")
 	}
 
