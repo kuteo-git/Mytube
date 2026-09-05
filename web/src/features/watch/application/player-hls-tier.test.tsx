@@ -45,7 +45,18 @@ vi.mock('hls.js', () => {
       ERROR: 'hlsError',
       MANIFEST_PARSED: 'hlsManifest',
       LEVEL_SWITCHED: 'hlsLevelSwitched',
+      SUBTITLE_TRACKS_UPDATED: 'hlsSubtitleTracksUpdated',
     }
+    // The caption renditions, which for these videos is none.
+    //
+    // Present rather than omitted because the player asks the library for them
+    // now: a broadcast's captions live inside the master playlist, so selecting
+    // one is a call into hls.js rather than a `<track>` element. A mock missing
+    // the property does not model a library that always has it, and the four
+    // quality tests failed on `undefined.length` before it was added.
+    subtitleTracks: Array<{ lang?: string; name?: string }> = []
+    subtitleTrack = -1
+    subtitleDisplay = false
     // The ladder the server resolved for this video, highest first. Seven rungs,
     // matching ingest's `maxRenditions`, so what is under test is the menu the
     // household actually gets — including the 360 and 240 that exist for ABR and

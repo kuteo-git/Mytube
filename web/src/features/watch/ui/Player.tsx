@@ -31,6 +31,10 @@ import {
   tierLabel as labelForTier,
 } from '@/features/watch/application/player-source'
 import {
+  captionTracksFor,
+  isManifestTrack,
+} from '@/features/watch/application/caption-tracks'
+import {
   attachHLS,
   type HLSAttachment,
   hlsCapabilities,
@@ -300,6 +304,13 @@ function useAttachedHLS(
   ref: React.RefObject<HTMLVideoElement | null>,
   src: string | undefined,
   height: number | undefined,
+  /**
+   * The manifest caption language to show, or undefined for none.
+   *
+   * Only a broadcast ever passes one: a recorded video's captions are `<track>`
+   * children and never reach the library. @see captionTracksFor
+   */
+  captionLanguage: string | undefined,
 ): { levels: number[]; playing: number | undefined } {
   const attachment = useRef<HLSAttachment | undefined>(undefined)
   // What the ladder turned out to be, and which rung is on screen. State rather
@@ -327,6 +338,7 @@ function useAttachedHLS(
       // Apply whatever was already chosen. The viewer may have pinned a height
       // on the previous video, and the menu is read before this resolves.
       handle.selectHeight(heightRef.current)
+      handle.selectCaptions(captionsRef.current)
       handle.onLevels(setLevels)
       handle.onLevelSwitched(setPlaying)
     })
@@ -353,6 +365,16 @@ function useAttachedHLS(
   useEffect(() => {
     attachment.current?.selectHeight(height)
   }, [height])
+
+  // Held in a ref for the reason `heightRef` is: turning captions on must not
+  // tear the attachment down and rebuild it, which would drop the buffer and
+  // restart the broadcast to show a line of text.
+  const captionsRef = useRef(captionLanguage)
+  captionsRef.current = captionLanguage
+
+  useEffect(() => {
+    attachment.current?.selectCaptions(captionLanguage)
+  }, [captionLanguage])
 
   return { levels, playing }
 }
@@ -806,7 +828,23 @@ export function Player({
   const playable = Boolean(frontSrc) && !loadFailed
   // Captions no longer wait for the media file: ingest publishes them ahead of
   // the transfer, precisely so they are usable during upstream playback.
-  const captionsAvailable = subtitles.length > 0
+  // What this video can actually offer, which for a broadcast is not what is on
+  // disk. The gateway names an `EXT-X-MEDIA:TYPE=SUBTITLES` rendition in the
+  // live master it writes, and hls.js has parsed it long before anything here
+  // asks — the fault was that the CC control is built from `subtitles`, which a
+  // broadcast never fills, so a stream with captions offered none.
+  const captionTracks = captionTracksFor(subtitles, {
+    available: sources?.liveCaptions,
+    language: sources?.liveCaptionsLang,
+  })
+  const captionsAvailable = captionTracks.length > 0
+  // The chosen track when it is one the *player* renders rather than one this
+  // app mounts. Undefined for every recorded video, and for a broadcast with
+  // captions switched off.
+  const manifestCaptions =
+    captions !== null && captionTracks.some((t) => t.language === captions && isManifestTrack(t))
+      ? captions
+      : undefined
   // Narration is available when there are Vietnamese subtitles. We don't know
   // until the <track> elements load, so we check via hasVietnameseSubs().
   // Narration is available when there are Vietnamese or English subtitles.
@@ -1344,8 +1382,8 @@ export function Player({
   // The height is what the quality menu chose, or undefined for automatic.
   // Changing it moves the ladder without reloading anything: hls.js switches
   // rendition at the next segment boundary.
-  const hlsA = useAttachedHLS(videoARef, srcA, pinnedHeight)
-  const hlsB = useAttachedHLS(videoBRef, srcB, pinnedHeight)
+  const hlsA = useAttachedHLS(videoARef, srcA, pinnedHeight, manifestCaptions)
+  const hlsB = useAttachedHLS(videoBRef, srcB, pinnedHeight, manifestCaptions)
 
   // The ladder of the layer the viewer is actually looking at. Both layers
   // report, and during a handover they are playing different things — reading
@@ -1893,7 +1931,11 @@ export function Player({
   // is what decides if the setting appears at all. A row reading "Off" beside
   // nothing to turn on is a dead control — which is what a video with no
   // captions used to be given.
-  const captionOptions = subtitleOptions(subtitles)
+  // Built from what this video offers, not from what is on disk — a broadcast's
+  // only track is in the manifest, and the gear's subtitle rows are the second
+  // place that list is read. Missing it here would leave the CC button working
+  // and the setting beside it empty, which is worse than neither.
+  const captionOptions = subtitleOptions(captionTracks)
 
   const subtitleRows =
     captionOptions.length > 0 ? (
@@ -2895,7 +2937,10 @@ export function Player({
                 }}
               >
                 {captionsAvailable &&
-                  subtitles.map((track) => (
+                  // Only the ones with a file behind them. A manifest track has
+                  // no URL and mounting a `<track src="">` for it would ask the
+                  // browser to fetch the page itself.
+                  captionTracks.filter((t) => !isManifestTrack(t)).map((track) => (
                     <track
                       key={track.language}
                       kind="subtitles"
@@ -3102,7 +3147,7 @@ export function Player({
               The corner player has no gear, so it keeps its button. */}
           {captionsAvailable && !coarse && variant !== 'full' && (
             <CaptionMenu
-              tracks={subtitles}
+              tracks={captionTracks}
               active={captions}
               onSelect={setCaptions}
               onOpenChange={trackMenu}
