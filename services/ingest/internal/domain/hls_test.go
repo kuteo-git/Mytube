@@ -184,6 +184,29 @@ func TestMasterPlaylistOffersOneAudioGroupForEveryRendition(t *testing.T) {
 	}
 }
 
+// A master that says nothing about closed captions is a master a player may
+// invent them for.
+//
+// Measured on the iOS client: with no CLOSED-CAPTIONS attribute, AVFoundation
+// assumes CEA-608 captions might be buried in the video and reports a legible
+// media selection group holding one option — `type=clcp, tag=nil, name=CC`.
+// The app read that as "this video's captions are the player's to draw" and
+// stopped fetching the .vtt beside the file, so every recorded video showed a
+// lit CC button over a bare picture. The client no longer believes an invented
+// track, and this says the true thing on the wire as well: there are none.
+func TestMasterPlaylistDeniesInBandClosedCaptions(t *testing.T) {
+	got := MasterPlaylist([]Rendition{
+		{URI: "v720.m3u8", Codecs: "avc1.4d401f", Bandwidth: 1_500_000, Width: 1280, Height: 720},
+		{URI: "v480.m3u8", Codecs: "avc1.4d401f", Bandwidth: 800_000, Width: 854, Height: 480},
+	}, "audio.m3u8", "mp4a.40.2")
+
+	// Every rendition, not just the first: a player reads the attribute from
+	// whichever variant it happens to choose.
+	if n := strings.Count(got, "CLOSED-CAPTIONS=NONE"); n != 2 {
+		t.Errorf("CLOSED-CAPTIONS=NONE on %d of 2 renditions:\n%s", n, got)
+	}
+}
+
 // A player decides whether it can play a stream from the CODECS attribute,
 // before it fetches a byte — so a wrong one is refused with no diagnosis at all.
 //

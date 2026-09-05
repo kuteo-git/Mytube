@@ -307,7 +307,21 @@ func MasterPlaylist(video []Rendition, audioURI, audioCodec string) string {
 		if audioCodec != "" {
 			codecs += "," + audioCodec
 		}
-		fmt.Fprintf(&b, "#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS=%q,RESOLUTION=%dx%d,AUDIO=\"audio\"\n",
+		// CLOSED-CAPTIONS=NONE, and it is not decoration.
+		//
+		// Saying nothing leaves a player free to assume CEA-608 captions are
+		// carried inside the video. Measured on iOS: AVFoundation reports a
+		// legible media selection group with one invented option — `type=clcp,
+		// tag=nil, name=CC` — for every video written here, because none of
+		// these masters ever declares a text track. The app read that as "the
+		// player draws this video's captions" and stopped fetching the .vtt
+		// beside the file, which is a lit CC button over a bare picture.
+		//
+		// The client was fixed to disbelieve an invented track. This says the
+		// true thing on the wire as well, and stops iOS offering a phantom CC
+		// entry in its own media UI, which no client can reach.
+		fmt.Fprintf(&b,
+			"#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS=%q,RESOLUTION=%dx%d,AUDIO=\"audio\",CLOSED-CAPTIONS=NONE\n",
 			r.Bandwidth, codecs, r.Width, r.Height)
 		b.WriteString(r.URI)
 		b.WriteString("\n")
