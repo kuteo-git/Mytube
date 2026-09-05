@@ -1,0 +1,11 @@
+import { chromium } from '@playwright/test'
+const b = await chromium.launch()
+const p = await b.newPage({ viewport: { width: 1280, height: 900 } })
+p.on('console', (m) => console.log('[c]', m.type(), m.text().slice(0,140)))
+p.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0,200)))
+await p.goto(`http://localhost:8180/watch/${process.argv[2] ?? 'GotlA1KKWoo'}`, { waitUntil: 'networkidle', timeout: 60000 })
+await p.waitForTimeout(4000)
+console.log('title:', await p.title())
+console.log('body text:', (await p.locator('body').innerText()).slice(0, 400))
+await p.screenshot({ path: 'e2e/page.png', fullPage: false })
+await b.close()

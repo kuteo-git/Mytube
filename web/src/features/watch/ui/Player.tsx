@@ -3197,8 +3197,17 @@ export function Player({
 
               The condition came back when the equaliser moved out. It had been
               dropped while the gear carried a setting every video has; without
-              it the gear would now open on nothing at all. */}
-          {(qualityOptions.length > 1 || coarse || narrationAvailable) &&
+              it the gear would now open on nothing at all.
+
+              `captionsAvailable` joined it for a broadcast, and a browser found
+              it rather than a reading: a live tier is a single tier, so there
+              is one quality option and no gear — and the CC button beside it is
+              drawn only on the corner player. Measured on CNN Headlines with
+              the caption track already parsed and sitting in `textTracks`, the
+              control bar was Pause, Next, Mute, Go to live, Audio, PiP, Full
+              screen: the track was in hand with nothing anywhere to select it
+              with. */}
+          {(qualityOptions.length > 1 || coarse || narrationAvailable || captionsAvailable) &&
             variant === 'full' && (
               <SettingsMenu
                 buttonClassName={controlButton}
