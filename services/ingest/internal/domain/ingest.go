@@ -486,6 +486,14 @@ type LiveRendition struct {
 type LiveStream struct {
 	IsLive     bool
 	Renditions []LiveRendition
+
+	// CaptionsURL is the broadcast's live caption feed, empty when it has none.
+	//
+	// A rolling HLS playlist rather than a file: five-second segments, each its
+	// own small WebVTT. Some streams publish one and some do not, which is why
+	// this is reported rather than assumed — see the charter.
+	CaptionsURL  string
+	CaptionsLang string
 }
 
 // SubtitleRetry is a caption fetch upstream turned away, waiting to be asked

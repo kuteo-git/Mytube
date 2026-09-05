@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lrstanley/go-ytdlp"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/adapter/proxycfg"
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
@@ -85,6 +86,8 @@ func (d *Downloader) ResolveLive(
 		})
 	}
 
+	out.CaptionsLang, out.CaptionsURL = liveCaptions(info.AutomaticCaptions)
+
 	// Tallest first, sound last, so the caller can read the ladder in order and
 	// find the audio group at the end.
 	sort.SliceStable(out.Renditions, func(i, j int) bool {
@@ -95,4 +98,39 @@ func (d *Downloader) ResolveLive(
 		return a.Height > b.Height
 	})
 	return out, nil
+}
+
+// liveCaptionLangs is the order automatic captions are preferred in.
+//
+// Vietnamese first: a household reading in Vietnamese is better served by the
+// broadcast's own Vietnamese track than by translating its English one, and
+// nothing downstream has to know which happened. English second because it is
+// what nearly every stream that has captions at all publishes.
+var liveCaptionLangs = []string{"vi", "en"}
+
+// liveCaptions picks one automatic caption playlist out of what yt-dlp reported.
+//
+// The answer is already in the `--dump-json` ResolveLive parses, so this costs
+// no second process and no second request. It is only ever a *playlist* — a
+// live caption track has no file to fetch, and an entry without `.m3u8` in it
+// is something this cannot follow.
+func liveCaptions(tracks map[string][]*ytdlp.ExtractedSubtitle) (lang, url string) {
+	if len(tracks) == 0 {
+		return "", ""
+	}
+	for _, want := range liveCaptionLangs {
+		for have, entries := range tracks {
+			// `en-US` and `en-orig` are both English, and YouTube publishes
+			// several spellings of the same language on one stream.
+			if have != want && !strings.HasPrefix(have, want+"-") {
+				continue
+			}
+			for _, e := range entries {
+				if e != nil && strings.Contains(e.URL, ".m3u8") {
+					return have, e.URL
+				}
+			}
+		}
+	}
+	return "", ""
 }

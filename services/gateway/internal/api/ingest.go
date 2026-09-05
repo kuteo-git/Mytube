@@ -108,6 +108,18 @@ type streamDTO struct {
 	// begins from a finished file, and a live video publishes none — which is
 	// why resolving one the ordinary way produced nothing at all.
 	Live *sourceDTO `json:"live,omitempty"`
+	// Whether this broadcast publishes captions that can be narrated.
+	//
+	// Reported rather than guessed, because it genuinely varies: measured while
+	// three streams were on air, Al Jazeera English carried an `en` automatic
+	// track and Sky News carried none. A client that cannot tell them apart
+	// either offers narration that fails on press, or offers none at all.
+	//
+	// Only meaningful beside `Live`.
+	LiveCaptions bool `json:"liveCaptions,omitempty"`
+	// The language of those captions, so a client can name the track it is
+	// offering rather than calling it "Subtitles".
+	LiveCaptionsLang string `json:"liveCaptionsLang,omitempty"`
 	// The downloaded file. Present only once it is on disk; the best source
 	// whenever it is there.
 	Local *sourceDTO `json:"local,omitempty"`
@@ -623,8 +635,26 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	// generated after a broadcast ends, so asking now is asking for something
 	// that does not exist yet.
 	if v.GetIsLiveNow() {
-		g.logger.Info("stream offered", "video", videoID, "tier", "live")
+		// Whether it can be narrated, answered from the same resolve the
+		// playlist route is about to want. Cached for a minute, so opening a
+		// broadcast runs yt-dlp once rather than twice — see live_resolve.go.
+		//
+		// A failure here is not a failure of the stream: the video plays and
+		// the narration control is simply not offered, which is the honest
+		// answer to a question that could not be asked.
+		captions, captionsLang := false, ""
+		if live, err := g.resolveLive(r.Context(), v.GetSourceUrl()); err == nil {
+			captions = live.GetCaptionsUrl() != ""
+			captionsLang = live.GetCaptionsLang()
+		} else {
+			g.logger.Warn("live captions", "video", videoID, "error", err)
+		}
+
+		g.logger.Info("stream offered", "video", videoID, "tier", "live",
+			"captions", captions)
 		writeJSON(w, http.StatusOK, streamDTO{
+			LiveCaptions:     captions,
+			LiveCaptionsLang: captionsLang,
 			Live: &sourceDTO{
 				URL:      "/api/live/" + url.PathEscape(videoID) + "/master.m3u8",
 				MimeType: "application/vnd.apple.mpegurl",

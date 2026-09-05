@@ -495,9 +495,21 @@ func (x *LiveRendition) GetAudioOnly() bool {
 }
 
 type ResolveLiveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	IsLive        bool                   `protobuf:"varint,1,opt,name=is_live,json=isLive,proto3" json:"is_live,omitempty"`
-	Renditions    []*LiveRendition       `protobuf:"bytes,2,rep,name=renditions,proto3" json:"renditions,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	IsLive     bool                   `protobuf:"varint,1,opt,name=is_live,json=isLive,proto3" json:"is_live,omitempty"`
+	Renditions []*LiveRendition       `protobuf:"bytes,2,rep,name=renditions,proto3" json:"renditions,omitempty"`
+	// The broadcast's live caption feed, empty when it publishes none.
+	//
+	// Not every stream has one: measured while three were on air, Al Jazeera
+	// English carried an `en` automatic track and Sky News carried nothing. So
+	// this is what lets a client draw a narration control for the first and omit
+	// it for the second, rather than offering a button that fails on press.
+	//
+	// It is a rolling HLS playlist rather than a file — five-second segments,
+	// each its own small WebVTT — and it costs nothing to report, because
+	// ResolveLive already parses the `--dump-json` this comes out of.
+	CaptionsUrl   string `protobuf:"bytes,3,opt,name=captions_url,json=captionsUrl,proto3" json:"captions_url,omitempty"`
+	CaptionsLang  string `protobuf:"bytes,4,opt,name=captions_lang,json=captionsLang,proto3" json:"captions_lang,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -544,6 +556,20 @@ func (x *ResolveLiveResponse) GetRenditions() []*LiveRendition {
 		return x.Renditions
 	}
 	return nil
+}
+
+func (x *ResolveLiveResponse) GetCaptionsUrl() string {
+	if x != nil {
+		return x.CaptionsUrl
+	}
+	return ""
+}
+
+func (x *ResolveLiveResponse) GetCaptionsLang() string {
+	if x != nil {
+		return x.CaptionsLang
+	}
+	return ""
 }
 
 type ResolveChannelRequest struct {
@@ -3824,12 +3850,14 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06height\x18\x04 \x01(\x05R\x06height\x12\x18\n" +
 	"\abitrate\x18\x05 \x01(\x05R\abitrate\x12\x1d\n" +
 	"\n" +
-	"audio_only\x18\x06 \x01(\bR\taudioOnly\"h\n" +
+	"audio_only\x18\x06 \x01(\bR\taudioOnly\"\xb0\x01\n" +
 	"\x13ResolveLiveResponse\x12\x17\n" +
 	"\ais_live\x18\x01 \x01(\bR\x06isLive\x128\n" +
 	"\n" +
 	"renditions\x18\x02 \x03(\v2\x18.ingest.v1.LiveRenditionR\n" +
-	"renditions\"1\n" +
+	"renditions\x12!\n" +
+	"\fcaptions_url\x18\x03 \x01(\tR\vcaptionsUrl\x12#\n" +
+	"\rcaptions_lang\x18\x04 \x01(\tR\fcaptionsLang\"1\n" +
 	"\x15ResolveChannelRequest\x12\x18\n" +
 	"\achannel\x18\x01 \x01(\tR\achannel\"\xad\x01\n" +
 	"\x16ResolveChannelResponse\x12\x1d\n" +

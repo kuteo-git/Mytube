@@ -169,6 +169,20 @@ export interface HLSAttachment {
    * player climbing down from a 4K stream to a 1080p file on disk.
    */
   onLevelSwitched: (cb: (height: number) => void) => void
+  /**
+   * Show a caption rendition named in the manifest, or `undefined` for none.
+   *
+   * This exists only for a broadcast. A recorded video's captions are `.vtt`
+   * files beside it and reach the element as `<track>` children, which the
+   * browser owns; a broadcast's are a rendition *inside* the master playlist,
+   * which only the library that parsed it can select. Without this the track
+   * was in hand and unreachable, and the CC control was not drawn at all.
+   *
+   * A language the manifest does not carry selects nothing rather than the
+   * nearest one — `selectHeight`'s rule, for its reason: substituting something
+   * other than what was asked for is how a control stops meaning what it says.
+   */
+  selectCaptions: (language: string | undefined) => void
 }
 
 /**
@@ -212,13 +226,25 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
   if (!Hls.isSupported()) {
     // Nothing can play it here. Said the way the player already listens for.
     el.dispatchEvent(new Event('error'))
-    return { detach: () => {}, selectHeight: () => {}, onLevels: () => {}, onLevelSwitched: () => {} }
+    return {
+      detach: () => {},
+      selectHeight: () => {},
+      onLevels: () => {},
+      onLevelSwitched: () => {},
+      selectCaptions: () => {},
+    }
   }
 
   const hls = new Hls({
-    // The playlist is VOD and the segments are byte ranges into two files that
-    // are already on the far side of a proxy; the defaults are tuned for a live
-    // edge that does not exist here.
+    // `lowLatencyMode` off for two different reasons, and the comment that used
+    // to be here only knew the first.
+    //
+    // An ordinary video's playlist is VOD and its segments are byte ranges into
+    // two files already on the far side of a proxy, so low-latency machinery
+    // has nothing to chase. A broadcast *does* have a live edge — that claim
+    // was written before the live tier existed and stopped being true when it
+    // arrived — but the gateway proxies YouTube's DVR playlist without
+    // rewriting it into parts, so there is still no LL-HLS to speak.
     enableWorker: true,
     lowLatencyMode: false,
   })
@@ -273,6 +299,27 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
     onLevelSwitched?.(height)
   })
 
+  // The chosen caption language, remembered until the renditions are known.
+  //
+  // Same shape as `wanted` above and for the same reason: the master arrives
+  // after this function returns, so a language chosen before then has nothing
+  // to be applied to yet. A broadcast opened with captions already on is
+  // exactly that case.
+  let wantedCaptions: string | undefined
+  const applyCaptions = () => {
+    if (wantedCaptions === undefined) {
+      hls.subtitleTrack = -1
+      return
+    }
+    // `lang` is the LANGUAGE attribute of the EXT-X-MEDIA line; `name` is NAME.
+    // Both are compared because the gateway writes the language into both and a
+    // manifest from anywhere else may fill only one.
+    hls.subtitleTrack = hls.subtitleTracks.findIndex(
+      (track) => track.lang === wantedCaptions || track.name === wantedCaptions,
+    )
+  }
+  hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, applyCaptions)
+
   hls.loadSource(url)
   hls.attachMedia(el)
 
@@ -281,6 +328,18 @@ export async function attachHLS(el: HTMLVideoElement, url: string): Promise<HLSA
     selectHeight: (height) => {
       wanted = height
       if (hls.levels.length > 0) apply()
+    },
+    selectCaptions: (language) => {
+      wantedCaptions = language
+      // Turning them off needs no list: -1 is "none" whatever the manifest
+      // carries, and every recorded video reaches this line with nothing wanted.
+      if (language === undefined) {
+        hls.subtitleTrack = -1
+        return
+      }
+      // Drawing them is off by default in hls.js and has to be asked for once.
+      hls.subtitleDisplay = true
+      if (hls.subtitleTracks.length > 0) applyCaptions()
     },
     onLevels: (cb) => {
       onLevels = cb

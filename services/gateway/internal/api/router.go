@@ -72,6 +72,9 @@ type Gateway struct {
 	// translations and the clips — is on disk, so a restarted pass is fast
 	// rather than repeated.
 	narration *narrationRegistry
+	// One resolve per broadcast per minute, shared by the stream answer and the
+	// playlist routes — see live_resolve.go.
+	liveResolves *liveResolveCache
 }
 
 func NewGateway(
@@ -104,6 +107,7 @@ func NewGateway(
 		configDir:     configDir,
 		skipLocalTier: skipLocal,
 		narration:     newNarrationRegistry(),
+		liveResolves:  newLiveResolveCache(),
 	}
 }
 

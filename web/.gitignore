@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screenshots from e2e runs are evidence, not source.
+e2e/*.png

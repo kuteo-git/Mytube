@@ -290,6 +290,21 @@ export interface StreamSources {
    */
   live?: StreamSource
   /**
+   * Whether the broadcast publishes captions, and in which language.
+   *
+   * Sent only beside `live`, and it genuinely varies: measured against YouTube
+   * with three streams on air, CNN Headlines and Al Jazeera English carry an
+   * `en` automatic track, Sky News carries none, and a 24/7 music stream would
+   * not give up its metadata at all.
+   *
+   * The track itself is not here and cannot be: it lives *inside* the HLS
+   * manifest, as a rendition the gateway names in the master it writes, rather
+   * than as a `.vtt` file beside the video. So this is the flag that says the
+   * player already has a track — see `captionTracksFor`.
+   */
+  liveCaptions?: boolean
+  liveCaptionsLang?: string
+  /**
    * A broadcast that has not begun.
    *
    * No source, and none is missing — YouTube publishes nothing for a stream

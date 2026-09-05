@@ -13,6 +13,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"connectrpc.com/connect"
+
+	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 )
 
 // The narration manifest: translation and speech done on the server, handed to
@@ -78,6 +82,25 @@ type narrationClip struct {
 	// never pass through this handler.
 	ClipURL string `json:"clipUrl"`
 	Text    string `json:"text"`
+
+	// StartsAtUnixMillis is when the line was spoken, in wall-clock time.
+	//
+	// Zero for a recorded video, where `StartSeconds` is the whole answer. A
+	// broadcast has no zero to count from — see the charter — so its lines are
+	// placed by the clock instead, taken from `EXT-X-PROGRAM-DATE-TIME` in the
+	// caption playlist. Both the video and the caption feed carry that tag, and
+	// both players can report the wall clock of their own playhead, so the two
+	// meet without anybody touching a presentation timestamp.
+	StartsAtUnixMillis int64 `json:"startsAtUnixMillis,omitempty"`
+}
+
+// order is what the manifest is sorted by, and it is one key for two kinds of
+// clip: a recorded line has only an offset and a live one has only a clock.
+func (c narrationClip) order() float64 {
+	if c.StartsAtUnixMillis != 0 {
+		return float64(c.StartsAtUnixMillis)
+	}
+	return c.StartSeconds
 }
 
 // narrationPass is the state of one video's pass.
@@ -169,8 +192,31 @@ func (g *Gateway) handleStartNarration(w http.ResponseWriter, r *http.Request) {
 	pass.cancel = cancel
 	g.narration.mu.Unlock()
 
-	go g.runNarration(ctx, videoID, gen, from)
+	// A broadcast is a different pass, not a parameter on this one. Everything
+	// `runNarration` does is indexed against a caption file that exists in
+	// full; a live stream has a feed instead, and no end. See narration_live.go.
+	if live, sourceURL := g.broadcast(r.Context(), videoID); live {
+		go g.runLiveNarration(ctx, videoID, gen, sourceURL)
+	} else {
+		go g.runNarration(ctx, videoID, gen, from)
+	}
 	writeJSON(w, http.StatusAccepted, pass)
+}
+
+// broadcast reports whether this video is on air, and where it came from.
+//
+// A catalogue read rather than a resolve: `IsLiveNow` is what the stream answer
+// already decides the live tier by, so narration and playback cannot disagree
+// about what kind of thing is playing.
+func (g *Gateway) broadcast(ctx context.Context, videoID string) (bool, string) {
+	video, err := g.catalog.GetVideo(ctx, connect.NewRequest(&catalogv1.GetVideoRequest{
+		VideoId: videoID,
+	}))
+	if err != nil {
+		return false, ""
+	}
+	v := video.Msg.GetVideo()
+	return v.GetIsLiveNow(), v.GetSourceUrl()
 }
 
 // narrationStartAt reads where the viewer is, in seconds.
@@ -435,6 +481,28 @@ func (g *Gateway) translateInto(
 		contextLines = append(contextLines, all[i].Text)
 	}
 
+	g.translateLines(ctx, wanted, slots, contextLines, translations, videoID, partition)
+}
+
+// translateLines asks the sidecar for these lines and records what came back.
+//
+// Split out of [translateInto] because a broadcast has no `[]vttCue` to index
+// into: its lines arrive one clause at a time from a feed, and the slot and the
+// context are worked out there rather than from a list that already exists.
+// What both need is identical from here down, and having it twice is how two
+// callers come to disagree about a cache partition.
+func (g *Gateway) translateLines(
+	ctx context.Context,
+	wanted []string,
+	slots []float64,
+	contextLines []string,
+	translations map[string]string,
+	videoID, partition string,
+) {
+	if len(wanted) == 0 {
+		return
+	}
+
 	body, err := json.Marshal(map[string]any{
 		"cues":    wanted,
 		"context": contextLines,
@@ -517,6 +585,39 @@ func (g *Gateway) speakCue(
 	}
 
 	slot := slotFor(cues, i)
+	clipURL, ok := g.spokenClip(ctx, videoID, line, slot, voice)
+	if !ok {
+		return
+	}
+
+	g.addNarrationClip(videoID, gen, narrationClip{
+		StartSeconds: cues[i].Start,
+		// The slot, not the audio's own length. It is what the client uses to
+		// duck the video's sound, and ducking has to end when the line's time
+		// is up rather than when its file happens to stop.
+		DurationSeconds: slot,
+		ClipURL:         clipURL,
+		Text:            line,
+	})
+}
+
+// spokenClip turns one translated line into an audio file and answers its
+// address, synthesising and stretching only what is not already on disk.
+//
+// Split out of [speakCue] so a broadcast can use it. Everything here is about a
+// line and the time it has; nothing is about where that line sits in a list,
+// which is the only part a live stream cannot supply.
+//
+// False means the line is not to be spoken — synthesis failed, or it cannot be
+// said in the time it has even at the maximum tempo. Refusing is deliberate:
+// squeezing past that costs two lines to keep one, because the clip is
+// unintelligible *and* overruns into the next.
+func (g *Gateway) spokenClip(
+	ctx context.Context,
+	videoID, line string,
+	slot float64,
+	voice string,
+) (string, bool) {
 	speed := naturalSpeed
 
 	natural, cached := readTTSCache(g.mediaRoot, videoID, line, naturalSpeed, voice)
@@ -525,7 +626,7 @@ func (g *Gateway) speakCue(
 		natural, err = g.synthesise(ctx, line, voice)
 		if err != nil {
 			g.logger.Warn("narration synthesise", "video", videoID, "error", err)
-			return
+			return "", false
 		}
 		if err := writeTTSCache(g.mediaRoot, videoID, line, naturalSpeed, voice, natural); err != nil {
 			g.logger.Warn("tts cache write", "error", err)
@@ -540,13 +641,10 @@ func (g *Gateway) speakCue(
 			// lost.
 			g.logger.Warn("tts unmeasurable wav", "bytes", len(natural))
 		} else if fitted, err := tempoFor(duration, slot); err != nil {
-			// Refused, not clamped. Squeezing to the maximum costs two lines to
-			// keep one: unintelligible at that tempo, and it overruns its slot,
-			// which pushes the next clip past its own cue.
 			g.logger.Info("narration too fast", "video", videoID,
 				"natural", fmt.Sprintf("%.2f", duration),
 				"slot", fmt.Sprintf("%.2f", slot))
-			return
+			return "", false
 		} else {
 			speed = fitted
 		}
@@ -557,25 +655,17 @@ func (g *Gateway) speakCue(
 			stretched, err := atempo(natural, speed)
 			if err != nil {
 				g.logger.Warn("narration atempo", "error", err)
-				return
+				return "", false
 			}
 			if err := writeTTSCache(g.mediaRoot, videoID, line, speed, voice, stretched); err != nil {
 				g.logger.Warn("tts cache write", "error", err)
-				return
+				return "", false
 			}
 		}
 	}
 
-	g.addNarrationClip(videoID, gen, narrationClip{
-		StartSeconds: cues[i].Start,
-		// The slot, not the audio's own length. It is what the client uses to
-		// duck the video's sound, and ducking has to end when the line's time
-		// is up rather than when its file happens to stop.
-		DurationSeconds: slot,
-		ClipURL: fmt.Sprintf("/media/%s/%s/%s.wav",
-			videoID, narrationTTSDir, ttsKey(line, speed, voice)),
-		Text: line,
-	})
+	return fmt.Sprintf("/media/%s/%s/%s.wav",
+		videoID, narrationTTSDir, ttsKey(line, speed, voice)), true
 }
 
 // current is the pass this goroutine is still allowed to write to.
@@ -607,9 +697,9 @@ func (g *Gateway) addNarrationClip(videoID string, gen int, clip narrationClip) 
 		return
 	}
 	at := sort.Search(len(pass.Clips), func(i int) bool {
-		return pass.Clips[i].StartSeconds >= clip.StartSeconds
+		return pass.Clips[i].order() >= clip.order()
 	})
-	if at < len(pass.Clips) && pass.Clips[at].StartSeconds == clip.StartSeconds {
+	if at < len(pass.Clips) && pass.Clips[at].order() == clip.order() {
 		pass.Clips[at] = clip
 		return
 	}
