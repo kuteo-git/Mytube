@@ -253,3 +253,26 @@ describe('shapes that broke the old parser', () => {
     expect(cues[1].start).toBeCloseTo(2)
   })
 })
+
+describe('a cue with no speech in it', () => {
+  it('does not lend its timestamp to the line after it', () => {
+    // Copied from 8OPCWER_68U: "[âm nhạc]" runs 6.55–11.43 and the greeting
+    // begins at 11.44, so the clause the two formed spoke five seconds early.
+    const raw = [
+      'WEBVTT',
+      '',
+      '00:00:06.550 --> 00:00:11.430 align:start position:0%',
+      ' ',
+      '[âm nhạc]',
+      '',
+      '00:00:11.440 --> 00:00:12.709 align:start position:0%',
+      ' ',
+      'Họ<00:00:11.639><c> đang</c><00:00:11.719><c> kính</c><00:00:11.840><c> chào</c><00:00:11.960><c> quý</c><00:00:12.120><c> vị.</c>',
+      '',
+    ].join('\n')
+
+    const cues = parseVTT(raw, 'vi')
+    expect(cues.length).toBeGreaterThan(0)
+    expect(cues[0].start).toBeCloseTo(11.44)
+  })
+})

@@ -365,6 +365,13 @@ func groupIntoClauses(pieces []piece) []vttCue {
 	b := &clauseBuilder{}
 
 	for _, p := range pieces {
+		// A piece that is nothing but a bracketed description is a timestamp
+		// with no speech under it. Left in the buffer it is stripped at the end
+		// of emit, by which time the clause has already taken its start — so
+		// the line after it is spoken from the moment the music began.
+		if stripBrackets(p.text) == "" {
+			continue
+		}
 		b.buf = append(b.buf, p)
 
 		// One block can complete more than one clause.

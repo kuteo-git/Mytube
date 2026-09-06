@@ -205,3 +205,31 @@ func TestUnknownLanguageIsNotSplit(t *testing.T) {
 		t.Fatalf("got %d cues, want 3 unsplit pieces: %+v", len(cues), cues)
 	}
 }
+
+// A cue that is nothing but a bracketed description carries a timestamp and no
+// speech. Copied from 8OPCWER_68U, where "[âm nhạc]" runs from 6.55 to 11.43 and
+// the greeting after it begins at 11.44: the clause the two of them formed took
+// the bracket's start, so the voice spoke the greeting five seconds before the
+// picture said it.
+func TestParseVTTIgnoresATimestampWithNoSpeech(t *testing.T) {
+	raw := strings.Join([]string{
+		"WEBVTT",
+		"",
+		"00:00:06.550 --> 00:00:11.430 align:start position:0%",
+		" ",
+		"[âm nhạc]",
+		"",
+		"00:00:11.440 --> 00:00:12.709 align:start position:0%",
+		" ",
+		"Họ<00:00:11.639><c> đang</c><00:00:11.719><c> kính</c><00:00:11.840><c> chào</c><00:00:11.960><c> quý</c><00:00:12.120><c> vị.</c>",
+		"",
+	}, "\n")
+
+	cues := parseVTT(raw, "vi")
+	if len(cues) == 0 {
+		t.Fatalf("no cues")
+	}
+	if math.Abs(cues[0].Start-11.44) > 1e-9 {
+		t.Errorf("first cue starts at %v, want 11.44 (the bracket's 6.55 is not speech)", cues[0].Start)
+	}
+}
