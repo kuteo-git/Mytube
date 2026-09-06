@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.0.14 — 2026-09-06
+
+**The feed ranked the whole library on every request, and opening a video asked
+YouTube three times.**
+
+Reported from the phone: pulling Home down waited about three seconds on a
+skeleton, and the watch screen waited longer and sometimes never arrived — "lâu
+lâu xuất hiện", over a LAN to the Mac mini. The network was ruled out first: the
+feed's JSON is 24 KB.
+
+| | before | after |
+|---|---|---|
+| `GET /api/feed` | p50 724ms, max 2.2s | p50 6ms |
+| the same after 30s idle | 1.99s | 16ms |
+| resolves per cold open | 3 | 1 |
+| `master.m3u8` after `/stream` warmed it | — | 6.9ms |
+
+- **An ordering already being served is no longer ranked again.** `GetFeedPage`
+  called `rankAll` unconditionally and then read the snapshot, whose whole
+  purpose is that the ordering is frozen while it lives — so every video in the
+  library was scored, sorted and quota'd to append nothing, on page two, page
+  three and every pull-to-refresh alike.
+- **The library is fingerprinted over its ids, not counted.** An ingest that adds
+  one video and drops another leaves the count where it was, and the ordering
+  would go on believing it had seen material it never had.
+- **The feed still reacts exactly as before.** Nothing about *when* an ordering
+  is rebuilt changed: `InvalidateUser` still drops it the moment somebody watches
+  something, and the TTL still expires it.
+- **The catalog projection is served stale and refreshed behind the caller.** It
+  is held for 30s and the refresh ran in front of whoever found it stale, so one
+  request in every thirty paid an extra second and a half — which is the "lâu
+  lâu" in the report. The first caller after a restart still waits, having
+  nothing stale to be served.
+- **One resolve per video, however many playlists ask at once.** The master
+  playlist and both media playlists miss the cache together, and each called
+  `ResolveTracks` on its own — three yt-dlp processes and three requests to
+  YouTube for one press of a thumbnail. The caller's wall time is unchanged; what
+  changes is what upstream is asked, which is the counted, rate-limited thing.
+  The shared call runs on a context of its own, so a player that abandons the
+  master playlist cannot cancel the answer the other two are waiting on.
+- **The ladder is resolved at `/stream`**, where it overlaps the client's own
+  work rather than being paid for after it. Never on a `prefetch`: that boundary
+  is about requests upstream, and a resolve is exactly such a request.
+
+The cost was in Go, not in Postgres. `VideoRetention` and `ImpressionCoverage`
+are unbounded aggregates and read as the obvious suspects; measured, they are
+20ms and 4ms. What settled it was a differential rather than a profile —
+`pageSize=1` cost 0.73s and `pageSize=100` cost 0.66s, so the work scaled with
+the library and not with the page.
+
+No migrations. No API changes.
+
 ## 0.0.10 — 2026-09-03
 
 **A narration pass now begins where the viewer is.**
