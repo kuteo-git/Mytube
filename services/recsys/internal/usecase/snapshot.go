@@ -42,6 +42,15 @@ type snapshotEntry struct {
 	// re-ranked at all. The ordering they were given on opening the app was the
 	// ordering they had until they stopped.
 	created time.Time
+
+	// A fingerprint of the library this ordering was ranked from. Ranking is
+	// the expensive half of a feed request — every video in the library is
+	// scored — and while an ordering lives, re-ranking can change nothing that
+	// is shown: the ordering is frozen by design, and the only thing a fresh
+	// ranking contributes is material that was not in the library when the
+	// ordering was built. So the work is done when the library has moved and
+	// skipped when it has not.
+	library uint64
 }
 
 func (e *snapshotEntry) expired(ttl time.Duration) bool {
@@ -171,6 +180,33 @@ func (s *SnapshotStore) Append(id string, extra []domain.RankedVideo) int {
 		added++
 	}
 	return added
+}
+
+// Library reports the library fingerprint this ordering was ranked from, and
+// whether the ordering is still live.
+func (s *SnapshotStore) Library(id string) (uint64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.entries[id]
+	if !ok || entry.expired(s.ttl) {
+		return 0, false
+	}
+	return entry.library, true
+}
+
+// SetLibrary records the fingerprint an ordering has now been ranked against.
+//
+// Called after the ranking has succeeded rather than before it: a failed rank
+// that had already claimed the new fingerprint would leave the ordering
+// believing it had caught up with a library it never read.
+func (s *SnapshotStore) SetLibrary(id string, fingerprint uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if entry, ok := s.entries[id]; ok {
+		entry.library = fingerprint
+	}
 }
 
 func (s *SnapshotStore) evictExpiredLocked() {

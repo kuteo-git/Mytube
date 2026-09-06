@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/lucnguyen/local-youtube/services/ingest/internal/domain"
 )
 
@@ -49,6 +51,11 @@ type Handler struct {
 	// because they answer a different question and are dropped for different
 	// reasons.
 	hls hlsCache
+	// One resolve per video at a time. Opening a video asks for the master
+	// playlist and both media playlists at once, and all three miss the cache
+	// together — measured, three yt-dlp runs against YouTube for one video,
+	// 3.0s, 3.0s and 3.5s. The two that lose now wait on the one that wins.
+	resolving singleflight.Group
 }
 
 // liveHeight is the rendition muxed on the fly, which is deliberately not the

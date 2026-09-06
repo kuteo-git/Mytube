@@ -1301,3 +1301,87 @@ chip is the page it shows; and paging asks the same route rather than the feed.
 to pass the untranslated guard and a third English word here fails it — rightly,
 since the guard cannot tell an identity from a label by looking. The phone's chip
 key is the same string for the same reason.
+
+## The feed was ranking the whole library on every request (2026-09-06)
+
+Reported from the phone: pulling Home down waited about three seconds on a
+skeleton, and opening a video waited longer and sometimes never arrived — "lâu
+lâu xuất hiện", over a LAN to the Mac mini. Measured against the running stack
+before a line was read, and the network was the first thing ruled out: the feed's
+JSON is 24 KB.
+
+| | before | after |
+|---|---|---|
+| `GET /api/feed` | p50 **724ms**, max 2.2s | p50 **6ms** |
+| the same after 30s idle | **1.99s** | **16ms** |
+| `master.m3u8`, cold | 2.9s–5.3s | unchanged |
+| resolves for one cold open | **3** | **1** |
+| `master.m3u8` after `/stream` warmed it | — | **6.9ms** |
+
+**The cost was in Go, not in Postgres.** `VideoRetention` and
+`ImpressionCoverage` are unbounded aggregates and read as the obvious suspects;
+measured with `EXPLAIN (ANALYZE)` they are 20ms and 4ms. What decided it was a
+differential rather than a profile — `pageSize=1` cost 0.73s and `pageSize=100`
+cost 0.66s, so the work scaled with the library and not with the page.
+
+- **An ordering that is already being served does not need ranking again.**
+  `GetFeedPage` called `rankAll` unconditionally — every video in the library
+  scored, sorted, quota'd and diversified — and then read the snapshot, whose
+  whole purpose is that the ordering is *frozen* while it lives. The only thing a
+  fresh ranking could contribute was material that arrived after the ordering was
+  built, and it was paid for on page two, page three and every pull-to-refresh
+  alike.
+- **So the library is fingerprinted, and the rank is skipped when it has not
+  moved.** Over the ids rather than the count: an ingest that adds one video and
+  drops another leaves the count where it was, and the ordering would go on
+  believing it had seen material it never had. FNV-1a over 43,079 ids is well
+  under a millisecond, against the ~700ms it decides whether to spend.
+- **The feed still reacts.** Nothing about *when* an ordering is rebuilt changed:
+  `InvalidateUser` still drops it the moment somebody watches something, and the
+  TTL still expires it. What is gone is re-ranking to produce an answer that was
+  then discarded.
+- **The projection refreshes behind the caller.** The catalog projection is held
+  for 30s, and the refresh ran in front of whoever found it stale — so one
+  request in every thirty paid a second and a half extra, which is exactly the
+  "lâu lâu" in the report. It is served stale and refreshed in a goroutine now,
+  on a context of its own; the first caller after a restart still waits, having
+  nothing stale to be served. The `inFlight` field the struct already carried was
+  written for this and never used.
+
+### One video, three resolves
+
+Opening a video asks for the master playlist and both media playlists at once,
+and on a video nobody has opened for ninety minutes all three miss the cache
+together. Each called `ResolveTracks` on its own: three yt-dlp processes and
+three requests to YouTube for one press of a thumbnail, measured at 3.01s, 3.05s
+and 3.50s.
+
+`singleflight` on the key collapses them. The caller's wall time is unchanged —
+the two that lose now wait on the one that wins — and what changes is what
+YouTube is asked, which is the counted, rate-limited thing.
+
+- **The shared call runs on a context of its own.** A player that gives up on the
+  master playlist would otherwise cancel the resolve the other two are waiting
+  on, and throw away an answer that was seconds away. Bounded, because nothing
+  can then cancel it.
+- **The "hls tracks resolved" line moved inside the shared call.** Left where it
+  was, the losers logged it too — three "resolved" lines for one run of yt-dlp,
+  which is the very thing the sharing exists to stop, now merely invisible.
+  Measured: it said three, and the three timestamps were the same millisecond.
+- **The re-resolve after a refused segment is untouched.** That path has its own
+  cooldown and its own reason, and sharing it would be sharing a retry.
+
+### The ladder is resolved when the player asks how to play, not what to play
+
+`/api/videos/{id}/stream` is what the app reads before fetching a playlist, so
+the resolve starts there — fire and forget, and it collapses into the player's
+own request through the singleflight above, so the worst case is unchanged.
+Measured: a video warmed by `/stream` alone answered `master.m3u8` in 6.9ms.
+
+- **Not on a prefetch.** That boundary is about requests upstream — hovering a
+  card downloads nothing and asks YouTube nothing — and a resolve is exactly
+  such a request.
+- **Once a minute per video**, through the same `askedRecently` the download
+  submit uses. The player polls `/stream` every five seconds while a download is
+  pending, and a warm on each would be twelve crossings a minute to be handed a
+  playlist ingest has held for the last ninety minutes.

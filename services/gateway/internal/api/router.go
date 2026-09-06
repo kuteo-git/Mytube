@@ -50,6 +50,11 @@ type Gateway struct {
 	// downloadsAsked keeps the player's five-second poll from asking ingest to
 	// schedule the same download twelve times a minute. See ensureDownload.
 	downloadsAsked askedRecently
+	// laddersWarmed does the same for the HLS resolve. The player polls this
+	// answer every five seconds while a download is pending, and a warm on each
+	// of those would be twelve requests a minute across a service boundary to
+	// be handed a playlist ingest has held for the last ninety minutes.
+	laddersWarmed askedRecently
 	// skipLocalTier withholds the file on disk from the stream answer, so that
 	// the streaming tiers are what the player has to use. Debugging only.
 	//

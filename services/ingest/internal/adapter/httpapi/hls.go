@@ -185,6 +185,61 @@ func (c *hlsCache) forget(key string) {
 	delete(c.entries, key)
 }
 
+// resolveOnce resolves a video's tracks, collapsing the requests that arrive
+// together into one run of yt-dlp.
+//
+// Opening a video is three cache misses at once — the master playlist and both
+// media playlists — and before this each of them went upstream on its own.
+// Measured on a cold video: 3.01s, 3.05s and 3.50s, three yt-dlp processes and
+// three requests to YouTube to answer one press of a thumbnail.
+//
+// The shared call runs on a context of its own rather than on the winner's.
+// A player that gives up on the master playlist would otherwise cancel the
+// resolve the other two requests are waiting on, and the answer that was
+// seconds away would be thrown away unused.
+func (h *Handler) resolveOnce(
+	ctx context.Context, videoID, key string, resolver TrackResolver, sourceURL string,
+) (domain.MediaTracks, error) {
+	shared, err, _ := h.resolving.Do(key, func() (any, error) {
+		runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolveTimeout)
+		defer cancel()
+
+		tracks, err := resolver.ResolveTracks(runCtx, sourceURL, hlsMaxHeight)
+		if err != nil {
+			return domain.MediaTracks{}, err
+		}
+
+		// What the ladder came out as, said once per resolve.
+		//
+		// Inside the shared call rather than after it: the callers that lost the
+		// race are handed this same answer, and logging where they read it said
+		// "resolved" three times for one run of yt-dlp — which is precisely the
+		// thing the sharing was added to stop, now merely invisible.
+		//
+		// The audio language above all: YouTube auto-dubs, and one video of this
+		// library publishes twenty-one audio tracks at an identical bitrate. A
+		// wrong pick there is not subtly wrong — it is an English video playing
+		// in Arabic — and from the server side it looked exactly like a right
+		// one until this line existed.
+		heights := make([]int, 0, len(tracks.Videos))
+		for _, v := range tracks.Videos {
+			heights = append(heights, v.Height)
+		}
+		h.logger.Info("hls tracks resolved",
+			"video", videoID, "heights", heights,
+			"audio_language", tracks.Audio.Language, "audio_bitrate", tracks.Audio.Bitrate)
+
+		// Put inside the shared call, so the losers find it cached rather than
+		// racing to write the same entry back.
+		h.hls.put(key, tracks)
+		return tracks, nil
+	})
+	if err != nil {
+		return domain.MediaTracks{}, err
+	}
+	return shared.(domain.MediaTracks), nil
+}
+
 // handleHLS answers all three routes, told apart by what was asked for.
 func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -209,7 +264,7 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 	key := sourceURL + "|hls|" + strconv.Itoa(int(hlsMaxHeight))
 	tracks, cached := h.hls.get(key)
 	if !cached {
-		tracks, err = resolver.ResolveTracks(ctx, sourceURL, hlsMaxHeight)
+		tracks, err = h.resolveOnce(ctx, videoID, key, resolver, sourceURL)
 		if err != nil {
 			h.logger.Warn("resolve hls tracks", "video", videoID, "error", err)
 			if h.refuse(w, ctx, sourceURL, videoID, err) {
@@ -218,22 +273,6 @@ func (h *Handler) handleHLS(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "cannot resolve media", http.StatusBadGateway)
 			return
 		}
-		h.hls.put(key, tracks)
-
-		// What the ladder came out as, said once per resolve.
-		//
-		// The audio language above all: YouTube auto-dubs, and one video of this
-		// library publishes twenty-one audio tracks at an identical bitrate. A
-		// wrong pick there is not subtly wrong — it is an English video playing
-		// in Arabic — and from the server side it looked exactly like a right
-		// one until this line existed.
-		heights := make([]int, 0, len(tracks.Videos))
-		for _, v := range tracks.Videos {
-			heights = append(heights, v.Height)
-		}
-		h.logger.Info("hls tracks resolved",
-			"video", videoID, "heights", heights,
-			"audio_language", tracks.Audio.Language, "audio_bitrate", tracks.Audio.Bitrate)
 	}
 
 	switch {
@@ -554,3 +593,8 @@ func refusedUpstream(err error) bool {
 // at the exact moment upstream is already unhappy. One re-resolve serves every
 // request that follows it, because they all read the same cache.
 const resolveCooldown = 15 * time.Second
+
+// How long a shared resolve may run. It is detached from the request that
+// started it, so without a bound a hung yt-dlp would hold every later request
+// for this video behind it for as long as the process lived.
+const resolveTimeout = 90 * time.Second

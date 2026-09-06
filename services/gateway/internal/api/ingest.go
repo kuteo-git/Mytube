@@ -818,6 +818,22 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Start resolving the ladder now rather than when the player asks for it.
+	//
+	// The player's next act after reading this answer is to fetch the master
+	// playlist, and on a video nobody has opened for ninety minutes that is a
+	// run of yt-dlp against YouTube — measured at 2.9s and 5.3s, which is the
+	// whole of the watch screen's skeleton. Nothing here waits on it: ingest
+	// collapses this and the player's own request into one resolve, so the
+	// worst case is unchanged and the common case is a playlist already held.
+	//
+	// Not on a prefetch. That boundary is about requests upstream — hovering a
+	// card downloads nothing and asks YouTube nothing — and a resolve is
+	// exactly such a request.
+	if !prefetch {
+		go g.warmHLSLadder(videoID)
+	}
+
 	out := streamDTO{
 		// No copy is coming, so the player can stop asking for one.
 		//
@@ -1006,6 +1022,40 @@ func (g *Gateway) handleHLS(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	copyStream(w, resp.Body)
 }
+
+// warmHLSLadder asks ingest for the master playlist so that the resolve behind
+// it has happened by the time the player asks.
+//
+// The body is discarded: what is wanted is the side effect, ingest's cache of
+// the resolved track URLs. A failure is not reported to anybody — the player is
+// about to ask for the same thing and will surface whatever went wrong itself,
+// and a warning here would be the same fault logged twice.
+func (g *Gateway) warmHLSLadder(videoID string) {
+	if !g.laddersWarmed.claim("hls|"+videoID, time.Now()) {
+		return
+	}
+
+	ctx, cancel := contextWithTimeout(warmLadderTimeout)
+	defer cancel()
+
+	target := g.ingestBaseURL + "/hls/" + url.PathEscape(videoID) + "/master.m3u8"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return
+	}
+
+	resp, err := g.streamClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+}
+
+// Long enough for a resolve that is going to succeed, and bounded because
+// nothing is waiting on this one. The player's own request carries its own
+// deadline and is unaffected either way.
+const warmLadderTimeout = 90 * time.Second
 
 // handleRemuxStream proxies the muxed stream from ingest, which owns yt-dlp and
 // ffmpeg. Streamed straight through rather than buffered: the body is a whole

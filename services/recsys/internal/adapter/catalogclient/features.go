@@ -21,15 +21,20 @@ import (
 
 const pageSize = 500
 
+// How long a background refresh may take before it is abandoned. Generous,
+// because nothing is waiting on it; bounded, because a hung catalog must not
+// leave inFlight set for ever and block every refresh after it.
+const refreshTimeout = 2 * time.Minute
+
 type FeatureSource struct {
 	client catalogv1connect.CatalogServiceClient
 	ttl    time.Duration
 
-	mu        sync.Mutex
-	cached    []domain.VideoFeatures
-	cachedAt  time.Time
-	inFlight  bool
-	refreshed chan struct{}
+	mu       sync.Mutex
+	cached   []domain.VideoFeatures
+	cachedAt time.Time
+	loaded   bool
+	inFlight bool
 }
 
 func New(httpClient *http.Client, baseURL string, ttl time.Duration) *FeatureSource {
@@ -39,30 +44,76 @@ func New(httpClient *http.Client, baseURL string, ttl time.Duration) *FeatureSou
 	}
 }
 
+// ListVideoFeatures answers from the projection, refreshing it in the
+// background rather than in front of the caller.
+//
+// The refresh reads the whole library — measured at 43,079 videos, about 1.3s —
+// and blocking on it once per TTL put that second and a third onto one feed
+// request in every thirty. A viewer pulling the grid down cannot tell a slow
+// server from a broken one, and the projection they would have been served
+// instead is a few seconds out of date on a library that changes hourly. So a
+// stale answer is served and the refresh runs behind it.
+//
+// The one caller that still waits is the first after a restart, which has
+// nothing stale to be served.
 func (f *FeatureSource) ListVideoFeatures(ctx context.Context) ([]domain.VideoFeatures, error) {
 	f.mu.Lock()
-	if time.Since(f.cachedAt) < f.ttl && f.cached != nil {
+	fresh := time.Since(f.cachedAt) < f.ttl
+	if f.loaded && fresh {
 		cached := f.cached
+		f.mu.Unlock()
+		return cached, nil
+	}
+	if f.loaded {
+		// Stale, and that is good enough to answer with. Start one refresh
+		// behind it — one, however many requests arrive while it runs.
+		cached := f.cached
+		if !f.inFlight {
+			f.inFlight = true
+			go f.refresh()
+		}
 		f.mu.Unlock()
 		return cached, nil
 	}
 	f.mu.Unlock()
 
+	// Nothing has ever been loaded, so there is nothing to serve but the wait.
 	features, err := f.fetchAll(ctx)
 	if err != nil {
 		// Serve a stale projection rather than an empty feed if catalog blips.
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if f.cached != nil {
+		if f.loaded {
 			return f.cached, nil
 		}
 		return nil, err
 	}
 
 	f.mu.Lock()
-	f.cached, f.cachedAt = features, time.Now()
+	f.cached, f.cachedAt, f.loaded = features, time.Now(), true
 	f.mu.Unlock()
 	return features, nil
+}
+
+// refresh replaces the projection out of band. Its context is its own: the
+// request that noticed the staleness has long been answered, and hanging the
+// refresh off that request's context would cancel it the moment the viewer got
+// their page.
+func (f *FeatureSource) refresh() {
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	defer cancel()
+
+	features, err := f.fetchAll(ctx)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inFlight = false
+	if err != nil {
+		// Keep serving what is held. Leaving cachedAt where it is means the
+		// next request tries again rather than waiting out another TTL.
+		return
+	}
+	f.cached, f.cachedAt, f.loaded = features, time.Now(), true
 }
 
 func (f *FeatureSource) fetchAll(ctx context.Context) ([]domain.VideoFeatures, error) {
