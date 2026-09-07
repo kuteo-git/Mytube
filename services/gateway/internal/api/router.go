@@ -222,6 +222,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/videos/{id}/comments", g.handleListComments)
 	mux.HandleFunc("POST /api/videos/{id}/comments", g.handleCreateComment)
 	mux.HandleFunc("POST /api/videos/{id}/comments/fetch", g.handleFetchComments)
+	mux.HandleFunc("POST /api/videos/{id}/metadata", g.handleRefreshMetadata)
 	mux.HandleFunc("POST /api/videos/{id}/progress", g.handleProgress)
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 
@@ -787,6 +788,68 @@ func (g *Gateway) handleListComments(w http.ResponseWriter, r *http.Request) {
 // handleFetchComments loads YouTube comments for a video and imports them into
 // the catalog. It short-circuits when comments already exist, so pressing play
 // twice does not fetch twice.
+// handleRefreshMetadata fills in what a scan could not.
+//
+// A video that reached the library through a scan or the RSS pass has no
+// description: flat listings do not carry one, and until now the only writer of
+// that column was the download path — 2761 rows of 43295 had one, and the watch
+// screen simply drew nothing where the text belongs.
+//
+// ## Why it checks first, and refuses rather than fetching
+//
+// One call is one full metadata fetch upstream, and this library has already
+// been blocked once for making too many (see BackfillTopics). So a video that
+// already has a description is answered from the row without touching YouTube,
+// exactly as comments/fetch answers from the database when it already holds
+// some. The client asking anyway is not a fault; asking *twice for the same
+// video* would be, and this is what stops it.
+//
+// ## Why the response says what it did
+//
+// `updated` false with no error is a real answer: upstream had nothing to give,
+// which is what a private, removed, or genuinely description-less video looks
+// like. Reporting that as a failure would put an error on a page where nothing
+// is wrong.
+func (g *Gateway) handleRefreshMetadata(w http.ResponseWriter, r *http.Request) {
+	videoID := r.PathValue("id")
+	ctx := r.Context()
+
+	v, err := g.catalog.GetVideo(ctx, connect.NewRequest(&catalogv1.GetVideoRequest{
+		VideoId: videoID,
+		UserId:  g.userID(r),
+	}))
+	if err != nil {
+		g.writeErr(w, r, err)
+		return
+	}
+	if strings.TrimSpace(v.Msg.GetVideo().GetDescription()) != "" {
+		writeJSON(w, http.StatusOK, refreshMetadataResponse{Updated: false, Skipped: true})
+		return
+	}
+
+	resp, err := g.ingest.RefreshVideoMetadata(ctx, connect.NewRequest(&ingestv1.RefreshVideoMetadataRequest{
+		VideoId: videoID,
+	}))
+	if err != nil {
+		// Same judgement as comments/fetch: the page is whole without this, so
+		// a refusal from upstream is reported as a refusal and not as a fault
+		// in this system.
+		g.logger.Warn("refresh metadata", "video", videoID, "error", err)
+		writeJSON(w, http.StatusOK, refreshMetadataResponse{Updated: false})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, refreshMetadataResponse{Updated: resp.Msg.GetUpdated()})
+}
+
+type refreshMetadataResponse struct {
+	Updated bool `json:"updated"`
+	// True when the row already had what was wanted, so nothing was asked of
+	// YouTube. Told apart from `updated: false` because the two mean opposite
+	// things about whether it is worth asking again.
+	Skipped bool `json:"skipped,omitempty"`
+}
+
 func (g *Gateway) handleFetchComments(w http.ResponseWriter, r *http.Request) {
 	videoID := r.PathValue("id")
 	ctx := r.Context()

@@ -192,6 +192,16 @@ func (s *Server) EnsureVideo(ctx context.Context, req *connect.Request[ingestv1.
 	return connect.NewResponse(&ingestv1.EnsureVideoResponse{VideoId: videoID}), nil
 }
 
+func (s *Server) RefreshVideoMetadata(
+	ctx context.Context, req *connect.Request[ingestv1.RefreshVideoMetadataRequest],
+) (*connect.Response[ingestv1.RefreshVideoMetadataResponse], error) {
+	updated, err := s.ingest.RefreshVideoMetadata(ctx, req.Msg.GetVideoId())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.RefreshVideoMetadataResponse{Updated: updated}), nil
+}
+
 func scanToProto(r domain.ScanResult) *ingestv1.ScanStatus {
 	return &ingestv1.ScanStatus{
 		StartedAt:      timestamppb.New(r.StartedAt),

@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.0.15 — 2026-09-07
+
+**Only a download ever wrote a description, so the watch screen had nothing to
+draw for 94% of the library.**
+
+Reported from the mobile app: the description is missing. It was, and the app
+was right to draw nothing — `GET /api/videos/{id}` answers `description: ""`
+for anything that arrived through a scan or the RSS pass. Measured across the
+first 24 videos of the feed: **0 of 24** had one. In the catalogue as a whole,
+**2761 of 43295** rows (6.4%).
+
+`ytdlp/downloader.go` sets `Description` from a full metadata fetch, and the
+download path is the only caller that ever reaches it. A flat listing carries no
+description, so every scanned video keeps the empty string it arrived with.
+
+| | |
+|---|---|
+| `POST /api/videos/l5XJnEpGpDo/metadata` | `{"updated":true}` in **1.86s**, 0 → **906** chars |
+| the same call again | `{"updated":false,"skipped":true}` in **16ms** |
+| `GET /api/videos/{id}` after | 906 chars |
+
+- **`RefreshVideoMetadata` is its own RPC, not a flag on `EnsureVideo`.** They
+  are different intentions: EnsureVideo asks "is there a row for this?" and
+  answers yes without touching upstream when there is, which is right for
+  opening a search result and is exactly wrong here — measured before the split,
+  calling it on a row that already existed left the description at 0.
+- **The gateway refuses before it fetches.** One call is one full metadata
+  fetch, and this library has been blocked once for making too many — the note
+  on `BackfillTopics` records what that cost: every full metadata request
+  answered with "Sign in to confirm you're not a bot", which takes out stream
+  resolution too. So a video that already has a description is answered from the
+  row, and `skipped` is told apart from `updated: false` because the two mean
+  opposite things about whether asking again is worth anything.
+- **The video id is read from the row, not taken from the caller.** Passing a
+  URL in would be the one way this could write one video's metadata onto
+  another's id.
+- **`updated: false` is not an error.** A private or removed video is a fact
+  about that video, and the page it came from is showing it perfectly well
+  without the field. Same judgement `comments/fetch` already makes.
+- **It does not carry the backfill's `switch`.** That one refuses to write when
+  upstream has no category, because a pass picked the video for its *topics* and
+  an empty topic list cannot be told from not having tried. A caller here named
+  one video and wants whatever came back; the upsert decides what survives, and
+  it already leaves `media_state`, `media_path` and `added_at` alone while
+  keeping every non-empty answer.
+- **The backfill is deliberately not what answers this.** Its pass is bounded,
+  paced and prioritised because it walks forty thousand rows; a video somebody
+  has just opened cannot wait for a scheduled pass to reach it. Widening its
+  predicate to "missing description" would fill the library in eventually and
+  remains the right way to do that; it is not the way to answer one open.
+
 ## 0.0.14 — 2026-09-06
 
 **The feed ranked the whole library on every request, and opening a video asked

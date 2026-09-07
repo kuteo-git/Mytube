@@ -32,6 +32,22 @@ service IngestService {
   // only when it is opened. Two rules for one act is how they come to disagree.
   rpc PreviewVideo(PreviewVideoRequest) returns (PreviewVideoResponse);
 
+  // Fetches one video's metadata again and writes what the catalogue is
+  // missing back onto its row.
+  //
+  // Separate from EnsureVideo rather than a flag on it, because the two are
+  // different intentions and a boolean joining them is how they come to
+  // disagree: EnsureVideo asks "is there a row for this?" and answers yes
+  // without touching upstream when there is, which is exactly right for
+  // opening a search result. This asks "fetch it again", and its whole purpose
+  // is to run when the row already exists.
+  //
+  // The cost is one full metadata fetch per call, against a library that has
+  // been blocked once for making too many (see BackfillTopics). So the caller
+  // is expected to ask only for a video somebody is looking at, and only when
+  // the field it wants is actually missing.
+  rpc RefreshVideoMetadata(RefreshVideoMetadataRequest) returns (RefreshVideoMetadataResponse);
+
   // Rescans topics.yaml now instead of waiting for the timer.
   rpc Refresh(RefreshRequest) returns (RefreshResponse);
 
@@ -376,6 +392,19 @@ message EnsureVideoRequest {
 message EnsureVideoResponse {
   // Catalog id of the video, ready to be opened.
   string video_id = 1;
+}
+
+message RefreshVideoMetadataRequest {
+  // Catalog id. The source URL is read from the row rather than passed in, so
+  // a caller cannot point this at one video and write the answer onto another.
+  string video_id = 1;
+}
+
+message RefreshVideoMetadataResponse {
+  // False when upstream had nothing to give: a private or removed video, or
+  // one whose metadata simply carries none of what was missing. Not an error —
+  // a video that will never have a description is a fact, not a failure.
+  bool updated = 1;
 }
 
 message BackfillTopicsRequest {

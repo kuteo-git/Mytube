@@ -41,6 +41,9 @@ const (
 	// IngestServicePreviewVideoProcedure is the fully-qualified name of the IngestService's
 	// PreviewVideo RPC.
 	IngestServicePreviewVideoProcedure = "/ingest.v1.IngestService/PreviewVideo"
+	// IngestServiceRefreshVideoMetadataProcedure is the fully-qualified name of the IngestService's
+	// RefreshVideoMetadata RPC.
+	IngestServiceRefreshVideoMetadataProcedure = "/ingest.v1.IngestService/RefreshVideoMetadata"
 	// IngestServiceRefreshProcedure is the fully-qualified name of the IngestService's Refresh RPC.
 	IngestServiceRefreshProcedure = "/ingest.v1.IngestService/Refresh"
 	// IngestServiceBackfillTopicsProcedure is the fully-qualified name of the IngestService's
@@ -133,6 +136,21 @@ type IngestServiceClient interface {
 	// same act — "I saw this video elsewhere" — and a search result is written
 	// only when it is opened. Two rules for one act is how they come to disagree.
 	PreviewVideo(context.Context, *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error)
+	// Fetches one video's metadata again and writes what the catalogue is
+	// missing back onto its row.
+	//
+	// Separate from EnsureVideo rather than a flag on it, because the two are
+	// different intentions and a boolean joining them is how they come to
+	// disagree: EnsureVideo asks "is there a row for this?" and answers yes
+	// without touching upstream when there is, which is exactly right for
+	// opening a search result. This asks "fetch it again", and its whole purpose
+	// is to run when the row already exists.
+	//
+	// The cost is one full metadata fetch per call, against a library that has
+	// been blocked once for making too many (see BackfillTopics). So the caller
+	// is expected to ask only for a video somebody is looking at, and only when
+	// the field it wants is actually missing.
+	RefreshVideoMetadata(context.Context, *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Assigns YouTube's own category to videos that have none.
@@ -258,6 +276,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServicePreviewVideoProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("PreviewVideo")),
+			connect.WithClientOptions(opts...),
+		),
+		refreshVideoMetadata: connect.NewClient[v1.RefreshVideoMetadataRequest, v1.RefreshVideoMetadataResponse](
+			httpClient,
+			baseURL+IngestServiceRefreshVideoMetadataProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("RefreshVideoMetadata")),
 			connect.WithClientOptions(opts...),
 		),
 		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
@@ -424,6 +448,7 @@ type ingestServiceClient struct {
 	search               *connect.Client[v1.SearchRequest, v1.SearchResponse]
 	ensureVideo          *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
 	previewVideo         *connect.Client[v1.PreviewVideoRequest, v1.PreviewVideoResponse]
+	refreshVideoMetadata *connect.Client[v1.RefreshVideoMetadataRequest, v1.RefreshVideoMetadataResponse]
 	refresh              *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	backfillTopics       *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
 	getBackfillStatus    *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
@@ -465,6 +490,11 @@ func (c *ingestServiceClient) EnsureVideo(ctx context.Context, req *connect.Requ
 // PreviewVideo calls ingest.v1.IngestService.PreviewVideo.
 func (c *ingestServiceClient) PreviewVideo(ctx context.Context, req *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error) {
 	return c.previewVideo.CallUnary(ctx, req)
+}
+
+// RefreshVideoMetadata calls ingest.v1.IngestService.RefreshVideoMetadata.
+func (c *ingestServiceClient) RefreshVideoMetadata(ctx context.Context, req *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error) {
+	return c.refreshVideoMetadata.CallUnary(ctx, req)
 }
 
 // Refresh calls ingest.v1.IngestService.Refresh.
@@ -616,6 +646,21 @@ type IngestServiceHandler interface {
 	// same act — "I saw this video elsewhere" — and a search result is written
 	// only when it is opened. Two rules for one act is how they come to disagree.
 	PreviewVideo(context.Context, *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error)
+	// Fetches one video's metadata again and writes what the catalogue is
+	// missing back onto its row.
+	//
+	// Separate from EnsureVideo rather than a flag on it, because the two are
+	// different intentions and a boolean joining them is how they come to
+	// disagree: EnsureVideo asks "is there a row for this?" and answers yes
+	// without touching upstream when there is, which is exactly right for
+	// opening a search result. This asks "fetch it again", and its whole purpose
+	// is to run when the row already exists.
+	//
+	// The cost is one full metadata fetch per call, against a library that has
+	// been blocked once for making too many (see BackfillTopics). So the caller
+	// is expected to ask only for a video somebody is looking at, and only when
+	// the field it wants is actually missing.
+	RefreshVideoMetadata(context.Context, *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Assigns YouTube's own category to videos that have none.
@@ -737,6 +782,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServicePreviewVideoProcedure,
 		svc.PreviewVideo,
 		connect.WithSchema(ingestServiceMethods.ByName("PreviewVideo")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceRefreshVideoMetadataHandler := connect.NewUnaryHandler(
+		IngestServiceRefreshVideoMetadataProcedure,
+		svc.RefreshVideoMetadata,
+		connect.WithSchema(ingestServiceMethods.ByName("RefreshVideoMetadata")),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceRefreshHandler := connect.NewUnaryHandler(
@@ -903,6 +954,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceEnsureVideoHandler.ServeHTTP(w, r)
 		case IngestServicePreviewVideoProcedure:
 			ingestServicePreviewVideoHandler.ServeHTTP(w, r)
+		case IngestServiceRefreshVideoMetadataProcedure:
+			ingestServiceRefreshVideoMetadataHandler.ServeHTTP(w, r)
 		case IngestServiceRefreshProcedure:
 			ingestServiceRefreshHandler.ServeHTTP(w, r)
 		case IngestServiceBackfillTopicsProcedure:
@@ -974,6 +1027,10 @@ func (UnimplementedIngestServiceHandler) EnsureVideo(context.Context, *connect.R
 
 func (UnimplementedIngestServiceHandler) PreviewVideo(context.Context, *connect.Request[v1.PreviewVideoRequest]) (*connect.Response[v1.PreviewVideoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.PreviewVideo is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) RefreshVideoMetadata(context.Context, *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.RefreshVideoMetadata is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {

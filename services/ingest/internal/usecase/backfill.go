@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -270,6 +272,61 @@ func (i *Ingest) runBackfill(limit int32) {
 	i.logger.Info("topic backfill finished",
 		"examined", final.Examined, "updated", final.Updated, "failed", final.Failed,
 		"took", time.Since(final.StartedAt).Truncate(time.Second))
+}
+
+// RefreshVideoMetadata fetches one video's metadata again and writes it back.
+//
+// The backfill below is the bulk version of this and is deliberately not what
+// answers here. Its pass is bounded, paced and prioritised because it walks a
+// library of forty thousand rows; this is one video that somebody has just
+// opened, and making it wait for a scheduled pass to reach it is the same as
+// never showing it.
+//
+// It does not carry the backfill's `switch`. That one refuses to write when
+// upstream has no category, because a pass picked the video for its *topics*
+// and an empty topic list cannot be told from not having tried. A caller here
+// named one video and wants whatever came back — the upsert is what decides
+// which fields survive, and it keeps every non-empty answer while leaving
+// media_state, media_path and added_at alone.
+//
+// Reported as the watch screen showing no description: only the download path
+// ever wrote one, so 2761 of 43295 rows had one and everything that arrived
+// through a scan had none.
+func (i *Ingest) RefreshVideoMetadata(ctx context.Context, videoID string) (bool, error) {
+	videoID = strings.TrimSpace(videoID)
+	if videoID == "" {
+		return false, fmt.Errorf("%w: video_id is required", domain.ErrInvalid)
+	}
+
+	// Read from the row rather than taking a URL from the caller: pointing this
+	// at one address and writing the answer onto another id is the one way it
+	// could corrupt a row, and it costs a local lookup to make impossible.
+	sourceURL, err := i.library.SourceURLFor(ctx, videoID)
+	if err != nil {
+		return false, err
+	}
+	if sourceURL == "" {
+		sourceURL = "https://www.youtube.com/watch?v=" + videoID
+	}
+
+	preview, err := i.downloader.Preview(ctx, sourceURL)
+	if err != nil {
+		// Private, removed, or upstream refusing. Not an error the caller can
+		// act on and not one worth putting on screen: the page it came from is
+		// showing the video perfectly well without the field.
+		i.logger.Debug("refresh metadata: preview failed", "video", videoID, "error", err)
+		return false, nil
+	}
+
+	preview.ID = videoID
+	if preview.Category != "" {
+		preview.Topics = categoryTopics(preview)
+	}
+
+	if err := i.library.UpsertVideo(ctx, preview, ""); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // backfillOne fetches one video's metadata and writes the missing fields back.
