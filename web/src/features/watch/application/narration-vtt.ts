@@ -61,10 +61,14 @@ export function cleanCueText(raw: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
 
+  // The four quote marks are written as escapes on purpose. As literals they
+  // were at some point flattened to straight " and ' — by an editor or a
+  // formatter, silently — and the class then stripped the apostrophe out of
+  // every contraction it saw: "they're" reached the translator as "theyre".
   s = s
     .replace(/<[^>]+>/g, '')
     .replace(/>>\s*/g, '')
-    .replace(/[♪♫♬→←↑↓↔«»""''„‚]/g, '')
+    .replace(/[♪♫♬→←↑↓↔«»\u201C\u201D\u2018\u2019„‚]/g, '')
     .trim()
 
   return s.replace(/\s{2,}/g, ' ')
@@ -88,11 +92,35 @@ export function stripBrackets(text: string): string {
 /** Cues shorter than this are YouTube's clean-snapshot copies, not speech. */
 const SNAPSHOT_MAX_SECONDS = 0.1
 
-/** A clause is not split off a comma if either side is shorter than this. */
+/** The clause a comma opens is not split off if it is shorter than this. */
 const MIN_CLAUSE_WORDS = 3
 
-/** With no punctuation at all, a clause is cut once it reaches this length. */
-const FORCE_SPLIT_WORDS = 30
+/**
+ * Nor is the clause a comma closes.
+ *
+ * Larger than MIN_CLAUSE_WORDS, and measured rather than chosen. The rule above
+ * exists to stop a clause being voiced as a clip half a second long — and at 3
+ * it was not stopping it: on one measured video thirteen clips came out under a
+ * second and the shortest, "And of course,", was 0.40s. Every one of them was an
+ * adverbial opener that had picked up three words and qualified.
+ *
+ * English ASR here runs at 3.37 words a second, so five words is about a second
+ * and a half. At five, those thirteen become three — and the three that remain
+ * are whole short sentences, which are allowed to be short.
+ */
+const MIN_CLAUSE_BEFORE = 5
+
+/**
+ * With no punctuation at all, a clause is cut once it reaches this length.
+ *
+ * A ceiling on speech that never punctuates, and nothing else: any boundary at
+ * all is taken first, on the word it arrives. It was 30, which is low enough to
+ * fire a word or two *before* a full stop — measured, it cut "...or maybe okay
+ * maybe slightly" and left "below those." as a cue of its own, 0.72s long. A
+ * blind cut that beats a real boundary to it by two words is the one thing this
+ * constant must not do, so it has room to let a sentence finish.
+ */
+const FORCE_SPLIT_WORDS = 40
 
 const ABBREVIATIONS = /^(Dr|Mr|Mrs|Ms|DR|Prof|Sr|Jr|vs|etc)$/i
 
@@ -197,6 +225,12 @@ function piecesFromTagged(block: RawBlock): Piece[] {
  * so "Hello there, my friend. How are you" came out as a single cue instead of
  * the three the rule asks for.
  */
+/** The text from just past `idx` to the next punctuation mark, or to the end. */
+function segmentAfter(text: string, idx: number): string {
+  const next = text.slice(idx + 1).search(/[.!?,]/)
+  return next < 0 ? text.slice(idx + 1) : text.slice(idx + 1, idx + 1 + next)
+}
+
 export function firstClauseBoundary(text: string): number {
   const re = /[.!?,]/g
   let m: RegExpExecArray | null
@@ -221,10 +255,15 @@ export function firstClauseBoundary(text: string): number {
     // "Then, how are you" leaves "Then," to be translated with no sentence
     // around it and voiced as a clip half a second long — the opposite of what
     // splitting is for.
+    //
+    // The side that follows is the *next clause*, not everything left in the
+    // buffer. Measured to the end it counted the whole rest of the sentence, so
+    // a list separator always qualified: "the AirPods 4, 3, or 2" was cut after
+    // "4," and left "3, or 2." to be spoken alone, 0.72s long.
     if (ch === ',') {
       const wordsBefore = text.slice(0, idx).trim().split(/\s+/).filter(Boolean).length
-      const wordsAfter = text.slice(idx + 1).trim().split(/\s+/).filter(Boolean).length
-      if (wordsBefore < MIN_CLAUSE_WORDS || wordsAfter < MIN_CLAUSE_WORDS) continue
+      const wordsAfter = segmentAfter(text, idx).trim().split(/\s+/).filter(Boolean).length
+      if (wordsBefore < MIN_CLAUSE_BEFORE || wordsAfter < MIN_CLAUSE_WORDS) continue
     }
 
     return idx + 1

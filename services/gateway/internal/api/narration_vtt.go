@@ -36,11 +36,31 @@ type vttCue struct {
 // copies of a line a real cue already carries, not speech.
 const snapshotMaxSeconds = 0.1
 
-// minClauseWords: a clause is not split off a comma if either side is shorter.
+// minClauseWords: the clause a comma opens is not split off if it is shorter.
 const minClauseWords = 3
 
+// minClauseBefore: nor is the clause a comma closes.
+//
+// Larger than minClauseWords, and measured rather than chosen. The rule above
+// exists to stop a clause being "voiced as a clip half a second long" — and at
+// 3 it was not stopping it: on one measured video thirteen clips came out under
+// a second and the shortest, "And of course,", was 0.40s. Every one of them was
+// an adverbial opener that had picked up three words and qualified.
+//
+// English ASR here runs at 3.37 words a second, so five words is about a second
+// and a half. At five, those thirteen become three — and the three that remain
+// are whole short sentences, which are allowed to be short.
+const minClauseBefore = 5
+
 // forceSplitWords: with no punctuation at all, a clause is cut at this length.
-const forceSplitWords = 30
+//
+// A ceiling on speech that never punctuates, and nothing else: any boundary at
+// all is taken first, on the word it arrives. It was 30, which is low enough to
+// fire a word or two *before* a full stop — measured, it cut "...or maybe okay
+// maybe slightly" and left "below those." as a cue of its own, 0.72s long. A
+// blind cut that beats a real boundary to it by two words is the one thing this
+// constant must not do, so it has room to let a sentence finish.
+const forceSplitWords = 40
 
 var (
 	abbreviations = regexp.MustCompile(`(?i)^(Dr|Mr|Mrs|Ms|Prof|Sr|Jr|vs|etc)$`)
@@ -266,8 +286,8 @@ func firstClauseBoundary(text string) int {
 		// around it and voiced as a clip half a second long.
 		if ch == ',' {
 			wordsBefore := len(strings.Fields(string(runes[:idx])))
-			wordsAfter := len(strings.Fields(string(runes[idx+1:])))
-			if wordsBefore < minClauseWords || wordsAfter < minClauseWords {
+			wordsAfter := len(strings.Fields(segmentAfter(runes, idx)))
+			if wordsBefore < minClauseBefore || wordsAfter < minClauseWords {
 				continue
 			}
 		}
@@ -275,6 +295,18 @@ func firstClauseBoundary(text string) int {
 		return idx + 1
 	}
 	return -1
+}
+
+// segmentAfter returns the text from just past idx to the next punctuation
+// mark, or to the end when there is none.
+func segmentAfter(runes []rune, idx int) string {
+	for k := idx + 1; k < len(runes); k++ {
+		switch runes[k] {
+		case '.', '!', '?', ',':
+			return string(runes[idx+1 : k])
+		}
+	}
+	return string(runes[idx+1:])
 }
 
 func isDigit(r rune) bool  { return r >= '0' && r <= '9' }

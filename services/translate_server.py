@@ -145,6 +145,111 @@ def aligned_or_none(parsed: dict[int, str], want: int) -> list[str] | None:
 MERGE_RATIO = 2.4
 MERGE_FLOOR = 24
 
+# How many lines before a cue travel with it when it is retried on its own.
+#
+# Three, which is what the gateway sends for a batch (`narrationContext`). It is
+# written here as well rather than derived from what the caller sent, because
+# the first batch of a video has nothing before it and the cues in front of a
+# line are still that line's context — deriving it would leave exactly that
+# batch translating in a vacuum.
+CONTEXT_LINES = 3
+
+
+def context_for(context: list[str], cues: list[str], i: int) -> list[str]:
+    """The lines a single-cue retry should see before cue `i`.
+
+    The caller's context runs out as the batch is walked and the batch's own
+    earlier cues take its place, so a line late in a batch is read against its
+    real neighbours rather than against three lines from before all of them.
+
+    Measured on one real line, against the running router:
+
+        "So, if you're coming from the three or the twos,"
+          alone  -> "Vậy nếu bạn đến từ đường ba hoặc đường hai,"
+          with 3 -> "Vậy nếu bạn đang dùng thế hệ ba hay hai thì"
+
+    "đường ba" is road number three. Nothing in the line itself says these are
+    AirPods, and Vietnamese has to choose a word where English left none.
+    """
+    return [*context, *cues[:i]][-CONTEXT_LINES:]
+
+# English number words, so a line that says "the twos" counts as carrying a 2.
+#
+# Without these the check below would fire on every correct translation that
+# writes a spelled-out number as a digit, which Vietnamese does as a matter of
+# course: "coming from the three or the twos" is correctly "dùng thế hệ 3 hay 2".
+NUMBER_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    "seventy": 70, "eighty": 80, "ninety": 90, "hundred": 100,
+    # A month is a number to a Vietnamese reader: July is "tháng 7". Measured
+    # over this library these were the single largest source of false alarms.
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
+    "december": 12,
+}
+
+
+def digit_runs(text: str) -> list[str]:
+    """Every run of digits in the text, as written."""
+    return re.findall(r"\d+", text)
+
+
+def numbers_in(text: str) -> set[int]:
+    """Every number the text carries, written as a digit or as a word.
+
+    Plurals count: "the twos" and "the threes" are how a reviewer says it, and
+    they are the same fact as "2" and "3".
+    """
+    found = {int(d) for d in digit_runs(text)}
+    for word in re.findall(r"[A-Za-z]+", text.casefold()):
+        value = NUMBER_WORDS.get(word) or NUMBER_WORDS.get(word.rstrip("s"))
+        if value is not None:
+            found.add(value)
+    return found
+
+
+def borrowed_number(cues: list[str], out: list[str]) -> str:
+    """Why a line holds a figure belonging to the cue after it, or "".
+
+    The two signatures in `misaligned` both look for the padding a shift leaves
+    behind. A model that returns the right number of lines, each the right
+    length, attached to the wrong cues leaves none — and both go blind. Measured
+    on kXVt4atqMv8, where six consecutive cues carried the next cue's words:
+    every line distinct, the longest 54 characters against a threshold of 122.
+
+    So this one reads the contents instead of the envelope, which is the lesson
+    the first fix recorded one level up. A number is what survives translation
+    unchanged, so a line holding a figure that belongs to the cue after it did
+    not come from the cue it is filed under.
+
+    The audit script calls this too, which is why it is a function of its own:
+    two spellings of what counts as a borrowed number would be two answers to
+    the same question, and the one in the script is the one nobody runs.
+    """
+    for i in range(min(len(out), len(cues)) - 1):
+        source = digit_runs(cues[i])
+        mine = numbers_in(cues[i])
+        theirs = numbers_in(cues[i + 1])
+        borrowed = set()
+        for run in digit_runs(out[i]):
+            value = int(run)
+            if value in mine or value not in theirs:
+                continue
+            # The same number written another way. "how old were you on 911"
+            # becomes "vào ngày 11/9", which is the question's own digits laid
+            # out for a reader who puts the day first — not a figure from
+            # anywhere else.
+            if any(run in whole for whole in source):
+                continue
+            borrowed.add(value)
+        if borrowed:
+            return f"line {i + 1} carries {sorted(borrowed)} from cue {i + 2}"
+    return ""
+
 
 def misaligned(cues: list[str], out: list[str]) -> str:
     """Why this batch's lines do not belong to these cues, or "".
@@ -181,7 +286,7 @@ def misaligned(cues: list[str], out: list[str]) -> str:
         if len(line.strip()) > MERGE_FLOOR + MERGE_RATIO * source:
             return f"line {i + 1} is {len(line.strip())} chars for {source}"
 
-    return ""
+    return borrowed_number(cues, out)
 
 
 def openai_content(payload: dict) -> str:
@@ -385,7 +490,14 @@ async def translate_batch(req: Request):
             # a differently-worded question and could hand back a line that no
             # longer fits, which is exactly what the retry is trying to salvage.
             one_slot = [slots[i]] if i < len(slots) else None
-            single = omniroute_batch([c], [], base_url, model, api_key, one_slot)
+            # So does the context, for the same kind of reason. What this retry
+            # removes is the ordering a batch can get wrong; the lines around a
+            # cue are not part of that. A context line is marked "do NOT
+            # translate" and is not counted, so it cannot reintroduce the shift
+            # — and without it every pronoun and every bare noun phrase is
+            # resolved by guesswork.
+            single = omniroute_batch([c], context_for(context, cues, i),
+                                     base_url, model, api_key, one_slot)
             out.append(single[0] if single else "")
 
     dt = time.perf_counter() - t0

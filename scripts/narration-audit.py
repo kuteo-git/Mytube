@@ -18,11 +18,15 @@ line's audio is simply never asked for again.
 import argparse
 import json
 import os
+import re
 import sys
 
-# The same two signatures the server's own guard refuses, so a video this
-# reports is a video that would be refused today.
+# The signatures the server's own guard refuses, so a video this reports is a
+# video that would be refused today. `numbers_in` is imported rather than copied
+# for that reason: two spellings of what counts as a number would be two answers
+# to the same question, and the one here is the one nobody runs.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services"))
+from translate_server import borrowed_number  # noqa: E402
 
 
 def blocks(vtt: str) -> list[str]:
@@ -73,29 +77,136 @@ def suspect(cues: list[str], translations: list[str]) -> str:
     return ""
 
 
+def borrowed(cues: list[str], translations: list[str]) -> str:
+    """The server's own borrowed-number signature, worded for a video.
+
+    The line it names is quoted, because the whole point of running this over a
+    library is deciding which reports to believe, and a cue number alone sends
+    somebody back to the files to find out what it says.
+    """
+    why = borrowed_number(cues, translations)
+    if not why:
+        return ""
+    why = why.replace("line ", "cue ", 1)
+    at = int(why.split()[1]) - 1
+    if 0 <= at < len(translations):
+        why += f': "{translations[at][:60]}"'
+    return why
+
+
+# The symbols a synthesiser would read out, which the parser drops before a cue
+# is ever cached. Kept as escapes: written as literals these four quote marks
+# were once flattened to straight ones by an editor, and the class then stripped
+# the apostrophe out of every contraction it saw.
+SYMBOLS = "\u266a\u266b\u266c\u2192\u2190\u2191\u2193\u2194\u00ab\u00bb" \
+          "\u201C\u201D\u2018\u2019\u201e\u201a"
+
+
+def clean(text: str) -> str:
+    """The captions as the parser left them before the cue was cached.
+
+    Entities first, so &gt;&gt; is >> in time to be recognised below — the same
+    order `cleanCueText` uses, and for the same reason. Without this step a
+    transcript read raw does not contain the text any cue was built from:
+    measured on kXVt4atqMv8, 25 of 183 cues could not be placed, every one of
+    them because the captions spell "A&C" as "A&amp;C".
+    """
+    for entity, char in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
+                         ("&quot;", '"'), ("&#39;", "'")):
+        text = text.replace(entity, char)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r">>\s*", "", text)
+    text = text.translate({ord(c): None for c in SYMBOLS})
+    return re.sub(r"\s+", " ", text)
+
+
+def order_from_transcript(cache: dict, vtt: str) -> list[str]:
+    """The cached cues in the order they are spoken, read off the captions.
+
+    `narration-cues.json` is the authoritative order and 174 of this library's
+    narrated videos do not have one — including the video this check was written
+    for. Every cached key is a run of words inside the transcript, so its
+    position there is its position in the pass, and that needs no extra file.
+
+    **It places 92% of them, not all.** The rolling format repeats the previous
+    cue above each new one, so the repeats have to be dropped — and a cue that
+    began in the tail of a dropped line no longer has a run to be found in. That
+    is a limit of reading the order back out rather than being handed it, and it
+    is recorded rather than worked around: the alternative is the parser itself,
+    which lives in Go. A cue that cannot be placed is a cue this audit does not
+    examine, so a clean report over these videos is weaker than a clean report
+    over one with a cues file.
+    """
+    lines, seen = [], set()
+    for raw in vtt.split("\n"):
+        if "-->" in raw or raw.startswith(("WEBVTT", "Kind:", "Language:")):
+            continue
+        # Cleaned per line: `clean` collapses every run of whitespace, so
+        # running it over the whole file first would leave nothing to split on.
+        line = clean(raw).strip()
+        if not line:
+            continue
+        # The rolling format repeats the previous cue above each new one.
+        if line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
+    text = " ".join(lines)
+
+    placed = []
+    for key in cache:
+        at = text.find(clean(key).strip())
+        if at >= 0:
+            placed.append((at, key))
+    return [key for _, key in sorted(placed)]
+
+
+def pairs(folder: str) -> tuple[list[str], list[str]]:
+    """(cues, translations) in order, or two empty lists.
+
+    Prefers `narration-cues.json` and the vi-mt subtitle, which is what the
+    repeat signature has always read. Falls back to the translation cache, which
+    every narrated video has, so a video missing those two is examined rather
+    than skipped.
+    """
+    cues_path = os.path.join(folder, "narration-cues.json")
+    subs = [f for f in os.listdir(folder) if f.endswith(".vi-mt.vtt")]
+    if os.path.isfile(cues_path) and subs:
+        cues = [c["text"] for c in json.load(open(cues_path))]
+        with open(os.path.join(folder, subs[0])) as fh:
+            return cues, blocks(fh.read())
+
+    cache_path = os.path.join(folder, "narration.vi.json")
+    source = [f for f in os.listdir(folder)
+              if f.endswith(".vtt") and not f.endswith(".vi-mt.vtt")]
+    if not os.path.isfile(cache_path) or not source:
+        return [], []
+    cache = json.load(open(cache_path)).get("omniroute:sub_translation", {})
+    with open(os.path.join(folder, source[0])) as fh:
+        cues = order_from_transcript(cache, fh.read())
+    return cues, [cache[c] for c in cues]
+
+
 def audit(root: str, delete: bool) -> int:
     hit = 0
     checked = 0
     for video in sorted(os.listdir(root)):
-        cues_path = os.path.join(root, video, "narration-cues.json")
-        if not os.path.isfile(cues_path):
+        folder = os.path.join(root, video)
+        if not os.path.isdir(folder):
             continue
-
-        subs = [f for f in os.listdir(os.path.join(root, video))
-                if f.endswith(".vi-mt.vtt")]
-        if not subs:
+        if not os.path.isfile(os.path.join(folder, "narration.vi.json")):
             continue
 
         try:
-            cues = [c["text"] for c in json.load(open(cues_path))]
-            with open(os.path.join(root, video, subs[0])) as fh:
-                translations = blocks(fh.read())
+            cues, translations = pairs(folder)
         except (OSError, ValueError, KeyError) as err:
             print(f"{video}: unreadable ({err})")
             continue
+        if not cues:
+            continue
 
         checked += 1
-        why = suspect(cues, translations)
+        why = suspect(cues, translations) or borrowed(cues, translations)
         if not why:
             continue
 
@@ -104,8 +215,9 @@ def audit(root: str, delete: bool) -> int:
         if not delete:
             continue
 
+        subs = [f for f in os.listdir(folder) if f.endswith(".vi-mt.vtt")]
         for name in [*subs, "narration.vi.json"]:
-            path = os.path.join(root, video, name)
+            path = os.path.join(folder, name)
             if os.path.exists(path):
                 os.remove(path)
                 print(f"  removed {name}")
