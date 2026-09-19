@@ -1,5 +1,113 @@
 # Changelog
 
+## 0.0.16 — 2026-09-19
+
+**Narration was cut mid-phrase, and one line in every fifty was speaking the
+next line's words.** Two unrelated faults, reported as one feeling: that the
+narration did not follow the video.
+
+### A comma is not a boundary just because both sides have words
+
+Reported against kXVt4atqMv8. Three mechanisms in the clause splitter, and each
+one produced a different shape of fragment.
+
+- **`wordsAfter` counted to the end of the buffer, not to the next clause.** The
+  rule's own comment says a comma is a boundary only when "both sides can stand
+  alone" — and the side that follows is the next clause, not everything left to
+  read. Measured to the end, a list separator always qualified: "the AirPods 4,
+  3, or 2." was cut after "4," and "3, or 2." was spoken alone, 0.72s long.
+- **The closing side had the same three-word minimum as the opening one.** That
+  rule exists to stop a clause being "voiced as a clip half a second long", and
+  at 3 it was not stopping it: thirteen clips came out under a second on this
+  one video, the shortest "And of course," at **0.40s**. Every one was an
+  adverbial opener that had picked up three words and qualified. English ASR
+  here runs at 3.37 words a second, so the minimum is five — about a second and
+  a half.
+- **The 30-word ceiling was low enough to beat a full stop to it.** It bounds
+  speech that never punctuates and nothing else, yet it cut "...or maybe okay
+  maybe slightly" two words before the sentence ended and left "below those." as
+  a cue of its own. At 40 a sentence has room to finish.
+
+| | before | after |
+|---|---|---|
+| clips under 1.0s | 13 | **2** |
+| cues of four words or fewer | 26 | **10** |
+| cues cut with no punctuation | 2 | **1** |
+| cues | 201 | 185 |
+
+The one blind cut left is a genuine 45-word run with no punctuation anywhere in
+it, which is what a ceiling is for.
+
+Both clients. The TypeScript is what the Go file was ported from and carried all
+three faults unchanged.
+
+### Counting the padding was never checking the alignment either
+
+0.0.13 added a guard for a batch whose lines do not belong to its cues, and it
+works — 5 of 249 batches refused. But both its signatures look for the *padding*
+a shift leaves behind: a line repeated to keep the count, or two cues merged into
+one over-long line. **A model that returns the right number of lines, each a
+sensible length, attached to the wrong cues leaves no padding at all.**
+
+kXVt4atqMv8 was published on the 17th and narrated on the 18th, by the server
+that already had both signatures. Six consecutive cues carried the next cue's
+words:
+
+```
+EN  we also got USBC.
+VI  Vậy nếu bạn dùng thế hệ 3 hay 2,        ← the line after it
+```
+
+Run both existing signatures over that batch and neither speaks: every output
+line distinct, the longest 54 characters against a merge threshold of 122. That
+is now a test of its own, so a later change cannot quietly remove the reason the
+third signature exists.
+
+- **`borrowed_number` reads the contents, not the envelope** — which is the
+  lesson the first fix stated one level up. A number survives translation
+  unchanged, so a line holding a figure belonging to the cue after it did not
+  come from the cue it is filed under.
+- **A month is a number.** "starting in July this year" is correctly "bắt đầu
+  từ tháng 7 năm nay". Measured over the library, month names were the single
+  largest source of false alarms.
+- **A number written another way is not borrowed.** "how old were you on 911" is
+  correctly "vào ngày 11/9" — the question's own digits, laid out for a reader
+  who puts the day first.
+- **The cost is a slower batch, never a wrong one.** A refusal re-translates one
+  cue at a time, where there is no ordering left to get wrong. Across 116,511
+  cues, 173 flag: 0.15%, or ~2.2% of fifteen-cue batches, which is the rate the
+  existing guard already ran at. The digit 1 alone drives 6 of 170, so "one"
+  being a pronoun as often as a number is not the systematic problem it looked
+  like.
+
+**28% of videos narrated since the first fix still carried a shifted cue.** Fifty
+were found and their caches removed; the next pass over each will ask again.
+
+### The audit could not see the video it was written for
+
+- It read `narration-cues.json` and a vi-mt subtitle, which **174 narrated videos
+  do not have** — including this one. It falls back to the translation cache and
+  the source captions, which every narrated video has. Coverage 215 → 388.
+- It searched the captions raw while every cached key had been through
+  `cleanCueText`, so a cue containing "A&C" — spelled `A&amp;C` in the file —
+  could not be placed at all. That silently dropped **25 of 183** cues on the
+  reported video: a cue that cannot be placed is a cue nothing examines.
+  Cleaning the transcript the same way takes placement from 85% to **92.1%**.
+- The remainder is a cue that begins in the tail of a rolling repeat, and it is
+  recorded in the docstring as a limit rather than worked around. Reading an
+  order back out is weaker than being handed one.
+
+### And the web app had been eating apostrophes
+
+Found while writing the above. The four typographic quote marks in
+`cleanCueText`'s symbol class — “ ” ‘ ’ — had at some point been flattened to
+straight `"` and `'`, silently, by an editor or a formatter. A class holding a
+straight apostrophe strips the apostrophe out of every contraction in every
+caption: "they're" reached the translator and the synthesiser as "theyre". The
+Go port has the correct marks, so the server and the mobile app were never
+affected. They are `\u` escapes now, because a literal can be flattened by the
+same pass that flattened it the first time.
+
 ## 0.0.15 — 2026-09-07
 
 **Only a download ever wrote a description, so the watch screen had nothing to
