@@ -6,8 +6,10 @@ measurement.
 """
 from translate_server import (
     BATCH_PROMPT,
+    CONTEXT_LINES,
     MERGE_FLOOR,
     MERGE_RATIO,
+    context_for,
     OMNIROUTE_API_KEY,
     OMNIROUTE_BASE_URL,
     OMNIROUTE_MODEL,
@@ -379,3 +381,69 @@ def test_a_borrowed_number_is_still_caught_when_nothing_explains_it():
     out = ["Đây là một lỗ hổng P1.",
            "Nó cho bạn một prompt để dán vào agent."]
     assert misaligned(cues, out)
+
+
+# ---- what a single-cue retry is allowed to see ------------------------------
+#
+# The retry exists to remove the ordering a batch can get wrong. It was also
+# removing the lines around each cue, and those are two different things.
+# Measured against the running router on one real line, with and without:
+#
+#   "So, if you're coming from the three or the twos,"
+#     alone    -> "Vậy nếu bạn đến từ đường ba hoặc đường hai,"
+#     with 3   -> "Vậy nếu bạn đang dùng thế hệ ba hay hai thì"
+#
+# "đường ba" is road number three. Nothing in the line says these are AirPods.
+
+
+def test_context_for_the_first_cue_is_what_the_caller_sent():
+    ctx = ["one", "two", "three"]
+    assert context_for(ctx, ["a", "b"], 0) == ["one", "two", "three"]
+
+
+def test_context_for_a_later_cue_slides_onto_the_batch():
+    # The cue's real neighbours are the ones in front of it in this batch.
+    ctx = ["one", "two", "three"]
+    assert context_for(ctx, ["a", "b", "c"], 2) == ["three", "a", "b"]
+
+
+def test_context_for_holds_its_depth():
+    assert len(context_for([], list("abcdefgh"), 7)) == CONTEXT_LINES
+
+
+def test_context_for_works_when_the_caller_sent_none():
+    # The first batch of a video has no preceding lines, and the cues in front
+    # of this one are still its context.
+    assert context_for([], ["a", "b", "c"], 2) == ["a", "b"]
+
+
+def test_the_retry_keeps_the_context(monkeypatch):
+    """The fallback must not translate each line in a vacuum.
+
+    Alignment is what the retry removes; the surrounding lines are not part of
+    that. A context line is marked "do NOT translate" and is not counted, so it
+    cannot reintroduce the shift the retry exists to escape.
+    """
+    import asyncio
+
+    import translate_server
+
+    calls = []
+
+    def fake(cues, context, *a, **k):
+        calls.append((list(cues), list(context)))
+        return None if len(cues) > 1 else ["vi"]
+
+    monkeypatch.setattr(translate_server, "omniroute_batch", fake)
+
+    class FakeRequest:
+        async def json(self):
+            return {"cues": ["a", "b", "c"], "context": ["x", "y", "z"],
+                    "slots": [1.0, 1.0, 1.0]}
+
+    asyncio.run(translate_server.translate_batch(FakeRequest()))
+
+    assert calls[0] == (["a", "b", "c"], ["x", "y", "z"])   # the batch
+    assert calls[1] == (["a"], ["x", "y", "z"])             # then one at a time
+    assert calls[2] == (["b"], ["y", "z", "a"])
+    assert calls[3] == (["c"], ["z", "a", "b"])

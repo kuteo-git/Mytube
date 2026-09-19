@@ -145,6 +145,34 @@ def aligned_or_none(parsed: dict[int, str], want: int) -> list[str] | None:
 MERGE_RATIO = 2.4
 MERGE_FLOOR = 24
 
+# How many lines before a cue travel with it when it is retried on its own.
+#
+# Three, which is what the gateway sends for a batch (`narrationContext`). It is
+# written here as well rather than derived from what the caller sent, because
+# the first batch of a video has nothing before it and the cues in front of a
+# line are still that line's context — deriving it would leave exactly that
+# batch translating in a vacuum.
+CONTEXT_LINES = 3
+
+
+def context_for(context: list[str], cues: list[str], i: int) -> list[str]:
+    """The lines a single-cue retry should see before cue `i`.
+
+    The caller's context runs out as the batch is walked and the batch's own
+    earlier cues take its place, so a line late in a batch is read against its
+    real neighbours rather than against three lines from before all of them.
+
+    Measured on one real line, against the running router:
+
+        "So, if you're coming from the three or the twos,"
+          alone  -> "Vậy nếu bạn đến từ đường ba hoặc đường hai,"
+          with 3 -> "Vậy nếu bạn đang dùng thế hệ ba hay hai thì"
+
+    "đường ba" is road number three. Nothing in the line itself says these are
+    AirPods, and Vietnamese has to choose a word where English left none.
+    """
+    return [*context, *cues[:i]][-CONTEXT_LINES:]
+
 # English number words, so a line that says "the twos" counts as carrying a 2.
 #
 # Without these the check below would fire on every correct translation that
@@ -462,7 +490,14 @@ async def translate_batch(req: Request):
             # a differently-worded question and could hand back a line that no
             # longer fits, which is exactly what the retry is trying to salvage.
             one_slot = [slots[i]] if i < len(slots) else None
-            single = omniroute_batch([c], [], base_url, model, api_key, one_slot)
+            # So does the context, for the same kind of reason. What this retry
+            # removes is the ordering a batch can get wrong; the lines around a
+            # cue are not part of that. A context line is marked "do NOT
+            # translate" and is not counted, so it cannot reintroduce the shift
+            # — and without it every pronoun and every bare noun phrase is
+            # resolved by guesswork.
+            single = omniroute_batch([c], context_for(context, cues, i),
+                                     base_url, model, api_key, one_slot)
             out.append(single[0] if single else "")
 
     dt = time.perf_counter() - t0
