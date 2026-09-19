@@ -6,6 +6,8 @@ measurement.
 """
 from translate_server import (
     BATCH_PROMPT,
+    MERGE_FLOOR,
+    MERGE_RATIO,
     OMNIROUTE_API_KEY,
     OMNIROUTE_BASE_URL,
     OMNIROUTE_MODEL,
@@ -255,3 +257,125 @@ def test_a_blank_line_is_not_a_repeat():
 def test_a_short_line_may_translate_long():
     # "Yeah." to a full Vietnamese phrase is a ratio of three and is not a merge.
     assert misaligned(["Yeah."], ["Ừ, đúng rồi đấy bạn ạ."]) == ""
+
+
+# ---- alignment of content: the numbers a line carries ------------------------
+#
+# The two signatures above both look for the *padding* a shift leaves behind — a
+# repeated line, or two cues merged into one over-long line. A model that hands
+# back the right number of lines, each the right length, attached to the wrong
+# cues leaves no padding at all, and both go blind.
+#
+# The cues and answers below are copied from a real pass over kXVt4atqMv8,
+# narrated on 18 September by the server that already had both signatures. Six
+# consecutive cues carried the next cue's words and nothing refused the batch:
+# every output line was distinct, and the longest was 54 characters against a
+# merge threshold of 122.
+
+ROTATED_CUES = [
+    "And of course, it's also worth remembering that with the AirPods 4,",
+    "we also got USBC.",
+    "So, if you're coming from the three or the twos,",
+    "you also get that as an upgrade as well.",
+    "And finally, what about any special features that you're getting with the AirPods 5?",
+    "Well, if you're upgrading from the AirPods 4,",
+    "you now get even better water resistance.",
+    "Going from IP54 to IP57,",
+]
+
+ROTATED_ANSWER = [
+    "Và tất nhiên, cần nhớ rằng với AirPods 4,",
+    "Vậy nếu bạn dùng thế hệ 3 hay 2,",
+    "bạn cũng được nâng cấp đó.",
+    "Cuối cùng, AirPods 5 có những tính năng đặc biệt gì?",
+    "Nếu bạn nâng cấp từ AirPods 4,",
+    "bạn sẽ có khả năng chống nước tốt hơn.",
+    "Chúng tôi cũng nhận được điều đó như một bản nâng cấp.",
+    "Từ IP54 lên IP57,",
+]
+
+
+def test_misaligned_catches_a_rotation_with_no_padding():
+    assert misaligned(ROTATED_CUES, ROTATED_ANSWER)
+
+
+def test_the_two_older_signatures_are_blind_to_it():
+    # Recorded rather than assumed: this is why a third signature exists. If a
+    # later change makes either of these fire, the third is no longer the only
+    # thing standing between this batch and the cache.
+    seen = {}
+    repeated = False
+    for i, line in enumerate(ROTATED_ANSWER):
+        key = line.strip().casefold()
+        first = seen.get(key)
+        if first is not None and ROTATED_CUES[first].strip() != ROTATED_CUES[i].strip():
+            repeated = True
+        seen.setdefault(key, i)
+    assert not repeated
+
+    merged = any(
+        len(line.strip()) > MERGE_FLOOR + MERGE_RATIO * len(ROTATED_CUES[i].strip())
+        for i, line in enumerate(ROTATED_ANSWER)
+    )
+    assert not merged
+
+
+def test_a_spelled_out_number_may_be_written_as_a_digit():
+    # The whole reason this cannot be "a digit the source does not have": every
+    # one of these is a correct translation. "the twos" is 2, "a 6 out of 10" is
+    # already digits, and Vietnamese writes them all as digits.
+    cues = [
+        "So, if you're coming from the three or the twos,",
+        "The AirPods 3, however, were about a 6 out of 10.",
+        "Let's say they've got a ten out of ten sound quality.",
+    ]
+    out = [
+        "Vậy nếu bạn dùng thế hệ 3 hay 2,",
+        "Còn AirPods 3 thì chỉ được khoảng 6 điểm.",
+        "Cứ cho là chất lượng âm thanh của chúng là 10 trên 10.",
+    ]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_number_the_translator_adds_is_not_a_shift():
+    # Nothing nearby carries it either, so there is nothing to have been shifted
+    # from. A translator elaborating is not a translator misaligned.
+    cues = ["It costs a fortune.", "But it is worth it."]
+    out = ["Nó tốn cả gia tài, gấp 3 lần.", "Nhưng đáng đồng tiền."]
+    assert misaligned(cues, out) == ""
+
+
+def test_the_last_line_has_no_next_cue_to_borrow_from():
+    cues = ["Here we go.", "It cost 500 dollars."]
+    out = ["Bắt đầu nào.", "Nó giá 500 đô."]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_month_name_is_the_number_of_its_month():
+    # "starting in July this year" is correctly "bắt đầu từ tháng 7 năm nay",
+    # and the cue after it happened to mention 7 as well. Measured across the
+    # library, month names were the single largest source of false alarms.
+    cues = ["but starting in July this year,", "the average increase has reached 7 to 10%."]
+    out = ["nhưng bắt đầu từ tháng 7 năm nay,", "mức tăng trung bình đã lên tới 7 đến 10%."]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_number_written_a_different_way_is_not_borrowed():
+    # "how old were you on 911?" is correctly "vào ngày 11/9?" — the digits in
+    # the answer are the digits in the question, punctuated for a reader who
+    # writes the day first. The next cue saying "nine" is a coincidence.
+    cues = ["John, how old were you on 911?",
+            "I was a week away from being 8 years old and I was nine."]
+    out = ["John, bạn bao nhiêu tuổi vào ngày 11/9?",
+           "Tôi còn một tuần nữa sẽ tròn 8 tuổi, hay là tôi đã 9 tuổi."]
+    assert misaligned(cues, out) == ""
+
+
+def test_a_borrowed_number_is_still_caught_when_nothing_explains_it():
+    # The shape that must survive both excuses above: the line names a thing
+    # from the cue after it and its own cue has no number in any form.
+    cues = ["It actually found a security loophole and called it out.",
+            "This is a P1 loophole."]
+    out = ["Đây là một lỗ hổng P1.",
+           "Nó cho bạn một prompt để dán vào agent."]
+    assert misaligned(cues, out)
