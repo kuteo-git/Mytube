@@ -97,6 +97,35 @@ were found and their caches removed; the next pass over each will ask again.
   recorded in the docstring as a limit rather than worked around. Reading an
   order back out is weaker than being handed one.
 
+### And the retry it falls back to was translating in a vacuum
+
+A refused batch is re-translated one cue at a time. That call passed `[]` for
+context — the only argument in it with no comment saying why, beside a
+`one_slot` that does explain itself.
+
+What the retry removes is the *ordering* a batch can get wrong. The lines around
+a cue are not part of that: a context line is marked "do NOT translate", is not
+counted, and the alignment check is skipped for a single cue anyway. Keeping it
+cannot reintroduce the shift the retry exists to escape.
+
+Measured against the running router, on a line from the video above:
+
+```
+So, if you're coming from the three or the twos,
+  alone           Vậy nếu bạn đến từ đường ba hoặc đường hai,
+  with 3 before   Vậy nếu bạn đang dùng thế hệ ba hay hai thì
+```
+
+**"đường ba" is road number three.** Nothing in the line says these are AirPods
+generations, and Vietnamese has to choose a word where English left none — so
+without the surrounding lines every pronoun and bare noun phrase is resolved by
+guesswork.
+
+`context_for` slides the window: the caller's three lines run out as the batch
+is walked and the batch's own earlier cues take their place, so a line late in a
+batch is read against its real neighbours rather than against three lines from
+before all of them.
+
 ### And the web app had been eating apostrophes
 
 Found while writing the above. The four typographic quote marks in
