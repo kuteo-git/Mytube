@@ -174,9 +174,22 @@ describe('firstClauseBoundary', () => {
     expect(firstClauseBoundary('Then, how are you')).toBe(-1)
   })
 
+  it('ignores a comma that closes too short a clause', () => {
+    // Three words is the same fault one word is, and measuring said so: this
+    // clause is 0.80s of speech. MIN_CLAUSE_BEFORE is five.
+    expect(firstClauseBoundary('wait a moment, and then we go')).toBe(-1)
+  })
+
   it('takes a comma with enough on both sides', () => {
-    const text = 'wait a moment, and then we go'
-    expect(firstClauseBoundary(text)).toBe('wait a moment,'.length)
+    const text = 'wait here for a moment, and then we go'
+    expect(firstClauseBoundary(text)).toBe('wait here for a moment,'.length)
+  })
+
+  it('ignores a comma inside an enumeration', () => {
+    // What follows this comma is one word, so the clause it opens cannot stand
+    // alone however long the rest of the sentence is.
+    const text = 'if you have got the AirPods 4, 3, or 2, here is how they compare'
+    expect(firstClauseBoundary(text)).toBe('if you have got the AirPods 4, 3, or 2,'.length)
   })
 
   it('finds a boundary at the very end', () => {
@@ -275,4 +288,82 @@ describe('a cue with no speech in it', () => {
     expect(cues.length).toBeGreaterThan(0)
     expect(cues[0].start).toBeCloseTo(11.44)
   })
+})
+
+/**
+ * The reported fault: cues cut mid-phrase instead of at punctuation.
+ *
+ * Every sentence here came off one measured video (kXVt4atqMv8) and each one
+ * broke in a different place, so they are kept whole rather than reduced to the
+ * rule each happens to exercise. They are fed through `parseVTT` as automatic
+ * captions one word at a time, which is how the rolling format really arrives —
+ * a boundary the parser only finds once the whole sentence is present would
+ * pass a test on the joined text and still cut the video wrongly.
+ */
+describe('clauses break at punctuation, not mid-phrase', () => {
+  /** One sentence as a rolling automatic cue, one word per timestamp. */
+  const rolling = (sentence: string): string => {
+    const words = sentence.split(/\s+/).filter(Boolean)
+    const at = (i: number) => {
+      const t = i * 0.5
+      const mm = String(Math.floor(t / 60)).padStart(2, '0')
+      const ss = (t % 60).toFixed(3).padStart(6, '0')
+      return `00:${mm}:${ss}`
+    }
+    const tagged = words
+      .map((w, i) => (i === 0 ? w : `<${at(i)}><c> ${w}</c>`))
+      .join('')
+    return ['WEBVTT', '', `${at(0)} --> ${at(words.length)}`, ' ', tagged, ''].join('\n')
+  }
+
+  const cases: Array<{ name: string; sentence: string; want: string[] }> = [
+    {
+      // Split at the list comma this left "3, or 2." alone, 0.72s long.
+      name: 'an enumeration is not split between its items',
+      sentence: "If you've already got the AirPods 4, 3, or 2, well, here's how they all compare.",
+      want: [
+        "If you've already got the AirPods 4, 3, or 2, well,",
+        "here's how they all compare.",
+      ],
+    },
+    {
+      // "The AirPods 3," was a cue of its own, 0.80s long.
+      name: 'an appositive does not end a clause',
+      sentence: 'The AirPods 3, however, were about a 6 out of 10.',
+      want: ['The AirPods 3, however, were about a 6 out of 10.'],
+    },
+    {
+      // The rule the comma split exists for, and it still holds.
+      name: 'a comma between two full clauses still splits',
+      sentence:
+        "and it's also a bit more snug to help with passive noise cancellation, which in turn helps with active noise cancellation.",
+      want: [
+        "and it's also a bit more snug to help with passive noise cancellation,",
+        'which in turn helps with active noise cancellation.',
+      ],
+    },
+    {
+      // The case the "first, not last" rule was written for.
+      name: 'a full stop still ends a clause',
+      sentence: 'Hello there, my friend. How are you',
+      want: ['Hello there, my friend.', 'How are you'],
+    },
+    {
+      // A blind cut must not beat a full stop to it. No punctuation until the
+      // last two words; at 30 this came out as "...maybe slightly" plus
+      // "below those." — a cue 0.72s long that says nothing on its own.
+      name: 'a blind cut does not beat a nearby full stop',
+      sentence:
+        "I would say that they're even better than the original AirPods Pros were and maybe even on the same level as the AirPods Pro 2os or maybe okay maybe slightly below those.",
+      want: [
+        "I would say that they're even better than the original AirPods Pros were and maybe even on the same level as the AirPods Pro 2os or maybe okay maybe slightly below those.",
+      ],
+    },
+  ]
+
+  for (const c of cases) {
+    it(c.name, () => {
+      expect(parseVTT(rolling(c.sentence), 'en').map((cue) => cue.text)).toEqual(c.want)
+    })
+  }
 })

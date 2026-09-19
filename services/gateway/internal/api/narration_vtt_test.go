@@ -2,6 +2,7 @@ package api
 
 import (
 	"math"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -46,9 +47,23 @@ func TestFirstClauseBoundary(t *testing.T) {
 			want: -1,
 		},
 		{
-			name: "takes a comma with enough on both sides",
+			// Three words is the same fault one word is, and measuring said so:
+			// this clause is 0.80s of speech. minClauseBefore is five.
+			name: "ignores a comma that closes too short a clause",
 			text: "wait a moment, I will be right there",
-			want: len([]rune("wait a moment,")),
+			want: -1,
+		},
+		{
+			name: "takes a comma with enough on both sides",
+			text: "wait here for a moment, I will be right there",
+			want: len([]rune("wait here for a moment,")),
+		},
+		{
+			// A list separator. What follows this comma is one word, so the
+			// clause it opens cannot stand alone however long the sentence is.
+			name: "ignores a comma inside an enumeration",
+			text: "if you have got the AirPods 4, 3, or 2, here is how they compare",
+			want: len([]rune("if you have got the AirPods 4, 3, or 2,")),
 		},
 		{"finds a boundary at the very end", "all done.", len([]rune("all done."))},
 	}
@@ -231,5 +246,92 @@ func TestParseVTTIgnoresATimestampWithNoSpeech(t *testing.T) {
 	}
 	if math.Abs(cues[0].Start-11.44) > 1e-9 {
 		t.Errorf("first cue starts at %v, want 11.44 (the bracket's 6.55 is not speech)", cues[0].Start)
+	}
+}
+
+// The reported fault: cues cut mid-phrase instead of at punctuation.
+//
+// Every sentence here came off one measured video (kXVt4atqMv8) and each one
+// broke in a different place, so they are kept whole rather than reduced to the
+// rule each happens to exercise.
+func TestClausesBreakAtPunctuationNotMidPhrase(t *testing.T) {
+	cases := []struct {
+		name     string
+		sentence string
+		want     []string
+	}{
+		{
+			// Split at the list comma this left "3, or 2." alone, 0.72s long.
+			name:     "an enumeration is not split between its items",
+			sentence: "If you've already got the AirPods 4, 3, or 2, well, here's how they all compare.",
+			want: []string{
+				"If you've already got the AirPods 4, 3, or 2, well,",
+				"here's how they all compare.",
+			},
+		},
+		{
+			// "The AirPods 3," was a cue of its own, 0.80s long.
+			name:     "an appositive does not end a clause",
+			sentence: "The AirPods 3, however, were about a 6 out of 10.",
+			want:     []string{"The AirPods 3, however, were about a 6 out of 10."},
+		},
+		{
+			// The rule the comma split exists for, and it still holds.
+			name:     "a comma between two full clauses still splits",
+			sentence: "and it's also a bit more snug to help with passive noise cancellation, which in turn helps with active noise cancellation.",
+			want: []string{
+				"and it's also a bit more snug to help with passive noise cancellation,",
+				"which in turn helps with active noise cancellation.",
+			},
+		},
+		{
+			// The case the "first, not last" rule was written for.
+			name:     "a full stop still ends a clause",
+			sentence: "Hello there, my friend. How are you",
+			want:     []string{"Hello there, my friend.", "How are you"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			// One word at a time, which is how the rolling captions arrive.
+			words := strings.Fields(c.sentence)
+			pieces := make([]piece, len(words))
+			for i, w := range words {
+				pieces[i] = piece{start: float64(i), end: float64(i + 1), text: w}
+			}
+
+			cues := groupIntoClauses(pieces)
+			got := make([]string, len(cues))
+			for i, cue := range cues {
+				got[i] = cue.Text
+			}
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("groupIntoClauses(%q) =\n  %q\nwant\n  %q", c.sentence, got, c.want)
+			}
+		})
+	}
+}
+
+// A blind cut must not beat a full stop to it. This run has no punctuation
+// until its last two words; at 30 it came out as "...maybe slightly" plus
+// "below those." — a cue 0.72s long that says nothing on its own.
+func TestForceSplitLetsANearbySentenceFinish(t *testing.T) {
+	sentence := "I would say that they're even better than the original AirPods Pros " +
+		"were and maybe even on the same level as the AirPods Pro 2os or maybe " +
+		"okay maybe slightly below those."
+
+	words := strings.Fields(sentence)
+	pieces := make([]piece, len(words))
+	for i, w := range words {
+		pieces[i] = piece{start: float64(i), end: float64(i + 1), text: w}
+	}
+
+	cues := groupIntoClauses(pieces)
+	if len(cues) != 1 {
+		t.Fatalf("got %d cues, want 1: %+v", len(cues), cues)
+	}
+	if !strings.HasSuffix(cues[0].Text, "below those.") {
+		t.Errorf("clause does not reach its full stop: %q", cues[0].Text)
 	}
 }
