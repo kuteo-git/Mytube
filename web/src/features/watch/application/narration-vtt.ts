@@ -61,10 +61,14 @@ export function cleanCueText(raw: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
 
+  // The four quote marks are written as escapes on purpose. As literals they
+  // were at some point flattened to straight " and ' — by an editor or a
+  // formatter, silently — and the class then stripped the apostrophe out of
+  // every contraction it saw: "they're" reached the translator as "theyre".
   s = s
     .replace(/<[^>]+>/g, '')
     .replace(/>>\s*/g, '')
-    .replace(/[♪♫♬→←↑↓↔«»""''„‚]/g, '')
+    .replace(/[♪♫♬→←↑↓↔«»\u201C\u201D\u2018\u2019„‚]/g, '')
     .trim()
 
   return s.replace(/\s{2,}/g, ' ')
