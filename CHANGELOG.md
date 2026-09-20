@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.16 — 2026-09-19
+## 0.1.1 — 2026-09-19
 
 **Narration was cut mid-phrase, and one line in every fifty was speaking the
 next line's words.** Two unrelated faults, reported as one feeling: that the
