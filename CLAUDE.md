@@ -1385,3 +1385,69 @@ Measured: a video warmed by `/stream` alone answered `master.m3u8` in 6.9ms.
   submit uses. The player polls `/stream` every five seconds while a download is
   pending, and a warm on each would be twelve crossings a minute to be handed a
   playlist ingest has held for the last ninety minutes.
+
+## The narration voice was a stranger's, and nothing failed (2026-09-24)
+
+Reported as a macOS upgrade having lost the household's cloned voice. The
+upgrade had lost nothing; what it did was reboot the machine, and this has been
+one race away from happening since `dev.sh` learned to start the speech server.
+
+The speech service lives in another repository and keeps a venv beside itself.
+`dev.sh` started it with bare `python3`, which on this machine resolves to
+anaconda — where `vieneu` is **3.0.5**, a version whose v3turbo engine has no
+`add_voice`. So the cloned voice could not be enrolled, and its own log said so
+in three lines nobody was reading:
+
+```
+ERROR   - không nhân bản được 'Lê Yến': 'V3TurboVieNeuTTS' object has no attribute 'add_voice'
+WARNING - giọng 'Lê Yến' KHÔNG có, thử fallback 'Thục Đoan'
+WARNING - fallback 'Thục Đoan' cũng KHÔNG có -> dùng default gói
+```
+
+- **Nothing failed, and that is the fault.** The server started, bound the port,
+  answered 200, and read every line of narration in a voice nobody chose. A
+  silence would have been traced in minutes; a wrong voice was blamed on the
+  operating system for a day. **The `no_tier` lesson in a new place** — the worst
+  answer is not an error, it is a plausible one.
+- **A second symptom was sitting beside it and nobody joined them up.** That
+  build is also the slow one: 8–32s per line in the log against ~3s now. Two
+  complaints, one process.
+- **Winning a race for a port is worse than losing it.** `:8002` belongs to a
+  launchd agent (`com.user.robot-vieneu`) that starts at boot with the right
+  interpreter. `dev.sh` asked `lsof` once, found the port free because the agent
+  was still loading a model, and took it — after which the agent crash-looped on
+  `address already in use` **4,806 times**, each iteration loading the model
+  again. Asking a port once is asking about a moment; the script waits ten
+  seconds for an owner now.
+- **A service from another repository is started with that repository's
+  interpreter.** `$(dirname "$TTS_SERVER")/.venv/bin/python`, falling back to
+  `python3` only when there is no venv there. Which Python is on `PATH` is a
+  fact about the shell that happened to launch this, and it decided which voice
+  the house heard.
+
+### The upgrade that came with it, and what it measured
+
+`vieneu` went 3.6.0 → **3.8.3** in the service's own venv. Benchmarked through
+the endpoint this gateway actually calls (`POST /v1/audio/speech`,
+`storytelling`, the cloned voice), five runs a case, median:
+
+| | 3.6.0 | 3.8.3 | audio | RTF |
+|---|---|---|---|---|
+| 65 chars | 0.60s | 0.57s | 3.3s | 0.17 |
+| 256 chars | 3.08s | 3.01s | 13.8s | 0.22 |
+| 778 chars | 9.04s | 8.53s | 43.6s | 0.20 |
+
+**Flat, and that is the honest answer.** 3.7.0's headline is `nhanh 6×` and it
+is CUDA graphs; this Mac runs the torch-free ONNX path, where the only relevant
+change in nine releases is 3.6.5's `cut CPU load on the voice-cloning path`.
+
+- **The first measurement said 2.9× and was warmup.** The 3.6.0 short-text
+  median came off a server that had been up for seconds. Rolling back and
+  re-measuring — rather than keeping the flattering number — is what produced
+  the table above. **A version is part of the measurement**, and so is how long
+  the process has been running.
+- **What the numbers cannot answer is whether it still sounds like her.** 3.8.0
+  re-enrolled the preset `Trúc Ly` from a new clip and stopped the encoder
+  appending 455 audible padding frames to a reference — and this household's
+  clone borrows its codes from exactly that preset. A question for ears, with
+  `pip install vieneu==3.6.0` as the way back.

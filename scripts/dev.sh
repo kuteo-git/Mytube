@@ -274,11 +274,29 @@ fi
 #
 # Not fatal when absent. Narration is one feature; the library is the app.
 TTS_SERVER="${TTS_SERVER:-/Volumes/Data2/git/robot-esp32/services/vieneu_server.py}"
+# That repository keeps a venv beside the server, and using it is not a
+# preference. Measured 2026-09-24: bare `python3` resolved to anaconda, whose
+# vieneu is 3.0.5 -- a version whose v3turbo engine has no `add_voice`, so the
+# household's cloned voice cannot be enrolled and every request is answered in
+# the package's default voice instead. Nothing fails: the server starts, returns
+# 200, and reads in a stranger's voice. A silence would have been easier to
+# trace than that.
+TTS_PYTHON="$(dirname "$TTS_SERVER")/.venv/bin/python"
+[ -x "$TTS_PYTHON" ] || TTS_PYTHON="python3"
+# And that service is launchd's on this machine, so :8002 has an owner that is
+# already starting. Winning the race against it is worse than losing: the agent
+# then crash-loops on "address already in use" for as long as this script's own
+# copy holds the port -- 4,806 restarts were logged before anybody looked. So
+# wait for it rather than asking once.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  lsof -ti:8002 >/dev/null 2>&1 && break
+  sleep 1
+done
 if lsof -ti:8002 >/dev/null 2>&1; then
   echo "speech already running on :8002, leaving it alone"
 elif [ -f "$TTS_SERVER" ]; then
-  echo "starting speech server (port 8002)..."
-  python3 "$TTS_SERVER" >>"$LOG_DIR/tts.log" 2>&1 & pids+=($!)
+  echo "starting speech server (port 8002) with $TTS_PYTHON..."
+  "$TTS_PYTHON" "$TTS_SERVER" >>"$LOG_DIR/tts.log" 2>&1 & pids+=($!)
 else
   echo "no speech server at $TTS_SERVER: narration will be silent" >&2
 fi
