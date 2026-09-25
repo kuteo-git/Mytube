@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.3 — 2026-09-25
+
+**Narration stopped paying to translate Vietnamese into Vietnamese.** Reported
+from the phone: a video with Vietnamese captions on disk was narrated from the
+English track beside it. Two faults, one missing question — nothing in the pass
+asked what language it had picked up.
+
+`narrationCues` took whichever `.vtt` the folder listing handed over first,
+which is alphabetical, so `…en.vtt` beat `…vi.vtt` every time; and `runNarration`
+sent whatever it found to the model regardless. Measured across the library
+before the fix: **40 videos and 6,806 lines** whose only track was Vietnamese
+were translated into Vietnamese anyway, plus 4 videos translated from English
+while their own Vietnamese sat beside it.
+
+`narrationSource` now prefers any Vietnamese track that is not the pass's own
+output, and a Vietnamese source is spoken as it is — so the translation model is
+consulted only when there is something to translate, and a Vietnamese video
+narrates on a machine with no model configured at all.
+
 ## 0.1.2 — 2026-09-25
 
 **Everything the app draws over the picture, and the two places a selection
