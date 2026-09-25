@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import {useParams} from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
   useDiscover,
   useFeed,
@@ -28,6 +28,7 @@ import { VideoCard, VideoCardSkeleton } from '@/features/catalog/ui/VideoCard'
 import { usePlayer } from '@/features/watch/application/player-context'
 import { PullIndicator } from '@/features/catalog/ui/PullIndicator'
 import { usePullToRefresh } from '@/features/catalog/application/use-pull-to-refresh'
+import { chipFromSearch, searchForChip } from '@/features/catalog/application/home-chip'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 import { Trans, useTranslation } from 'react-i18next'
 import { PageLink } from '@/shared/ui/PageLink'
@@ -39,8 +40,21 @@ import { PageLink } from '@/shared/ui/PageLink'
 export function HomePage() {
   const { t } = useTranslation()
   const { topicName } = useParams()
-  const [selected, setSelected] = useState<string>(ALL_CATEGORY)
-  const active = topicName ?? selected
+  // The chip is kept in the address, not in state.
+  //
+  // It was `useState(ALL_CATEGORY)`, so every reload put Home back to All —
+  // pick Missed, press refresh, and the row has moved on its own. React state
+  // cannot outlive a reload; the URL is the only thing that can.
+  //
+  // `replace`, because a filter is not somewhere you went. Pushing would make
+  // the back button walk out through every chip pressed on the way in, and the
+  // way out of Home is out of Home.
+  const [search, setSearch] = useSearchParams()
+  const active = chipFromSearch(search, topicName)
+  const setSelected = useCallback(
+    (next: string) => setSearch(searchForChip(search, next), { replace: true }),
+    [search, setSearch],
+  )
 
   // A different topic is a different grid, so it starts at its own beginning.
   //
@@ -165,10 +179,23 @@ export function HomePage() {
   // Before Live, because it is a way of reading the whole library rather than a
   // subject, and it answers the question people open the app to ask.
   const chips = [
-    ALL_CATEGORY,
-    ...(missedVideos.length > 0 ? [MISSED_CATEGORY] : []),
-    ...(live && live.length > 0 ? [LIVE_CATEGORY] : []),
-    ...(topics ?? []).map((t) => t.name),
+    ...new Set([
+      ALL_CATEGORY,
+      ...(missedVideos.length > 0 ? [MISSED_CATEGORY] : []),
+      ...(live && live.length > 0 ? [LIVE_CATEGORY] : []),
+      ...(topics ?? []).map((t) => t.name),
+      // Whatever is selected is always in the row, even when the list it names
+      // has since emptied or has not arrived yet.
+      //
+      // Now that the selection is in the address, somebody can open
+      // `/?chip=__missed` on a morning when nothing was missed — and without
+      // this the row would show no selection at all while the grid showed that
+      // list, which reads as the page having lost its place. It is also the
+      // ordinary case for a topic on the first frame, before `topics` has
+      // loaded, which is why this is a Set: a moment later the topic arrives in
+      // its own right and would otherwise be drawn twice.
+      active,
+    ]),
   ]
 
   // The Live chip shows a list, not a ranking — so it does not go through the
