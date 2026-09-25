@@ -210,8 +210,18 @@
      window onto it. */
   .chrome-blur {
     background-color: color-mix(in srgb, var(--color-bg) 95%, transparent);
-    backdrop-filter: blur(24px) saturate(150%);
+    /* The prefix first and the standard property last, which is the opposite
+       of the usual order and is not a style choice: lightningcss deduplicates a
+       property against its own `-webkit-` alias by keeping whichever is written
+       **last**. Written the conventional way round, the build shipped the
+       prefixed form alone — fine until Chrome 153 removed the alias, and then
+       every pane in the app stopped blurring while the source still said
+       blur(24px) and `getComputedStyle` answered `none`. Tailwind's own
+       `backdrop-filter` utility writes it this way round too.
+       `backdrop-blur.guard.test.ts` asserts the built output, because the
+       source was never the thing that was wrong. */
     -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
   }
 
   /* A panel the viewer opened, over video they are watching.
@@ -237,8 +247,10 @@
      longer solid enough to draw one by itself. */
   .panel-blur {
     background-color: color-mix(in srgb, var(--color-bg) 82%, transparent);
-    backdrop-filter: blur(32px) saturate(160%);
+    /* Prefix first, standard last — see `.chrome-blur` above for why the
+       order is load-bearing. */
     -webkit-backdrop-filter: blur(32px) saturate(160%);
+    backdrop-filter: blur(32px) saturate(160%);
     border: 1px solid rgb(255 255 255 / 0.08);
   }
 }
