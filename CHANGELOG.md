@@ -1,5 +1,109 @@
 # Changelog
 
+## 0.1.2 — 2026-09-25
+
+**Everything the app draws over the picture, and the two places a selection
+went missing.** Reported in four rounds; three of the faults turned out to be
+one shape, and two of those were found by asking what the previous fix had
+exposed rather than by anybody hitting them.
+
+### The blur had been dead since Chrome 153
+
+`.panel-blur` asks for `blur(32px)` in the source and `getComputedStyle`
+answered `none` on the page. lightningcss deduplicates a property against its
+own `-webkit-` alias by keeping whichever is written **last**, so the
+conventional order — standard first, prefix as a fallback — shipped the
+prefixed form alone. That was harmless until Chrome removed the alias:
+`CSS.supports('-webkit-backdrop-filter','blur(4px)')` is now false. Every pane
+in the app stopped blurring on the same day, the top bar included.
+
+Tailwind's own `.backdrop-filter` utility was the control, in the same built
+file: it keeps both, because it writes the prefix first.
+
+`backdrop-blur.guard.test.ts` asserts the **built output**, not the source —
+the source was never the thing that was wrong.
+
+### Full screen and picture-in-picture did not survive the end of a video
+
+Both `<video>` elements left the DOM for one frame when the route advanced. A
+browser drops full screen when the element holding it leaves the document, and
+strands the floating window on a node nothing can reach again.
+
+Two causes, and both had to go: a `key={state.videoId}` that tore the player
+down on every video, and `{playable ? layers : message}` around the two layers,
+where `playable` is false for the moment the source is being replaced.
+
+| | |
+|---|---|
+| video elements mid-advance | one 50ms sample of **0** |
+| after | never below 2 |
+| the PiP node | the same node, new source, playing |
+
+The player's own `useLayoutEffect` already opens with *"Moving to another video
+keeps this component mounted"*, and the key made those forty lines dead code.
+Two files held opposite beliefs about one question.
+
+### Pausing in full screen started playing again
+
+`goFullscreen` handed the `<video>` itself to the Fullscreen API, and Chrome
+gives a fullscreened video its own click-to-play gesture — fired ~300ms later
+so it can tell one tap from two. Instrumented before app code ran, the trace is
+a `pause()` call followed by a `play` event with no `play()` anywhere.
+
+| | resumed on its own |
+|---|---|
+| windowed | 0/6 |
+| full screen | 6/6, then 20/20 |
+| full screen on the frame around the picture | **0/6** |
+
+It takes the frame now. The webkit path still takes the video, because Apple's
+player is opened by the element holding the media.
+
+**This put the app's controls in full screen for the first time.** They are
+painted in the page, and a fullscreened video covers the page — so until now
+there were none there at all.
+
+### Which uncovered two dead buttons
+
+- The suggestions switch was drawn in full screen and did nothing: its gate
+  asked only about window width, and full screen does not narrow the window.
+- Settings and Audio opened into `document.body`, which is painted *under* the
+  fullscreen layer. Both menus were in the DOM and invisible.
+
+The second was found by listing every control now visible there and pressing
+each one, rather than waiting for it to be reported.
+
+### Show or hide the suggestions column
+
+A switch on the player, remembered per device. The 1280px cap on the main
+column lifts with it, so the picture grows rather than leaving a gap: 1280 ->
+1706 at a 1920 viewport. The first version changed nothing there, because it
+was only ever measured at 1440 — narrow enough to hide the bug being looked
+for.
+
+It is absent below the two-column breakpoint, and in full screen.
+
+### Home forgot which chip was chosen
+
+Pick Missed, reload, and the row is back on All. The selection was React state,
+which cannot outlive a reload. It is `?chip=` now, carrying the stable token
+rather than the translated label, and written with `replace` — a filter is not
+somewhere you went.
+
+Whatever is selected is always drawn in the row, so opening `/?chip=__missed`
+on a morning when nothing was missed does not show a grid with no selection
+above it.
+
+### Narration reads at the synthesiser's own tempo
+
+`defaultSpeed` was 1.1 on the belief that the voice runs slow. At 1.0 a line is
+hurried by the time it actually has and never by a standing opinion. Because it
+now equals `naturalSpeed` the two share a cache key, so an ordinary pass runs no
+`atempo`, writes no second file, and reuses every natural clip already on disk.
+
+Measured on the running gateway: a roomy slot answers `X-TTS-Speed: 1.00`, a
+tight one still computes its own (`1.16`).
+
 ## 0.1.1 — 2026-09-19
 
 **Narration was cut mid-phrase, and one line in every fifty was speaking the
