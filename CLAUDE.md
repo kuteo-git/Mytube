@@ -1451,3 +1451,70 @@ change in nine releases is 3.6.5's `cut CPU load on the voice-cloning path`.
   appending 455 audible padding frames to a reference — and this household's
   clone borrows its codes from exactly that preset. A question for ears, with
   `pip install vieneu==3.6.0` as the way back.
+
+## The pass paid to translate Vietnamese into Vietnamese (2026-09-25)
+
+Reported from the phone, and it is a bill rather than a symptom: *"có vẻ như ở
+mobile, nó tự dịch tiếng anh sang tiếng Việt dù có sub việt sẵn."* True, and the
+app was innocent — it asks `POST /api/videos/{id}/narration` and nothing else.
+Both halves of the fault are here, and they are one sentence: **nothing in the
+pass ever asked what language it had picked up.**
+
+- `narrationCues` took whichever `.vtt` `os.ReadDir` handed over first, which is
+  alphabetical — so `…en.vtt` beat `…vi.vtt` **every time** a video carried
+  both.
+- And `runNarration` then sent it to the model whatever it was. A video whose
+  only track is Vietnamese was translated from Vietnamese into Vietnamese.
+
+Measured across the library before a line was changed, by reading the pass's own
+cache (`narration.vi.json`, partition `omniroute:sub_translation`) against the
+`.vtt` files beside it:
+
+| | |
+|---|---|
+| Vietnamese track only, translated anyway | **40 videos, 6,806 lines** |
+| Vietnamese *and* English present, translated from English | **4 videos, 311 lines** |
+| `BwiK3MiwYfc`, 22 Sep | one cue in, one cue out — *"Đến giờ ăn cơm rồi gọi ba xuống"* → the same sentence with commas added |
+
+That last row is the whole entry in one line: money spent on punctuation.
+
+- **The web app has had the rule since before this endpoint existed**, and this
+  is it moved rather than invented: `hasHumanVietnamese` there prefers any `vi*`
+  track that is not our own `vi-x-mt`, and `loadViSubtitles(viSub.url, 'vi')`
+  then reads it as it is — `vietnameseFor` returns the source text unchanged
+  when `_sourceLang !== 'en'`. Two clients, one library, and only one of them
+  was spending.
+- **`narrationSource` is a named function**, for the reason `wholeSeconds` and
+  `channelToken` are: nothing in the type system catches a pass that opened the
+  wrong file. It translates, it speaks, it reports `done` — and the only place
+  the mistake shows is an invoice.
+- **A seeded map, not a flag.** `translations[cue.Text] = cue.Text` for a
+  Vietnamese source, and `translateInto` then asks for nothing because it only
+  ever asks for what is missing — the same mechanism that makes a restarted pass
+  cheap. A boolean beside it would be a second answer to one question.
+- **The translation model is consulted only when there is something to
+  translate.** It used to be demanded first, so a Vietnamese video on a machine
+  with no model configured failed with *"no translation model configured"* —
+  a video that needs nothing but a voice, refused for want of a translator.
+- **Our own output is still skipped.** Reading `…vi-mt.vtt` back would narrate
+  Vietnamese into Vietnamese, which is this fault wearing the pass's own clothes,
+  and the comment that said so was the one correct language check in the file.
+
+Measured after, against the running library on `0c7tCywpHpI` — a Vietnamese
+video carrying YouTube's English auto-translation beside its own captions, which
+is exactly the shape that was reported. A second gateway on `:8199` from the
+same environment, so the household's own was never interrupted:
+
+| | |
+|---|---|
+| the clips | `Mọi người vẫn thường hay nghĩ là…` — the `.vi.vtt` lines, verbatim |
+| 20 seconds in | 36 of 202 spoken |
+| `narration.vi.json` | **not written** |
+| `translate.log` | **not touched** — last line 40 minutes before the pass |
+
+The tests are at both seams: `narrationSource` for the choice, including the
+folder order that caused it, and one through `runNarration` asserting a
+Vietnamese video narrates on a machine with **no translation model and no
+synthesiser configured at all** — a test that reached either would be a test
+that spends money to pass. Red before the fix on the reported case, with the
+English line named in the failure.

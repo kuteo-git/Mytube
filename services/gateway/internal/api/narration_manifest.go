@@ -284,7 +284,7 @@ func (g *Gateway) handleStopNarration(w http.ResponseWriter, r *http.Request) {
 func (g *Gateway) runNarration(ctx context.Context, videoID string, gen int, fromSeconds float64) {
 	start := time.Now()
 
-	cues, err := g.narrationCues(videoID)
+	cues, translate, err := g.narrationCues(videoID)
 	if err != nil {
 		g.failNarration(videoID, gen, err.Error())
 		return
@@ -302,19 +302,33 @@ func (g *Gateway) runNarration(ctx context.Context, videoID string, gen int, fro
 	}
 	g.narration.mu.Unlock()
 
-	cfg := loadTranslateConfig(g.translateConfigPath())
-	if strings.TrimSpace(cfg.Model) == "" {
-		// Refused rather than attempted. Translating into a partition named
-		// after nothing is worse than a cold cache: the answers land somewhere
-		// they will later be read back as another model's work.
-		g.failNarration(videoID, gen, "no translation model configured")
-		return
-	}
-	partition := "omniroute:" + cfg.Model
+	// `translations` is what [speakCue] reads a line out of, and seeding it is
+	// how a Vietnamese source skips the model: [translateInto] asks only for
+	// what is missing, which is the same mechanism that makes a restarted pass
+	// cheap. No flag beside it, because a flag and a filled map are two things
+	// that can disagree about the one question.
+	translations := map[string]string{}
+	partition := ""
+	if translate {
+		cfg := loadTranslateConfig(g.translateConfigPath())
+		if strings.TrimSpace(cfg.Model) == "" {
+			// Refused rather than attempted. Translating into a partition named
+			// after nothing is worse than a cold cache: the answers land somewhere
+			// they will later be read back as another model's work.
+			g.failNarration(videoID, gen, "no translation model configured")
+			return
+		}
+		partition = "omniroute:" + cfg.Model
 
-	translations, err := readNarrationCache(g.mediaRoot, videoID, partition)
-	if err != nil || translations == nil {
-		translations = map[string]string{}
+		if cached, err := readNarrationCache(g.mediaRoot, videoID, partition); err == nil && cached != nil {
+			translations = cached
+		}
+	} else {
+		// Already Vietnamese, so the line to speak is the line on disk. Asked
+		// of the model, it would come back reworded, later, and paid for.
+		for _, cue := range cues {
+			translations[cue.Text] = cue.Text
+		}
 	}
 
 	voice := loadTTSConfig(g.ttsConfigPath()).Voice
@@ -404,39 +418,75 @@ func (g *Gateway) narrateRange(
 }
 
 // narrationCues reads the video's caption file and turns it into lines.
-func (g *Gateway) narrationCues(videoID string) ([]vttCue, error) {
+//
+// Reports whether those lines still have to be translated, because that is a
+// fact about the file it chose and nothing above it can see the folder.
+func (g *Gateway) narrationCues(videoID string) ([]vttCue, bool, error) {
 	dir, err := safeVideoDir(g.mediaRoot, videoID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("no folder for this video")
+		return nil, false, fmt.Errorf("no folder for this video")
 	}
 
-	name := ""
+	var names []string
 	for _, e := range entries {
-		n := e.Name()
-		// The machine translation is this pass's own output. Reading it back
-		// would narrate a Vietnamese file into Vietnamese.
-		if e.IsDir() || !strings.HasSuffix(n, ".vtt") || strings.HasSuffix(n, machineVTTSuffix) {
-			continue
+		if !e.IsDir() {
+			names = append(names, e.Name())
 		}
-		name = n
-		break
 	}
+	name, translate := narrationSource(names)
 	if name == "" {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	raw, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// The language is read from the filename ("1080p.mp4.en.vtt"), because the
 	// clause rules are tuned for English and Vietnamese punctuation and a
 	// language they do not describe is better left in whole cues.
-	return parseVTT(string(raw), languageFromVTTName(name)), nil
+	return parseVTT(string(raw), languageFromVTTName(name)), translate, nil
+}
+
+// narrationSource picks the caption file to read aloud, and says whether it has
+// to be translated first.
+//
+// A Vietnamese track wins over every other language in the folder, and having
+// won it is spoken as it is. This is the web app's rule — `hasHumanVietnamese`
+// there, and `loadViSubtitles(viSub.url, 'vi')` beside it — and the server had
+// neither half of it: it took whichever .vtt `os.ReadDir` handed over first,
+// which is alphabetical, so "…en.vtt" beat "…vi.vtt" every time; and it then
+// sent whatever it found to the model whatever language that was. A household
+// with Vietnamese captions on disk was paying to have Vietnamese translated
+// into Vietnamese, and hearing the model's English-derived wording over a
+// video that came with its own.
+//
+// A named function rather than a loop inside [narrationCues] for the reason
+// `wholeSeconds` and `channelToken` are named: nothing in the type system
+// catches a pass that chose the wrong file — it translates, it speaks, and the
+// only symptom is a bill.
+//
+// Our own output is skipped. Reading `…vi-mt.vtt` back would narrate a
+// Vietnamese file into Vietnamese, which is the fault above wearing this pass's
+// own clothes.
+func narrationSource(names []string) (string, bool) {
+	fallback := ""
+	for _, n := range names {
+		if !strings.HasSuffix(n, ".vtt") || strings.HasSuffix(n, machineVTTSuffix) {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(languageFromVTTName(n)), "vi") {
+			return n, false
+		}
+		if fallback == "" {
+			fallback = n
+		}
+	}
+	return fallback, true
 }
 
 // languageFromVTTName reads "en" out of "1080p.mp4.en.vtt".
