@@ -313,6 +313,9 @@ export const vi: Dictionary = {
     // the Vietnamese phrase is longer than the control it labels.
     pictureInPicture: 'Picture in picture',
     fullScreen: 'Toàn màn hình',
+    exitFullScreen: 'Thoát toàn màn hình',
+    showSuggestions: 'Hiện video gợi ý',
+    hideSuggestions: 'Ẩn video gợi ý',
     expand: 'Mở rộng trình phát',
     closePlayer: 'Đóng trình phát',
     readAloud: 'Đọc to',
@@ -347,8 +350,6 @@ export const vi: Dictionary = {
 
   comments: {
     count: '{{count}} bình luận',
-    placeholder: 'Viết bình luận...',
-    label: 'Viết bình luận',
     noneReturned: 'YouTube không trả về bình luận nào cho video này.',
     couldNotLoad: 'Không tải được bình luận từ YouTube.',
     like: 'Thích bình luận',

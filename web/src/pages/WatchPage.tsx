@@ -10,6 +10,7 @@ import { CommentSection } from '@/features/watch/ui/CommentSection'
 import { DescriptionBox } from '@/features/watch/ui/DescriptionBox'
 import { QueueRail } from '@/features/watch/ui/QueueRail'
 import { UpNextRail } from '@/features/watch/ui/UpNextRail'
+import { useSuggestionsHidden } from '@/features/watch/application/suggestions'
 import { VideoActions } from '@/features/watch/ui/VideoActions'
 import { hueFromId } from '@/shared/lib/hue'
 import { mediaURL } from '@/shared/lib/media'
@@ -71,6 +72,8 @@ export function WatchPage() {
   // by any of that, and expires on its own.
   const startAtBeginning = arrivedByAdvancing(videoId)
 
+  const [suggestionsHidden] = useSuggestionsHidden()
+
   const onPlayNext = next
     ? () => {
         recordAutoplayHop()
@@ -120,6 +123,10 @@ export function WatchPage() {
 
   return (
     <div
+      // `min-[1000px]` is TWO_COLUMN_WIDTH in features/watch/application/
+      // suggestions.ts, which decides whether the player draws the switch that
+      // hides the rail. Tailwind compiles this class, so it cannot read that
+      // constant — the two have to be changed together.
       className="mx-auto flex max-w-[1754px] flex-col gap-6 px-4 py-0 min-[700px]:px-6 min-[700px]:py-6
                  min-[1000px]:flex-row
                  pt-[calc(56.25vw+var(--safe-top))] min-[700px]:pt-6"
@@ -141,7 +148,17 @@ export function WatchPage() {
           bar rather than at the very top: the watch screen on a phone has no
           header, so the notch is the only thing above the player and the
           reserve has to account for it or the title hides behind the film. */}
-      <div className="min-w-0 max-w-[1280px] flex-1">
+      {/* The 1280px cap belongs to the two-column layout: it stops the picture
+          from crowding the rail beside it on a wide screen. With the rail
+          hidden there is nothing to leave room for, so the cap goes and the
+          column grows to the page's own width.
+
+          Measured before this: at a 1920 viewport, hiding the suggestions
+          changed the player by not one pixel and left 541px of empty screen to
+          the right of it. The first loop missed it entirely because it ran at
+          1440, where the column had not yet reached the cap and so did grow —
+          a viewport narrow enough to hide the bug being looked for. */}
+      <div className={clsx('min-w-0 flex-1', !suggestionsHidden && 'max-w-[1280px]')}>
         {/* The player's slot. AppShell measures this div and positions the player
             host over it — the player is never a child of this page, which is what
             lets it outlive the page. On mobile the host is pinned below the top
@@ -169,7 +186,11 @@ export function WatchPage() {
         {video.mediaState !== 'UNAVAILABLE' && <CommentSection videoId={video.id} />}
       </div>
 
-      <div className="w-full shrink-0 min-[1000px]:w-[402px]">
+      {/* Hidden from the player's own control row. The column simply goes, and
+          the main one grows into the space up to its own maximum — the player
+          host measures that slot every frame, so the picture follows without
+          anything here telling it to. */}
+      <div className={clsx('w-full shrink-0 min-[1000px]:w-[402px]', suggestionsHidden && 'hidden')}>
         {/* The queue replaces the recommendation rail rather than sitting
             beside it: while playing through a list, what comes next is already
             decided, and offering a competing list would just be noise. */}

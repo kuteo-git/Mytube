@@ -1,7 +1,7 @@
 import { ChevronDown, Pin, ThumbsDown, ThumbsUp, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { Comment } from '@/features/catalog/domain/video'
-import { useAddComment, useComments, useFetchComments } from '@/features/catalog/application/queries'
+import { useComments, useFetchComments } from '@/features/catalog/application/queries'
 import { Avatar } from '@/shared/ui/primitives'
 import { InfiniteList } from '@/shared/ui/InfiniteList'
 
@@ -12,9 +12,7 @@ import { useTranslation } from 'react-i18next'
 export function CommentSection({ videoId }: { videoId: string }) {
   const { t } = useTranslation()
   const { data, isPending, fetchNextPage, hasNextPage, isFetchingNextPage } = useComments(videoId)
-  const addComment = useAddComment(videoId)
   const fetchComments = useFetchComments(videoId)
-  const [draft, setDraft] = useState('')
   const [autoFetched, setAutoFetched] = useState(false)
 
   const handleLoadMore = useCallback(() => {
@@ -36,24 +34,11 @@ export function CommentSection({ videoId }: { videoId: string }) {
           and it had been sitting here long enough to look like a feature. */}
       <h2 className="text-xl font-bold">{t('comments.count', { count: data?.totalCount ?? 0 })}</h2>
 
-      <form
-        className="mt-6 flex gap-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          const text = draft.trim()
-          if (!text) return
-          addComment.mutate(text, { onSuccess: () => setDraft('') })
-        }}
-      >
-        <Avatar hue={hueFromId('u_luc')} name="Luc" size={40} />
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={t('comments.placeholder')}
-          aria-label={t('comments.label')}
-          className="flex-1 border-b border-line bg-transparent pb-1 text-sm outline-none placeholder:text-text-2 focus:border-text"
-        />
-      </form>
+      {/* No box to write in, and that is a decision rather than an omission.
+          The gateway accepts a comment and writes it into this household's own
+          catalogue — it never reaches YouTube. Under two thousand real YouTube
+          comments that reads as a reply to them, and it would be a reply nobody
+          outside this house will ever see. */}
 
       {/* Skeleton shimmer while fetching YouTube comments */}
       {fetchComments.isPending && (

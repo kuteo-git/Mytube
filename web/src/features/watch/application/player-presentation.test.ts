@@ -4,6 +4,8 @@ import {
   canUsePiP,
   enterPiP,
   goFullscreen,
+  leaveFullscreen,
+  menuHost,
   videoSupportsPiP,
 } from './player-presentation'
 
@@ -56,6 +58,34 @@ describe('canGoFullscreen', () => {
   })
 })
 
+describe('leaveFullscreen', () => {
+  it('asks the document to exit, not the element', () => {
+    // Exiting is a document-level act: whatever is filling the screen, this is
+    // the way back. The element that went in may no longer exist by then.
+    const exit = vi.fn(async () => {})
+    Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exit })
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true, value: document.createElement('div'),
+    })
+
+    leaveFullscreen()
+
+    expect(exit).toHaveBeenCalled()
+  })
+
+  it('does nothing when nothing is filling the screen', () => {
+    // Chrome rejects exitFullscreen outside full screen, and an unhandled
+    // rejection in a click handler is a console error on an ordinary press.
+    const exit = vi.fn(async () => {})
+    Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exit })
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null })
+
+    leaveFullscreen()
+
+    expect(exit).not.toHaveBeenCalled()
+  })
+})
+
 describe('goFullscreen', () => {
   it('prefers the webkit method even where the standard one is offered', () => {
     // Safari reports the Fullscreen API on iPhone, and what it gives is the
@@ -72,6 +102,48 @@ describe('goFullscreen', () => {
 
     expect(webkit).toHaveBeenCalled()
     expect(standard).not.toHaveBeenCalled()
+  })
+
+  it('fullscreens the frame around the video, not the video itself', () => {
+    // Chrome gives a fullscreened `<video>` element its own click-to-play
+    // gesture, and it fires about 300ms after the click to tell a single tap
+    // from a double one. So tapping the picture to pause paused it and then the
+    // browser started it again — reported as "pause cỡ 0.5sec sau đó nó play
+    // tiếp", and measured at 6 attempts out of 6 in full screen against 0 out
+    // of 6 windowed. Handing the surrounding element to the Fullscreen API
+    // leaves the gesture to this app alone, and it is what puts the player's own
+    // controls on screen there at all — a fullscreened video element covers
+    // them, because they are painted in the page it is covering.
+    setDocumentFlag('fullscreenEnabled', true)
+    const video = document.createElement('video')
+    const frame = document.createElement('div')
+    const onVideo = vi.fn(async () => {})
+    const onFrame = vi.fn(async () => {})
+    Object.assign(video, { requestFullscreen: onVideo })
+    Object.assign(frame, { requestFullscreen: onFrame })
+
+    goFullscreen(video, frame)
+
+    expect(onFrame).toHaveBeenCalled()
+    expect(onVideo).not.toHaveBeenCalled()
+  })
+
+  it('still hands the video itself to the webkit method', () => {
+    // Apple's own player is opened by the element that holds the media, so the
+    // iPhone path is unchanged by the frame: passing the frame there would open
+    // nothing at all.
+    setDocumentFlag('fullscreenEnabled', true)
+    const video = document.createElement('video')
+    const frame = document.createElement('div')
+    const webkit = vi.fn()
+    const onFrame = vi.fn(async () => {})
+    Object.assign(video, { webkitEnterFullscreen: webkit })
+    Object.assign(frame, { requestFullscreen: onFrame })
+
+    goFullscreen(video, frame)
+
+    expect(webkit).toHaveBeenCalled()
+    expect(onFrame).not.toHaveBeenCalled()
   })
 
   it('uses the standard method where there is no webkit one', () => {
@@ -229,5 +301,21 @@ describe('capability is read from the prototype, not from an element', () => {
     const undo = withVideoMethod('webkitEnterFullscreen', () => {})
     expect(canGoFullscreen()).toBe(true)
     undo()
+  })
+})
+
+describe('menuHost', () => {
+  it('is the body while nothing fills the screen', () => {
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null })
+    expect(menuHost(document.fullscreenElement)).toBe(document.body)
+  })
+
+  it('is whatever fills the screen when something does', () => {
+    // A menu rendered into the body is painted *under* the fullscreen layer, so
+    // it opens and nobody sees it. That is the same dead button the suggestions
+    // switch was, one control along.
+    const frame = document.createElement('div')
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: frame })
+    expect(menuHost(document.fullscreenElement)).toBe(frame)
   })
 })

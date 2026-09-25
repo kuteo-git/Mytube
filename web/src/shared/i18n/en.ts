@@ -290,6 +290,9 @@ export const en = {
     live: 'LIVE',
     pictureInPicture: 'Picture in picture',
     fullScreen: 'Full screen',
+    exitFullScreen: 'Exit full screen',
+    showSuggestions: 'Show suggestions',
+    hideSuggestions: 'Hide suggestions',
     expand: 'Expand player',
     closePlayer: 'Close player',
     readAloud: 'Read aloud',
@@ -324,8 +327,6 @@ export const en = {
 
   comments: {
     count: '{{count}} Comments',
-    placeholder: 'Add a comment...',
-    label: 'Add a comment',
     noneReturned: 'YouTube did not return comments for this video.',
     couldNotLoad: 'Could not load YouTube comments.',
     like: 'Like comment',

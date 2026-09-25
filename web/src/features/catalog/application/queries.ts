@@ -738,16 +738,6 @@ export function useSetSubscription(channelId: string) {
   })
 }
 
-export function useAddComment(videoId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (text: string) => repo.addComment(videoId, text),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['comments', videoId] })
-    },
-  })
-}
-
 export function useFetchComments(videoId: string) {
   const queryClient = useQueryClient()
   return useMutation({

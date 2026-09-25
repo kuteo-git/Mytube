@@ -851,12 +851,29 @@ describe('the subtitle preference and the two layers', () => {
    * As `trackable`, but the list can be listened to and fired at — which is
    * what a browser does when it selects a track by itself.
    */
-  function liveTrackable(video: HTMLVideoElement, languages: string[]) {
-    const listeners: Record<string, Array<() => void>> = {}
-    const tracks = languages.map((language) => ({ language, mode: 'disabled', cues: null }))
-    Object.defineProperty(video, 'textTracks', {
-      configurable: true,
-      value: Object.assign(tracks, {
+  /**
+   * Gives every `<video>` a live text-track list from the moment it is created.
+   *
+   * On the prototype rather than on an element fetched after rendering, and
+   * that is the whole point. The player attaches its `change` listener on the
+   * first animation frame in which a layer reports any tracks at all — so a
+   * list swapped onto the element afterwards is a list nothing is listening
+   * to, and the test then proves only that a detached object can be written to.
+   *
+   * It used to work by accident: the two layers were unmounted whenever the
+   * source was not playable, so the listener bound late enough to catch a
+   * replacement. Keeping them mounted is what fixed full screen and
+   * picture-in-picture surviving the end of a video, and it took this timing
+   * with it. A browser never swaps the list out from under an element, so
+   * handing one over at birth is also the more faithful fake.
+   */
+  function trackableLayers(languages: string[]) {
+    const fakes = new WeakMap<HTMLVideoElement, ReturnType<typeof makeList>>()
+    const makeList = (video: HTMLVideoElement) => {
+      void video
+      const listeners: Record<string, Array<() => void>> = {}
+      const tracks = languages.map((language) => ({ language, mode: 'disabled', cues: null }))
+      const list = Object.assign(tracks, {
         length: tracks.length,
         addEventListener(type: string, fn: () => void) {
           ;(listeners[type] ??= []).push(fn)
@@ -864,12 +881,32 @@ describe('the subtitle preference and the two layers', () => {
         removeEventListener(type: string, fn: () => void) {
           listeners[type] = (listeners[type] ?? []).filter((f) => f !== fn)
         },
-      }),
+      })
+      return { tracks, list, listeners,
+        fire: (type: string) => { for (const fn of listeners[type] ?? []) fn() } }
+    }
+
+    const original = Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype, 'textTracks')
+    Object.defineProperty(HTMLVideoElement.prototype, 'textTracks', {
+      configurable: true,
+      get(this: HTMLVideoElement) {
+        let fake = fakes.get(this)
+        if (!fake) {
+          fake = makeList(this)
+          fakes.set(this, fake)
+        }
+        return fake.list
+      },
     })
+
     return {
-      tracks,
-      fire: (type: string) => {
-        for (const fn of listeners[type] ?? []) fn()
+      of: (video: HTMLVideoElement) => {
+        void video.textTracks
+        return fakes.get(video)!
+      },
+      restore: () => {
+        if (original) Object.defineProperty(HTMLVideoElement.prototype, 'textTracks', original)
+        else Reflect.deleteProperty(HTMLVideoElement.prototype, 'textTracks')
       },
     }
   }
@@ -881,21 +918,43 @@ describe('the subtitle preference and the two layers', () => {
     // is attached, which for a video being downloaded is long after the effect
     // that applies the preference last ran. So the preference is enforced, not
     // applied once.
-    await ready()
-    const [a, b] = Array.from(document.querySelectorAll('video'))
-    liveTrackable(b, ['en'])
-    const front = liveTrackable(a, ['en'])
+    const layers = trackableLayers(['en'])
+    try {
+      await ready()
+      const [a] = Array.from(document.querySelectorAll('video'))
+      const front = layers.of(a as HTMLVideoElement)
 
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 60))
-    })
+      // Wait for the player to be listening rather than for a number of
+      // milliseconds. The effect re-runs as the source settles, and each run
+      // re-attaches on an animation frame — a fixed sleep raced that and failed
+      // while the enforcement itself was perfectly well wired.
+      await waitFor(
+        () => {
+          expect((front.listeners['change'] ?? []).length).toBeGreaterThan(0)
+        },
+        { timeout: 5000 },
+      )
 
-    await act(async () => {
-      front.tracks[0].mode = 'showing'
-      front.fire('change')
-    })
+      // Whatever the player settled on — not a hardcoded 'disabled'.
+      //
+      // The caption preference lives in localStorage, which the run shares with
+      // every other test file, so a sibling turning captions on makes 'showing'
+      // the correct answer here and the assertion fails over a player that is
+      // behaving perfectly. Measured at one failure in three. What this test is
+      // named for is the *enforcement*: whatever the player wrote, something
+      // else changing it gets put back.
+      const enforced = front.tracks[0].mode
+      const meddled = enforced === 'showing' ? 'disabled' : 'showing'
 
-    expect(front.tracks[0].mode).toBe('disabled')
+      await act(async () => {
+        front.tracks[0].mode = meddled
+        front.fire('change')
+      })
+
+      expect(front.tracks[0].mode).toBe(enforced)
+    } finally {
+      layers.restore()
+    }
   })
 })
 

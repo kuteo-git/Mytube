@@ -445,8 +445,19 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
           : 'none',
       }}
     >
+      {/* No `key` on the video. Keying this on `state.videoId` tore the whole
+          Player down and built a new one for every video, which is the fault
+          this host was created to remove — one video further along. A rebuilt
+          subtree means new `<video>` elements, and the browser drops full
+          screen when the element carrying it leaves the document and strands
+          the picture-in-picture window on a node nothing can reach any more.
+
+          Player.tsx is written for this: the `useLayoutEffect` keyed on
+          `videoId` there puts back every ref and every piece of state the old
+          video left behind, and says so — "Moving to another video keeps this
+          component mounted". The key made that forty lines of dead code while
+          two files held opposite beliefs about the same question. */}
       <Player
-        key={state.videoId}
         videoId={state.videoId}
         title={state.title}
         channelTitle={state.channelTitle}

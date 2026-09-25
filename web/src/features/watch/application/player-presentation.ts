@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 /**
  * Full screen and picture-in-picture, across browsers that disagree about how
  * to ask.
@@ -48,7 +49,25 @@ function hasVideoMethod(name: string): boolean {
   return typeof HTMLVideoElement !== 'undefined' && name in HTMLVideoElement.prototype
 }
 
-export function goFullscreen(video: HTMLVideoElement | null): void {
+/**
+ * Fills the screen with the player.
+ *
+ * `frame` is the element around the picture — the one that also holds this
+ * app's controls — and it is what the standard API is given. Handing it the
+ * `<video>` instead has two costs, and both were reported:
+ *
+ *  - Chrome gives a fullscreened video element a click-to-play/pause gesture of
+ *    its own, fired ~300ms after the click so it can tell one tap from two. A
+ *    tap on the picture therefore paused through this app and was started again
+ *    by the browser a moment later. Measured: 6 of 6 attempts in full screen
+ *    against 0 of 6 windowed.
+ *  - The controls are painted in the page, and a fullscreened video covers the
+ *    page. So there were none.
+ *
+ * The webkit path still takes the video, because Apple's player is opened by
+ * the element holding the media and a `<div>` opens nothing.
+ */
+export function goFullscreen(video: HTMLVideoElement | null, frame?: Element | null): void {
   if (!video) return
   const webkit = video as WebkitVideo
 
@@ -69,8 +88,34 @@ export function goFullscreen(video: HTMLVideoElement | null): void {
     return
   }
 
-  if (typeof video.requestFullscreen === 'function') {
-    void video.requestFullscreen().catch(() => undefined)
+  const target = frame ?? video
+  if (typeof target.requestFullscreen === 'function') {
+    void target.requestFullscreen().catch(() => undefined)
+  }
+}
+
+/**
+ * The way back out.
+ *
+ * Asked of the document rather than of an element, which is what the API takes
+ * — and the honest shape anyway: by the time somebody leaves, the element that
+ * went in may have been replaced under them.
+ *
+ * It exists because the frame is what fills the screen now. While the `<video>`
+ * was the fullscreen element, this app's controls were painted in the page
+ * behind it and nobody could see the button; with the frame there, the button
+ * is on screen and a press that did nothing would be the one thing §5 of the
+ * charter forbids outright.
+ *
+ * Guarded on `fullscreenElement`: Chrome rejects the call outside full screen,
+ * and an unhandled rejection inside a click handler is a console error on an
+ * ordinary press.
+ */
+export function leaveFullscreen(): void {
+  if (typeof document === 'undefined') return
+  if (!document.fullscreenElement) return
+  if (typeof document.exitFullscreen === 'function') {
+    void document.exitFullscreen().catch(() => undefined)
   }
 }
 
@@ -115,4 +160,51 @@ export function videoSupportsPiP(video: HTMLVideoElement | null): boolean {
     return webkit.webkitSupportsPresentationMode('picture-in-picture')
   }
   return typeof document !== 'undefined' && Boolean(document.pictureInPictureEnabled)
+}
+
+/**
+ * Whether anything is currently filling the screen.
+ *
+ * A subscription rather than a read, because the way out is not only this
+ * app's button: Escape and the browser's own chrome both leave, and a button
+ * whose icon was read once would then be showing the wrong way.
+ */
+export function useIsFullscreen(): boolean {
+  const [full, setFull] = useState(
+    () => typeof document !== 'undefined' && !!document.fullscreenElement,
+  )
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const read = () => setFull(!!document.fullscreenElement)
+    read()
+    document.addEventListener('fullscreenchange', read)
+    // Safari has never sent the unprefixed event.
+    document.addEventListener('webkitfullscreenchange', read)
+    return () => {
+      document.removeEventListener('fullscreenchange', read)
+      document.removeEventListener('webkitfullscreenchange', read)
+    }
+  }, [])
+  return full
+}
+
+/**
+ * Where a menu opened from the player has to be rendered.
+ *
+ * `document.body` while nothing fills the screen — the player frame clips its
+ * own contents with `overflow-hidden`, to keep the picture's rounded corners,
+ * so a menu left inside it is cut off.
+ *
+ * And the element in full screen, because only that element and its descendants
+ * are drawn there. A menu portalled to the body while the player frame fills
+ * the screen opens perfectly well and is painted underneath it, which is a
+ * button that appears to do nothing. Measured before this existed: the panel
+ * was in the DOM at 1052,596 with `parent: BODY`, and invisible.
+ *
+ * The frame's `overflow-hidden` does not clip it: the menu is `position: fixed`
+ * and that frame is a plain positioned box, so it is not the menu's containing
+ * block.
+ */
+export function menuHost(fullscreenElement: Element | null): Element {
+  return fullscreenElement ?? document.body
 }

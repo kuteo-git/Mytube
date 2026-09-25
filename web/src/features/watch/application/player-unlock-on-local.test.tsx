@@ -137,8 +137,16 @@ it('plays the downloaded file after the only live tier was refused', async () =>
   })
   await settle(50)
 
-  // Given up: no element left to play, and a sentence in its place.
-  await waitFor(() => expect(document.querySelectorAll('video').length).toBe(0))
+  // Given up: a sentence over the picture — and the two layers stay in the
+  // tree while it is shown.
+  //
+  // They used to be taken out, and this asserted it. That is what dropped full
+  // screen and stranded the picture-in-picture window at the end of every
+  // video: advancing empties the sources for a frame, so both elements left the
+  // document, and a browser ends full screen when the element holding it goes.
+  // The message is drawn over the layers now rather than instead of them.
+  await waitFor(() => expect(document.querySelector('p.absolute.inset-0')).not.toBeNull())
+  expect(document.querySelectorAll('video').length).toBe(2)
 
   // The download lands, which is the one thing here that has never failed.
   onDisk = true

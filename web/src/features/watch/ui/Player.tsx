@@ -3,7 +3,10 @@ import {
   Captions,
   CaptionsOff,
   Maximize,
+  Minimize,
   Pause,
+  PanelRightClose,
+  PanelRightOpen,
   PictureInPicture2,
   Play,
   Settings,
@@ -119,6 +122,9 @@ import {
   canUsePiP,
   enterPiP,
   goFullscreen,
+  leaveFullscreen,
+  menuHost,
+  useIsFullscreen,
   videoSupportsPiP,
 } from '@/features/watch/application/player-presentation'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
@@ -128,6 +134,7 @@ import { rememberLastWatched } from '@/features/watch/application/last-watched'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useTTSConfig } from '@/features/settings/application/queries'
+import { useSuggestionsHidden, useSuggestionsToggleAvailable } from '@/features/watch/application/suggestions'
 
 /**
  * Progressive MP4 in a plain <video> element, served over HTTP range requests.
@@ -666,6 +673,9 @@ export function Player({
   const barRef = useRef(false)
   useEffect(() => { barRef.current = bar }, [bar])
   const [autoplayEnabled, setAutoplayEnabled] = useAutoplayPreference()
+  const [suggestionsHidden, setSuggestionsHidden] = useSuggestionsHidden()
+  const suggestionsToggleAvailable = useSuggestionsToggleAvailable()
+  const isFullscreen = useIsFullscreen()
   // Seconds left before the next video starts, or null when no countdown runs.
   const [countdown, setCountdown] = useState<number | null>(null)
 
@@ -2591,12 +2601,25 @@ export function Player({
         </div>
       )}
 
-      {playable ? (
-        // Two layers, permanently mounted. Only one is ever visible; the other
-        // is where a better source is quietly loaded and lined up. Both stay in
-        // the tree so that exchanging them is a change of opacity rather than a
-        // teardown, which is what keeps the picture from blinking.
-        <>
+      {/* Two layers, permanently mounted. Only one is ever visible; the other
+          is where a better source is quietly loaded and lined up. Both stay in
+          the tree so that exchanging them is a change of opacity rather than a
+          teardown, which is what keeps the picture from blinking.
+
+          "Permanently" has to survive a change of video, and for a long time it
+          did not: these two sat inside `{playable ? … }`, and `playable` is
+          `Boolean(frontSrc)`, which the per-video reset sets to undefined. So
+          moving to the next video took both elements out of the tree for a
+          single frame — measured, one 50ms sample of `n=0` — and a frame is all
+          it takes. The browser drops full screen when the element holding it
+          leaves the document, and leaves the picture-in-picture window stranded
+          on a node nothing can reach again. Both were reported: full screen
+          exiting at the end of a video, and the floating window keeping the old
+          picture, paused, while the page had moved on.
+
+          So the message for a video that cannot be played is drawn *over* these
+          two rather than instead of them. */}
+      <>
           {([true, false] as const).map((isA) => {
             const src = isA ? srcA : srcB
             const isFront = isA === frontIsA
@@ -2955,8 +2978,9 @@ export function Player({
               </video>
             )
           })}
-        </>
-      ) : (
+      </>
+
+      {!playable && (
         <p className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-text-2">
           {resolvingStream
             ? t('player.findingStream')
@@ -3238,15 +3262,45 @@ export function Player({
             </button>
           )}
 
+          {/* Show or hide the column of suggestions beside the video.
+              On the player rather than on the rail itself: it is a decision
+              about how much of the screen the video gets, which is what every
+              other control in this row is about. It is absent in the corner
+              and on the phone bar, where there is no column beside anything.
+
+              Gated on the width as well: below the two-column breakpoint the
+              rail is stacked under the video rather than beside it, so the
+              switch would be a control for a layout that is not on screen. */}
+          {variant === 'full' && suggestionsToggleAvailable && (
+            <button
+              type="button"
+              aria-label={suggestionsHidden ? t('player.showSuggestions') : t('player.hideSuggestions')}
+              aria-pressed={suggestionsHidden}
+              onClick={() => setSuggestionsHidden(!suggestionsHidden)}
+              className={controlButton}
+            >
+              {suggestionsHidden ? <PanelRightOpen size={20} /> : <PanelRightClose size={20} />}
+            </button>
+          )}
+
           {variant === 'full' && fullscreenAvailable && (
             <button
               type="button"
-              aria-label={t('player.fullScreen')}
-              onClick={() => goFullscreen(front())}
+              aria-label={isFullscreen ? t('player.exitFullScreen') : t('player.fullScreen')}
+              // The frame, not the picture. See goFullscreen: a fullscreened
+              // `<video>` gets a click-to-play gesture from Chrome that undid
+              // this app's own pause a third of a second later, and it covers
+              // the controls painted in the page behind it.
+              //
+              // And it is a toggle now, which it had no need to be while those
+              // controls were invisible in full screen. With the frame there
+              // they are on screen, so a button that could only ever go in
+              // would be a press that does nothing.
+              onClick={() => (isFullscreen ? leaveFullscreen() : goFullscreen(front(), surfaceRef.current))}
               disabled={!playable}
               className={controlButton}
             >
-              <Maximize size={22} />
+              {isFullscreen ? <Minimize size={22} /> : <Maximize size={22} />}
             </button>
           )}
         </div>
@@ -3472,6 +3526,9 @@ function SettingsMenu({
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [menuPos, setMenuPos] = useState<{ bottom: number; right: number } | null>(null)
+  // Read as a subscription, not once: full screen can be left with Escape while
+  // this menu is open, and the portal has to follow it back to the body.
+  const fullscreen = useIsFullscreen()
 
   // Measure the button's viewport position so the portalled dropdown can sit
   // exactly where it would have been, just outside the clipping container.
@@ -3512,11 +3569,17 @@ function SettingsMenu({
         {icon ?? <Settings size={22} />}
       </button>
 
-      {/* The menu is portalled to document.body regardless of mode, because
-          the player host clips its contents with overflow-hidden (it has to,
-          to keep the video's rounded corners). On desktop the dropdown opens
-          upwards from the button; on mobile it is a bottom sheet. Both are
-          clipped by the player unless portalled out. */}
+      {/* The menu is portalled out of the player host, because that host clips
+          its contents with overflow-hidden (it has to, to keep the video's
+          rounded corners). On desktop the dropdown opens upwards from the
+          button; on mobile it is a bottom sheet. Both are clipped by the
+          player unless portalled out.
+
+          Out to the body, except in full screen — see `menuHost`. Only the
+          fullscreen element and its descendants are painted there, so a menu
+          sent to the body opened correctly and was drawn underneath the
+          picture. Measured: the panel in the DOM at 1052,596 with `parent:
+          BODY`, and nothing on screen. */}
       {open &&
         createPortal(
           !sheet && menuPos ? (
@@ -3565,7 +3628,7 @@ function SettingsMenu({
               </ul>
             </>
           ) : null,
-          document.body,
+          menuHost(fullscreen ? document.fullscreenElement : null),
         )}
     </div>
   )
