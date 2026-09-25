@@ -48,7 +48,7 @@ Hệ thống thuyết minh (narration) tự động đọc phụ đề tiếng V
 | Constant | Value | Ý nghĩa |
 |----------|-------|---------|
 | `TTS_VOICE` | `'Ngọc Linh'` | Giọng đọc |
-| `DEFAULT_SPEED` | `1.1` | Tốc độ mặc định (server atempo) |
+| `DEFAULT_SPEED` | `1.0` | Tốc độ mặc định — tốc độ gốc của synthesiser, không atempo |
 | `MAX_SPEED` | `3.0` | Tốc độ tối đa khi slot chật |
 | `PREFETCH_SEC` | `60` | Fetch TTS trước bao nhiêu giây (đã đổi từ 10 — xem CLAUDE.md §8.3b: 10s runway làm narration im sau ≤10s khi tab vào nền) |
 | `GAP_BETWEEN_CLIPS` | `0.25` | Khoảng nghỉ giữa 2 câu |
@@ -105,7 +105,7 @@ Hệ thống thuyết minh (narration) tự động đọc phụ đề tiếng V
 slot = max(0.1, end - start)
 IF next_cue có gap: slot = min(next_cue.start - start, slot × 2)
 
-Fetch ở DEFAULT_SPEED (1.1×) → buf.duration
+Fetch ở DEFAULT_SPEED (1.0×) → buf.duration
 
 IF buf.duration > slot:
    natural = buf.duration × DEFAULT_SPEED

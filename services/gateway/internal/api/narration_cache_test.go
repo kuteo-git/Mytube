@@ -303,14 +303,28 @@ func TestTTSNaturalAndStretchedAreSeparateEntries(t *testing.T) {
 	}
 }
 
-// defaultSpeed is 1.1, not 1.0 — so "natural" and "the tempo narration normally
-// runs at" are genuinely different recordings and must not share a key.
-func TestTTSNaturalIsNotTheDefaultSpeedEntry(t *testing.T) {
+// defaultSpeed is 1.0, which is naturalSpeed — so "natural" and "the tempo
+// narration normally runs at" are the same recording and deliberately share a
+// key. That is what lets a pass at the default tempo run no atempo, write no
+// second file, and reuse every natural copy already on disk.
+//
+// This goes red the day defaultSpeed moves off naturalSpeed again, which is the
+// point: that change costs a stretch and a second file for every line, and it
+// should be made on purpose rather than noticed later as a slow pass.
+func TestTTSNaturalAndDefaultShareAKeyWhileTheyAreEqual(t *testing.T) {
 	root := t.TempDir()
 	_ = writeTTSCache(root, "vid1", "hello", naturalSpeed, "V", []byte("natural"))
 
-	if _, ok := readTTSCache(root, "vid1", "hello", defaultSpeed, "V"); ok {
-		t.Fatal("the natural copy must not answer a request for defaultSpeed")
+	got, ok := readTTSCache(root, "vid1", "hello", defaultSpeed, "V")
+	if !ok || string(got) != "natural" {
+		t.Fatalf("the natural copy must answer a request for defaultSpeed: ok=%v %q",
+			ok, got)
+	}
+
+	// A tempo that really is different still gets its own entry — the key is
+	// keyed on the speed, not ignoring it.
+	if _, ok := readTTSCache(root, "vid1", "hello", 1.4, "V"); ok {
+		t.Fatal("a stretched tempo must not be answered by the natural copy")
 	}
 }
 

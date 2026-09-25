@@ -24,8 +24,17 @@ const (
 	// one natural copy serves every tempo the same words are ever asked for.
 	naturalSpeed = 1.0
 
-	// defaultSpeed matches DEFAULT_SPEED: VieNeu-TTS reads slightly slow.
-	defaultSpeed = 1.1
+	// defaultSpeed matches DEFAULT_SPEED: the floor a line is read at when its
+	// slot has room to spare. It is the synthesiser's own tempo, so a line is
+	// only ever hurried by the time it actually has — never by a standing
+	// opinion that the voice is slow.
+	//
+	// It being equal to naturalSpeed is load-bearing rather than a coincidence:
+	// the two then share a cache key, so the common case runs no atempo and
+	// writes no second file, and every natural copy already on disk answers a
+	// default-tempo request outright. The day this moves off 1.0 again they part,
+	// and TestTTSNaturalAndDefaultShareAKeyWhileTheyAreEqual says so.
+	defaultSpeed = 1.0
 
 	// maxSpeed matches MAX_SPEED. Past this a line stops being followable
 	// whatever the timing says, so it is dropped rather than played — see

@@ -1,7 +1,9 @@
 import type { CueText } from './narration-vtt'
 
-/** VieNeu-TTS reads slightly slow; 1.1× sounds natural. */
-export const DEFAULT_SPEED = 1.1
+/** The floor a line is read at: the synthesiser's own tempo, so a line is only
+ * ever hurried by the time it actually has. Mirrored by defaultSpeed in
+ * narration_tempo.go, and the two have to move together. */
+export const DEFAULT_SPEED = 1.0
 
 /** ffmpeg's atempo preserves pitch, so this is fast but still clear. */
 export const MAX_SPEED = 3.0
