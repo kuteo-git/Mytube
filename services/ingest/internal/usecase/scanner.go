@@ -37,6 +37,14 @@ type Scanner struct {
 	mu       sync.Mutex
 	running  bool
 	lastScan domain.ScanResult
+
+	// Videos the live recheck could not get a word out of upstream — a
+	// members-only or deleted broadcast. Held for the process's lifetime so the
+	// backlog behind them can move; see recheckKnownLive.
+	liveRecheckFailed map[string]struct{}
+	// Overrides liveRecheckGap. Zero means the constant; a test sets it so a
+	// twenty-video quota does not cost eighty seconds of wall clock.
+	liveRecheckDelay time.Duration
 }
 
 // How long a pass stays on the Activity page.

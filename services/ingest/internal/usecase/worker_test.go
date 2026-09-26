@@ -201,6 +201,8 @@ func (f *fakeLibrary) ListUncheckedShorts(context.Context, int32) ([]string, err
 	return nil, nil
 }
 
+func (f *fakeLibrary) ListStaleLive(context.Context, int32) ([]string, error) { return nil, nil }
+
 func (f *fakeLibrary) SetShort(context.Context, string, bool) error { return nil }
 
 func (f *fakeLibrary) SetSubscription(context.Context, string, string, bool) error { return nil }

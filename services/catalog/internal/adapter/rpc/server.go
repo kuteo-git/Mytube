@@ -410,7 +410,7 @@ func (s *Server) UpsertVideo(ctx context.Context, req *connect.Request[catalogv1
 		// IsLiveNow is deliberately not read here. It is computed in SQL from
 		// the two stored columns, so accepting it from a caller would be a
 		// second source for a fact that has one.
-		LiveStatus:      in.GetLiveStatus(),
+		LiveStatus: in.GetLiveStatus(),
 	}
 	if ts := in.GetPublishedAt(); ts != nil {
 		v.PublishedAt = ts.AsTime()
@@ -436,6 +436,14 @@ func (s *Server) ListUncheckedShorts(ctx context.Context, req *connect.Request[c
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.ListUncheckedShortsResponse{VideoIds: ids}), nil
+}
+
+func (s *Server) ListStaleLive(ctx context.Context, req *connect.Request[catalogv1.ListStaleLiveRequest]) (*connect.Response[catalogv1.ListStaleLiveResponse], error) {
+	ids, err := s.catalog.ListStaleLive(ctx, req.Msg.GetLimit())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.ListStaleLiveResponse{VideoIds: ids}), nil
 }
 
 // ListLive answers with the broadcasts this member's channels have on air.

@@ -100,6 +100,17 @@ func (l *Library) ListUncheckedShorts(ctx context.Context, limit int32) ([]strin
 	return resp.Msg.GetVideoIds(), nil
 }
 
+// ListStaleLive returns the broadcasts whose liveness has gone unconfirmed.
+func (l *Library) ListStaleLive(ctx context.Context, limit int32) ([]string, error) {
+	resp, err := l.client.ListStaleLive(ctx, connect.NewRequest(&catalogv1.ListStaleLiveRequest{
+		Limit: limit,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.GetVideoIds(), nil
+}
+
 // SetSubscription records that this member follows the channel.
 func (l *Library) SetSubscription(ctx context.Context, userID, channelID string, subscribed bool) error {
 	_, err := l.client.SetSubscription(ctx, connect.NewRequest(&catalogv1.SetSubscriptionRequest{

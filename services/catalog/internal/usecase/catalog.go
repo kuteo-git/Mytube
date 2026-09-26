@@ -23,6 +23,12 @@ const (
 	// YouTube, and §8 of the charter is about exactly this: a pass is always
 	// bounded, and a zero limit means this number rather than "all of them".
 	maxShortCheckBatch = 200
+	// Rows per ListStaleLive. Smaller than the Shorts batch by an order of
+	// magnitude, because each of these costs a full metadata request where a
+	// Shorts check costs a cheap one, and because the caller spaces them four
+	// seconds apart — a batch it cannot finish inside one pass is a batch whose
+	// tail is asked for again next time and never reached.
+	maxStaleLiveBatch = 50
 	// The server's own ceiling on how many playlists one importer pass may be
 	// handed, whichever list it asks for.
 	//
@@ -223,6 +229,19 @@ func (c *Catalog) ListUncheckedShorts(ctx context.Context, limit int32) ([]strin
 		limit = maxShortCheckBatch
 	}
 	return c.repo.ListUncheckedShorts(ctx, limit)
+}
+
+// ListStaleLive returns the broadcasts whose liveness nobody has confirmed
+// lately.
+//
+// Bounded exactly as ListUncheckedShorts is, and for a sharper version of the
+// same reason: one answer to this costs a *full* metadata request upstream, and
+// this library has been blocked once for making too many of those.
+func (c *Catalog) ListStaleLive(ctx context.Context, limit int32) ([]string, error) {
+	if limit <= 0 || limit > maxStaleLiveBatch {
+		limit = maxStaleLiveBatch
+	}
+	return c.repo.ListStaleLive(ctx, limit)
 }
 
 // ListLive passes straight through. No limit, no ordering choice, no ranking:

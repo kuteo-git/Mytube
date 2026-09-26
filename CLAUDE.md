@@ -1631,3 +1631,123 @@ playable video, and it did not cost this one either, since both 502'd. It is
 still the fourth tier declared on this path and the app's own charter has paid
 for that shape three times. Worth reading the day HLS fails where remux would
 not.
+
+## Nothing ever wound the clock the Live chip reads (2026-09-26)
+
+Asked as the obvious follow-up to the entry above — *"ủa mà tại sao cái video đó
+nó ko nằm trên live?"* — and it is the same frozen number, one list over. The
+playback fix stopped depending on it; this is the half that still did.
+
+Measured, with the broadcast on air and 34 concurrent viewers:
+
+| | |
+|---|---|
+| `/api/live` as `u_luc` | **18 videos, and not this one** |
+| the channel's `/streams` tab | **0 entries** |
+| the channel's `/live` | `ERROR: The channel is not currently live` |
+| the channel's `/videos`, top 40 | not listed, and `live_status` on **0 of 40** |
+| `u_luc` follows the channel | yes — so the subscription join was never the problem |
+
+So YouTube does not surface this broadcast on the channel at all, and `ScanLive`
+reads the channel. That pass was never going to find it.
+
+### What had written `is_live`, once
+
+The gateway's own log from the night before, on a row nobody had touched since:
+
+```
+22:39:34  stream offered  video=VsQWkHo_E4o  tier=hls+remux   ← the 502
+22:39:35  live_checked_at written
+22:40:30  stream offered  video=VsQWkHo_E4o  tier=live        ← it worked
+22:42:49  stream offered  video=VsQWkHo_E4o  tier=live
+```
+
+**The app opening the video is what did it.** `fillDescription` posts to
+`/api/videos/{id}/metadata`, that runs a full `Preview`, and `UpsertVideo` writes
+`live_status` and `live_checked_at` as a side effect. For thirty minutes the video
+played and sat on the Live chip.
+
+**And it can never happen again**, because that endpoint refuses once a
+description exists — which is the right rule, written to stop a second full
+metadata request per video. Measured just now:
+
+```
+POST /api/videos/VsQWkHo_E4o/metadata → {"updated":false,"skipped":true}
+live_checked_at → 2026-09-25 22:39:35   (unmoved)
+```
+
+A freshness window is only honest if something is guaranteed to wind it. Nothing
+was.
+
+### The other half: 568 rows that never heard the broadcast end
+
+| | |
+|---|---|
+| rows saying `is_live` | **589** |
+| of those, fresh enough for the chip | **21** |
+| stale | **568**, oldest last checked **22 August** |
+| stale, of a followed channel | **480** |
+
+Nothing ever wrote `was_live` for a broadcast that finished, and that is not only
+a missing chip entry: `ListVideoFeatures` exempts an `is_live` row from the
+ranker's 365-day age filter, so 480 finished broadcasts keep an exemption they
+are not entitled to.
+
+### `ListStaleLive`, and a pass that drains rather than rotates
+
+`GET` the oldest claims, ask YouTube one at a time, write back the word it gives.
+The set then **shrinks**: a finished broadcast settles into `was_live` and is gone
+from it for good, and one still running has its clock wound and goes to the back.
+
+- **Oldest first is what makes it a backlog rather than a rota**, and the quota is
+  chosen against the set it drains *to* rather than the one it starts with:
+  around twenty broadcasts are on air across this household's channels at any
+  time, so once the dead rows are settled the whole remaining set fits in one
+  pass. Every genuinely live row is then re-confirmed every ten minutes and the
+  thirty-minute cut never drops one. The backlog costs about five hours, which is
+  the right way round for a one-off.
+- **The pacing is the metadata backfill's, unchanged**: serial, four seconds
+  apart, and a cutoff after five consecutive failures. Its own comment is why —
+  an earlier version of that pass running eight at once had YouTube answering
+  every full metadata request on this address with *"Sign in to confirm you're not
+  a bot"*, which took stream resolution down with it. This is the expensive kind
+  of request, and 568 of them impatiently is exactly §8 risk 6.
+- **A row that can never be settled would wedge a queue ordered oldest-first.**
+  A members-only or deleted video answers nothing, so its word never changes and
+  it is handed back at the head for ever — measured on the eight oldest rows, one
+  was members-only. Failures are remembered **in the process**, not written down:
+  `live_status` is yt-dlp's own word and inventing one it did not say is how a
+  column stops meaning anything, so the row is left alone and simply not asked
+  again this run. A restart asks once more, which is the right frequency for "has
+  this become describable again".
+- **Silence is not an answer, and the upsert already knew it**: a video carrying
+  no `live_status` leaves both columns exactly as they were. So a preview that
+  names none is not written and not asked again — writing it would cost a request
+  and leave the row in the set for ever.
+- **After the channel walk, never instead of it.** The walk is the cheap half and
+  finds broadcasts this library has never heard of; this is the expensive half and
+  only ever confirms rows it already holds. A failing walk must not skip it — the
+  rows needing confirmation are precisely the ones the walk cannot see.
+- **The cut is written out three times, not shared.** `ListLive`,
+  `ListVideoFeatures` and `ListStaleLive` all say
+  `live_status = 'is_live' AND live_checked_at > now() - interval '30 minutes'`,
+  and the three want opposite sides of it. What matters is that they agree: a row
+  this pass does not collect is a row `ListLive` is already hiding, and the day
+  they differ is the day a broadcast is neither listed nor rechecked.
+- **Household-wide, unlike `ListLive`.** Whether a broadcast is running is a fact
+  about the broadcast; who is shown it is a question for the read.
+
+### Every test proven to fail
+
+Six, and each was run against a deliberate break of the thing it guards:
+
+| break | goes red |
+|---|---|
+| never write back | the two that assert `is_live` refreshed and `was_live` settled |
+| do not remember a failure | the undescribable-video test, which asks twice |
+| treat silence as an answer | the no-status test |
+| remove the quota and the cutoff | both pacing tests |
+
+The one that matters most is the first: `live_checked_at` moves only when an
+upsert carries a `live_status`, so a pass that probed and wrote nothing would
+leave the row exactly as stale as it found it, at the cost of every request.

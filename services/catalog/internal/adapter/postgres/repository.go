@@ -586,6 +586,48 @@ func (r *Repository) ListUncheckedShorts(ctx context.Context, limit int32) ([]st
 	return out, rows.Err()
 }
 
+// ListStaleLive returns the rows whose claim to be on air has expired, oldest
+// claim first.
+//
+// The cut is the same expression ListLive and ListVideoFeatures use, and it has
+// to be: a row this pass does not collect is a row ListLive is already hiding,
+// and the day the two differ is the day a broadcast is neither listed nor
+// rechecked. It is written out rather than shared because the three want
+// opposite sides of it.
+//
+// Oldest first, which makes this a draining backlog rather than a rota. Every
+// answer either settles a finished broadcast into `was_live` — and it leaves
+// this set for good — or winds the clock on one still running, which sends it to
+// the back. So the set shrinks to the broadcasts that are genuinely on air, and
+// those are then small enough to be re-confirmed inside one pass.
+//
+// Household-wide, unlike ListLive. Whether a broadcast is running is a fact
+// about the broadcast; who is shown it is a question for the read.
+func (r *Repository) ListStaleLive(ctx context.Context, limit int32) ([]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id
+		FROM videos
+		WHERE live_status = 'is_live'
+		  AND (live_checked_at IS NULL
+		       OR live_checked_at <= now() - interval '30 minutes')
+		ORDER BY live_checked_at ASC NULLS FIRST, id
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) SetMediaState(ctx context.Context, videoID string, state domain.MediaState, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -1781,8 +1823,8 @@ func (r *Repository) DeleteUserData(
 	// same numbers for the same member — the dialog shows these and then the
 	// delete reports them back.
 	tables := []struct {
-		name  string
-		into  *int64
+		name string
+		into *int64
 	}{
 		{"subscriptions", &counts.Subscriptions},
 		{"watch_progress", &counts.WatchProgress},

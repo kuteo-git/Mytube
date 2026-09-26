@@ -74,6 +74,9 @@ const (
 	CatalogServiceListUncheckedShortsProcedure = "/catalog.v1.CatalogService/ListUncheckedShorts"
 	// CatalogServiceListLiveProcedure is the fully-qualified name of the CatalogService's ListLive RPC.
 	CatalogServiceListLiveProcedure = "/catalog.v1.CatalogService/ListLive"
+	// CatalogServiceListStaleLiveProcedure is the fully-qualified name of the CatalogService's
+	// ListStaleLive RPC.
+	CatalogServiceListStaleLiveProcedure = "/catalog.v1.CatalogService/ListStaleLive"
 	// CatalogServiceFindBySourceURLProcedure is the fully-qualified name of the CatalogService's
 	// FindBySourceURL RPC.
 	CatalogServiceFindBySourceURLProcedure = "/catalog.v1.CatalogService/FindBySourceURL"
@@ -199,6 +202,20 @@ type CatalogServiceClient interface {
 	// are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
 	// would actively hide some of them.
 	ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error)
+	// The rows that still claim to be on air but can no longer prove it, oldest
+	// claim first.
+	//
+	// ListLive cuts at thirty minutes, and nothing was guaranteed to wind that
+	// clock: the live scan reads a channel's /streams tab, and a channel whose
+	// tab lists nothing can broadcast without this library ever hearing. So a row
+	// written once stayed `is_live` for ever and vanished from the chip after half
+	// an hour — measured, 568 such rows, the oldest last checked on 22 August.
+	//
+	// Ingest asks YouTube about these one at a time and writes back what it is
+	// told, which both refreshes a broadcast genuinely still running and settles
+	// one that ended into `was_live`. That makes the answer here a draining
+	// backlog rather than a standing query.
+	ListStaleLive(context.Context, *connect.Request[v1.ListStaleLiveRequest]) (*connect.Response[v1.ListStaleLiveResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
 	FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error)
@@ -366,6 +383,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+CatalogServiceListLiveProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("ListLive")),
+			connect.WithClientOptions(opts...),
+		),
+		listStaleLive: connect.NewClient[v1.ListStaleLiveRequest, v1.ListStaleLiveResponse](
+			httpClient,
+			baseURL+CatalogServiceListStaleLiveProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListStaleLive")),
 			connect.WithClientOptions(opts...),
 		),
 		findBySourceURL: connect.NewClient[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse](
@@ -544,6 +567,7 @@ type catalogServiceClient struct {
 	setShort                *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
 	listUncheckedShorts     *connect.Client[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse]
 	listLive                *connect.Client[v1.ListLiveRequest, v1.ListLiveResponse]
+	listStaleLive           *connect.Client[v1.ListStaleLiveRequest, v1.ListStaleLiveResponse]
 	findBySourceURL         *connect.Client[v1.FindBySourceURLRequest, v1.FindBySourceURLResponse]
 	listComments            *connect.Client[v1.ListCommentsRequest, v1.ListCommentsResponse]
 	createComment           *connect.Client[v1.CreateCommentRequest, v1.CreateCommentResponse]
@@ -645,6 +669,11 @@ func (c *catalogServiceClient) ListUncheckedShorts(ctx context.Context, req *con
 // ListLive calls catalog.v1.CatalogService.ListLive.
 func (c *catalogServiceClient) ListLive(ctx context.Context, req *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error) {
 	return c.listLive.CallUnary(ctx, req)
+}
+
+// ListStaleLive calls catalog.v1.CatalogService.ListStaleLive.
+func (c *catalogServiceClient) ListStaleLive(ctx context.Context, req *connect.Request[v1.ListStaleLiveRequest]) (*connect.Response[v1.ListStaleLiveResponse], error) {
+	return c.listStaleLive.CallUnary(ctx, req)
 }
 
 // FindBySourceURL calls catalog.v1.CatalogService.FindBySourceURL.
@@ -822,6 +851,20 @@ type CatalogServiceHandler interface {
 	// are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
 	// would actively hide some of them.
 	ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error)
+	// The rows that still claim to be on air but can no longer prove it, oldest
+	// claim first.
+	//
+	// ListLive cuts at thirty minutes, and nothing was guaranteed to wind that
+	// clock: the live scan reads a channel's /streams tab, and a channel whose
+	// tab lists nothing can broadcast without this library ever hearing. So a row
+	// written once stayed `is_live` for ever and vanished from the chip after half
+	// an hour — measured, 568 such rows, the oldest last checked on 22 August.
+	//
+	// Ingest asks YouTube about these one at a time and writes back what it is
+	// told, which both refreshes a broadcast genuinely still running and settles
+	// one that ended into `was_live`. That makes the answer here a draining
+	// backlog rather than a standing query.
+	ListStaleLive(context.Context, *connect.Request[v1.ListStaleLiveRequest]) (*connect.Response[v1.ListStaleLiveResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
 	FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error)
@@ -985,6 +1028,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceListLiveProcedure,
 		svc.ListLive,
 		connect.WithSchema(catalogServiceMethods.ByName("ListLive")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceListStaleLiveHandler := connect.NewUnaryHandler(
+		CatalogServiceListStaleLiveProcedure,
+		svc.ListStaleLive,
+		connect.WithSchema(catalogServiceMethods.ByName("ListStaleLive")),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceFindBySourceURLHandler := connect.NewUnaryHandler(
@@ -1175,6 +1224,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListUncheckedShortsHandler.ServeHTTP(w, r)
 		case CatalogServiceListLiveProcedure:
 			catalogServiceListLiveHandler.ServeHTTP(w, r)
+		case CatalogServiceListStaleLiveProcedure:
+			catalogServiceListStaleLiveHandler.ServeHTTP(w, r)
 		case CatalogServiceFindBySourceURLProcedure:
 			catalogServiceFindBySourceURLHandler.ServeHTTP(w, r)
 		case CatalogServiceListCommentsProcedure:
@@ -1294,6 +1345,10 @@ func (UnimplementedCatalogServiceHandler) ListUncheckedShorts(context.Context, *
 
 func (UnimplementedCatalogServiceHandler) ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListLive is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListStaleLive(context.Context, *connect.Request[v1.ListStaleLiveRequest]) (*connect.Response[v1.ListStaleLiveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.ListStaleLive is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) FindBySourceURL(context.Context, *connect.Request[v1.FindBySourceURLRequest]) (*connect.Response[v1.FindBySourceURLResponse], error) {

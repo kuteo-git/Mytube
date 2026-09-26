@@ -25,6 +25,7 @@ type recordingLibrary struct {
 	// subscribed is what ListSubscribedChannels hands back.
 	subscribed      []domain.SubscribedChannel
 	uncheckedShorts []string
+	staleLive       []string
 	shortAnswers    map[string]bool
 	// What the account pass wrote on each member's behalf.
 	subscribedBy []struct{ userID, channelID string }
@@ -136,6 +137,7 @@ func (d *deepenDownloader) FetchSubtitles(context.Context, string, string, int32
 func (d *deepenDownloader) Download(context.Context, string, string, int32, func(domain.Progress)) (domain.DownloadResult, error) {
 	return domain.DownloadResult{}, nil
 }
+
 // Live is refused as a download and resolved by its own path; nothing in
 // these tests goes near it, and "not broadcasting" is the honest stub.
 func (d *deepenDownloader) ResolveLive(context.Context, string, int32) (domain.LiveStream, error) {
@@ -263,6 +265,10 @@ func TestExpandFilesDeepenedVideosUnderTheCuratedTopic(t *testing.T) {
 // a test can assert what was written.
 func (l *recordingLibrary) ListUncheckedShorts(context.Context, int32) ([]string, error) {
 	return l.uncheckedShorts, nil
+}
+
+func (l *recordingLibrary) ListStaleLive(context.Context, int32) ([]string, error) {
+	return l.staleLive, nil
 }
 
 func (l *recordingLibrary) SetShort(_ context.Context, videoID string, isShort bool) error {

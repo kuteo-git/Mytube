@@ -59,6 +59,20 @@ service CatalogService {
   // are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
   // would actively hide some of them.
   rpc ListLive(ListLiveRequest) returns (ListLiveResponse);
+  // The rows that still claim to be on air but can no longer prove it, oldest
+  // claim first.
+  //
+  // ListLive cuts at thirty minutes, and nothing was guaranteed to wind that
+  // clock: the live scan reads a channel's /streams tab, and a channel whose
+  // tab lists nothing can broadcast without this library ever hearing. So a row
+  // written once stayed `is_live` for ever and vanished from the chip after half
+  // an hour — measured, 568 such rows, the oldest last checked on 22 August.
+  //
+  // Ingest asks YouTube about these one at a time and writes back what it is
+  // told, which both refreshes a broadcast genuinely still running and settles
+  // one that ended into `was_live`. That makes the answer here a draining
+  // backlog rather than a standing query.
+  rpc ListStaleLive(ListStaleLiveRequest) returns (ListStaleLiveResponse);
   // Resolves an external source URL to an existing library entry, so the same
   // video is never ingested twice.
   rpc FindBySourceURL(FindBySourceURLRequest) returns (FindBySourceURLResponse);
@@ -502,6 +516,17 @@ message ListUncheckedShortsRequest {
 }
 
 message ListUncheckedShortsResponse {
+  repeated string video_ids = 1;
+}
+
+message ListStaleLiveRequest {
+  // Zero means the server's own bound rather than "all of them" — the same rule
+  // ListUncheckedShorts follows, and for the same reason: one answer costs a
+  // full metadata request upstream.
+  int32 limit = 1;
+}
+
+message ListStaleLiveResponse {
   repeated string video_ids = 1;
 }
 

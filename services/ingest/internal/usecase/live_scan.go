@@ -175,6 +175,12 @@ func (s *Scanner) RunLive(ctx context.Context, interval time.Duration) {
 			if err := s.ScanLive(ctx); err != nil {
 				s.logger.Warn("live scan", "error", err)
 			}
+			// After the channel walk, not instead of it. The walk is the cheap
+			// half and finds broadcasts this library has never heard of; this is
+			// the expensive half and only ever confirms rows it already holds.
+			// A failing walk must not stop it — the rows needing confirmation
+			// are the ones the walk cannot see.
+			s.recheckKnownLive(ctx)
 		}
 	}
 }
@@ -190,4 +196,170 @@ func channelStreamsURL(channel domain.SubscribedChannel) string {
 		return "https://www.youtube.com/" + handle + "/streams"
 	}
 	return "https://www.youtube.com/channel/" + channel.ID + "/streams"
+}
+
+// Confirming the broadcasts this library already believes in.
+//
+// ScanLive above finds what a channel's /streams tab lists, and that is the
+// only thing that has ever wound the thirty-minute clock `is_live_now` is cut
+// at. Measured on VsQWkHo_E4o, a station on air with 34 concurrent viewers: its
+// channel's /streams tab lists **nothing at all**, and `/live` answers "The
+// channel is not currently live" — YouTube does not surface that broadcast on
+// the channel at all. The row was written once, by the app opening the video,
+// and then aged out of every list that reads the cut.
+//
+// The other half of the same gap is that nothing ever said a broadcast had
+// ended either. 568 rows still said `is_live`, the oldest last checked on
+// 22 August, and each one keeps the ranker's exemption from the 365-day age
+// filter for as long as it says so.
+//
+// So this asks upstream directly, one video at a time, and writes back the word
+// it is given. `ListStaleLive` hands over the oldest claims first, which makes
+// the pass a backlog that drains: a finished broadcast settles into `was_live`
+// and is gone from the set for good, and one still running has its clock wound
+// and goes to the back.
+const (
+	// Videos per pass.
+	//
+	// Chosen against the set this drains to rather than the backlog it starts
+	// with. Around twenty broadcasts are on air across this household's
+	// channels at any time, so once the dead rows are settled the whole
+	// remaining set fits in one pass — every genuinely live row is re-confirmed
+	// every ten minutes, and the thirty-minute cut never drops one.
+	//
+	// The backlog then costs about five hours, which is the right way round: it
+	// is a one-off, and being impatient with it is what §8 risk 6 is about.
+	liveRecheckPerPass = 20
+
+	// Gap between them. The metadata backfill's number, for its reason, which
+	// applies here word for word: this is the *expensive* kind of request, and
+	// an earlier version of that pass running eight at once had YouTube
+	// answering every full metadata request on this address with "Sign in to
+	// confirm you're not a bot" — which took stream resolution down with it.
+	liveRecheckGap = 4 * time.Second
+
+	// Consecutive failures that end the recheck for this pass. A rate-limit
+	// block presents as every request failing in a row, and pushing through it
+	// only lengthens the block. The backfill's rule, at a third of its number
+	// because this pass is a tenth of its size.
+	liveRecheckFailureCutoff = 5
+
+	// How many candidates to ask for, against how many are probed.
+	//
+	// Wider than the quota because some rows can never be settled: a
+	// members-only or deleted video answers nothing, so its word never changes
+	// and `ListStaleLive` hands it back at the head of the queue for ever.
+	// Measured on the eight oldest, one was members-only. Without the slack the
+	// pass would spend itself on the same few rows and the backlog behind them
+	// would never move.
+	liveRecheckCandidates = liveRecheckPerPass * 4
+)
+
+// recheckKnownLive asks upstream about the rows whose claim to be on air has
+// expired, and writes back what it is told.
+//
+// Failures are remembered for the lifetime of the process rather than written
+// down. A video upstream will not describe is not a fact about the library —
+// `live_status` is yt-dlp's own word and inventing one it did not say is how a
+// column stops meaning anything — so the row is left alone and simply not asked
+// again this run. A restart asks once more, which is the right frequency for
+// "has this become describable again".
+func (s *Scanner) recheckKnownLive(ctx context.Context) {
+	candidates, err := s.library.ListStaleLive(ctx, liveRecheckCandidates)
+	if err != nil {
+		s.logger.Warn("live recheck: list", "error", err)
+		return
+	}
+
+	var probed, stillLive, settled, failures int
+	for _, videoID := range candidates {
+		if ctx.Err() != nil {
+			return
+		}
+		if probed >= liveRecheckPerPass || failures >= liveRecheckFailureCutoff {
+			break
+		}
+		if s.liveRecheckSkipped(videoID) {
+			continue
+		}
+
+		if probed > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(s.liveRecheckPause()):
+			}
+		}
+		probed++
+
+		sourceURL, err := s.library.SourceURLFor(ctx, videoID)
+		if err != nil || sourceURL == "" {
+			// Read from the row rather than built from the id, the rule
+			// RefreshVideoMetadata states: pointing a fetch at one address and
+			// writing the answer onto another id is the one way this corrupts a
+			// row.
+			sourceURL = "https://www.youtube.com/watch?v=" + videoID
+		}
+
+		video, err := s.fetch.Preview(ctx, sourceURL)
+		if err != nil {
+			failures++
+			s.skipLiveRecheck(videoID)
+			s.logger.Debug("live recheck: preview failed",
+				"video", videoID, "error", err)
+			continue
+		}
+		failures = 0
+
+		// Silence is not an answer, and the upsert reads it as one: an
+		// ExternalVideo carrying no live_status leaves both columns exactly as
+		// they were, so a row that would otherwise have been settled stays in
+		// this set for ever. Nothing to write means nothing to ask again about.
+		if video.LiveStatus == "" {
+			s.skipLiveRecheck(videoID)
+			s.logger.Debug("live recheck: upstream named no live status", "video", videoID)
+			continue
+		}
+
+		video.ID = videoID
+		if err := s.library.UpsertVideo(ctx, video, ""); err != nil {
+			s.logger.Warn("live recheck: upsert", "video", videoID, "error", err)
+			continue
+		}
+		if video.LiveStatus == "is_live" {
+			stillLive++
+		} else {
+			settled++
+		}
+	}
+
+	if probed > 0 {
+		s.logger.Info("live recheck", "probed", probed,
+			"still_live", stillLive, "settled", settled, "remaining", len(candidates))
+	}
+}
+
+func (s *Scanner) liveRecheckSkipped(videoID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, skipped := s.liveRecheckFailed[videoID]
+	return skipped
+}
+
+func (s *Scanner) skipLiveRecheck(videoID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.liveRecheckFailed == nil {
+		s.liveRecheckFailed = map[string]struct{}{}
+	}
+	s.liveRecheckFailed[videoID] = struct{}{}
+}
+
+// liveRecheckPause is the gap between probes, overridable so a test does not
+// have to wait the real one out.
+func (s *Scanner) liveRecheckPause() time.Duration {
+	if s.liveRecheckDelay > 0 {
+		return s.liveRecheckDelay
+	}
+	return liveRecheckGap
 }
