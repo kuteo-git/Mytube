@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.1.4 — 2026-09-26
+
+**A broadcast on air for fourteen hours was offered a file's tiers, and was
+missing from the Live chip for the same reason.** Reported from the phone about
+one video: *"sao video này ko play đc trên mobile: VsQWkHo_E4o"*. The app was
+innocent and so was desktop, which had not been tried and would have failed
+identically.
+
+`VsQWkHo_E4o` is a 24/7 station and it was live at that moment — yt-dlp:
+`is_live=True`, 35 concurrent viewers, all 14 formats `m3u8_native`. The gateway
+offered `hls` and `remux` and both answered 502 *"cannot resolve media"*, which is
+exactly what the live branch's own comment already warned of. The branch was
+right; its guard was wrong.
+
+`is_live_now` is `live_status = 'is_live' AND live_checked_at > now() - 30
+minutes`, and this row's `live_checked_at` was 13h55m old. It could never have
+been corrected: `ScanLive` reads a channel's `/streams` tab, and this channel's
+tab lists **0 entries** while its `/live` answers *"The channel is not currently
+live"* — YouTube does not surface the broadcast on the channel at all. The one
+thing that ever wrote `is_live` was the app opening the video, since
+`fillDescription` runs a full `Preview` whose upsert carries `live_status` as a
+side effect; and that endpoint refuses once a description exists, so it could not
+happen twice.
+
+Two fixes. On the play path, `decideLive` has a third answer — a row that says
+`is_live` and can no longer vouch for it asks YouTube once, rather than guessing.
+Not new cost: a stale row already ran yt-dlp twice on that path, the ladder
+warm-up and the master playlist, and both failed.
+
+And `ListStaleLive` plus a recheck in the live pass, because nothing ever wrote
+`was_live` either: 589 rows claimed to be on air, 21 were fresh, the oldest stale
+one was last checked on 22 August, and 480 of them belong to a followed channel —
+each keeping the ranker's exemption from the 365-day age filter for as long as it
+says so. The pass asks the most recent claims first and writes back the word it is
+given, pacing itself like the metadata backfill: serial, four seconds apart,
+stopping after five consecutive failures.
+
+**The ordering shipped wrong once and the first run said so.** Oldest-first
+drained beautifully and reported `still_live=0`, because every row it reached had
+ended in August — the reported video sat 544 rows back, seven hours away. A row
+confirmed on air *leaves* the stale set for thirty minutes, so its newest end is
+the broadcasts most likely to still be running; reading from that end asks about
+them on the first pass and settles the forgotten ones at the same rate from the
+other. A pass that is measurably doing work is not the same as a pass that fixes
+what it was written for.
+
+Measured after, on the household's own stack: `VsQWkHo_E4o` plays as `live` with a
+full 144p–1080p ladder, and `/api/live` lists 20 videos with it among them where
+it listed 18 without.
+
 ## 0.1.3 — 2026-09-25
 
 **Narration stopped paying to translate Vietnamese into Vietnamese.** Reported

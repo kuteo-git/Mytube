@@ -1789,3 +1789,30 @@ other end.
 
 **A pass that is measurably doing work is not the same as a pass that fixes the
 thing it was written for**, and one log line said both.
+
+### Nothing can trigger the live scan, which is how the ordering shipped wrong
+
+The topic scan, the account scan, expansion and the metadata backfill each have
+an RPC. The live scan has only its ticker, and the recheck hangs off that ticker —
+so there is no way to ask for a pass, and the loop for this work was "restart the
+stack and wait fourteen minutes". That is how a wrong ordering got as far as a
+deploy: the cost of checking it was a quarter of an hour, so it was reasoned about
+instead of measured.
+
+Forcing one needed a throwaway in-package test calling `recheckKnownLive` against
+the real catalog and the real yt-dlp — written, measured, deleted. Recorded rather
+than fixed, because an RPC for it is worth having for its own reasons and not as a
+side effect of this entry.
+
+The forced run is also where the failure path was seen for real rather than in a
+fake: `orOBmSB1cHY: Private video` → `preview failed` → skipped for the run, and
+the rows behind it reached.
+
+### Measured, on the household's own stack
+
+| | |
+|---|---|
+| the pass | `live recheck probed=20 still_live=1 settled=18 remaining=50` |
+| the row | `is_live`, `live_checked_at` now, from fourteen hours stale |
+| `/api/live` as `u_luc` | **20 videos, VsQWkHo_E4o first** — it was 18 without it |
+| `is_live` rows | 589 → 552, `was_live` 131 → 155, and draining a quota a pass |
