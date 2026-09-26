@@ -634,15 +634,24 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 	// No download is scheduled and no subtitles are fetched. Captions are
 	// generated after a broadcast ends, so asking now is asking for something
 	// that does not exist yet.
-	if v.GetIsLiveNow() {
-		// Whether it can be narrated, answered from the same resolve the
-		// playlist route is about to want. Cached for a minute, so opening a
-		// broadcast runs yt-dlp once rather than twice — see live_resolve.go.
-		//
+	//
+	// Whether it *is* on air is not always the row's to say. decideLive weighs
+	// the two facts and can answer "ask upstream" — see live_decision.go for
+	// the measurement that put it there, and note that this is the same repair
+	// the READY-but-missing check below makes, for the same reason: this is the
+	// one place holding both answers at once, and it sits on the path somebody
+	// has just pressed play on.
+	onAir := false
+	// Whether it can be narrated, answered from the same resolve the playlist
+	// route is about to want. Cached for a minute, so opening a broadcast runs
+	// yt-dlp once rather than twice — see live_resolve.go.
+	captions, captionsLang := false, ""
+	switch decideLive(v.GetLiveStatus(), v.GetIsLiveNow()) {
+	case liveYes:
+		onAir = true
 		// A failure here is not a failure of the stream: the video plays and
 		// the narration control is simply not offered, which is the honest
 		// answer to a question that could not be asked.
-		captions, captionsLang := false, ""
 		if live, err := g.resolveLive(r.Context(), v.GetSourceUrl()); err == nil {
 			captions = live.GetCaptionsUrl() != ""
 			captionsLang = live.GetCaptionsLang()
@@ -650,6 +659,31 @@ func (g *Gateway) handleStream(w http.ResponseWriter, r *http.Request) {
 			g.logger.Warn("live captions", "video", videoID, "error", err)
 		}
 
+	case liveAsk:
+		// Upstream is the authority here, and this resolve is not new cost: a
+		// stale row already ran yt-dlp on this path, twice over — the ladder
+		// warm-up and the master playlist — and both failed.
+		//
+		// ResolveLive answers a finished broadcast with is_live false rather
+		// than an error, which is exactly the question being asked. An actual
+		// error falls through to the file path: the row's own answer is "not on
+		// air", and believing something nobody could confirm is what the
+		// freshness window exists to prevent.
+		live, err := g.resolveLive(r.Context(), v.GetSourceUrl())
+		switch {
+		case err != nil:
+			g.logger.Warn("stale live check", "video", videoID, "error", err)
+		case live.GetIsLive():
+			g.logger.Info("stale live row confirmed on air", "video", videoID)
+			onAir = true
+			captions = live.GetCaptionsUrl() != ""
+			captionsLang = live.GetCaptionsLang()
+		default:
+			g.logger.Info("stale live row has finished", "video", videoID)
+		}
+	}
+
+	if onAir {
 		g.logger.Info("stream offered", "video", videoID, "tier", "live",
 			"captions", captions)
 		writeJSON(w, http.StatusOK, streamDTO{

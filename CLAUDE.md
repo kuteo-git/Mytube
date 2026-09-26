@@ -1518,3 +1518,116 @@ Vietnamese video narrates on a machine with **no translation model and no
 synthesiser configured at all** — a test that reached either would be a test
 that spends money to pass. Red before the fix on the reported case, with the
 English line named in the failure.
+
+## A broadcast on air for fourteen hours was offered a file's tiers (2026-09-26)
+
+Reported from the phone about one video: *"sao video này ko play đc trên mobile:
+VsQWkHo_E4o"*. The app was innocent — it reads `/stream` and plays whatever tier
+it is handed — and so was desktop, which had not been tried and would have failed
+in exactly the same way.
+
+`VsQWkHo_E4o` is a 24/7 station and it was **live at the moment it was reported**:
+yt-dlp answers `is_live=True`, `duration=None`, 35 concurrent viewers, and all 14
+of its formats are `m3u8_native`. The gateway offered `hls` and `remux`, and both
+answered 502:
+
+```
+WARN resolve hls tracks   error="no directly playable format available
+      (saw 8 formats: 0 without a url, 8 behind a manifest; video-only 0; audio-only 0)"
+WARN resolve remux urls   error="every resolved url was refused: probe: upstream answered 200"
+```
+
+Which is the thing §4's live branch already says in a comment written from a
+measurement: *"all seven of a live video's formats are m3u8_native and not one is
+a plain https file."* The branch was right; its **guard** was wrong.
+
+### A freshness window cannot be the last word when nothing refreshes it
+
+`is_live_now` is computed in SQL so that no reader invents a second definition of
+"on air", and that is still the right instinct:
+
+```sql
+live_status = 'is_live' AND live_checked_at > now() - interval '30 minutes'
+```
+
+The row for this video:
+
+| | |
+|---|---|
+| `live_status` | `is_live` |
+| `live_checked_at` | 2026-09-25 22:39:35+07 |
+| age | **13h 55m** |
+
+So `is_live_now` was false, the route fell past its live branch, and the file
+path could not work. Meanwhile `/api/live/VsQWkHo_E4o/master.m3u8` served a full
+144p–1080p ladder the whole time — the video was never unplayable, it was only
+ever described wrongly.
+
+**Why the row went stale is the part worth keeping.** `ScanLive` runs every ten
+minutes over 417 channels and finds around twenty, and it reads each subscribed
+channel's `/streams` tab. This channel is subscribed, and its `/streams` tab
+lists **nothing at all** — measured, `entries 0`. No pass was ever going to
+correct that row. A window that expires is only honest if something is
+guaranteed to wind it; here nothing was.
+
+### The route asks upstream, and only when the row cannot vouch for itself
+
+`decideLive` is a pure function with three answers, and the third is the entry:
+
+| | |
+|---|---|
+| `is_live_now` true | `liveYes` — believed on its own |
+| `live_status = 'is_live'`, stale | `liveAsk` — resolve once and let upstream say |
+| anything else | `liveNo` — the file path, untouched |
+
+- **`liveAsk` is kept apart from `liveYes` rather than folded into it**, because
+  the two want opposite answers when the resolve fails: a fresh row is believed
+  and its video plays, a stale one is not and falls through. There are **589**
+  `is_live` rows in this library and **21** of them fresh; most of the rest are
+  broadcasts that ended, and serving a live tier for those would be this fault in
+  the other direction.
+- **`ResolveLive` already answers this exact question** — `is_live` false for a
+  finished broadcast, and its own comment says *"Not an error: the caller asked
+  whether this is live, and it is not."* Nothing new had to be built.
+- **The resolve is not new cost.** A stale row already ran yt-dlp twice on this
+  path — the ladder warm-up and the master playlist — and both runs failed. This
+  replaces two failures with one answer, and `resolveLive`'s one-minute cache
+  means the playlist request behind it reuses it.
+- **Reading `live_status` directly was refused**, though it is one line and it is
+  what the `is_upcoming` branch does. That branch can afford it because being
+  wrong there costs one scan interval of "starting soon"; being wrong here costs
+  a live tier over 568 finished broadcasts.
+- **A named function, not a condition in the handler**, for the reason
+  `wholeSeconds` and `channelToken` are: nothing in the type system catches a
+  liveness guard that is wrong, because both answers are a valid `bool` and both
+  requests return 200.
+- **No write-back to `live_checked_at`.** It was costed: it needs a
+  `SetLiveStatus` RPC through proto, catalog and postgres, and what it buys is a
+  saved resolve on the second open and a red dot in the feed. Recorded as a
+  follow-up rather than done here, because the row being stale is no longer what
+  decides whether the video plays.
+
+### Measured, on a second gateway at `:8190` so the household's own was never interrupted
+
+| video | state | old | new |
+|---|---|---|---|
+| `VsQWkHo_E4o` | stale `is_live`, **on air** | `hls`,`remux` → **502** | `live` → **200, 6 variants** |
+| `pejctw3lecM` | stale `is_live`, finished | `hls`,`remux` | `hls`,`remux` — *"stale live row has finished"* |
+| `lkbsgMXODFg` | fresh `is_live` | `live` | `live` |
+| `06zfrpIbZI8` | `was_live` | `hls`,`remux` | `hls`,`remux` |
+| `nYDI_ywrq8s` | `is_upcoming` | `upcoming` | `upcoming` |
+| `VREskKM-hkk` | no live status | `hls`,`remux` | `hls`,`remux` |
+
+The loop is one command that asks `/stream` and then **plays whatever tier the
+app would have picked**, in the app's own order — so it is red on the reported
+symptom rather than on a server error somebody has to interpret. 1.6s, and it was
+green on a control video throughout.
+
+### And one thing the app should read and does not
+
+`StreamDto` in the app declares `live`, `hls` and `local`, and the gateway sends
+`hls` and `remux` **always together** — so `remux` being unread has never cost a
+playable video, and it did not cost this one either, since both 502'd. It is
+still the fourth tier declared on this path and the app's own charter has paid
+for that shape three times. Worth reading the day HLS fails where remux would
+not.
