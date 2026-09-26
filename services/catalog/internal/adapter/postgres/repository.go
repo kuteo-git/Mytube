@@ -586,8 +586,8 @@ func (r *Repository) ListUncheckedShorts(ctx context.Context, limit int32) ([]st
 	return out, rows.Err()
 }
 
-// ListStaleLive returns the rows whose claim to be on air has expired, oldest
-// claim first.
+// ListStaleLive returns the rows whose claim to be on air has expired, most
+// recent claim first.
 //
 // The cut is the same expression ListLive and ListVideoFeatures use, and it has
 // to be: a row this pass does not collect is a row ListLive is already hiding,
@@ -595,11 +595,25 @@ func (r *Repository) ListUncheckedShorts(ctx context.Context, limit int32) ([]st
 // rechecked. It is written out rather than shared because the three want
 // opposite sides of it.
 //
-// Oldest first, which makes this a draining backlog rather than a rota. Every
-// answer either settles a finished broadcast into `was_live` — and it leaves
-// this set for good — or winds the clock on one still running, which sends it to
-// the back. So the set shrinks to the broadcasts that are genuinely on air, and
-// those are then small enough to be re-confirmed inside one pass.
+// ## Why the newest claim goes first
+//
+// Oldest first was the first version and it was measured to be wrong. A row
+// confirmed on air *leaves this set for thirty minutes* — that is what the cut
+// means — so the newest end of it is precisely "the broadcasts something
+// confirmed recently, whose confirmation has just expired". The oldest end is
+// almost entirely broadcasts that ended weeks ago and were never corrected.
+//
+// Measured on the reported video: its claim was 15 hours old while the oldest
+// rows here were five weeks old, so it sat **544 rows back** and would not have
+// been asked about for seven hours — which is the whole of the bug this pass
+// exists to fix.
+//
+// This still drains, at the same rate and from the other end: a finished
+// broadcast settles into `was_live` and is gone from the set for good, so every
+// pass shortens it by its whole quota whichever way it is read. What the
+// direction decides is only which rows are asked *first*, and a broadcast
+// somebody may be watching right now is worth more than one that ended in
+// August.
 //
 // Household-wide, unlike ListLive. Whether a broadcast is running is a fact
 // about the broadcast; who is shown it is a question for the read.
@@ -610,7 +624,7 @@ func (r *Repository) ListStaleLive(ctx context.Context, limit int32) ([]string, 
 		WHERE live_status = 'is_live'
 		  AND (live_checked_at IS NULL
 		       OR live_checked_at <= now() - interval '30 minutes')
-		ORDER BY live_checked_at ASC NULLS FIRST, id
+		ORDER BY live_checked_at DESC NULLS LAST, id
 		LIMIT $1`, limit)
 	if err != nil {
 		return nil, err

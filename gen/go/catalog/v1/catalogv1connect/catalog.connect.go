@@ -202,8 +202,8 @@ type CatalogServiceClient interface {
 	// are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
 	// would actively hide some of them.
 	ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error)
-	// The rows that still claim to be on air but can no longer prove it, oldest
-	// claim first.
+	// The rows that still claim to be on air but can no longer prove it, most
+	// recent claim first.
 	//
 	// ListLive cuts at thirty minutes, and nothing was guaranteed to wind that
 	// clock: the live scan reads a channel's /streams tab, and a channel whose
@@ -214,7 +214,9 @@ type CatalogServiceClient interface {
 	// Ingest asks YouTube about these one at a time and writes back what it is
 	// told, which both refreshes a broadcast genuinely still running and settles
 	// one that ended into `was_live`. That makes the answer here a draining
-	// backlog rather than a standing query.
+	// backlog rather than a standing query — and the newest claim goes first
+	// because a row confirmed on air leaves this set for thirty minutes, so the
+	// newest end of it is the broadcasts most likely to still be running.
 	ListStaleLive(context.Context, *connect.Request[v1.ListStaleLiveRequest]) (*connect.Response[v1.ListStaleLiveResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.
@@ -851,8 +853,8 @@ type CatalogServiceHandler interface {
 	// are a few dozen at most, so ranking adds nothing, and applyChannelDiversity
 	// would actively hide some of them.
 	ListLive(context.Context, *connect.Request[v1.ListLiveRequest]) (*connect.Response[v1.ListLiveResponse], error)
-	// The rows that still claim to be on air but can no longer prove it, oldest
-	// claim first.
+	// The rows that still claim to be on air but can no longer prove it, most
+	// recent claim first.
 	//
 	// ListLive cuts at thirty minutes, and nothing was guaranteed to wind that
 	// clock: the live scan reads a channel's /streams tab, and a channel whose
@@ -863,7 +865,9 @@ type CatalogServiceHandler interface {
 	// Ingest asks YouTube about these one at a time and writes back what it is
 	// told, which both refreshes a broadcast genuinely still running and settles
 	// one that ended into `was_live`. That makes the answer here a draining
-	// backlog rather than a standing query.
+	// backlog rather than a standing query — and the newest claim goes first
+	// because a row confirmed on air leaves this set for thirty minutes, so the
+	// newest end of it is the broadcasts most likely to still be running.
 	ListStaleLive(context.Context, *connect.Request[v1.ListStaleLiveRequest]) (*connect.Response[v1.ListStaleLiveResponse], error)
 	// Resolves an external source URL to an existing library entry, so the same
 	// video is never ingested twice.

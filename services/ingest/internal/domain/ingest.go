@@ -324,8 +324,8 @@ type Library interface {
 	// ListUncheckedShorts returns videos nobody has asked YouTube about yet.
 	ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error)
 	// ListStaleLive returns the rows that still say they are on air but whose
-	// claim has expired, oldest claim first. See the live scan's recheck for what
-	// is done with them.
+	// claim has expired, most recent claim first. See the live scan's recheck for
+	// what is done with them.
 	ListStaleLive(ctx context.Context, limit int32) ([]string, error)
 	// SetShort records the answer for one video.
 	SetShort(ctx context.Context, videoID string, isShort bool) error

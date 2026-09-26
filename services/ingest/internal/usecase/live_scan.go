@@ -214,10 +214,15 @@ func channelStreamsURL(channel domain.SubscribedChannel) string {
 // filter for as long as it says so.
 //
 // So this asks upstream directly, one video at a time, and writes back the word
-// it is given. `ListStaleLive` hands over the oldest claims first, which makes
-// the pass a backlog that drains: a finished broadcast settles into `was_live`
-// and is gone from the set for good, and one still running has its clock wound
-// and goes to the back.
+// it is given. The pass is a backlog that drains: a finished broadcast settles
+// into `was_live` and is gone from the set for good, so every pass shortens the
+// set by its whole quota.
+//
+// `ListStaleLive` hands over the *most recent* claims first, and that direction
+// was measured rather than chosen — see its own comment. A row confirmed on air
+// leaves the set for thirty minutes, so its newest end is the broadcasts most
+// likely to still be running; ordering the other way put the reported video 544
+// rows back and seven hours away.
 const (
 	// Videos per pass.
 	//
@@ -227,8 +232,11 @@ const (
 	// remaining set fits in one pass — every genuinely live row is re-confirmed
 	// every ten minutes, and the thirty-minute cut never drops one.
 	//
-	// The backlog then costs about five hours, which is the right way round: it
-	// is a one-off, and being impatient with it is what §8 risk 6 is about.
+	// It does not have to cover the backlog, because the ordering puts the rows
+	// that might be live at the front: a broadcast on air is asked about on the
+	// first pass whether there are fifty forgotten rows behind it or five
+	// hundred. Those then settle at a quota a pass, which takes hours and costs
+	// nobody anything — being impatient with them is what §8 risk 6 is about.
 	liveRecheckPerPass = 20
 
 	// Gap between them. The metadata backfill's number, for its reason, which
@@ -249,9 +257,9 @@ const (
 	// Wider than the quota because some rows can never be settled: a
 	// members-only or deleted video answers nothing, so its word never changes
 	// and `ListStaleLive` hands it back at the head of the queue for ever.
-	// Measured on the eight oldest, one was members-only. Without the slack the
-	// pass would spend itself on the same few rows and the backlog behind them
-	// would never move.
+	// Measured on the eight oldest rows, one was members-only. Without the slack
+	// the pass would spend itself on the same few rows and everything behind
+	// them would never be reached.
 	liveRecheckCandidates = liveRecheckPerPass * 4
 )
 

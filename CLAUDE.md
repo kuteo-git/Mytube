@@ -1699,13 +1699,20 @@ are not entitled to.
 The set then **shrinks**: a finished broadcast settles into `was_live` and is gone
 from it for good, and one still running has its clock wound and goes to the back.
 
-- **Oldest first is what makes it a backlog rather than a rota**, and the quota is
-  chosen against the set it drains *to* rather than the one it starts with:
-  around twenty broadcasts are on air across this household's channels at any
-  time, so once the dead rows are settled the whole remaining set fits in one
-  pass. Every genuinely live row is then re-confirmed every ten minutes and the
-  thirty-minute cut never drops one. The backlog costs about five hours, which is
-  the right way round for a one-off.
+- **The newest claim goes first, and the first version had it backwards.** A row
+  confirmed on air leaves this set for thirty minutes — that is what the cut
+  means — so the newest end of it is exactly "the broadcasts something confirmed
+  recently, whose confirmation has just expired", and the oldest end is almost
+  entirely broadcasts that ended weeks ago. It still drains from either end,
+  because a settled row is gone for good and every pass therefore shortens the
+  set by its whole quota; the direction only decides which rows are asked
+  **first**. See the measurement below — oldest-first put the reported video 544
+  rows back.
+- **The quota is chosen against the set it drains *to***, not the backlog it
+  starts with: around twenty broadcasts are on air across this household's
+  channels at any time, so the whole live set fits in one pass and the
+  thirty-minute cut never drops one. It does not have to cover the backlog,
+  because the ordering puts the rows that might be live at the front.
 - **The pacing is the metadata backfill's, unchanged**: serial, four seconds
   apart, and a cutoff after five consecutive failures. Its own comment is why —
   an earlier version of that pass running eight at once had YouTube answering
@@ -1751,3 +1758,34 @@ Six, and each was run against a deliberate break of the thing it guards:
 The one that matters most is the first: `live_checked_at` moves only when an
 upsert carries a `live_status`, so a pass that probed and wrote nothing would
 leave the row exactly as stale as it found it, at the cost of every request.
+
+### The ordering was measured, and it was wrong the first time
+
+The first version ordered by oldest claim, on the reasoning written into its own
+comment: *"oldest first, which makes this a draining backlog rather than a
+rota."* True about the backlog, and it misses the point of the pass.
+
+Deployed and measured on the first real run:
+
+```
+13:29:53  live recheck  probed=20  still_live=0  settled=18  remaining=50
+          is_live 589 → 576, was_live 131
+```
+
+Working — and `still_live=0`, because every row it reached had ended in August.
+The video that was reported sat **544 rows back**: its claim was 15 hours old
+against a backlog going back five weeks, so at a quota a pass it would not have
+been asked about for **seven hours**. The pass drained beautifully and did not fix
+the bug.
+
+The confusion was between *oldest claim* and *most in need of asking*. What
+decides the second is which rows might still be on air, and the cut itself says
+where those are: **a row confirmed live leaves this set for thirty minutes**, so
+the newest end of the set is the recently-confirmed ones whose confirmation has
+just lapsed. Reading from that end asks about a broadcast somebody may be
+watching on the first pass, whether there are fifty forgotten rows behind it or
+five hundred — and settles those five hundred at exactly the same rate, from the
+other end.
+
+**A pass that is measurably doing work is not the same as a pass that fixes the
+thing it was written for**, and one log line said both.

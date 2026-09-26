@@ -2986,8 +2986,8 @@ export const CatalogService: GenService<{
     output: typeof ListLiveResponseSchema;
   },
   /**
-   * The rows that still claim to be on air but can no longer prove it, oldest
-   * claim first.
+   * The rows that still claim to be on air but can no longer prove it, most
+   * recent claim first.
    *
    * ListLive cuts at thirty minutes, and nothing was guaranteed to wind that
    * clock: the live scan reads a channel's /streams tab, and a channel whose
@@ -2998,7 +2998,9 @@ export const CatalogService: GenService<{
    * Ingest asks YouTube about these one at a time and writes back what it is
    * told, which both refreshes a broadcast genuinely still running and settles
    * one that ended into `was_live`. That makes the answer here a draining
-   * backlog rather than a standing query.
+   * backlog rather than a standing query — and the newest claim goes first
+   * because a row confirmed on air leaves this set for thirty minutes, so the
+   * newest end of it is the broadcasts most likely to still be running.
    *
    * @generated from rpc catalog.v1.CatalogService.ListStaleLive
    */

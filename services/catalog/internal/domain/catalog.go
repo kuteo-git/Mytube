@@ -278,8 +278,8 @@ type Repository interface {
 	// truncated "everything on air" would be a list that quietly lies.
 	ListLive(ctx context.Context, userID string) ([]Video, error)
 	// ListStaleLive returns the rows that still say `is_live` but whose claim is
-	// older than ListLive will accept, oldest claim first. Household-wide and not
-	// per member: a broadcast's liveness is a fact about the broadcast.
+	// older than ListLive will accept, most recent claim first. Household-wide and
+	// not per member: a broadcast's liveness is a fact about the broadcast.
 	ListStaleLive(ctx context.Context, limit int32) ([]string, error)
 	FindBySourceURL(ctx context.Context, sourceURL, userID string) (Video, error)
 
