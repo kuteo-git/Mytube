@@ -1816,3 +1816,78 @@ the rows behind it reached.
 | the row | `is_live`, `live_checked_at` now, from fourteen hours stale |
 | `/api/live` as `u_luc` | **20 videos, VsQWkHo_E4o first** — it was 18 without it |
 | `is_live` rows | 589 → 552, `was_live` 131 → 155, and draining a quota a pass |
+
+## Scrubbing had no picture, and yt-dlp was never the problem (2026-09-27)
+
+Reported as: dragging a video's bar shows no image of the moment being aimed
+at, with the suspicion that something was wrong in yt-dlp. It was not.
+
+**Measured before a line was written.** `yt-dlp -F` on any video lists the whole
+storyboard ladder, and `-j` carries everything needed to draw from it:
+
+| rung | tile | grid | sheets, 10-minute video |
+|---|---|---|---|
+| `sb0` | 320x180 | 3x3 | 15, ~750 KiB, 135 stills |
+| `sb1` | **160x90** | 5x5 | **6, ~282 KiB, 150 stills** |
+| `sb2` | 80x45 | 10x10 | 2 |
+| `sb3` | 48x27 | 10x10 | 1 |
+
+So the ladder was always there and nothing ever read it. `ResolveTracks` drops
+every rung twice over — `protocol` is `mhtml`, which fails the http check, and
+`vcodec`/`acodec` are both `none`, which matches no branch of the `switch`
+below it. Neither was wrong: that function resolves *playable* tracks.
+
+- **The 180-tall rung is copied, and which rung that is was decided twice.**
+  `sb1` went in first, on the measurement above: fewer sheets, a third of the
+  bytes, and *more* stills than `sb0`. That was a true trade and the wrong one,
+  and it was the phone that showed why — see the app charter. Its preview covers
+  the whole player, so a 160-pixel tile is enlarged **6.75x** on a 1080-pixel
+  picture, which is not a soft preview but a blocky one. 320 makes it 3.4x.
+  - **The finer grid was not lost.** 180's sheets hold 9 stills against 25, so
+    there are more of them and the *interval* comes out the same: measured on
+    one video, 1.9583s per still at both rungs. What is paid is disk.
+  - **Rungs are named by height, whatever the video's shape.** A portrait upload
+    answers 101x180 where a landscape one answers 320x180, so the picker reads
+    height and nothing else.
+- **The sheets are copied, not linked.** Measured: the same URL without its
+  `sqp`+`sigh` answers **403**, and there is no `expire=` to read a lifetime
+  from. A URL stored in the catalogue is therefore a preview that works until an
+  unknown day. Copying them is `narration-tts`'s pattern, and it means both
+  clients load a still the way they load every other image in the library.
+- **The disk is the store and the catalogue knows nothing.** A row earns its
+  place when something *queries* by it, and nothing does: no ranking, no feed
+  and no listing has an opinion about storyboards, and the only reader is one
+  watch screen asking about one video. `spec.json` sits beside the sheets it
+  describes, where the two cannot disagree — a row saying "9 sheets" over a
+  directory holding 4 is a fault this arrangement cannot have.
+- **A sheet is named after its bytes, not its URL.** YouTube serves these from a
+  path ending `.jpg` and answers `image/webp`. `/media` is an `http.FileServer`,
+  which types a response from its extension, so named `.jpg` every sheet would
+  be declared `image/jpeg` to both clients.
+- **All or nothing.** A missing sheet in the middle is a hole in the middle of
+  the bar: every still past it still has somewhere to be drawn from, so the
+  preview would be quietly wrong for the rest of the video rather than absent.
+  The directory is removed on any failure, and `spec.json` is written last, so
+  its presence is the promise that everything it names is there.
+- **`GET`, though the first call copies files.** What a client asks is "what can
+  I draw at this moment", and the answer is the same every time; the copying is
+  how that is answered the first time. Guarded like `refreshMetadata`, so a
+  client may ask on every open — measured, **2.9ms** for a video already copied.
+- **404 for a video with no ladder**, which is most of a library of Shorts and
+  flat-listed rows. That is a fact about the video rather than a failure, and
+  both clients keep the clock they already drew.
+- **The geometry crosses, not a picture.** A route that cropped server-side and
+  answered one still per request is a request per frame under a moving finger.
+  Six numbers and a list of paths is one request per video and arithmetic on the
+  client — the same sum in Kotlin and in TypeScript.
+
+Measured end to end: `GET /api/videos/gEWF0LL4IPA/storyboard` → `tileWidth 101,
+tileHeight 180, 3x3, interval 1.9583, eight sheets`; the sheets on disk as
+`0.webp`..`7.webp`; `/media/…/0.webp` → 200, `image/webp`.
+
+**The interval is a sheet's own duration over its slots, never the video's
+length over every slot.** The last sheet is usually only partly filled — six
+sheets of 25 hold 150 slots for a video with 128 stills — so the second form
+stretches every still's share by however much of that sheet is blank, and the
+preview drifts further the longer somebody scrubs. Both clients' tests assert
+against the mistake by name.

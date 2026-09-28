@@ -177,11 +177,46 @@ type YouTubeComment struct {
 	PinnedBy        *string
 }
 
+// Storyboard is the scrub-preview sheets for one video, as they sit on disk.
+//
+// Everything here is a fact about files under the media root. A client finds the
+// still for a moment by dividing — `frame = floor(t / IntervalSeconds)`, then
+// `sheet = frame / (Rows*Columns)` with the remainder giving the row and column
+// inside it — which is the same arithmetic in Kotlin and in TypeScript. That is
+// the reason this answers with numbers and paths rather than with a rendered
+// image: two clients, one set of facts, and no server-side cropping per scrub.
+type Storyboard struct {
+	// The size of one still, in pixels.
+	TileWidth  int32
+	TileHeight int32
+	// The grid inside each sheet.
+	Rows    int32
+	Columns int32
+	// How much of the video one still stands for.
+	//
+	// Taken from a sheet's own duration rather than from the video's, because
+	// the last sheet is usually only partly filled: dividing the video's length
+	// by the total number of slots would stretch every still's share by however
+	// much of that last sheet is blank, and the preview would drift further the
+	// longer somebody scrubbed.
+	IntervalSeconds float64
+	// The sheets in order, as paths relative to the media root.
+	Sprites []string
+}
+
 // Downloader is the port over the external tool. Keeping it an interface is
 // what lets the use cases be exercised without touching the network.
 type Downloader interface {
 	Search(ctx context.Context, query string, limit int32) ([]ExternalVideo, error)
 	Preview(ctx context.Context, url string) (ExternalVideo, error)
+	// Storyboard copies a video's scrub-preview sheets into the media root, or
+	// answers with the ones already copied.
+	//
+	// ErrNotFound for a video that has none — a Short too brief for a ladder, or
+	// an upload YouTube has not finished processing. That is a fact about the
+	// video rather than a failure here, and the page it was asked for is whole
+	// without a preview.
+	Storyboard(ctx context.Context, videoURL, videoID string) (Storyboard, error)
 	// offset skips entries already scanned, which is how the library is
 	// deepened past the most recent few dozen uploads.
 	ListPlaylist(ctx context.Context, url string, offset, limit int32) (string, []ExternalVideo, error)

@@ -48,6 +48,24 @@ service IngestService {
   // the field it wants is actually missing.
   rpc RefreshVideoMetadata(RefreshVideoMetadataRequest) returns (RefreshVideoMetadataResponse);
 
+  // Copies a video's scrub-preview sheets into the media root, or answers with
+  // the ones already there.
+  //
+  // What a "storyboard" is: YouTube publishes a ladder of sprite sheets, each a
+  // grid of small stills, so a player can show the frame at the moment a finger
+  // is aiming at. yt-dlp has always extracted the whole ladder; nothing here
+  // ever read it, which is why scrubbing showed a clock and no picture.
+  //
+  // The sheets are copied rather than linked because their URLs are signed and
+  // the signature is mandatory — measured, the same path without it answers 403
+  // — with no stated lifetime to plan around. A stored URL is therefore a
+  // preview that works until an unknown day.
+  //
+  // Guarded like RefreshVideoMetadata and for its reason: a video already
+  // copied is answered off the disk without touching upstream, so a client may
+  // ask on every open.
+  rpc VideoStoryboard(VideoStoryboardRequest) returns (VideoStoryboardResponse);
+
   // Rescans topics.yaml now instead of waiting for the timer.
   rpc Refresh(RefreshRequest) returns (RefreshResponse);
 
@@ -405,6 +423,34 @@ message RefreshVideoMetadataResponse {
   // one whose metadata simply carries none of what was missing. Not an error —
   // a video that will never have a description is a fact, not a failure.
   bool updated = 1;
+}
+
+message VideoStoryboardRequest {
+  // Catalog id. The address is read from the row for RefreshVideoMetadata's
+  // reason: pointing a fetch at one video and writing the answer under another
+  // id is the one way this could corrupt a library, and a local lookup makes it
+  // impossible.
+  string video_id = 1;
+}
+
+message VideoStoryboardResponse {
+  // The size of one still, in pixels.
+  int32 tile_width = 1;
+  int32 tile_height = 2;
+  // The grid inside each sheet.
+  int32 rows = 3;
+  int32 columns = 4;
+  // How much of the video one still stands for.
+  //
+  // Taken from a sheet's own duration rather than from the video's: the last
+  // sheet is usually only partly filled, so dividing the video's length by the
+  // total number of slots stretches every still's share by however much of that
+  // last sheet is blank.
+  double interval_seconds = 5;
+  // The sheets in order, as paths relative to the media root — the same kind of
+  // path as a thumbnail's, so both clients load one the way they load every
+  // other image in the library.
+  repeated string sprites = 6;
 }
 
 message BackfillTopicsRequest {

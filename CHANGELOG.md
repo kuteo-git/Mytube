@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.1.5 — 2026-09-28
+
+**Scrubbing a video showed a clock and no picture, and yt-dlp was never the
+problem.** Reported with the suspicion attached: *"tìm hiểu xem issue là gì ở
+yt-dlp"*. Measured before a line was written — `yt-dlp -F` on any video lists the
+whole storyboard ladder, and `-j` carries the tile size, the grid, the fragments
+and their durations. The ladder was always there and nothing ever read it.
+
+`ResolveTracks` drops every rung twice over: `protocol` is `mhtml`, which fails
+its http check, and `vcodec`/`acodec` are both `none`, which matches no branch of
+the switch below. Neither is wrong — that function resolves *playable* tracks.
+
+`GET /api/videos/{id}/storyboard` is the new route, `VideoStoryboard` the RPC
+behind it. The 180-tall rung is copied into `<mediaRoot>/<videoId>/storyboard/`
+and the geometry answered as six numbers, so both clients do the same arithmetic
+rather than asking for a crop per frame under a moving finger.
+
+- **The sheets are copied, not linked.** The same URL without its `sqp`+`sigh`
+  answers **403**, and there is no `expire=` to read a lifetime from, so a URL
+  stored in the catalogue is a preview that works until an unknown day.
+- **The disk is the store and the catalogue knows nothing.** A row earns its
+  place when something queries by it, and nothing does. `spec.json` sits beside
+  the sheets it describes, where the two cannot disagree.
+- **A sheet is named after its bytes.** YouTube serves these from a path ending
+  `.jpg` and answers `image/webp`; `/media` is an `http.FileServer`, which types
+  a response from its extension.
+- **All or nothing.** A missing sheet in the middle is a hole in the middle of
+  the bar — every still past it still has somewhere to be drawn from, so the
+  preview would be quietly wrong for the rest of the video rather than absent.
+- **404 for a video with no ladder**, which is most of a library of Shorts and
+  flat-listed rows. Both clients keep the clock they already drew.
+
+Measured end to end: a first ask copies eight sheets and answers `101x180, 3x3,
+interval 1.9583`; the second is **2.9ms** and touches nothing upstream.
+
+**Which rung was decided twice.** The 90-tall one went in first, on a true
+measurement — fewer sheets, a third of the bytes, and *more* stills. It became
+the wrong trade the moment the phone drew the still over its whole player, where
+a 160-pixel tile is a 6.75x enlargement. 320 makes it 3.4x, and the finer grid is
+not lost: more sheets of nine leave the interval where it was, at 1.9583s.
+
+The web player draws it on hover, scaled *down* from the taller rung — the same
+160x90 box it always had, from a sharper source.
+
 ## 0.1.4 — 2026-09-26
 
 **A broadcast on air for fourteen hours was offered a file's tiers, and was

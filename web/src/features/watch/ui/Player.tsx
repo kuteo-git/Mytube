@@ -21,11 +21,12 @@ import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import type { MediaState, SubtitleTrack } from '@/features/catalog/domain/video'
 import type { UnavailableReason } from '@/features/catalog/infrastructure/catalogRepository'
-import { useStream } from '@/features/catalog/application/queries'
+import { useStoryboard, useStream } from '@/features/catalog/application/queries'
 import { atLiveEdge, livePercent } from '../application/live-timeline'
 import { playbackDuration } from '../application/player-duration'
 import { log } from '@/shared/api/log'
 import { seekElement } from '@/features/watch/application/player-seek'
+import { storyboardFrame, type Storyboard } from '@/features/watch/domain/storyboard'
 import {
   type Tier,
   availableTiers,
@@ -129,6 +130,7 @@ import {
 } from '@/features/watch/application/player-presentation'
 import { httpCatalogRepository as repo } from '@/features/catalog/infrastructure/catalogRepository'
 import { formatDuration } from '@/shared/lib/format'
+import { mediaURL } from '@/shared/lib/media'
 import { useCoarsePointer } from '@/shared/lib/pointer'
 import { rememberLastWatched } from '@/features/watch/application/last-watched'
 import { useTranslation } from 'react-i18next'
@@ -484,6 +486,14 @@ export function Player({
     onCommit: () => onSwipeDown?.(),
   })
   const { data: sources, isPending: resolvingStream, isError: streamFailed } = useStream(videoId)
+  // Asked for on opening a video, not on first hovering the bar.
+  //
+  // The first ask is the slow one — it copies the sheets from YouTube — and the
+  // moment somebody wants a preview is the moment they are already dragging.
+  // Fetching then would answer a gesture seconds after it finished, which is
+  // what the up-next rail's own rule says about round trips nothing on screen is
+  // waiting for: run it early, behind the one call the viewer is waiting on.
+  const { data: storyboard } = useStoryboard(videoId)
   // Playing from upstream always schedules a copy, so a job is coming even if
   // the queue has not caught up yet.
   const download = useDownloadProgress(videoId, Boolean(sources) && !sources?.local)
@@ -3068,6 +3078,7 @@ export function Player({
           // it reachable only by the arrow keys — so the path that was broken
           // was also the path nobody could see was broken.
           disabled={!playable}
+          storyboard={storyboard}
           // While dragging, only the number moves; the stream is asked for once
           // the handle is released. On a tier that cannot be seeked each of
           // these would otherwise kill an ffmpeg and start another, dozens of
@@ -4039,6 +4050,7 @@ function SeekBar({
   origin = 0,
   buffered,
   disabled,
+  storyboard,
   onScrub,
   onSeek,
 }: {
@@ -4055,12 +4067,33 @@ function SeekBar({
   origin?: number
   buffered: number
   disabled: boolean
+  /**
+   * The scrub-preview sheets, when the video has any.
+   *
+   * Undefined for most of this library — Shorts too brief for a ladder, and
+   * anything upstream will not discuss — and the bar simply draws no still, as
+   * it did before previews existed.
+   */
+  storyboard?: Storyboard
   /** Called continuously while dragging. Moves the readout, nothing else. */
   onScrub: (next: number) => void
   /** Called once, when the handle is released or a key press lands. */
   onSeek: (next: number) => void
 }) {
   const { t } = useTranslation()
+  const track = useRef<HTMLDivElement | null>(null)
+  /**
+   * Where the pointer is over the bar, as a time, or null when it is elsewhere.
+   *
+   * Tracked separately from `position` because on a desktop the preview is
+   * wanted on *hover*, before anything is pressed — which is the whole gesture
+   * this answers, and it moves no playhead and fires no change event. Reading
+   * the range input's value would give the position of the video instead, so
+   * the still would follow the playhead rather than the cursor.
+   */
+  const [hovered, setHovered] = useState<{ seconds: number; x: number; trackWidth: number } | null>(
+    null,
+  )
   const safeDuration = Math.max(duration, origin + 1)
   // Everything is measured from the origin, and clamped.
   //
@@ -4075,7 +4108,29 @@ function SeekBar({
   const bufferedPercent = livePercent(window, buffered)
 
   return (
-    <div className="relative h-4">
+    <div
+      className="relative h-4"
+      ref={track}
+      onPointerMove={(e) => {
+        const box = track.current?.getBoundingClientRect()
+        if (!box || box.width <= 0) return
+        const x = Math.min(Math.max(e.clientX - box.left, 0), box.width)
+        setHovered({
+          seconds: origin + (x / box.width) * (safeDuration - origin),
+          x,
+          trackWidth: box.width,
+        })
+      }}
+      onPointerLeave={() => setHovered(null)}
+    >
+      {hovered && (
+        <StoryboardPreview
+          board={storyboard}
+          seconds={hovered.seconds}
+          x={hovered.x}
+          trackWidth={hovered.trackWidth}
+        />
+      )}
       <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/25">
         <div className="h-full rounded-full bg-white/40" style={{ width: `${bufferedPercent}%` }} />
         <div
@@ -4101,6 +4156,84 @@ function SeekBar({
         aria-label={t('ui.seek')}
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
+    </div>
+  )
+}
+
+/**
+ * One still from a sprite sheet, floating above the bar where the pointer is.
+ *
+ * ## Why the sheet is a background and not an <img>
+ *
+ * There is one image carrying a grid of stills, and what has to appear is one
+ * cell of it. A background with a scaled size and a negative position crops
+ * without a second element to clip with, and — the part that matters — the
+ * browser holds *one* decoded sheet however many stills are drawn from it, so
+ * moving the pointer across the bar costs no fetch and no decode after the
+ * first. An <img> per still would ask for the same file again for every cell.
+ *
+ * ## Why the time is drawn even when the still is not
+ *
+ * Most of this library has no storyboard, and the pointer being somewhere on the
+ * bar is still worth answering: the time under the cursor is the thing the
+ * gesture is asking about, and the picture is the part that is sometimes
+ * unavailable. So a video without sheets keeps a readout, and one with them gets
+ * the readout under the picture.
+ */
+function StoryboardPreview({
+  board,
+  seconds,
+  x,
+  trackWidth,
+}: {
+  board: Storyboard | undefined
+  seconds: number
+  /** Where the pointer is along the bar, in pixels from its left edge. */
+  x: number
+  trackWidth: number
+}) {
+  const frame = storyboardFrame(board, seconds)
+
+  // Drawn at about the height YouTube draws it, whatever rung the video had.
+  //
+  // Both directions, which is the part worth stating. The gateway copies the
+  // 180-tall rung because the phone draws a still over its whole player, and a
+  // pointer hovering a bar on a desktop wants nothing like that — so here the
+  // sheet is scaled *down*, and a preview that used to be a 160-pixel tile at
+  // native size is now a 320-pixel one at half, which is the same box and a
+  // sharper picture. A video whose ladder stops lower still arrives at 45 or 27
+  // and is enlarged instead, capped so a short ladder is not blown into a smear.
+  const scale = board ? Math.min(3, Math.max(0.5, 90 / board.tileHeight)) : 1
+  const width = board && frame ? board.tileWidth * scale : 56
+
+  // Clamped inside the bar, which is arithmetic rather than tidiness: centred on
+  // the cursor with no clamp, the first and last seconds of every video put half
+  // the picture outside the player.
+  const left = Math.min(Math.max(x - width / 2, 0), Math.max(trackWidth - width, 0))
+
+  return (
+    <div
+      className="pointer-events-none absolute bottom-6 z-10 flex flex-col items-center gap-1"
+      style={{ left, width }}
+    >
+      {frame && board && (
+        <div
+          className="rounded border border-white/20 bg-black shadow-lg"
+          style={{
+            width,
+            height: board.tileHeight * scale,
+            backgroundImage: `url(${mediaURL(frame.sprite)})`,
+            backgroundSize: `${board.columns * board.tileWidth * scale}px ${
+              board.rows * board.tileHeight * scale
+            }px`,
+            backgroundPosition: `-${frame.x * scale}px -${frame.y * scale}px`,
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+      )}
+      <span className="rounded bg-black/80 px-1.5 py-0.5 text-xs tabular-nums text-white">
+        {formatDuration(seconds)}
+      </span>
     </div>
   )
 }

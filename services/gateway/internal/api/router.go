@@ -223,6 +223,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/comments", g.handleCreateComment)
 	mux.HandleFunc("POST /api/videos/{id}/comments/fetch", g.handleFetchComments)
 	mux.HandleFunc("POST /api/videos/{id}/metadata", g.handleRefreshMetadata)
+	mux.HandleFunc("GET /api/videos/{id}/storyboard", g.handleStoryboard)
 	mux.HandleFunc("POST /api/videos/{id}/progress", g.handleProgress)
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 
@@ -840,6 +841,79 @@ func (g *Gateway) handleRefreshMetadata(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, refreshMetadataResponse{Updated: resp.Msg.GetUpdated()})
+}
+
+// handleStoryboard answers with the scrub-preview sheets for one video.
+//
+// ## Why GET, when the first call copies files
+//
+// Because what a client asks is "what can I draw at this moment", and the answer
+// is the same every time. The copying is an implementation detail of answering it
+// for the first time — the same shape as `comments/fetch` triggering an import,
+// except that there is nothing here for a caller to decide, so there is nothing
+// for a POST to mean. A client asks on opening a video and gets an answer off the
+// disk every time but the first.
+//
+// ## Why a missing preview is 404 and not an error
+//
+// A Short too brief to have a ladder, an upload YouTube has not finished
+// processing, or a video upstream will not discuss: each is a video that has no
+// preview rather than a system that failed to produce one. Both clients draw the
+// time readout they already drew and nothing on the page is wrong, which is the
+// same judgement `comments/fetch` and `metadata` make about their own failures.
+func (g *Gateway) handleStoryboard(w http.ResponseWriter, r *http.Request) {
+	videoID := r.PathValue("id")
+	ctx := r.Context()
+
+	resp, err := g.ingest.VideoStoryboard(ctx, connect.NewRequest(&ingestv1.VideoStoryboardRequest{
+		VideoId: videoID,
+	}))
+	if err != nil {
+		// Logged at debug, not warn: a library of Shorts and flat-listed rows
+		// has a great many videos with no ladder, and a line per scrub-less
+		// video would be the loudest thing in the log for a state that is
+		// entirely normal.
+		g.logger.Debug("storyboard", "video", videoID, "error", err)
+		http.Error(w, "no storyboard", http.StatusNotFound)
+		return
+	}
+
+	msg := resp.Msg
+	if len(msg.GetSprites()) == 0 || msg.GetIntervalSeconds() <= 0 {
+		http.Error(w, "no storyboard", http.StatusNotFound)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, storyboardResponse{
+		TileWidth:       msg.GetTileWidth(),
+		TileHeight:      msg.GetTileHeight(),
+		Rows:            msg.GetRows(),
+		Columns:         msg.GetColumns(),
+		IntervalSeconds: msg.GetIntervalSeconds(),
+		Sprites:         msg.GetSprites(),
+	})
+}
+
+// storyboardResponse carries the geometry rather than a picture.
+//
+// The alternative was a route that crops server-side and answers with one still
+// per request. Refused: scrubbing is continuous, so that is a request per frame
+// under a moving finger — over a hundred for one drag — where this is one request
+// per video and then arithmetic on the client. It is also why the two clients
+// need no agreement beyond these six numbers.
+type storyboardResponse struct {
+	// The size of one still, in pixels.
+	TileWidth  int32 `json:"tileWidth"`
+	TileHeight int32 `json:"tileHeight"`
+	// The grid inside each sheet.
+	Rows    int32 `json:"rows"`
+	Columns int32 `json:"columns"`
+	// How much of the video one still stands for.
+	IntervalSeconds float64 `json:"intervalSeconds"`
+	// The sheets in order, as paths relative to the media root — the same kind
+	// of path as `thumbnailPath`, so a client loads one the way it loads every
+	// other image in the library.
+	Sprites []string `json:"sprites"`
 }
 
 type refreshMetadataResponse struct {

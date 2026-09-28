@@ -274,6 +274,30 @@ export function useChannelLink(query: string) {
   })
 }
 
+/**
+ * The scrub-preview sheets, fetched once per video and then left alone.
+ *
+ * `staleTime: Infinity` because these are files on disk that do not change: the
+ * sheets for a video are copied once and the geometry describing them is fixed
+ * for ever. Refetching would re-ask the gateway for an answer that cannot have
+ * moved.
+ *
+ * `retry: false` and no error surfaced anywhere, because most of this library
+ * has no preview: Shorts too brief for a ladder, and everything upstream will
+ * not discuss. A failure here means the bar keeps the time readout it already
+ * had, which is what it showed before this existed.
+ */
+export function useStoryboard(videoId: string | undefined) {
+  return useQuery({
+    queryKey: ['storyboard', videoId],
+    queryFn: () => repo.getStoryboard(videoId!),
+    enabled: Boolean(videoId),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+  })
+}
+
 export function useStreamPrefetch() {
   const queryClient = useQueryClient()
   const timer = useRef<number | undefined>(undefined)

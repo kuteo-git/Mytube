@@ -1,3 +1,4 @@
+import type { Storyboard } from '@/features/watch/domain/storyboard'
 import { apiFetch } from '@/shared/api/http'
 import type {
   Channel,
@@ -100,6 +101,16 @@ export interface CatalogRepository {
    * must not fill it.
    */
   getStream(videoId: string, prefetch?: boolean): Promise<StreamSources>
+  /**
+   * The scrub-preview sheets for a video.
+   *
+   * The first ask copies them from YouTube into the media root and is therefore
+   * slow; every ask after it is answered off the disk. Rejects with a 404 for a
+   * video that has no preview at all — a Short too brief for one, or an upload
+   * YouTube has not finished processing — which is a fact about the video and
+   * not a failure worth reporting on the page.
+   */
+  getStoryboard(videoId: string): Promise<Storyboard>
   listJobs(activeOnly: boolean, options?: JobListOptions): Promise<IngestJob[]>
   /**
    * Stops the transfer for a video, if one is running.
@@ -581,6 +592,10 @@ export const httpCatalogRepository: CatalogRepository = {
     return request<StreamSources>(
       `/videos/${encodeURIComponent(videoId)}/stream${prefetch ? '?prefetch=1' : ''}`,
     )
+  },
+
+  getStoryboard(videoId) {
+    return request<Storyboard>(`/videos/${encodeURIComponent(videoId)}/storyboard`)
   },
 
   async cancelDownload(videoId) {

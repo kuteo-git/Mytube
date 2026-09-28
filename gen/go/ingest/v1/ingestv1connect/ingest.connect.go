@@ -44,6 +44,9 @@ const (
 	// IngestServiceRefreshVideoMetadataProcedure is the fully-qualified name of the IngestService's
 	// RefreshVideoMetadata RPC.
 	IngestServiceRefreshVideoMetadataProcedure = "/ingest.v1.IngestService/RefreshVideoMetadata"
+	// IngestServiceVideoStoryboardProcedure is the fully-qualified name of the IngestService's
+	// VideoStoryboard RPC.
+	IngestServiceVideoStoryboardProcedure = "/ingest.v1.IngestService/VideoStoryboard"
 	// IngestServiceRefreshProcedure is the fully-qualified name of the IngestService's Refresh RPC.
 	IngestServiceRefreshProcedure = "/ingest.v1.IngestService/Refresh"
 	// IngestServiceBackfillTopicsProcedure is the fully-qualified name of the IngestService's
@@ -151,6 +154,23 @@ type IngestServiceClient interface {
 	// is expected to ask only for a video somebody is looking at, and only when
 	// the field it wants is actually missing.
 	RefreshVideoMetadata(context.Context, *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error)
+	// Copies a video's scrub-preview sheets into the media root, or answers with
+	// the ones already there.
+	//
+	// What a "storyboard" is: YouTube publishes a ladder of sprite sheets, each a
+	// grid of small stills, so a player can show the frame at the moment a finger
+	// is aiming at. yt-dlp has always extracted the whole ladder; nothing here
+	// ever read it, which is why scrubbing showed a clock and no picture.
+	//
+	// The sheets are copied rather than linked because their URLs are signed and
+	// the signature is mandatory — measured, the same path without it answers 403
+	// — with no stated lifetime to plan around. A stored URL is therefore a
+	// preview that works until an unknown day.
+	//
+	// Guarded like RefreshVideoMetadata and for its reason: a video already
+	// copied is answered off the disk without touching upstream, so a client may
+	// ask on every open.
+	VideoStoryboard(context.Context, *connect.Request[v1.VideoStoryboardRequest]) (*connect.Response[v1.VideoStoryboardResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Assigns YouTube's own category to videos that have none.
@@ -282,6 +302,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+IngestServiceRefreshVideoMetadataProcedure,
 			connect.WithSchema(ingestServiceMethods.ByName("RefreshVideoMetadata")),
+			connect.WithClientOptions(opts...),
+		),
+		videoStoryboard: connect.NewClient[v1.VideoStoryboardRequest, v1.VideoStoryboardResponse](
+			httpClient,
+			baseURL+IngestServiceVideoStoryboardProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("VideoStoryboard")),
 			connect.WithClientOptions(opts...),
 		),
 		refresh: connect.NewClient[v1.RefreshRequest, v1.RefreshResponse](
@@ -449,6 +475,7 @@ type ingestServiceClient struct {
 	ensureVideo          *connect.Client[v1.EnsureVideoRequest, v1.EnsureVideoResponse]
 	previewVideo         *connect.Client[v1.PreviewVideoRequest, v1.PreviewVideoResponse]
 	refreshVideoMetadata *connect.Client[v1.RefreshVideoMetadataRequest, v1.RefreshVideoMetadataResponse]
+	videoStoryboard      *connect.Client[v1.VideoStoryboardRequest, v1.VideoStoryboardResponse]
 	refresh              *connect.Client[v1.RefreshRequest, v1.RefreshResponse]
 	backfillTopics       *connect.Client[v1.BackfillTopicsRequest, v1.BackfillTopicsResponse]
 	getBackfillStatus    *connect.Client[v1.GetBackfillStatusRequest, v1.GetBackfillStatusResponse]
@@ -495,6 +522,11 @@ func (c *ingestServiceClient) PreviewVideo(ctx context.Context, req *connect.Req
 // RefreshVideoMetadata calls ingest.v1.IngestService.RefreshVideoMetadata.
 func (c *ingestServiceClient) RefreshVideoMetadata(ctx context.Context, req *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error) {
 	return c.refreshVideoMetadata.CallUnary(ctx, req)
+}
+
+// VideoStoryboard calls ingest.v1.IngestService.VideoStoryboard.
+func (c *ingestServiceClient) VideoStoryboard(ctx context.Context, req *connect.Request[v1.VideoStoryboardRequest]) (*connect.Response[v1.VideoStoryboardResponse], error) {
+	return c.videoStoryboard.CallUnary(ctx, req)
 }
 
 // Refresh calls ingest.v1.IngestService.Refresh.
@@ -661,6 +693,23 @@ type IngestServiceHandler interface {
 	// is expected to ask only for a video somebody is looking at, and only when
 	// the field it wants is actually missing.
 	RefreshVideoMetadata(context.Context, *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error)
+	// Copies a video's scrub-preview sheets into the media root, or answers with
+	// the ones already there.
+	//
+	// What a "storyboard" is: YouTube publishes a ladder of sprite sheets, each a
+	// grid of small stills, so a player can show the frame at the moment a finger
+	// is aiming at. yt-dlp has always extracted the whole ladder; nothing here
+	// ever read it, which is why scrubbing showed a clock and no picture.
+	//
+	// The sheets are copied rather than linked because their URLs are signed and
+	// the signature is mandatory — measured, the same path without it answers 403
+	// — with no stated lifetime to plan around. A stored URL is therefore a
+	// preview that works until an unknown day.
+	//
+	// Guarded like RefreshVideoMetadata and for its reason: a video already
+	// copied is answered off the disk without touching upstream, so a client may
+	// ask on every open.
+	VideoStoryboard(context.Context, *connect.Request[v1.VideoStoryboardRequest]) (*connect.Response[v1.VideoStoryboardResponse], error)
 	// Rescans topics.yaml now instead of waiting for the timer.
 	Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error)
 	// Assigns YouTube's own category to videos that have none.
@@ -788,6 +837,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		IngestServiceRefreshVideoMetadataProcedure,
 		svc.RefreshVideoMetadata,
 		connect.WithSchema(ingestServiceMethods.ByName("RefreshVideoMetadata")),
+		connect.WithHandlerOptions(opts...),
+	)
+	ingestServiceVideoStoryboardHandler := connect.NewUnaryHandler(
+		IngestServiceVideoStoryboardProcedure,
+		svc.VideoStoryboard,
+		connect.WithSchema(ingestServiceMethods.ByName("VideoStoryboard")),
 		connect.WithHandlerOptions(opts...),
 	)
 	ingestServiceRefreshHandler := connect.NewUnaryHandler(
@@ -956,6 +1011,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServicePreviewVideoHandler.ServeHTTP(w, r)
 		case IngestServiceRefreshVideoMetadataProcedure:
 			ingestServiceRefreshVideoMetadataHandler.ServeHTTP(w, r)
+		case IngestServiceVideoStoryboardProcedure:
+			ingestServiceVideoStoryboardHandler.ServeHTTP(w, r)
 		case IngestServiceRefreshProcedure:
 			ingestServiceRefreshHandler.ServeHTTP(w, r)
 		case IngestServiceBackfillTopicsProcedure:
@@ -1031,6 +1088,10 @@ func (UnimplementedIngestServiceHandler) PreviewVideo(context.Context, *connect.
 
 func (UnimplementedIngestServiceHandler) RefreshVideoMetadata(context.Context, *connect.Request[v1.RefreshVideoMetadataRequest]) (*connect.Response[v1.RefreshVideoMetadataResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.RefreshVideoMetadata is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) VideoStoryboard(context.Context, *connect.Request[v1.VideoStoryboardRequest]) (*connect.Response[v1.VideoStoryboardResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.VideoStoryboard is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) Refresh(context.Context, *connect.Request[v1.RefreshRequest]) (*connect.Response[v1.RefreshResponse], error) {

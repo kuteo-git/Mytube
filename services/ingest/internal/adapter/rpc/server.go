@@ -202,6 +202,23 @@ func (s *Server) RefreshVideoMetadata(
 	return connect.NewResponse(&ingestv1.RefreshVideoMetadataResponse{Updated: updated}), nil
 }
 
+func (s *Server) VideoStoryboard(
+	ctx context.Context, req *connect.Request[ingestv1.VideoStoryboardRequest],
+) (*connect.Response[ingestv1.VideoStoryboardResponse], error) {
+	board, err := s.ingest.VideoStoryboard(ctx, req.Msg.GetVideoId())
+	if err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&ingestv1.VideoStoryboardResponse{
+		TileWidth:       board.TileWidth,
+		TileHeight:      board.TileHeight,
+		Rows:            board.Rows,
+		Columns:         board.Columns,
+		IntervalSeconds: board.IntervalSeconds,
+		Sprites:         board.Sprites,
+	}), nil
+}
+
 func scanToProto(r domain.ScanResult) *ingestv1.ScanStatus {
 	return &ingestv1.ScanStatus{
 		StartedAt:      timestamppb.New(r.StartedAt),
