@@ -67,3 +67,25 @@ func TestWidestThumbnailOfNothingIsEmpty(t *testing.T) {
 		t.Fatalf("picked %q from an empty list", got)
 	}
 }
+
+func TestASignedCustomStillKeepsItsSignature(t *testing.T) {
+	// hq720_custom_N is a crop YouTube serves only when asked with the sqp and
+	// rs parameters it handed out; stripped, the same path is a 404 and the
+	// card is a grey box. Measured on three search results for "phone".
+	signed := "https://i.ytimg.com/vi/-uk24egt0nE/hq720_custom_2.jpg?sqp=CJTN&rs=AOn4"
+	id := "-uk24egt0nE"
+	got := toExternal(&ytdlp.ExtractedInfo{ID: id, Thumbnails: []*ytdlp.ExtractedThumbnail{thumb(signed, 720)}})
+	if got.ThumbnailURL != signed {
+		t.Fatalf("thumbnail %q; the signature a custom still needs was dropped", got.ThumbnailURL)
+	}
+}
+
+func TestAnOrdinaryStillIsStillCanonical(t *testing.T) {
+	id := "x"
+	got := toExternal(&ytdlp.ExtractedInfo{ID: id, Thumbnails: []*ytdlp.ExtractedThumbnail{
+		thumb("https://i.ytimg.com/vi/x/maxresdefault.jpg?sqp=a&rs=b", 1920),
+	}})
+	if got.ThumbnailURL != "https://i.ytimg.com/vi/x/maxresdefault.jpg" {
+		t.Fatalf("thumbnail %q", got.ThumbnailURL)
+	}
+}

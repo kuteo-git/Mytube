@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.6 — 2026-10-03
+
+**A YouTube search result's picture was a grey box whenever its owner had set a
+custom thumbnail.** Found by the mobile app's QA pass: three of twenty results
+for "phone" drew nothing. `toExternal` stripped the query from every still, on
+the reasoning that `sqp` and `rs` sometimes earn a grey placeholder and the bare
+URL always works. True of `hqdefault` and `maxresdefault`; false of
+`hq720_custom_N.jpg`, which YouTube serves only with the signature it handed out.
+Measured: six such URLs, **200 with the query and 404 without**, every one.
+
+`canonicalThumbnail` keeps the query on a `_custom_` path and strips it
+everywhere else, so the case the strip was written for is untouched. Tested
+through `toExternal`, the call site that dropped it.
+
 ## 0.1.5 — 2026-09-28
 
 **Scrubbing a video showed a clock and no picture, and yt-dlp was never the

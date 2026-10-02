@@ -216,12 +216,7 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 		v.ThumbnailURL = "https://i.ytimg.com/vi/" + info.ID + "/hqdefault.jpg"
 	}
 
-	// yt-dlp's thumbnail URLs carry sqp and rs query parameters that sometimes
-	// cause YouTube to serve a generic grey placeholder instead of the real
-	// still. The canonical URL without parameters always works.
-	if idx := strings.IndexByte(v.ThumbnailURL, '?'); idx >= 0 {
-		v.ThumbnailURL = v.ThumbnailURL[:idx]
-	}
+	v.ThumbnailURL = canonicalThumbnail(v.ThumbnailURL)
 
 	// yt-dlp returns free-form tags; keep only the hashtag-looking ones so the
 	// UI does not fill up with noise.
@@ -449,6 +444,24 @@ func (d *Downloader) resolveStreamOnce(ctx context.Context, videoURL string) (do
 //
 // Entries whose dimensions yt-dlp did not report are counted as zero rather
 // than skipped, so a list of nothing but unmeasured entries still yields one.
+// canonicalThumbnail drops the query from a still's URL, except where the
+// query is what makes the URL work.
+//
+// yt-dlp's thumbnail URLs carry sqp and rs query parameters that sometimes
+// cause YouTube to serve a generic grey placeholder instead of the real still,
+// and for the standard names (hqdefault, maxresdefault, …) the bare URL always
+// works. A *custom* crop — hq720_custom_N.jpg — is the exception: YouTube
+// serves it only with the signature it handed out, and the bare path is a 404.
+// Measured on three "phone" search results: 200 with the query, 404 without,
+// six URLs out of six — which drew a grey box on every such card.
+func canonicalThumbnail(url string) string {
+	idx := strings.IndexByte(url, '?')
+	if idx < 0 || strings.Contains(url[:idx], "_custom_") {
+		return url
+	}
+	return url[:idx]
+}
+
 func widestThumbnail(thumbnails []*ytdlp.ExtractedThumbnail) string {
 	var (
 		best      string
