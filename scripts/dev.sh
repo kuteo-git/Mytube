@@ -286,13 +286,24 @@ TTS_PYTHON="$(dirname "$TTS_SERVER")/.venv/bin/python"
 # And that service is launchd's on this machine, so :8002 has an owner that is
 # already starting. Winning the race against it is worse than losing: the agent
 # then crash-loops on "address already in use" for as long as this script's own
-# copy holds the port -- 4,806 restarts were logged before anybody looked. So
-# wait for it rather than asking once.
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-  lsof -ti:8002 >/dev/null 2>&1 && break
-  sleep 1
-done
-if lsof -ti:8002 >/dev/null 2>&1; then
+# copy holds the port -- 4,806 restarts were logged before anybody looked, and
+# 51,484 the next time. Waiting for the port is not enough: the server binds it
+# only after loading its model, which at login takes longer than any wait here.
+# So ask launchd whether it owns the service; the port is the fallback for a
+# machine without the agent.
+TTS_AGENT="${TTS_AGENT:-com.user.robot-vieneu}"
+if launchctl print "gui/$(id -u)/$TTS_AGENT" >/dev/null 2>&1; then
+  echo "speech on :8002 is launchd's ($TTS_AGENT), leaving it alone"
+  TTS_SERVER=""
+else
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    lsof -ti:8002 >/dev/null 2>&1 && break
+    sleep 1
+  done
+fi
+if [ -z "$TTS_SERVER" ]; then
+  :
+elif lsof -ti:8002 >/dev/null 2>&1; then
   echo "speech already running on :8002, leaving it alone"
 elif [ -f "$TTS_SERVER" ]; then
   echo "starting speech server (port 8002) with $TTS_PYTHON..."
