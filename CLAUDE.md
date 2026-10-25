@@ -8,7 +8,9 @@
 A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **ingest tool**, not a realtime YouTube proxy — a video is fetched to disk once and then served from the LAN.
 
 - 2–5 users in one household (light multi-user, no public sign-up)
-- Final target: watching in a **Smart TV browser**; Phase 1 builds desktop web first
+- Final target: watching on the **television** — now through the native app's
+  Android TV build (Mytube App, `/Volumes/Data2/mytube-app`), not a Smart TV
+  browser; see Phase 3 in §7. Phase 1 built desktop web first
 - Reference layout: YouTube's own desktop, read from screenshots while the UI was
   built. **Those files are gone** — `Example/*.png` was 22 MB of somebody else's
   interface in a public repository, and the tokens taken from them are written
@@ -23,7 +25,7 @@ A **self-hosted** media library running on a Mac M4 at home. `yt-dlp` is an **in
 | Machine | Apple M4, 10 cores |
 | Installed | `ffmpeg`, `yt-dlp`, `go`, `node`, `python3` |
 | Not installed | `docker`, `postgres`, `redis` (Postgres via Homebrew) |
-| Network | The Mac must stay on; needs a static LAN IP + HTTPS (internal cert) for the TV to play |
+| Network | The Mac must stay on; needs a static LAN IP. HTTPS for the TV is no longer needed: the television plays through the native app over the same plain HTTP as the phones (2026-10-24) |
 
 ## 3. Architecture
 
@@ -1055,7 +1057,14 @@ Nested comments · click-to-seek transcript · history/likes/playlists · mixed 
 
 ### Phase 3
 
-Auto-follow channels · `/tv` UI driven by D-pad · mobile app · *(optional)* feed that pulls in outside videos
+Auto-follow channels · ~~`/tv` UI driven by D-pad~~ · mobile app · *(optional)* feed that pulls in outside videos
+
+**`/tv` is replaced by the native app's Android TV build (2026-10-24).** The
+television at home is a Chromecast with Google TV, so it installs the same APK
+the phones do; the app lays out a rail, shelves and a full-screen player for a
+remote there, and needs nothing of the gateway the phones did not already use.
+A D-pad web UI would have been a second screen-by-screen rewrite of `ui/`, and
+the Smart TV browser it was for would still have needed HTTPS (risk 3) to play.
 
 ### Cut for good
 
@@ -1068,7 +1077,7 @@ Auto-follow channels · `/tv` UI driven by D-pad · mobile app · *(optional)* f
 
 1. **External SSD drops.** If `/Volumes/Data2` disappears, services write errors into a path that does not exist. There is no test for this case.
 2. **Microservices + gRPC learning curve.** P1 is slower than a monolith; accepted. ConnectRPC keeps each service debuggable with curl.
-3. **HTTPS on a Smart TV is unproven.** Try it early against a real TV.
+3. ~~**HTTPS on a Smart TV is unproven.**~~ Moot: the television plays through the native Android TV app, over plain HTTP like the phones (2026-10-24).
 4. **Background playback on iOS is impossible from the web.** Media Session + PiP are the web limits; a native app is the only path for background iOS playback.
 5. **yt-dlp breaks periodically** when YouTube changes something → ingest must handle failures gracefully and allow retry.
 6. **YouTube blocks by IP if too many full-metadata fetches are made.** A full metadata fetch is expensive and counted; flat listing is not. Backfill runs one thread, 4s apart, 200 videos/pass, and stops after 15 consecutive failures. A pass is **always** bounded — `limit: 0` means 200, not "all".
@@ -1143,7 +1152,7 @@ is unchanged.
 
 ## 9. Open questions
 
-- What make is the TV at home? (it affects how certificates have to be handled)
+- ~~What make is the TV at home?~~ A Chromecast with Google TV (Android 14, 1920×1080). It runs the native app's TV build, so certificates no longer come into it.
 - ~~Is there an external SSD?~~ Yes — `/Volumes/Data2/Youtube`, 437 GiB. See §2.
 
 ### The narration pass moved to the server (2026-08-29)
