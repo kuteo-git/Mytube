@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -83,5 +84,37 @@ func TestAnUnknownMethodSaysWhatIsAllowed(t *testing.T) {
 	}
 	if allow := rec.Header().Get("Allow"); allow == "" {
 		t.Error("405 without an Allow header")
+	}
+}
+
+// The Mac talking to itself through its own LAN address — the household opens
+// the app at http://10.25.113.151:8180 or mytube.local on the Mac too, and a
+// paste from there was refused: the guard asked the Host header, which names
+// the URL typed, not where the bytes came from. A connection from one of this
+// machine's own addresses never touched the network.
+func TestAPasteFromThisMachinesOwnAddressIsAllowed(t *testing.T) {
+	own := []net.IP{net.ParseIP("10.25.113.151"), net.ParseIP("fe80::1")}
+
+	cases := map[string]string{
+		"its own LAN address": "10.25.113.151:52011",
+		"ipv4 loopback":       "127.0.0.1:52011",
+		"ipv6 loopback":       "[::1]:52011",
+	}
+	for name, remote := range cases {
+		if !fromThisMachine(remote, own) {
+			t.Errorf("%s (%s) was not recognised as this machine", name, remote)
+		}
+	}
+}
+
+// Another machine on the same wifi is exactly the one that must not be let
+// through: its paste crossed the network in the clear.
+func TestAPasteFromAnotherMachineIsStillRefused(t *testing.T) {
+	own := []net.IP{net.ParseIP("10.25.113.151")}
+
+	for _, remote := range []string{"10.25.113.117:52011", "192.0.2.1:1234", "garbage", ""} {
+		if fromThisMachine(remote, own) {
+			t.Errorf("%q was taken for this machine", remote)
+		}
 	}
 }

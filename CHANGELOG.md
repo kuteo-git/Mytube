@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+**A YouTube session pasted on the Mac itself was refused as "sent in the
+clear".** The household opens the web app at the Mac's LAN address
+(`http://10.25.113.151:8180`) on the Mac too, and the paste endpoint's guard
+let only loopback through — judged by the `Host` header, which names the URL
+typed rather than where the bytes came from. A connection to one's own address
+never leaves the machine. `fromThisMachine` decides by `RemoteAddr`: loopback,
+or one of the Mac's own interface addresses, read at the moment of the paste
+since the address is DHCP's. Another machine on the wifi is still refused —
+its paste did cross the network. Measured on the running gateway with a body
+that stops at validation: from the Mac via its LAN address **426 before, 400
+after**; localhost 400 both times.
+
 ## 0.1.6 — 2026-10-03
 
 **A YouTube search result's picture was a grey box whenever its owner had set a

@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -42,13 +43,58 @@ type accountView struct {
 // because refusing it would make the whole feature untestable on the machine it
 // runs on.
 func requireSecureTransport(w http.ResponseWriter, r *http.Request) bool {
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" || isLoopback(r) {
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" || isLoopback(r) ||
+		fromThisMachine(r.RemoteAddr, ownAddresses()) {
 		return true
 	}
 	writeJSON(w, http.StatusUpgradeRequired, map[string]any{
 		"error": "cookies may only be sent over HTTPS",
 	})
 	return false
+}
+
+// fromThisMachine reports whether a connection came from this machine itself:
+// a loopback address, or one of its own interfaces.
+//
+// The Host header is the URL that was typed, not where the bytes came from.
+// The household opens the app at the Mac's LAN address on the Mac too, and a
+// paste from there was refused although it never left the machine — a
+// connection to one's own address is routed internally, and arrives from that
+// same address. Another machine on the wifi arrives from its own.
+func fromThisMachine(remoteAddr string, own []net.IP) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	for _, mine := range own {
+		if ip.Equal(mine) {
+			return true
+		}
+	}
+	return false
+}
+
+// ownAddresses is this machine's interface addresses, asked at the moment of
+// the paste: the Mac's DHCP address can change while the gateway runs.
+func ownAddresses() []net.IP {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	ips := make([]net.IP, 0, len(addrs))
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok {
+			ips = append(ips, n.IP)
+		}
+	}
+	return ips
 }
 
 func isLoopback(r *http.Request) bool {
