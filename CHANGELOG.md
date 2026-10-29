@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+**Every scan failed on the same ten channels, and five of them were the wrong
+channel.** The activity page listed "This channel does not have a videos tab"
+nine times and one HTTP 404, on all three scans that day. Measured with the
+pinned yt-dlp, one channel at a time:
+
+- **The handle was not the channel's own.** When a playlist was scanned, its
+  owner's handle and name were written onto every video in it, including
+  videos from other channels. A subscription then took the handle of whoever
+  owned the last playlist it appeared in, and was listed by that handle. Ngọc
+  Phụng, Britney Spears and KARIK carried `@kuluom7038` (an empty channel),
+  Meta VR carried `@MetaQuestVR` (another empty one), and Windows carried
+  `@MicrosoftWindows` (404). 25 subscriptions shared the importing account's
+  own handle. Each one listed correctly by its ID.
+- **Three channels and `@TheReviewerrrrr` publish only Shorts or broadcasts.**
+  They have no Videos tab, but their uploads playlist (`UU` + the ID after
+  `UC`) lists them.
+
+`applyOwner` copies a playlist owner's handle and name only onto videos of that
+owner's channel. A subscription is listed by `/channel/<id>/videos`, never by
+its handle. A tab that does not exist is retried once as the uploads playlist.
+Because the catalogue keeps a handle only until a non-empty one replaces it, the
+first scan with this build corrected the stored ones: all five now carry their
+own handle (`@ngocphungofficial`, `@britneyspears`, `@karik2124`, `@metavr`,
+`@Windows`), and no two of the 417 subscriptions share one. Scan of 565
+sources: **10 failed before, 0 after**; 15,987 → 16,774 videos seen.
+
 **A YouTube session pasted on the Mac itself was refused as "sent in the
 clear".** The household opens the web app at the Mac's LAN address
 (`http://10.25.113.151:8180`) on the Mac too, and the paste endpoint's guard

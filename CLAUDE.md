@@ -256,7 +256,7 @@ Measured before switching, both binaries in one sitting, five videos of this lib
 - **Stable is equal on everything the tiers rest on**, and it stops offering the progressive format that stopped serving. That is the conclusion "itag 18 stopped serving" reached from measurement, arriving independently from upstream.
 - **Pinned, not tracked**, and now that is free: a nightly that upgrades itself is a stack that breaks on a morning nobody changed anything, and a release does not.
 - **The nightly stays installed as the way back** (`pipx install --suffix=-stable` put them side by side), reachable by one variable: `YTDLP_PATH=$HOME/.local/bin/yt-dlp`.
-- **What did *not* change**, recorded so nobody re-runs it: the scanner's `This channel does not have a videos tab` failures are identical on both binaries. Those channels genuinely publish no Videos tab; `#17386` is not about them.
+- **What did *not* change**, recorded so nobody re-runs it: the scanner's `This channel does not have a videos tab` failures are identical on both binaries. `#17386` is not about them. Most of them were not channels with no Videos tab at all, but the scanner asking for the wrong channel (a playlist owner's handle stamped onto other channels, so a subscription was listed by a handle that is not its own); the rest publish only Shorts or broadcasts, and are read from their uploads playlist (`UU…`). A subscribed channel is listed by its ID, never its handle (CHANGELOG, Unreleased).
 - A path that is not there falls back to `PATH`, the same rule as `YTDLP_COOKIES` and for the same reason: a typo must not take down every request in the library.
 - `docs/youtube-sabr.md` carries the measurements and what the earlier, wrong conclusion got wrong.
 

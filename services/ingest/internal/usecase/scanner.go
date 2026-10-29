@@ -476,6 +476,15 @@ func applyOwner(v *domain.ExternalVideo, owner domain.ChannelMetadata, fromPlayl
 			v.ChannelID = owner.ID
 		}
 	}
+	// The name and the handle are the owner's to give only to the owner's own
+	// videos. On a playlist the listing names a video's channel by id and
+	// often by nothing else, and filling the gaps from the playlist's owner
+	// put that owner's handle on somebody else's channel: three subscriptions
+	// carried a household member's handle and 25 the importing account's, and
+	// every scan of them read the wrong channel.
+	if fromPlaylist && v.ChannelID != owner.ID {
+		return
+	}
 	if v.ChannelName == "" || authoritative {
 		if owner.Name != "" {
 			v.ChannelName = owner.Name
@@ -516,7 +525,39 @@ func (s *Scanner) listSource(ctx context.Context, source string, limit int32) ([
 	}
 
 	_, videos, err := s.fetch.ListPlaylist(ctx, source, 0, limit)
+	if err != nil && hasNoVideosTab(err) {
+		// A channel that publishes only Shorts or broadcasts has no Videos
+		// tab, and its /videos failed on every scan. Its uploads playlist
+		// lists everything it published; Shorts are kept off Home by the
+		// Short probe, not by which tab is read.
+		if uploads := s.uploadsPlaylistURL(ctx, source); uploads != "" {
+			_, videos, err = s.fetch.ListPlaylist(ctx, uploads, 0, limit)
+		}
+	}
 	return videos, err
+}
+
+// hasNoVideosTab reports yt-dlp's answer for a channel without a Videos tab.
+func hasNoVideosTab(err error) bool {
+	return strings.Contains(err.Error(), "does not have a videos tab")
+}
+
+// uploadsPlaylistURL is the playlist YouTube keeps of everything a channel has
+// uploaded: the channel id with UC turned into UU. Empty when the channel's id
+// cannot be known.
+func (s *Scanner) uploadsPlaylistURL(ctx context.Context, source string) string {
+	id := channelRefFromURL(source)
+	if !strings.HasPrefix(id, "UC") && s.channels != nil {
+		resolved, err := s.channels.ResolveChannelID(ctx, id)
+		if err != nil {
+			return ""
+		}
+		id = resolved
+	}
+	if !strings.HasPrefix(id, "UC") {
+		return ""
+	}
+	return "https://www.youtube.com/playlist?list=UU" + strings.TrimPrefix(id, "UC")
 }
 
 // listViaBrowse pages the browse API until it has enough videos, since one
@@ -607,18 +648,20 @@ func (s *Scanner) sources(ctx context.Context, config domain.TopicConfig) []scan
 	return targets
 }
 
-// channelVideosURL prefers the handle, which is stable and readable. Some
-// channels have none — Tinh tế is the known case in topics.yaml — and those
-// need the channel id form instead.
+// channelVideosURL addresses a subscription by its channel id, the key its
+// row is stored under. It preferred the handle, as more readable, until the
+// handles turned out to be the least reliable thing on the row: one had been
+// renamed upstream (@MicrosoftWindows answers 404) and 28 were somebody else's
+// (see applyOwner). The handle is used only when the id is not a channel id.
 func channelVideosURL(c domain.SubscribedChannel) string {
-	if c.Handle != "" {
-		handle := c.Handle
-		if !strings.HasPrefix(handle, "@") {
-			handle = "@" + handle
-		}
-		return "https://www.youtube.com/" + handle + "/videos"
+	if strings.HasPrefix(c.ID, "UC") || c.Handle == "" {
+		return "https://www.youtube.com/channel/" + c.ID + "/videos"
 	}
-	return "https://www.youtube.com/channel/" + c.ID + "/videos"
+	handle := c.Handle
+	if !strings.HasPrefix(handle, "@") {
+		handle = "@" + handle
+	}
+	return "https://www.youtube.com/" + handle + "/videos"
 }
 
 // isLatinTitle reports whether every letter in the title belongs to the Latin
