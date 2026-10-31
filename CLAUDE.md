@@ -1112,8 +1112,14 @@ auto-login as well. Installed and removed by `scripts/install-agent.sh`.
   started against an unmounted media root is §8 risk 1 happening on every
   reboot, quietly. It waits up to five minutes for the volume and two for
   `pg_isready`, then starts anyway rather than holding a login agent for ever.
-- **Postgres is its own agent** (`homebrew.mxcl.postgresql@17`) with no ordering
+- **Postgres is its own agent** (`sh.brew.postgresql@17`) with no ordering
   relationship to this one, so the wait is asked rather than declared.
+- **A power cut leaves Postgres refusing over its own lock.** macOS reuses the
+  same low PIDs at every boot, so the old `postmaster.pid` names a live process
+  that is not Postgres, and Postgres only clears a lock whose PID is dead.
+  `scripts/pg-stale-lock.sh` (run by `boot.sh`, tested by
+  `test_pg_stale_lock.py`) moves that one lock aside and nothing else
+  (2026-10-31, CHANGELOG).
 - **`KeepAlive` means `scripts/stop.sh` is undone in thirty seconds.** Stopping
   for real is `launchctl bootout gui/$(id -u)/com.luke.local-mytube`.
 

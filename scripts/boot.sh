@@ -21,9 +21,12 @@ for _ in $(seq 1 150); do
 done
 [ -d "$ROOT" ] || echo "boot: $ROOT never appeared, starting anyway" >&2
 
-# Postgres is its own launch agent (homebrew.mxcl.postgresql@17) and has no
-# ordering relationship with this one, so ask rather than assume.
+# Postgres is its own launch agent (sh.brew.postgresql@17) and has no
+# ordering relationship with this one, so ask rather than assume. After a power
+# cut it can be refusing for ever over its own old lock; its agent retries
+# every ten seconds, so clearing the lock is enough for the wait below.
 export PATH="/opt/homebrew/opt/postgresql@17/bin:$PATH"
+./scripts/pg-stale-lock.sh
 for _ in $(seq 1 60); do
   pg_isready -q && break
   sleep 2

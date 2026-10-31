@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+**After a power cut the stack never came back.** The Mac restarted at 15:13
+with no shutdown record, and the phones answered every request with
+`ECONNREFUSED` on :8180. Postgres logged `lock file "postmaster.pid" already
+exists … Is another postmaster (PID 830) running` every ten seconds; PID 830
+was a Python server that had started at 15:14 and been handed the old
+postmaster's number. Postgres clears a lock only when its PID is dead, so it
+refused for ever, and `serve.sh` refused without it. `boot.sh` now runs
+`scripts/pg-stale-lock.sh` first, which moves `postmaster.pid` aside only when
+it names a live process that is not `postgres`; a dead PID is left to
+Postgres, a live one to the running server. Moving the lock by hand brought
+Postgres up after crash recovery, and the feed answered 200.
+
 **Every scan failed on the same ten channels, and five of them were the wrong
 channel.** The activity page listed "This channel does not have a videos tab"
 nine times and one HTTP 404, on all three scans that day. Measured with the
