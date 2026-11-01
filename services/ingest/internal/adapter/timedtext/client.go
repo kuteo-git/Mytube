@@ -91,11 +91,11 @@ func (c *Client) OnListed(listed func(ctx context.Context, videoID, language str
 // when it has no automatic captions; refused when the endpoint said no.
 // Recorded by the caller, not through [Client.OnListed].
 func (c *Client) SpokenLanguage(ctx context.Context, videoID string) (language string, refused bool, err error) {
-	tracks, err := c.list(ctx, videoID)
+	l, err := c.list(ctx, videoID)
 	if err != nil {
 		return "", errors.Is(err, errRefused), err
 	}
-	return spokenOf(tracks), false, nil
+	return l.spoken, false, nil
 }
 
 // spokenOf is the language of YouTube's automatic captions, which it makes
@@ -155,8 +155,21 @@ type playerResponse struct {
 	Captions struct {
 		Renderer struct {
 			Tracks []captionTrack `json:"captionTracks"`
+			// A dubbed video's audio tracks ("vi.4", "en-US.10"), and the
+			// one played by default, which is the original.
+			AudioTracks []struct {
+				ID string `json:"audioTrackId"`
+			} `json:"audioTracks"`
+			DefaultAudio int `json:"defaultAudioTrackIndex"`
 		} `json:"playerCaptionsTracklistRenderer"`
 	} `json:"captions"`
+}
+
+// listing is what one listing says: the caption tracks, and the language
+// spoken in the video, or empty when it does not say.
+type listing struct {
+	tracks []captionTrack
+	spoken string
 }
 
 // FetchSubtitles has the same shape as the yt-dlp downloader's, so the two are
@@ -170,7 +183,7 @@ func (c *Client) FetchSubtitles(ctx context.Context, videoURL, videoID string, h
 		return nil, false
 	}
 
-	tracks, err := c.list(ctx, videoID)
+	l, err := c.list(ctx, videoID)
 	if err != nil {
 		c.logger.Warn("caption list", "video", videoID, "error", err)
 		if c.listed != nil {
@@ -179,8 +192,9 @@ func (c *Client) FetchSubtitles(ctx context.Context, videoURL, videoID string, h
 		return nil, errors.Is(err, errRefused)
 	}
 	if c.listed != nil {
-		c.listed(ctx, videoID, spokenOf(tracks), false)
+		c.listed(ctx, videoID, l.spoken, false)
 	}
+	tracks := l.tracks
 	if len(tracks) == 0 {
 		// Nothing to fetch, and nothing refused us. A video with no captions is
 		// a finished question, not one to come back to.
@@ -262,15 +276,15 @@ func languages(tracks []captionTrack) string {
 	return strings.Join(out, ",")
 }
 
-// list asks once what captions exist.
-func (c *Client) list(ctx context.Context, videoID string) ([]captionTrack, error) {
+// list asks once what captions exist, and which language is spoken.
+func (c *Client) list(ctx context.Context, videoID string) (listing, error) {
 	html, err := c.get(ctx, fmt.Sprintf(c.watch, videoID))
 	if err != nil {
-		return nil, fmt.Errorf("watch page: %w", err)
+		return listing{}, fmt.Errorf("watch page: %w", err)
 	}
 	m := apiKey.FindSubmatch(html)
 	if m == nil {
-		return nil, errors.New("no innertube key in the watch page")
+		return listing{}, errors.New("no innertube key in the watch page")
 	}
 
 	body, _ := json.Marshal(map[string]any{
@@ -281,14 +295,27 @@ func (c *Client) list(ctx context.Context, videoID string) ([]captionTrack, erro
 	})
 	raw, err := c.post(ctx, fmt.Sprintf(c.player, m[1]), body)
 	if err != nil {
-		return nil, fmt.Errorf("player: %w", err)
+		return listing{}, fmt.Errorf("player: %w", err)
 	}
 
 	var p playerResponse
 	if err := json.Unmarshal(raw, &p); err != nil {
-		return nil, fmt.Errorf("player response: %w", err)
+		return listing{}, fmt.Errorf("player response: %w", err)
 	}
-	return p.Captions.Renderer.Tracks, nil
+	r := p.Captions.Renderer
+	l := listing{tracks: r.Tracks, spoken: spokenOf(r.Tracks)}
+	// Dubbed: an automatic track per audio track, so the first says nothing
+	// about which is spoken. The default audio track is the original. One
+	// listed (EhHvt1dhuV0): en and vi automatic tracks, audio en-US.10 and
+	// vi.4, default vi.4 — and the HLS ladder's original audio is vi.
+	if len(r.AudioTracks) > 1 {
+		l.spoken = ""
+		if d := r.DefaultAudio; d >= 0 && d < len(r.AudioTracks) {
+			id, _, _ := strings.Cut(r.AudioTracks[d].ID, ".")
+			l.spoken = strings.ToLower(primary(id))
+		}
+	}
+	return l, nil
 }
 
 // download takes the one file, asking for WebVTT directly.

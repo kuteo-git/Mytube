@@ -19,6 +19,9 @@ import (
 // the file itself.
 type fakeYouTube struct {
 	tracks     []map[string]any
+	// The audio tracks of a dubbed video, and which one plays by default.
+	audio        []map[string]any
+	defaultAudio int
 	captionRes int
 	playerRes  int
 	body       string
@@ -41,7 +44,9 @@ func (f *fakeYouTube) server(t *testing.T) *httptest.Server {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"captions": map[string]any{
 				"playerCaptionsTracklistRenderer": map[string]any{
-					"captionTracks": f.tracks,
+					"captionTracks":          f.tracks,
+					"audioTracks":            f.audio,
+					"defaultAudioTrackIndex": f.defaultAudio,
 				},
 			},
 		})
@@ -236,5 +241,25 @@ func TestACaptionFetchHearsTheLanguageSpoken(t *testing.T) {
 	}
 	if f.hits != 1 {
 		t.Errorf("%d caption downloads, want the one the fetch makes", f.hits)
+	}
+}
+
+// A dubbed video has an automatic track per audio track, and the language
+// spoken is the default audio track's — the original. Shaped as YouTube
+// answered for EhHvt1dhuV0 (Vietnamese, dubbed into English), 2026-11-01.
+func TestADubbedVideoSpeaksItsDefaultAudioTracksLanguage(t *testing.T) {
+	f := &fakeYouTube{body: vtt}
+	c, _ := newTestClient(t, f)
+	f.tracks = []map[string]any{
+		track("en", "asr", c.watchHost()+"/timedtext?lang=en"),
+		track("vi", "asr", c.watchHost()+"/timedtext?lang=vi"),
+	}
+	f.audio = []map[string]any{
+		{"audioTrackId": "en-US.10", "captionTrackIndices": []int{1, 0}},
+		{"audioTrackId": "vi.4", "captionTrackIndices": []int{1, 0}},
+	}
+	f.defaultAudio = 1
+	if lang, _, err := c.SpokenLanguage(context.Background(), "EhHvt1dhuV0"); err != nil || lang != "vi" {
+		t.Fatalf("lang %q err %v, want vi: the dub's automatic track is not the language spoken", lang, err)
 	}
 }
