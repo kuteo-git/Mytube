@@ -64,6 +64,9 @@ type Narrator interface {
 	// pass, from fromS, and the mix if they have not run — and says where it
 	// is. Asking again is how it is followed.
 	Prepare(ctx context.Context, videoID string, fromS int) (domain.NarratedAnswer, error)
+	// SpokenLanguage is the language spoken in the song ("vi", "en"), or
+	// empty when it is not known.
+	SpokenLanguage(ctx context.Context, videoID string) (string, error)
 }
 
 // How long one speaker gets to answer a status request.
@@ -93,6 +96,10 @@ type Engine struct {
 	// one question.
 	narratedMu sync.Mutex
 	narrated   map[string]domain.NarratedAnswer
+	// The language spoken in each song asked about, under narratedMu. An
+	// empty answer is kept too, with when it was given, and asked again after
+	// spokenRetry.
+	spoken map[string]spokenAnswer
 }
 
 func NewEngine(repo Repo, drivers []Driver, catalog Catalog, narrator Narrator, now func() time.Time, logger *slog.Logger) *Engine {
@@ -103,6 +110,7 @@ func NewEngine(repo Repo, drivers []Driver, catalog Catalog, narrator Narrator, 
 	return &Engine{
 		repo: repo, drivers: byKind, catalog: catalog, narrator: narrator, now: now, logger: logger,
 		locks: map[string]*sync.Mutex{}, narrated: map[string]domain.NarratedAnswer{},
+		spoken: map[string]spokenAnswer{},
 	}
 }
 
@@ -184,7 +192,9 @@ func (e *Engine) followNarration(ctx context.Context, drv Driver, s domain.Sessi
 		return e.apply(ctx, drv, s, reload)
 	}
 	if s.State == domain.Playing && s.LoadedNarrated && s.CurrentIndex+1 < len(s.Queue) {
-		e.narratedForm(ctx, drv, s.Queue[s.CurrentIndex+1].VideoID, 0)
+		if next := s.Queue[s.CurrentIndex+1].VideoID; e.covers(ctx, s, next) {
+			e.narratedForm(ctx, drv, next, 0)
+		}
 	}
 	return s
 }
@@ -202,7 +212,7 @@ func (e *Engine) narrationSwitch(ctx context.Context, drv Driver, s domain.Sessi
 		return s, nil
 	}
 	want := false
-	if s.Narration {
+	if e.covers(ctx, s, item.VideoID) {
 		switch e.narratedForm(ctx, drv, item.VideoID, s.PositionS) {
 		case domain.NarratedReady:
 			want = true
@@ -220,7 +230,47 @@ func (e *Engine) narrationSwitch(ctx context.Context, drv Driver, s domain.Sessi
 // wantsNarrated is whether a song of s is to be loaded narrated: asked for,
 // and ready in the form this speaker is handed it.
 func (e *Engine) wantsNarrated(ctx context.Context, drv Driver, s domain.Session, videoID string, fromS int) bool {
-	return s.Narration && e.narratedForm(ctx, drv, videoID, fromS) == domain.NarratedReady
+	return e.covers(ctx, s, videoID) && e.narratedForm(ctx, drv, videoID, fromS) == domain.NarratedReady
+}
+
+// covers is whether narration on s covers the song videoID — see
+// domain.NarratesSong. The gateway is asked which language it speaks only
+// while narration is on.
+func (e *Engine) covers(ctx context.Context, s domain.Session, videoID string) bool {
+	return s.Narration && domain.NarratesSong(s, videoID, e.spokenLanguage(ctx, videoID))
+}
+
+type spokenAnswer struct {
+	language string
+	at       time.Time
+}
+
+// spokenRetry is how long "not known" stands before the gateway is asked
+// again: it asks YouTube, and must not on every tick.
+const spokenRetry = 5 * time.Minute
+
+// spokenLanguage is the language spoken in a song, asked of the gateway once
+// and remembered; empty when not known.
+func (e *Engine) spokenLanguage(ctx context.Context, videoID string) string {
+	if e.narrator == nil {
+		return ""
+	}
+	e.narratedMu.Lock()
+	known, asked := e.spoken[videoID]
+	e.narratedMu.Unlock()
+	if asked && (known.language != "" || e.now().Sub(known.at) < spokenRetry) {
+		return known.language
+	}
+	askCtx, cancel := context.WithTimeout(ctx, narratorTimeout)
+	lang, err := e.narrator.SpokenLanguage(askCtx, videoID)
+	cancel()
+	if err != nil {
+		e.logger.Warn("spoken language", "video", videoID, "error", err)
+	}
+	e.narratedMu.Lock()
+	e.spoken[videoID] = spokenAnswer{language: lang, at: e.now()}
+	e.narratedMu.Unlock()
+	return lang
 }
 
 // narratedForm asks the gateway about a song, in the form this speaker is
@@ -259,12 +309,17 @@ func formFor(drv Driver, a domain.NarratedAnswer) domain.Narrated {
 }
 
 // NarrationStatus is what the remote shows about narration on s.
+//
+// From what is remembered only: it is read for every answer the remote gets,
+// and must not wait on the gateway.
 func (e *Engine) NarrationStatus(s domain.Session) domain.NarrationStatus {
 	item, _ := s.Current()
 	e.narratedMu.Lock()
 	known := e.narrated[item.VideoID]
+	spoken := e.spoken[item.VideoID].language
 	e.narratedMu.Unlock()
-	return domain.NarrationStatusOf(s, formFor(e.drivers[s.DeviceKind], known))
+	covers := domain.NarratesSong(s, item.VideoID, spoken)
+	return domain.NarrationStatusOf(s, covers, formFor(e.drivers[s.DeviceKind], known))
 }
 
 // apply carries out what a decision asked for. A load the speaker refuses
@@ -589,6 +644,12 @@ func (e *Engine) ReplaceQueue(ctx context.Context, id string, version int, ids [
 func (e *Engine) SetNarration(ctx context.Context, id string, on bool) (domain.Session, error) {
 	return e.command(ctx, id, func(s domain.Session, drv Driver, now time.Time) (domain.Session, []domain.Action, error) {
 		s.Narration = on
+		// Switched on while a Vietnamese song plays: narrate that song too,
+		// as asked; the next is decided by its own language again.
+		s.NarrationForcedFor = ""
+		if item, ok := s.Current(); ok && on && e.spokenLanguage(ctx, item.VideoID) == domain.Vietnamese {
+			s.NarrationForcedFor = item.VideoID
+		}
 		s, reload := e.narrationSwitch(ctx, drv, s, now)
 		return s, reload, nil
 	})

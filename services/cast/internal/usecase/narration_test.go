@@ -234,3 +234,58 @@ func TestANarratedSongKeepsItsVoiceWhileTheGatewayIsUnsure(t *testing.T) {
 		t.Fatalf("loads = %+v, want the song as it is once nothing is narrated", loads)
 	}
 }
+
+// A song that speaks Vietnamese is played as it is, narration on or not: its
+// narration would read its Vietnamese captions over its own Vietnamese voice.
+// The remote says narration is off for it, and nothing is made for it.
+func TestAVietnameseSongPlaysAsItIs(t *testing.T) {
+	r := newRig()
+	r.narrator.spoken["a"] = "vi"
+	r.narrator.set("a", domain.NarratedReady)
+	s := r.startNarrated(t, "a")
+	r.playing("a", 40)
+	if loads := r.driver.ops("load"); len(loads) != 1 || loads[0].narrated {
+		t.Fatalf("loads = %+v, want the song as it is", loads)
+	}
+	if r.narrator.wasAsked("a") {
+		t.Fatal("a narrated sound was made for a Vietnamese song")
+	}
+	if got := r.engine.NarrationStatus(s); got != domain.NarrationOff {
+		t.Fatalf("status = %s, want off", got)
+	}
+}
+
+// Switched on while a Vietnamese song plays, that song is narrated — the
+// listener asked for it on that song — and the next is decided by its own
+// language again.
+func TestNarrationSwitchedOnForAVietnameseSongNarratesIt(t *testing.T) {
+	r := newRig()
+	r.narrator.spoken["a"] = "vi"
+	r.narrator.spoken["b"] = "vi"
+	r.narrator.set("a", domain.NarratedReady)
+	r.narrator.set("b", domain.NarratedReady)
+	s := r.startNarrated(t, "a", "b")
+	r.playing("a", 40)
+
+	got, err := r.engine.SetNarration(context.Background(), s.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loads := r.driver.ops("load")
+	if len(loads) != 2 || !loads[1].narrated || loads[1].video != "a" {
+		t.Fatalf("loads = %+v, want a narrated at once", loads)
+	}
+	if st := r.engine.NarrationStatus(got); st != domain.NarrationOn {
+		t.Fatalf("status = %s, want on", st)
+	}
+
+	// The next song speaks Vietnamese too, and nobody asked for it.
+	r.playing("a~narrated", 198)
+	r.driver.setStatus(domain.DeviceStatus{State: domain.DeviceIdle})
+	r.clock.advance(time.Second)
+	r.engine.Tick(context.Background())
+	loads = r.driver.ops("load")
+	if last := loads[len(loads)-1]; last.video != "b" || last.narrated {
+		t.Fatalf("loads = %+v, want b as it is", loads)
+	}
+}

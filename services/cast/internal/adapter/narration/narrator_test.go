@@ -44,3 +44,16 @@ func TestAGatewayFailureIsAnError(t *testing.T) {
 		t.Fatal("a 502 was read as an answer")
 	}
 }
+
+func TestSpokenLanguageReadsTheGatewaysWord(t *testing.T) {
+	var path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_, _ = w.Write([]byte(`{"language":"vi"}`))
+	}))
+	defer srv.Close()
+	got, err := New(srv.URL, srv.Client()).SpokenLanguage(context.Background(), "abc")
+	if err != nil || got != "vi" || path != "/api/videos/abc/spoken-language" {
+		t.Fatalf("got %q %v from %s", got, err, path)
+	}
+}

@@ -21,6 +21,22 @@ type Server struct {
 	// in a deployment that has pasted no cookies, which must keep working.
 	accounts       domain.AccountStore
 	accountScanner *usecase.AccountScanner
+	// Nil until WithSpokenLanguages: SpokenLanguage then answers nothing.
+	spoken *usecase.SpokenLanguages
+}
+
+// WithSpokenLanguages attaches the asking of which language a video speaks.
+func (s *Server) WithSpokenLanguages(spoken *usecase.SpokenLanguages) *Server {
+	s.spoken = spoken
+	return s
+}
+
+func (s *Server) SpokenLanguage(ctx context.Context, req *connect.Request[ingestv1.SpokenLanguageRequest]) (*connect.Response[ingestv1.SpokenLanguageResponse], error) {
+	var lang string
+	if s.spoken != nil {
+		lang = s.spoken.Ask(ctx, req.Msg.GetVideoId())
+	}
+	return connect.NewResponse(&ingestv1.SpokenLanguageResponse{Language: lang}), nil
 }
 
 func NewServer(ingest *usecase.Ingest, scanner *usecase.Scanner, expander *usecase.Expander) *Server {

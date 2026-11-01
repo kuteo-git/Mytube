@@ -73,6 +73,46 @@ type Client struct {
 	// to somebody else's server.
 	watch  string
 	player string
+	// heard is told the language spoken in a video whenever a listing shows
+	// it, so a caption fetch records it for no request of its own. Nil until
+	// OnSpoken.
+	heard func(ctx context.Context, videoID, language string)
+}
+
+// OnSpoken has every listing report the language spoken in its video.
+func (c *Client) OnSpoken(heard func(ctx context.Context, videoID, language string)) {
+	c.heard = heard
+}
+
+// SpokenLanguage asks YouTube which language is spoken in a video: one
+// listing, the same one a caption fetch begins with, and no download. Empty
+// when it has no automatic captions; refused when the endpoint said no.
+func (c *Client) SpokenLanguage(ctx context.Context, videoID string) (language string, refused bool, err error) {
+	tracks, err := c.list(ctx, videoID)
+	if err != nil {
+		return "", errors.Is(err, errRefused), err
+	}
+	return c.spoken(ctx, videoID, tracks), false, nil
+}
+
+// spoken is the language of YouTube's automatic captions, which it makes from
+// the sound — so the language spoken, where an uploaded track is only the
+// language somebody wrote. Told to [Client.heard] when there is one.
+func (c *Client) spoken(ctx context.Context, videoID string, tracks []captionTrack) string {
+	lang := spokenOf(tracks)
+	if lang != "" && c.heard != nil {
+		c.heard(ctx, videoID, lang)
+	}
+	return lang
+}
+
+func spokenOf(tracks []captionTrack) string {
+	for _, t := range tracks {
+		if t.Kind == "asr" {
+			return strings.ToLower(primary(t.Lang))
+		}
+	}
+	return ""
 }
 
 func New(root string, logger *slog.Logger) *Client {
@@ -140,6 +180,7 @@ func (c *Client) FetchSubtitles(ctx context.Context, videoURL, videoID string, h
 		c.logger.Warn("caption list", "video", videoID, "error", err)
 		return nil, errors.Is(err, errRefused)
 	}
+	c.spoken(ctx, videoID, tracks)
 	if len(tracks) == 0 {
 		// Nothing to fetch, and nothing refused us. A video with no captions is
 		// a finished question, not one to come back to.

@@ -67,11 +67,22 @@ const (
 	NarrationUnavailable NarrationStatus = "unavailable"
 )
 
-// NarrationStatusOf decides it from the session and the gateway's last word
-// on the current song.
-func NarrationStatusOf(s Session, current Narrated) NarrationStatus {
+// Vietnamese is the language narration speaks. A song that speaks it is not
+// narrated unless asked for on that song: its narration would read its
+// Vietnamese captions over its own Vietnamese voice.
+const Vietnamese = "vi"
+
+// NarratesSong is whether narration on s covers the song videoID, which
+// speaks `spoken` ("" when not known: narrated, as the switch says).
+func NarratesSong(s Session, videoID, spoken string) bool {
+	return s.Narration && (spoken != Vietnamese || s.NarrationForcedFor == videoID)
+}
+
+// NarrationStatusOf decides it from the session, whether narration covers
+// the current song, and the gateway's last word on it.
+func NarrationStatusOf(s Session, covers bool, current Narrated) NarrationStatus {
 	switch {
-	case !s.Narration:
+	case !s.Narration || !covers:
 		return NarrationOff
 	case s.LoadedNarrated:
 		return NarrationOn
@@ -135,6 +146,9 @@ type Session struct {
 	// the gateway makes it, and the song plays as it is meanwhile.
 	Narration      bool
 	LoadedNarrated bool
+	// NarrationForcedFor is a song that speaks Vietnamese and is narrated
+	// all the same: narration was switched on while it played.
+	NarrationForcedFor string
 
 	// LoadedMediaKey is what was handed to the speaker for the current item,
 	// and how a takeover is recognised. PrevMediaKey is the one before it,

@@ -112,6 +112,9 @@ const (
 	// IngestServiceFetchSubtitlesProcedure is the fully-qualified name of the IngestService's
 	// FetchSubtitles RPC.
 	IngestServiceFetchSubtitlesProcedure = "/ingest.v1.IngestService/FetchSubtitles"
+	// IngestServiceSpokenLanguageProcedure is the fully-qualified name of the IngestService's
+	// SpokenLanguage RPC.
+	IngestServiceSpokenLanguageProcedure = "/ingest.v1.IngestService/SpokenLanguage"
 	// IngestServiceResolveLiveProcedure is the fully-qualified name of the IngestService's ResolveLive
 	// RPC.
 	IngestServiceResolveLiveProcedure = "/ingest.v1.IngestService/ResolveLive"
@@ -252,6 +255,13 @@ type IngestServiceClient interface {
 	// transfer, and a flag that stops it doing that is a name that lies to
 	// everyone who reads the call site afterwards.
 	FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error)
+	// The language spoken in a video, asked of YouTube: the language of its
+	// automatic captions, which are made from the sound. For a player opening a
+	// video nobody has asked about; the answer is written to the catalogue, so
+	// it is asked once. Empty when YouTube has none, refused, or was asked too
+	// recently. A caption fetch records the same answer for nothing, from the
+	// listing it makes anyway.
+	SpokenLanguage(context.Context, *connect.Request[v1.SpokenLanguageRequest]) (*connect.Response[v1.SpokenLanguageResponse], error)
 	// The HLS renditions of a broadcast still in progress.
 	//
 	// A live video publishes nothing this system's other paths can use: every
@@ -454,6 +464,12 @@ func NewIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(ingestServiceMethods.ByName("FetchSubtitles")),
 			connect.WithClientOptions(opts...),
 		),
+		spokenLanguage: connect.NewClient[v1.SpokenLanguageRequest, v1.SpokenLanguageResponse](
+			httpClient,
+			baseURL+IngestServiceSpokenLanguageProcedure,
+			connect.WithSchema(ingestServiceMethods.ByName("SpokenLanguage")),
+			connect.WithClientOptions(opts...),
+		),
 		resolveLive: connect.NewClient[v1.ResolveLiveRequest, v1.ResolveLiveResponse](
 			httpClient,
 			baseURL+IngestServiceResolveLiveProcedure,
@@ -500,6 +516,7 @@ type ingestServiceClient struct {
 	listChannelUploads   *connect.Client[v1.ListChannelUploadsRequest, v1.ListChannelUploadsResponse]
 	resolveChannel       *connect.Client[v1.ResolveChannelRequest, v1.ResolveChannelResponse]
 	fetchSubtitles       *connect.Client[v1.FetchSubtitlesRequest, v1.FetchSubtitlesResponse]
+	spokenLanguage       *connect.Client[v1.SpokenLanguageRequest, v1.SpokenLanguageResponse]
 	resolveLive          *connect.Client[v1.ResolveLiveRequest, v1.ResolveLiveResponse]
 	fetchComments        *connect.Client[v1.FetchCommentsRequest, v1.FetchCommentsResponse]
 }
@@ -649,6 +666,11 @@ func (c *ingestServiceClient) FetchSubtitles(ctx context.Context, req *connect.R
 	return c.fetchSubtitles.CallUnary(ctx, req)
 }
 
+// SpokenLanguage calls ingest.v1.IngestService.SpokenLanguage.
+func (c *ingestServiceClient) SpokenLanguage(ctx context.Context, req *connect.Request[v1.SpokenLanguageRequest]) (*connect.Response[v1.SpokenLanguageResponse], error) {
+	return c.spokenLanguage.CallUnary(ctx, req)
+}
+
 // ResolveLive calls ingest.v1.IngestService.ResolveLive.
 func (c *ingestServiceClient) ResolveLive(ctx context.Context, req *connect.Request[v1.ResolveLiveRequest]) (*connect.Response[v1.ResolveLiveResponse], error) {
 	return c.resolveLive.CallUnary(ctx, req)
@@ -791,6 +813,13 @@ type IngestServiceHandler interface {
 	// transfer, and a flag that stops it doing that is a name that lies to
 	// everyone who reads the call site afterwards.
 	FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error)
+	// The language spoken in a video, asked of YouTube: the language of its
+	// automatic captions, which are made from the sound. For a player opening a
+	// video nobody has asked about; the answer is written to the catalogue, so
+	// it is asked once. Empty when YouTube has none, refused, or was asked too
+	// recently. A caption fetch records the same answer for nothing, from the
+	// listing it makes anyway.
+	SpokenLanguage(context.Context, *connect.Request[v1.SpokenLanguageRequest]) (*connect.Response[v1.SpokenLanguageResponse], error)
 	// The HLS renditions of a broadcast still in progress.
 	//
 	// A live video publishes nothing this system's other paths can use: every
@@ -989,6 +1018,12 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(ingestServiceMethods.ByName("FetchSubtitles")),
 		connect.WithHandlerOptions(opts...),
 	)
+	ingestServiceSpokenLanguageHandler := connect.NewUnaryHandler(
+		IngestServiceSpokenLanguageProcedure,
+		svc.SpokenLanguage,
+		connect.WithSchema(ingestServiceMethods.ByName("SpokenLanguage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	ingestServiceResolveLiveHandler := connect.NewUnaryHandler(
 		IngestServiceResolveLiveProcedure,
 		svc.ResolveLive,
@@ -1061,6 +1096,8 @@ func NewIngestServiceHandler(svc IngestServiceHandler, opts ...connect.HandlerOp
 			ingestServiceResolveChannelHandler.ServeHTTP(w, r)
 		case IngestServiceFetchSubtitlesProcedure:
 			ingestServiceFetchSubtitlesHandler.ServeHTTP(w, r)
+		case IngestServiceSpokenLanguageProcedure:
+			ingestServiceSpokenLanguageHandler.ServeHTTP(w, r)
 		case IngestServiceResolveLiveProcedure:
 			ingestServiceResolveLiveHandler.ServeHTTP(w, r)
 		case IngestServiceFetchCommentsProcedure:
@@ -1188,6 +1225,10 @@ func (UnimplementedIngestServiceHandler) ResolveChannel(context.Context, *connec
 
 func (UnimplementedIngestServiceHandler) FetchSubtitles(context.Context, *connect.Request[v1.FetchSubtitlesRequest]) (*connect.Response[v1.FetchSubtitlesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.FetchSubtitles is not implemented"))
+}
+
+func (UnimplementedIngestServiceHandler) SpokenLanguage(context.Context, *connect.Request[v1.SpokenLanguageRequest]) (*connect.Response[v1.SpokenLanguageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("ingest.v1.IngestService.SpokenLanguage is not implemented"))
 }
 
 func (UnimplementedIngestServiceHandler) ResolveLive(context.Context, *connect.Request[v1.ResolveLiveRequest]) (*connect.Response[v1.ResolveLiveResponse], error) {

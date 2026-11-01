@@ -167,8 +167,14 @@ func main() {
 	// Captions come from the cheap path first — one request to list what exists,
 	// one to take the best of it — with yt-dlp behind it. See the timedtext
 	// package for the four-to-one that motivates it.
+	// The listing a caption fetch makes also says which language the video
+	// speaks; it is recorded from there, and asked for on its own only when a
+	// player opens a video nobody has listed.
+	listings := timedtext.New(mediaRoot, logger)
+	spoken := usecase.NewSpokenLanguages(listings, catalogclient.New(catalogHTTP, catalogURL, devUserID), logger)
+	listings.OnSpoken(spoken.Heard)
 	captions := timedtext.NewFirst(
-		timedtext.New(mediaRoot, logger),
+		listings,
 		remotetranscript.New(mediaRoot, proxies, logger),
 		downloader,
 		logger,
@@ -291,7 +297,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle(ingestv1connect.NewIngestServiceHandler(
-		rpc.NewServer(ingest, scanner, expander).WithAccounts(accountStore, accountScanner)))
+		rpc.NewServer(ingest, scanner, expander).WithAccounts(accountStore, accountScanner).WithSpokenLanguages(spoken)))
 
 	// Plain HTTP, not ConnectRPC: this is a continuous body of media bytes, and
 	// wrapping it in an RPC envelope would buy nothing.

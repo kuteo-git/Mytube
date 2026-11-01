@@ -192,3 +192,46 @@ func TestAPlayerErrorIsNotARefusal(t *testing.T) {
 		t.Error("refused=true on a 500 from the player call")
 	}
 }
+
+// The language spoken is the language of YouTube's automatic captions: it
+// makes them from the sound. An uploaded track says only what somebody wrote
+// — a Vietnamese translation under an English talk.
+func TestTheLanguageSpokenIsTheAutomaticCaptions(t *testing.T) {
+	f := &fakeYouTube{body: vtt}
+	c, _ := newTestClient(t, f)
+	f.tracks = []map[string]any{
+		track("vi", "", c.watchHost()+"/timedtext?lang=vi"),
+		track("en-US", "asr", c.watchHost()+"/timedtext?lang=en"),
+	}
+	lang, refused, err := c.SpokenLanguage(context.Background(), "abc123")
+	if err != nil || refused || lang != "en" {
+		t.Fatalf("lang %q refused %v err %v, want en", lang, refused, err)
+	}
+	if f.hits != 0 {
+		t.Errorf("downloaded %d caption files to answer which language is spoken", f.hits)
+	}
+
+	f.tracks = []map[string]any{track("vi", "", c.watchHost()+"/timedtext?lang=vi")}
+	if lang, _, _ := c.SpokenLanguage(context.Background(), "abc123"); lang != "" {
+		t.Fatalf("no automatic captions, answered %q", lang)
+	}
+}
+
+// A caption fetch reports the language spoken from the listing it makes
+// anyway: no request of its own.
+func TestACaptionFetchHearsTheLanguageSpoken(t *testing.T) {
+	f := &fakeYouTube{body: vtt}
+	c, _ := newTestClient(t, f)
+	f.tracks = []map[string]any{track("vi", "asr", c.watchHost()+"/timedtext?lang=vi")}
+	var heard []string
+	c.OnSpoken(func(_ context.Context, videoID, lang string) { heard = append(heard, videoID+" "+lang) })
+
+	c.FetchSubtitles(context.Background(), "", "abc123", 1080)
+
+	if len(heard) != 1 || heard[0] != "abc123 vi" {
+		t.Fatalf("heard %v", heard)
+	}
+	if f.hits != 1 {
+		t.Errorf("%d caption downloads, want the one the fetch makes", f.hits)
+	}
+}

@@ -121,6 +121,7 @@ func videoToProto(v domain.Video) *catalogv1.Video {
 		DiscoveredVia:   v.DiscoveredVia,
 		LiveStatus:      v.LiveStatus,
 		IsLiveNow:       v.IsLiveNow,
+		SpokenLanguage:  v.SpokenLanguage,
 	}
 
 	for _, t := range v.Subtitles {
@@ -428,6 +429,13 @@ func (s *Server) SetShort(ctx context.Context, req *connect.Request[catalogv1.Se
 		return nil, toConnectErr(err)
 	}
 	return connect.NewResponse(&catalogv1.SetShortResponse{}), nil
+}
+
+func (s *Server) SetSpokenLanguage(ctx context.Context, req *connect.Request[catalogv1.SetSpokenLanguageRequest]) (*connect.Response[catalogv1.SetSpokenLanguageResponse], error) {
+	if err := s.catalog.SetSpokenLanguage(ctx, req.Msg.GetVideoId(), req.Msg.GetLanguage()); err != nil {
+		return nil, toConnectErr(err)
+	}
+	return connect.NewResponse(&catalogv1.SetSpokenLanguageResponse{}), nil
 }
 
 func (s *Server) ListUncheckedShorts(ctx context.Context, req *connect.Request[catalogv1.ListUncheckedShortsRequest]) (*connect.Response[catalogv1.ListUncheckedShortsResponse], error) {

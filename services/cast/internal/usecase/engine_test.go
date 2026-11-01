@@ -189,8 +189,15 @@ type fakeNarrator struct {
 	mu      sync.Mutex
 	answers map[string]domain.Narrated
 	streams map[string]domain.Narrated
+	spoken  map[string]string
 	asked   []string
 	from    []int
+}
+
+func (n *fakeNarrator) SpokenLanguage(_ context.Context, videoID string) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.spoken[videoID], nil
 }
 
 func (n *fakeNarrator) Prepare(_ context.Context, videoID string, fromS int) (domain.NarratedAnswer, error) {
@@ -262,7 +269,7 @@ func newRig() rig {
 	drv := &fakeDriver{devices: []domain.Device{{ID: "r1", Name: "Loa R1", Kind: domain.KindR1, Online: true}}}
 	cat := &fakeCatalog{live: map[string]bool{}, gone: map[string]bool{}}
 	clk := &clock{now: time.Date(2026, 10, 31, 21, 0, 0, 0, time.UTC)}
-	nar := &fakeNarrator{answers: map[string]domain.Narrated{}, streams: map[string]domain.Narrated{}}
+	nar := &fakeNarrator{answers: map[string]domain.Narrated{}, streams: map[string]domain.Narrated{}, spoken: map[string]string{}}
 	e := NewEngine(repo, []Driver{drv}, cat, nar, clk.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	return rig{engine: e, repo: repo, driver: drv, catalog: cat, clock: clk, narrator: nar}
 }

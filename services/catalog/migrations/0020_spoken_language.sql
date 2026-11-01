@@ -1,0 +1,11 @@
+-- The language spoken in a video, from YouTube's automatic captions.
+--
+-- Beside `language`, not instead of it: that column is the uploader's word, or
+-- a guess from the title on a flat listing, and the feed's language filter
+-- reads it. It said "en" for 13,736 videos whose titles are Vietnamese
+-- (measured 2026-11-01), so narration cannot decide by it — a Vietnamese video
+-- narrated in Vietnamese reads its captions over its own voice.
+--
+-- '' while nobody has asked, which is nearly every row: it is written when
+-- captions are fetched and when a player asks about a video it does not know.
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS spoken_language text NOT NULL DEFAULT '';

@@ -69,6 +69,9 @@ const (
 	CatalogServiceSetMediaStateProcedure = "/catalog.v1.CatalogService/SetMediaState"
 	// CatalogServiceSetShortProcedure is the fully-qualified name of the CatalogService's SetShort RPC.
 	CatalogServiceSetShortProcedure = "/catalog.v1.CatalogService/SetShort"
+	// CatalogServiceSetSpokenLanguageProcedure is the fully-qualified name of the CatalogService's
+	// SetSpokenLanguage RPC.
+	CatalogServiceSetSpokenLanguageProcedure = "/catalog.v1.CatalogService/SetSpokenLanguage"
 	// CatalogServiceListUncheckedShortsProcedure is the fully-qualified name of the CatalogService's
 	// ListUncheckedShorts RPC.
 	CatalogServiceListUncheckedShortsProcedure = "/catalog.v1.CatalogService/ListUncheckedShorts"
@@ -194,6 +197,10 @@ type CatalogServiceClient interface {
 	// answer, because "is this a Short" is a property of the video the library
 	// holds rather than of the fetch that found it.
 	SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error)
+	// Records the language spoken in a video. Ingest asks YouTube — while
+	// fetching captions anyway, or when a player asks about one it does not
+	// know — and catalog stores the answer, as with SetShort.
+	SetSpokenLanguage(context.Context, *connect.Request[v1.SetSpokenLanguageRequest]) (*connect.Response[v1.SetSpokenLanguageResponse], error)
 	// The videos nobody has asked about yet, newest first.
 	ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error)
 	// Broadcasts on air right now, from channels this member follows.
@@ -373,6 +380,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+CatalogServiceSetShortProcedure,
 			connect.WithSchema(catalogServiceMethods.ByName("SetShort")),
+			connect.WithClientOptions(opts...),
+		),
+		setSpokenLanguage: connect.NewClient[v1.SetSpokenLanguageRequest, v1.SetSpokenLanguageResponse](
+			httpClient,
+			baseURL+CatalogServiceSetSpokenLanguageProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("SetSpokenLanguage")),
 			connect.WithClientOptions(opts...),
 		),
 		listUncheckedShorts: connect.NewClient[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse](
@@ -567,6 +580,7 @@ type catalogServiceClient struct {
 	upsertVideo             *connect.Client[v1.UpsertVideoRequest, v1.UpsertVideoResponse]
 	setMediaState           *connect.Client[v1.SetMediaStateRequest, v1.SetMediaStateResponse]
 	setShort                *connect.Client[v1.SetShortRequest, v1.SetShortResponse]
+	setSpokenLanguage       *connect.Client[v1.SetSpokenLanguageRequest, v1.SetSpokenLanguageResponse]
 	listUncheckedShorts     *connect.Client[v1.ListUncheckedShortsRequest, v1.ListUncheckedShortsResponse]
 	listLive                *connect.Client[v1.ListLiveRequest, v1.ListLiveResponse]
 	listStaleLive           *connect.Client[v1.ListStaleLiveRequest, v1.ListStaleLiveResponse]
@@ -661,6 +675,11 @@ func (c *catalogServiceClient) SetMediaState(ctx context.Context, req *connect.R
 // SetShort calls catalog.v1.CatalogService.SetShort.
 func (c *catalogServiceClient) SetShort(ctx context.Context, req *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error) {
 	return c.setShort.CallUnary(ctx, req)
+}
+
+// SetSpokenLanguage calls catalog.v1.CatalogService.SetSpokenLanguage.
+func (c *catalogServiceClient) SetSpokenLanguage(ctx context.Context, req *connect.Request[v1.SetSpokenLanguageRequest]) (*connect.Response[v1.SetSpokenLanguageResponse], error) {
+	return c.setSpokenLanguage.CallUnary(ctx, req)
 }
 
 // ListUncheckedShorts calls catalog.v1.CatalogService.ListUncheckedShorts.
@@ -845,6 +864,10 @@ type CatalogServiceHandler interface {
 	// answer, because "is this a Short" is a property of the video the library
 	// holds rather than of the fetch that found it.
 	SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error)
+	// Records the language spoken in a video. Ingest asks YouTube — while
+	// fetching captions anyway, or when a player asks about one it does not
+	// know — and catalog stores the answer, as with SetShort.
+	SetSpokenLanguage(context.Context, *connect.Request[v1.SetSpokenLanguageRequest]) (*connect.Response[v1.SetSpokenLanguageResponse], error)
 	// The videos nobody has asked about yet, newest first.
 	ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error)
 	// Broadcasts on air right now, from channels this member follows.
@@ -1020,6 +1043,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		CatalogServiceSetShortProcedure,
 		svc.SetShort,
 		connect.WithSchema(catalogServiceMethods.ByName("SetShort")),
+		connect.WithHandlerOptions(opts...),
+	)
+	catalogServiceSetSpokenLanguageHandler := connect.NewUnaryHandler(
+		CatalogServiceSetSpokenLanguageProcedure,
+		svc.SetSpokenLanguage,
+		connect.WithSchema(catalogServiceMethods.ByName("SetSpokenLanguage")),
 		connect.WithHandlerOptions(opts...),
 	)
 	catalogServiceListUncheckedShortsHandler := connect.NewUnaryHandler(
@@ -1224,6 +1253,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceSetMediaStateHandler.ServeHTTP(w, r)
 		case CatalogServiceSetShortProcedure:
 			catalogServiceSetShortHandler.ServeHTTP(w, r)
+		case CatalogServiceSetSpokenLanguageProcedure:
+			catalogServiceSetSpokenLanguageHandler.ServeHTTP(w, r)
 		case CatalogServiceListUncheckedShortsProcedure:
 			catalogServiceListUncheckedShortsHandler.ServeHTTP(w, r)
 		case CatalogServiceListLiveProcedure:
@@ -1341,6 +1372,10 @@ func (UnimplementedCatalogServiceHandler) SetMediaState(context.Context, *connec
 
 func (UnimplementedCatalogServiceHandler) SetShort(context.Context, *connect.Request[v1.SetShortRequest]) (*connect.Response[v1.SetShortResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetShort is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) SetSpokenLanguage(context.Context, *connect.Request[v1.SetSpokenLanguageRequest]) (*connect.Response[v1.SetSpokenLanguageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("catalog.v1.CatalogService.SetSpokenLanguage is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ListUncheckedShorts(context.Context, *connect.Request[v1.ListUncheckedShortsRequest]) (*connect.Response[v1.ListUncheckedShortsResponse], error) {

@@ -218,6 +218,14 @@ func (c *Catalog) SetShort(ctx context.Context, videoID string, isShort bool) er
 	return c.repo.SetShort(ctx, videoID, isShort)
 }
 
+// SetSpokenLanguage records the language spoken in one video.
+func (c *Catalog) SetSpokenLanguage(ctx context.Context, videoID, language string) error {
+	if videoID == "" || language == "" {
+		return fmt.Errorf("%w: video_id and language are required", domain.ErrInvalid)
+	}
+	return c.repo.SetSpokenLanguage(ctx, videoID, language)
+}
+
 // ListUncheckedShorts returns videos nobody has asked YouTube about yet.
 //
 // A zero limit means the server's own bound rather than "all of them", the same

@@ -51,6 +51,10 @@ service CatalogService {
   // answer, because "is this a Short" is a property of the video the library
   // holds rather than of the fetch that found it.
   rpc SetShort(SetShortRequest) returns (SetShortResponse);
+  // Records the language spoken in a video. Ingest asks YouTube — while
+  // fetching captions anyway, or when a player asks about one it does not
+  // know — and catalog stores the answer, as with SetShort.
+  rpc SetSpokenLanguage(SetSpokenLanguageRequest) returns (SetSpokenLanguageResponse);
   // The videos nobody has asked about yet, newest first.
   rpc ListUncheckedShorts(ListUncheckedShortsRequest) returns (ListUncheckedShortsResponse);
   // Broadcasts on air right now, from channels this member follows.
@@ -260,6 +264,12 @@ message Video {
   // definitions of the same question start agreeing, and go on agreeing right
   // up until one of them changes.
   bool is_live_now = 24;
+  // The language spoken in the video, by its primary subtag ("vi", "en"):
+  // the language of YouTube's own automatic captions, which are made from
+  // the sound. Empty while nobody has asked. Not `language`, which is the
+  // uploader's word or a guess from the title, and wrong for thousands of
+  // Vietnamese videos labelled "en" (measured 13,736 of 68,064).
+  string spoken_language = 25;
 }
 
 message SubtitleTrack {
@@ -510,6 +520,14 @@ message SetShortRequest {
 }
 
 message SetShortResponse {}
+
+message SetSpokenLanguageRequest {
+  string video_id = 1;
+  // A primary subtag ("vi", "en"). Empty is refused: there is no unasking.
+  string language = 2;
+}
+
+message SetSpokenLanguageResponse {}
 
 message ListUncheckedShortsRequest {
   // Zero means the server's own bound rather than "all of them" — the same rule

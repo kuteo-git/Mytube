@@ -57,6 +57,31 @@ func (n *Narrator) Prepare(ctx context.Context, videoID string, fromS int) (doma
 	return domain.NarratedAnswer{File: narrated(body.Status), Stream: narrated(body.Stream)}, nil
 }
 
+// SpokenLanguage is GET /api/videos/{id}/spoken-language: the language
+// spoken in the song, or empty when the gateway does not know.
+func (n *Narrator) SpokenLanguage(ctx context.Context, videoID string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		n.gateway+"/api/videos/"+url.PathEscape(videoID)+"/spoken-language", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("gateway answered %d for the language of %s", resp.StatusCode, videoID)
+	}
+	var body struct {
+		Language string `json:"language"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return "", err
+	}
+	return body.Language, nil
+}
+
 func narrated(word string) domain.Narrated {
 	switch word {
 	case "ready":

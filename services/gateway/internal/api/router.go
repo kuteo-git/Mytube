@@ -239,6 +239,7 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("POST /api/videos/{id}/comments/fetch", g.handleFetchComments)
 	mux.HandleFunc("POST /api/videos/{id}/metadata", g.handleRefreshMetadata)
 	mux.HandleFunc("GET /api/videos/{id}/storyboard", g.handleStoryboard)
+	mux.HandleFunc("GET /api/videos/{id}/spoken-language", g.handleSpokenLanguage)
 	mux.HandleFunc("POST /api/videos/{id}/progress", g.handleProgress)
 	mux.HandleFunc("POST /api/videos/{id}/reaction", g.handleReaction)
 

@@ -67,6 +67,10 @@ type Video struct {
 	Subtitles       []SubtitleTrack
 	UserState       *VideoUserState
 	Language        string
+	// SpokenLanguage is the language spoken in the video, from YouTube's
+	// automatic captions; empty while nobody has asked. See
+	// 0020_spoken_language.sql for why it is not Language.
+	SpokenLanguage string
 	// How this video reached the library: SOURCE, RELATED or SEARCH. Empty for
 	// anything ingested before the column existed, and never guessed at.
 	DiscoveredVia string
@@ -271,6 +275,8 @@ type Repository interface {
 	// SetShort records YouTube's answer about one video. Stored as a tri-state:
 	// unset means nobody has asked, which is what the checker looks for.
 	SetShort(ctx context.Context, videoID string, isShort bool) error
+	// SetSpokenLanguage records the language spoken in one video.
+	SetSpokenLanguage(ctx context.Context, videoID, language string) error
 	// ListUncheckedShorts returns videos with no answer yet, newest first.
 	ListUncheckedShorts(ctx context.Context, limit int32) ([]string, error)
 	// ListLive returns the broadcasts on air now from channels this user

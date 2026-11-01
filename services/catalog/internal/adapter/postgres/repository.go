@@ -40,7 +40,7 @@ SELECT v.id, v.title, v.duration_seconds, v.view_count, v.published_at, v.added_
        (s.user_id IS NOT NULL) AS subscribed,
        wp.position_seconds, wp.watched_fraction, wp.last_watched_at,
        r.reaction, (wl.user_id IS NOT NULL) AS in_watch_later,
-       v.live_status,
+       v.live_status, v.spoken_language,
        -- The one definition of "on air now". Thirty minutes is three passes of
        -- the ten-minute live scan, so a single failed pass does not put a
        -- broadcast out and a finished one does not stay lit for long.
@@ -99,7 +99,7 @@ func scanVideo(row pgx.Row) (domain.Video, error) {
 		&v.Channel.SubscriberCount, &v.Channel.Verified,
 		&subscribed,
 		&positionSeconds, &watchedFraction, &lastWatchedAt,
-		&reaction, &inWatchLater, &liveStatus, &isLiveNow, &v.LikeCount,
+		&reaction, &inWatchLater, &liveStatus, &v.SpokenLanguage, &isLiveNow, &v.LikeCount,
 	)
 	if err != nil {
 		return domain.Video{}, err
@@ -537,6 +537,12 @@ func (r *Repository) UpsertVideo(ctx context.Context, v domain.Video) (domain.Vi
 func (r *Repository) SetShort(ctx context.Context, videoID string, isShort bool) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE videos SET is_short = $2 WHERE id = $1`, videoID, isShort)
+	return err
+}
+
+func (r *Repository) SetSpokenLanguage(ctx context.Context, videoID, language string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE videos SET spoken_language = $2 WHERE id = $1`, videoID, language)
 	return err
 }
 

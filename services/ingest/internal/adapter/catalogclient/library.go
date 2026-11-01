@@ -140,6 +140,14 @@ func (l *Library) SetShort(ctx context.Context, videoID string, isShort bool) er
 	return err
 }
 
+func (l *Library) SetSpokenLanguage(ctx context.Context, videoID, language string) error {
+	_, err := l.client.SetSpokenLanguage(ctx, connect.NewRequest(&catalogv1.SetSpokenLanguageRequest{
+		VideoId:  videoID,
+		Language: language,
+	}))
+	return err
+}
+
 func (l *Library) SetMediaState(ctx context.Context, videoID, state, mediaPath string, sizeBytes int64, subtitles []domain.SubtitleTrack) error {
 	tracks := make([]*catalogv1.SubtitleTrack, 0, len(subtitles))
 	for _, t := range subtitles {

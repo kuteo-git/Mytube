@@ -156,6 +156,14 @@ service IngestService {
   // everyone who reads the call site afterwards.
   rpc FetchSubtitles(FetchSubtitlesRequest) returns (FetchSubtitlesResponse);
 
+  // The language spoken in a video, asked of YouTube: the language of its
+  // automatic captions, which are made from the sound. For a player opening a
+  // video nobody has asked about; the answer is written to the catalogue, so
+  // it is asked once. Empty when YouTube has none, refused, or was asked too
+  // recently. A caption fetch records the same answer for nothing, from the
+  // listing it makes anyway.
+  rpc SpokenLanguage(SpokenLanguageRequest) returns (SpokenLanguageResponse);
+
   // The HLS renditions of a broadcast still in progress.
   //
   // A live video publishes nothing this system's other paths can use: every
@@ -209,6 +217,15 @@ message FetchSubtitlesRequest {
 // Empty: the fetch runs in the background and nothing waits on it. A video
 // without captions is a working video.
 message FetchSubtitlesResponse {}
+
+message SpokenLanguageRequest {
+  string video_id = 1;
+}
+
+message SpokenLanguageResponse {
+  // A primary subtag ("vi", "en"), or empty when not known.
+  string language = 1;
+}
 
 message ResolveLiveRequest {
   string url = 1;
