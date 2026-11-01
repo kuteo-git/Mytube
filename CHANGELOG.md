@@ -16,6 +16,13 @@ while something plays. Measured on the Nest Audio at volume 0: playing within
 `cast_svc`, the castbridge venv, and `data/cast-devices.json` for the R1. See
 CLAUDE.md, "Cast".
 
+**Under the login agent the cast service lists no speakers** until macOS's
+Local Network permission is given to `cast` and `Python` (System Settings →
+Privacy & Security → Local Network): launchd's copies are refused every
+connection to the LAN, `no route to host`. Measured on the R1 with the
+permission side-stepped by starting both from a terminal: playing 5.4s after
+the press, the next song ~2–3s after the last, seek ≤4s, no related songs added.
+
 **After a power cut the stack never came back.** The Mac restarted at 15:13
 with no shutdown record, and the phones answered every request with
 `ECONNREFUSED` on :8180. Postgres logged `lock file "postmaster.pid" already

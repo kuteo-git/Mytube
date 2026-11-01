@@ -1971,3 +1971,17 @@ Measured on the real speakers, volume set to 0 first (it was night):
 | Nest, end of song to the next one loading / playing | ~1s / ~2s |
 | `audio.m4a` cut and served, 185s video | 0.078s, 2.98 MB, AAC only |
 | xiaozhi-server fetch + mp3, same video | 0.97s |
+| R1, press to playing (song cut, fetched, made mp3) | 5.4s |
+| R1, end of song to the next one playing | ~2–3s |
+| R1, seek to 60s | ≤4s (the R1 reports position every 3s) |
+
+**A LaunchAgent's own binaries cannot reach the LAN until macOS allows them**
+(2026-11-01). Local Network privacy blocks outbound connections to LAN hosts —
+and mDNS — from a self-built binary or a Homebrew Python started by launchd:
+`connect: no route to host`, measured with one Go binary that reached the R1
+from a shell and was refused under `launchctl submit`. Apple's own `curl`
+passes; Apple's `python3` does not. Nothing before cast needed it: every other
+service talks to localhost or the internet, and speakers fetching *from* the
+gateway is inbound. **The fix is one Allow** for `cast` and `Python` in System
+Settings → Privacy & Security → Local Network. Until then, `cast` and
+`castbridge` started from a terminal work; launchd's copies list no speakers.
