@@ -266,7 +266,7 @@ func TestAdvanceBumpsTheVersionAndTheTickDoesNot(t *testing.T) {
 func TestLoadedRemembersThePreviousKey(t *testing.T) {
 	s := loading(3, 1)
 	s.LoadedMediaKey = "a"
-	got := s.Loaded("b")
+	got := s.Loaded("b", false)
 	if got.LoadedMediaKey != "b" || got.PrevMediaKey != "a" {
 		t.Fatalf("loaded = %q, prev = %q", got.LoadedMediaKey, got.PrevMediaKey)
 	}

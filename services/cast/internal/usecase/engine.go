@@ -176,27 +176,35 @@ func (e *Engine) follow(ctx context.Context, sessionID string) {
 }
 
 // followNarration switches the song playing to its narrated sound once the
-// gateway has it, or back once narration is off, from where it is. Only while
-// playing: a reload starts the speaker, and a paused one must stay paused.
-// With the narrated song playing, the next one is asked for, so it is ready
-// by the time it is reached.
+// gateway has it, or back once narration is off. With the narrated song
+// playing, the next one is asked for, so it is ready by the time it is
+// reached.
 func (e *Engine) followNarration(ctx context.Context, drv Driver, s domain.Session) domain.Session {
-	if s.State != domain.Playing {
-		return s
+	if s, reload := e.narrationSwitch(ctx, drv, s, e.now()); reload != nil {
+		return e.apply(ctx, drv, s, reload)
 	}
-	item, ok := s.Current()
-	if !ok {
-		return s
-	}
-	want := s.Narration && e.narratedReady(ctx, drv, item.VideoID, s.PositionS)
-	if want != s.LoadedNarrated {
-		s, load := domain.Reload(s, e.now())
-		return e.apply(ctx, drv, s, []domain.Action{load})
-	}
-	if s.LoadedNarrated && s.CurrentIndex+1 < len(s.Queue) {
+	if s.State == domain.Playing && s.LoadedNarrated && s.CurrentIndex+1 < len(s.Queue) {
 		e.narratedReady(ctx, drv, s.Queue[s.CurrentIndex+1].VideoID, 0)
 	}
 	return s
+}
+
+// narrationSwitch reloads the song playing, from where it is, when what the
+// speaker has is not the form narration asks for. Only while playing: a
+// reload starts the speaker, and a paused one must stay paused.
+func (e *Engine) narrationSwitch(ctx context.Context, drv Driver, s domain.Session, now time.Time) (domain.Session, []domain.Action) {
+	item, ok := s.Current()
+	if !ok || s.State != domain.Playing || e.wantsNarrated(ctx, drv, s, item.VideoID, s.PositionS) == s.LoadedNarrated {
+		return s, nil
+	}
+	s, load := domain.Reload(s, now)
+	return s, []domain.Action{load}
+}
+
+// wantsNarrated is whether a song of s is to be loaded narrated: asked for,
+// and ready in the form this speaker is handed it.
+func (e *Engine) wantsNarrated(ctx context.Context, drv Driver, s domain.Session, videoID string, fromS int) bool {
+	return s.Narration && e.narratedReady(ctx, drv, videoID, fromS)
 }
 
 // narratedReady asks the gateway about a song, in the form this speaker is
@@ -250,7 +258,7 @@ func (e *Engine) apply(ctx context.Context, drv Driver, s domain.Session, action
 		switch a := actions[i].(type) {
 		case domain.Load:
 			item := s.Queue[a.Index]
-			narrated := s.Narration && e.narratedReady(ctx, drv, item.VideoID, a.StartS)
+			narrated := e.wantsNarrated(ctx, drv, s, item.VideoID, a.StartS)
 			key, err := drv.Load(ctx, s.DeviceID, item, a.StartS, a.First, narrated)
 			if err != nil {
 				e.logger.Warn("load refused, skipping", "session", s.ID, "video", item.VideoID, "error", err)
@@ -259,8 +267,7 @@ func (e *Engine) apply(ctx context.Context, drv Driver, s domain.Session, action
 				actions = append(actions, more...)
 				continue
 			}
-			s = s.Loaded(key)
-			s.LoadedNarrated = narrated
+			s = s.Loaded(key, narrated)
 			e.logger.Info("loaded", "session", s.ID, "device", s.DeviceID, "video", item.VideoID, "start", a.StartS,
 				"narrated", narrated)
 		case domain.StopDevice:
@@ -360,13 +367,12 @@ func (e *Engine) StartSession(ctx context.Context, req StartRequest) (domain.Ses
 		startS = 0
 	}
 	s, load := domain.LoadAt(s, start, max(startS, 0), true, now)
-	narrated := s.Narration && e.narratedReady(ctx, drv, s.Queue[start].VideoID, load.(domain.Load).StartS)
+	narrated := e.wantsNarrated(ctx, drv, s, s.Queue[start].VideoID, load.(domain.Load).StartS)
 	key, err := drv.Load(ctx, s.DeviceID, s.Queue[start], load.(domain.Load).StartS, true, narrated)
 	if err != nil {
 		return domain.Session{}, fmt.Errorf("load on %q: %v: %w", device.ID, err, domain.ErrDeviceOffline)
 	}
-	s = s.Loaded(key)
-	s.LoadedNarrated = narrated
+	s = s.Loaded(key, narrated)
 	if err := e.repo.Create(ctx, s, now); err != nil {
 		_ = drv.Stop(ctx, s.DeviceID)
 		return domain.Session{}, err
@@ -567,15 +573,8 @@ func (e *Engine) ReplaceQueue(ctx context.Context, id string, version int, ids [
 func (e *Engine) SetNarration(ctx context.Context, id string, on bool) (domain.Session, error) {
 	return e.command(ctx, id, func(s domain.Session, drv Driver, now time.Time) (domain.Session, []domain.Action, error) {
 		s.Narration = on
-		item, ok := s.Current()
-		if !ok || s.State != domain.Playing {
-			return s, nil, nil
-		}
-		if want := on && e.narratedReady(ctx, drv, item.VideoID, s.PositionS); want == s.LoadedNarrated {
-			return s, nil, nil
-		}
-		s, load := domain.Reload(s, now)
-		return s, []domain.Action{load}, nil
+		s, reload := e.narrationSwitch(ctx, drv, s, now)
+		return s, reload, nil
 	})
 }
 

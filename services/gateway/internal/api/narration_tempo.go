@@ -69,50 +69,62 @@ func tempoFor(naturalDuration, slot float64) (float64, error) {
 // wavDuration reads how many seconds of audio a WAV holds.
 //
 // Parsed from the header rather than decoded: the answer is data bytes divided
-// by byte rate, both of which are in chunks near the front of the file. Chunks
-// are walked rather than assumed to be at fixed offsets — the synthesiser is
-// free to emit LIST or fact chunks between `fmt ` and `data`, and a reader that
-// assumed the canonical 44-byte layout would measure those as audio.
+// by byte rate, both of which are in chunks near the front of the file.
 func wavDuration(wav []byte) (float64, bool) {
-	// "RIFF" + size + "WAVE" is 12 bytes before the first chunk header.
-	if len(wav) < 12 || string(wav[0:4]) != "RIFF" || string(wav[8:12]) != "WAVE" {
+	format, data, ok := wavChunks(wav)
+	// byteRate sits at offset 8 within the chunk and already folds in sample
+	// rate, channel count and bit depth — so nothing else has to be read to
+	// turn bytes into seconds.
+	if !ok || len(format) < 16 {
 		return 0, false
 	}
+	byteRate := binary.LittleEndian.Uint32(format[8:12])
+	if byteRate == 0 {
+		return 0, false
+	}
+	return float64(len(data)) / float64(byteRate), true
+}
 
-	var byteRate uint32
+// wavChunks finds a WAV's `fmt ` and `data` chunk bodies.
+//
+// Chunks are walked rather than assumed to be at fixed offsets — the
+// synthesiser is free to emit LIST or fact chunks between `fmt ` and `data`,
+// and a reader that assumed the canonical 44-byte layout would measure those
+// as audio. False when `data` comes before `fmt `: legal in the letter of the
+// format, unheard of in practice, and nothing could be read from it.
+func wavChunks(wav []byte) (format, data []byte, ok bool) {
+	// "RIFF" + size + "WAVE" is 12 bytes before the first chunk header.
+	if len(wav) < 12 || string(wav[0:4]) != "RIFF" || string(wav[8:12]) != "WAVE" {
+		return nil, nil, false
+	}
 	pos := 12
 	for pos+8 <= len(wav) {
 		id := string(wav[pos : pos+4])
-		size := binary.LittleEndian.Uint32(wav[pos+4 : pos+8])
+		size := int(binary.LittleEndian.Uint32(wav[pos+4 : pos+8]))
 		body := pos + 8
 
 		switch id {
 		case "fmt ":
-			// byteRate sits at offset 8 within the chunk and already folds in
-			// sample rate, channel count and bit depth — so nothing else has to
-			// be read to turn bytes into seconds.
 			if size < 16 || body+16 > len(wav) {
-				return 0, false
+				return nil, nil, false
 			}
-			byteRate = binary.LittleEndian.Uint32(wav[body+8 : body+12])
+			format = wav[body : body+16]
 		case "data":
-			if byteRate == 0 {
-				// `data` before `fmt ` is legal in the letter of the format and
-				// unheard of in practice; there is nothing to divide by.
-				return 0, false
+			if format == nil {
+				return nil, nil, false
 			}
 			// Trust the file's own length over the declared size: a clip cut
 			// short in transit would otherwise measure as its intended length
 			// and be stretched by the wrong factor.
-			n := int(size)
+			n := size
 			if avail := len(wav) - body; n > avail || n == 0 {
 				n = avail
 			}
-			return float64(n) / float64(byteRate), true
+			return format, wav[body : body+n], true
 		}
 
 		// Chunks are word-aligned: an odd size is followed by a pad byte.
-		pos = body + int(size) + int(size&1)
+		pos = body + size + size&1
 	}
-	return 0, false
+	return nil, nil, false
 }

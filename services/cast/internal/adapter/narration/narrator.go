@@ -1,6 +1,7 @@
 // Package narration asks the gateway for a song's narrated sound: the song
-// with its narration mixed in, made once and served as a file a speaker can
-// fetch and seek like the sound as it is.
+// with its narration mixed in, as a file made once (the R1) or a stream
+// mixed as it is fetched (a Google speaker), either fetched and sought like
+// the sound as it is.
 package narration
 
 import (

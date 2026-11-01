@@ -165,9 +165,11 @@ func (s Session) Current() (Item, bool) {
 	return s.Queue[s.CurrentIndex], true
 }
 
-// Loaded records what the driver handed the speaker for the current item.
-func (s Session) Loaded(mediaKey string) Session {
+// Loaded records what the driver handed the speaker for the current item,
+// and whether it was the narrated form.
+func (s Session) Loaded(mediaKey string, narrated bool) Session {
 	s.PrevMediaKey, s.LoadedMediaKey = s.LoadedMediaKey, mediaKey
+	s.LoadedNarrated = narrated
 	return s
 }
 

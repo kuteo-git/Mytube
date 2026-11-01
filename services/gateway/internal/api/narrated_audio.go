@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -62,8 +63,9 @@ type narratedAnswer struct {
 	Status string `json:"status"`
 	Done   int    `json:"done"`
 	Total  int    `json:"total"`
-	// The stream (narrated.wav): ready as soon as the pass knows its lines,
-	// preparing before that, none when there is nothing to narrate.
+	// The stream (narrated.wav): ready as soon as a pass is running — the
+	// stream waits on the lines itself, block by block — and none when there
+	// is nothing to narrate.
 	Stream string `json:"stream"`
 }
 
@@ -80,22 +82,33 @@ func newNarratedMixes() *narratedMixes {
 }
 
 func (g *Gateway) handlePrepareNarratedAudio(w http.ResponseWriter, r *http.Request) {
+	v, ok := g.narratableVideo(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, g.prepareNarrated(r.Context(), v.GetId(), narrationStartAt(r), g.narratedSource(r.Context(), v)))
+}
+
+// narratableVideo reads the video a narrated-sound request names, or
+// answers the request itself: a bad id, the catalogue's error, or 422 for a
+// broadcast, which has no end to mix to.
+func (g *Gateway) narratableVideo(w http.ResponseWriter, r *http.Request) (*catalogv1.Video, bool) {
 	videoID := r.PathValue("id")
 	if _, err := safeVideoDir(g.mediaRoot, videoID); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad video id"})
-		return
+		return nil, false
 	}
 	resp, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{VideoId: videoID}))
 	if err != nil {
 		g.writeErr(w, r, err)
-		return
+		return nil, false
 	}
 	v := resp.Msg.GetVideo()
 	if decideLive(v.GetLiveStatus(), v.GetIsLiveNow()) == liveYes || v.GetLiveStatus() == "is_upcoming" {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "live"})
-		return
+		return nil, false
 	}
-	writeJSON(w, http.StatusOK, g.prepareNarrated(r.Context(), videoID, narrationStartAt(r), g.narratedSource(r.Context(), v)))
+	return v, true
 }
 
 // narratedSource is where the song's own sound is read from: its audio.m4a
@@ -132,27 +145,9 @@ func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, from floa
 		// pass over lines already on disk is a read, so this is cheap when
 		// the phone has narrated it before.
 		g.startNarrationPass(context.WithoutCancel(ctx), videoID, from)
-		// A moment for it to read its lines, so the stream can be offered on
-		// this answer rather than one reload later.
-		stream := "preparing"
-		for wait := 0; wait < 15; wait++ {
-			time.Sleep(100 * time.Millisecond)
-			g.narration.mu.Lock()
-			p := g.narration.passes[videoID]
-			known, over := p != nil && p.Total > 0, p != nil && p.Status != narrationRunning
-			g.narration.mu.Unlock()
-			if known || over {
-				stream = "ready"
-				break
-			}
-		}
-		return narratedAnswer{Status: "preparing", Stream: stream}
+		return narratedAnswer{Status: "preparing", Stream: "ready"}
 	case status == narrationRunning:
-		stream := "ready"
-		if total == 0 {
-			stream = "preparing"
-		}
-		return narratedAnswer{Status: "preparing", Done: done, Total: total, Stream: stream}
+		return narratedAnswer{Status: "preparing", Done: done, Total: total, Stream: "ready"}
 	case status == narrationFailed:
 		return narratedAnswer{Status: "failed", Done: done, Total: total, Stream: "none"}
 	case len(clips) == 0:
@@ -185,16 +180,7 @@ func (g *Gateway) mixNarrated(videoID, key, dir, dst string, clips []narrationCl
 		if err != nil {
 			return err
 		}
-		lines := make([]narratedLine, 0, len(clips))
-		for _, c := range clips {
-			if c.StartsAtUnixMillis != 0 || !strings.HasPrefix(c.ClipURL, "/media/") {
-				continue
-			}
-			lines = append(lines, narratedLine{
-				At: c.StartSeconds, Slot: c.DurationSeconds,
-				Path: filepath.Join(g.mediaRoot, filepath.FromSlash(strings.TrimPrefix(c.ClipURL, "/media/"))),
-			})
-		}
+		lines := g.linesOf(clips)
 		// Into a file of its own first, as the audio cut is: a mix that dies
 		// half way never leaves a file that looks whole.
 		tmp := fmt.Sprintf("%s.%d.part", dst, time.Now().UnixNano())
@@ -295,8 +281,7 @@ func mixNarration(ctx context.Context, src string, lines []narratedLine, dst str
 	defer cancel()
 	pcm := fmt.Sprint(narratedRate)
 	ch := fmt.Sprint(narratedChannels)
-	dec := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-i", src, "-vn",
-		"-f", "s16le", "-ac", ch, "-ar", pcm, "pipe:1")
+	dec := decodePCM(ctx, src, 0, narratedChannels)
 	enc := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-y",
 		"-f", "s16le", "-ac", ch, "-ar", pcm, "-i", "pipe:0",
 		"-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", "-f", "mp4", dst)
@@ -447,6 +432,17 @@ func (m *narrationMixer) admit(t float64) {
 	}
 }
 
+// decodePCM is ffmpeg reading `src` from `from` seconds as s16le at
+// narratedRate, to its stdout.
+func decodePCM(ctx context.Context, src string, from float64, channels int) *exec.Cmd {
+	args := []string{"-v", "error"}
+	if from > 0 {
+		args = append(args, "-ss", strconv.FormatFloat(from, 'f', 3, 64))
+	}
+	args = append(args, "-i", src, "-vn", "-f", "s16le", "-ac", fmt.Sprint(channels), "-ar", fmt.Sprint(narratedRate), "pipe:1")
+	return exec.CommandContext(ctx, "ffmpeg", args...)
+}
+
 // readClip reads a line's WAV as mono at narratedRate. The synthesiser's
 // clips are 16-bit PCM at that rate already (ffprobed 40 of 40); anything
 // else is handed to ffmpeg.
@@ -458,8 +454,7 @@ func readClip(path string) ([]float32, error) {
 	if pcm, ok := wavPCM16(raw); ok {
 		return pcm, nil
 	}
-	out, err := exec.Command("ffmpeg", "-v", "error", "-i", path,
-		"-f", "s16le", "-ac", "1", "-ar", fmt.Sprint(narratedRate), "pipe:1").Output()
+	out, err := decodePCM(context.Background(), path, 0, 1).Output()
 	if err != nil {
 		return nil, err
 	}
@@ -473,43 +468,24 @@ func readClip(path string) ([]float32, error) {
 // wavPCM16 reads a WAV that is 16-bit PCM at narratedRate, folded to mono.
 // False for anything else.
 func wavPCM16(wav []byte) ([]float32, bool) {
-	if len(wav) < 12 || string(wav[0:4]) != "RIFF" || string(wav[8:12]) != "WAVE" {
+	format, data, ok := wavChunks(wav)
+	if !ok || len(format) < 16 || binary.LittleEndian.Uint16(format) != 1 {
 		return nil, false
 	}
-	var channels, bits int
-	var rate uint32
-	for pos := 12; pos+8 <= len(wav); {
-		id := string(wav[pos : pos+4])
-		size := int(binary.LittleEndian.Uint32(wav[pos+4 : pos+8]))
-		body := pos + 8
-		switch id {
-		case "fmt ":
-			if size < 16 || body+16 > len(wav) || binary.LittleEndian.Uint16(wav[body:]) != 1 {
-				return nil, false
-			}
-			channels = int(binary.LittleEndian.Uint16(wav[body+2:]))
-			rate = binary.LittleEndian.Uint32(wav[body+4:])
-			bits = int(binary.LittleEndian.Uint16(wav[body+14:]))
-		case "data":
-			if channels < 1 || bits != 16 || rate != narratedRate {
-				return nil, false
-			}
-			n := size
-			if avail := len(wav) - body; n > avail || n == 0 {
-				n = avail
-			}
-			frames := n / (2 * channels)
-			pcm := make([]float32, frames)
-			for f := 0; f < frames; f++ {
-				var sum float32
-				for c := 0; c < channels; c++ {
-					sum += float32(int16(binary.LittleEndian.Uint16(wav[body+(f*channels+c)*2:])))
-				}
-				pcm[f] = sum / float32(channels) / 32768
-			}
-			return pcm, true
-		}
-		pos = body + size + size%2
+	channels := int(binary.LittleEndian.Uint16(format[2:]))
+	rate := binary.LittleEndian.Uint32(format[4:])
+	bits := binary.LittleEndian.Uint16(format[14:])
+	if channels < 1 || bits != 16 || rate != narratedRate {
+		return nil, false
 	}
-	return nil, false
+	frames := len(data) / (2 * channels)
+	pcm := make([]float32, frames)
+	for f := 0; f < frames; f++ {
+		var sum float32
+		for c := 0; c < channels; c++ {
+			sum += float32(int16(binary.LittleEndian.Uint16(data[(f*channels+c)*2:])))
+		}
+		pcm[f] = sum / float32(channels) / 32768
+	}
+	return pcm, true
 }

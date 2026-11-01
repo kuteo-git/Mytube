@@ -14,10 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"connectrpc.com/connect"
-
-	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 )
 
 // The narrated sound as a stream, for a Google speaker: made as it is
@@ -52,21 +48,11 @@ const (
 )
 
 func (g *Gateway) handleNarratedStream(w http.ResponseWriter, r *http.Request) {
-	videoID := r.PathValue("id")
-	if _, err := safeVideoDir(g.mediaRoot, videoID); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad video id"})
+	v, ok := g.narratableVideo(w, r)
+	if !ok {
 		return
 	}
-	resp, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{VideoId: videoID}))
-	if err != nil {
-		g.writeErr(w, r, err)
-		return
-	}
-	v := resp.Msg.GetVideo()
-	if decideLive(v.GetLiveStatus(), v.GetIsLiveNow()) == liveYes || v.GetLiveStatus() == "is_upcoming" {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "live"})
-		return
-	}
+	videoID := v.GetId()
 	src, err := g.narratedSource(r.Context(), v)()
 	if err != nil {
 		g.logger.Error("narrated stream source", "video", videoID, "error", err)
@@ -184,8 +170,7 @@ func (g *Gateway) streamNarrated(ctx context.Context, w io.Writer, videoID, src 
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	dec := exec.CommandContext(ctx, "ffmpeg", "-v", "error", "-ss", strconv.FormatFloat(at, 'f', 3, 64),
-		"-i", src, "-vn", "-f", "s16le", "-ac", fmt.Sprint(narratedChannels), "-ar", fmt.Sprint(narratedRate), "pipe:1")
+	dec := decodePCM(ctx, src, at, narratedChannels)
 	out, err := dec.StdoutPipe()
 	if err != nil {
 		return err
@@ -198,17 +183,17 @@ func (g *Gateway) streamNarrated(ctx context.Context, w io.Writer, videoID, src 
 
 	m := newNarrationMixer(nil, readClip)
 	m.frame = frame
-	known := -1
+	var seen linesSeen
 	buf := make([]byte, narratedRate/10*wavFrameBytes)
 	for remaining > 0 {
 		blockStart := float64(m.frame) / narratedRate
-		lines, err := g.linesUntil(ctx, videoID, blockStart, blockStart+0.1)
+		lines, now, err := g.linesUntil(ctx, videoID, blockStart, blockStart+0.1, seen)
 		if err != nil {
 			return err
 		}
-		if len(lines) != known {
+		if now != seen {
 			m.refresh(lines)
-			known = len(lines)
+			seen = now
 		}
 		n, err := io.ReadFull(song, buf)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
@@ -234,49 +219,58 @@ func (g *Gateway) streamNarrated(ctx context.Context, w io.Writer, videoID, src 
 	return nil
 }
 
+// linesSeen is which lines a stream has: the pass and its revision.
+type linesSeen struct {
+	pass *narrationPass
+	rev  int
+}
+
 // linesUntil waits until the pass has been through every line that starts
-// in the block [from, until), and answers the lines it has. Only the block:
-// a pass working from where the speaker is leaves the start for last, and a
-// stream that waited on it sent 0.1s of sound in 40s. It starts a pass when there
-// is none, moves it here when it is working somewhere else, and gives up
-// waiting after streamLineWait.
-func (g *Gateway) linesUntil(ctx context.Context, videoID string, from, until float64) ([]narratedLine, error) {
+// in the block [from, until), and answers the lines it has — nil when they
+// are still the ones `seen`. Only the block: a pass working from where the
+// speaker is leaves the start for last, and a stream that waited on it sent
+// 0.1s of sound in 40s. It starts a pass when there is none, moves it here
+// when it is working somewhere else, and gives up waiting after
+// streamLineWait.
+func (g *Gateway) linesUntil(ctx context.Context, videoID string, from, until float64, seen linesSeen) ([]narratedLine, linesSeen, error) {
 	started := time.Now()
 	asked := false
 	for {
 		g.narration.mu.Lock()
 		pass := g.narration.passes[videoID]
 		var status narrationStatus
-		var clips []narrationClip
+		var now linesSeen
 		ready := false
 		if pass != nil {
-			status = pass.Status
-			clips = append(clips, pass.Clips...)
+			status, now = pass.Status, linesSeen{pass, pass.rev}
 			ready = status == narrationDone || status == narrationFailed ||
-				(pass.Total > 0 && spokenIn(pass.cueStarts, pass.spoken, from, until))
+				(pass.Total > 0 && spokenIn(pass.cues, from, until))
+		}
+		waited := time.Since(started)
+		if ready || waited > streamLineWait {
+			var clips []narrationClip
+			if now != seen && pass != nil {
+				clips = append(clips, pass.Clips...)
+			}
+			g.narration.mu.Unlock()
+			return g.linesOf(clips), now, nil
 		}
 		g.narration.mu.Unlock()
 
-		waited := time.Since(started)
-		if ready || waited > streamLineWait {
-			return g.linesOf(clips), nil
-		}
 		if pass == nil || status == narrationIdle || (!asked && waited > streamRetargetAfter) {
 			g.startNarrationPass(context.WithoutCancel(ctx), videoID, math.Max(until-0.1, 0))
 			asked = true
 		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(150 * time.Millisecond):
+		if !sleepCtx(ctx, 150*time.Millisecond) {
+			return nil, seen, ctx.Err()
 		}
 	}
 }
 
 // spokenIn reports whether every cue starting in [from, until) is spoken.
-func spokenIn(starts []float64, spoken []bool, from, until float64) bool {
-	for i, s := range starts {
-		if s >= from && s < until && !spoken[i] {
+func spokenIn(cues []passCue, from, until float64) bool {
+	for _, c := range cues {
+		if c.start >= from && c.start < until && !c.spoken {
 			return false
 		}
 	}

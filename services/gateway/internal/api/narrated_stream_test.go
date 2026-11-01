@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -52,16 +51,22 @@ func TestTheHeaderSaysHowLongTheSongIs(t *testing.T) {
 }
 
 func TestEveryCueInTheBlockMustBeSpoken(t *testing.T) {
-	starts := []float64{1, 2, 3}
-	if !spokenIn(starts, []bool{true, false, false}, 0.9, 2) {
+	cues := func(spoken ...bool) []passCue {
+		out := make([]passCue, len(spoken))
+		for i, s := range spoken {
+			out[i] = passCue{start: float64(i + 1), spoken: s}
+		}
+		return out
+	}
+	if !spokenIn(cues(true, false, false), 0.9, 2) {
 		t.Error("only the cue at 1s starts in 0.9–2s")
 	}
-	if spokenIn(starts, []bool{true, false, true}, 1.9, 2.5) {
+	if spokenIn(cues(true, false, true), 1.9, 2.5) {
 		t.Error("the cue at 2s is not spoken yet")
 	}
 	// A pass working from 450s leaves the start for last: a stream from 450s
 	// must not wait on it (measured: 0.1s of sound in 40s).
-	if !spokenIn(starts, []bool{false, false, true}, 2.5, 3.1) {
+	if !spokenIn(cues(false, false, true), 2.5, 3.1) {
 		t.Error("waited on lines before the block")
 	}
 }
@@ -70,21 +75,14 @@ func TestEveryCueInTheBlockMustBeSpoken(t *testing.T) {
 // which it has not spoken yet, and the line's clip: half a second of silence.
 func streamFixture(t *testing.T) (*Gateway, string, string) {
 	t.Helper()
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg not installed")
-	}
+	src := toneFixture(t)
 	g := narratedGateway(t)
-	src := filepath.Join(t.TempDir(), "audio.m4a")
-	if out, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=4:sample_rate=48000",
-		"-c:a", "aac", src).CombinedOutput(); err != nil {
-		t.Fatalf("make fixture: %v %s", err, out)
-	}
 	dir := filepath.Join(g.mediaRoot, "v", narrationTTSDir)
 	_ = os.MkdirAll(dir, 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "line.wav"), wav(narratedRate, 1, make([]int16, narratedRate/2)), 0o644)
 	g.narration.passes["v"] = &narrationPass{
 		Status: narrationRunning, Total: 1, gen: 1,
-		cueStarts: []float64{1.5}, spoken: []bool{false},
+		cues: []passCue{{start: 1.5}},
 	}
 	return g, src, "/media/v/" + narrationTTSDir + "/line.wav"
 }
@@ -93,7 +91,7 @@ func speakLater(g *Gateway, clipURL string, after time.Duration) {
 	go func() {
 		time.Sleep(after)
 		g.addNarrationClip("v", 1, narrationClip{StartSeconds: 1.5, DurationSeconds: 1, ClipURL: clipURL})
-		g.markSpoken("v", 1, 0)
+		g.cueDone("v", 1, 0)
 	}()
 }
 

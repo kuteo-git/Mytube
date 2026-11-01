@@ -201,18 +201,25 @@ func TestTheNarratedSoundIsServedWithRanges(t *testing.T) {
 	}
 }
 
-// Through the real ffmpeg, both ways: a tone in, a line of silence over it,
-// and the file out is AAC, as long as the song, and quieter in the line's slot.
-func TestFFmpegMixesTheNarrationIntoTheSong(t *testing.T) {
+// toneFixture is a 4s 440Hz tone, as AAC on disk.
+func toneFixture(t *testing.T) string {
+	t.Helper()
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg not installed")
 	}
-	dir := t.TempDir()
-	src := filepath.Join(dir, "audio.m4a")
+	src := filepath.Join(t.TempDir(), "audio.m4a")
 	if out, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:d=4:sample_rate=48000",
 		"-c:a", "aac", src).CombinedOutput(); err != nil {
 		t.Fatalf("make fixture: %v %s", err, out)
 	}
+	return src
+}
+
+// Through the real ffmpeg, both ways: a tone in, a line of silence over it,
+// and the file out is AAC, as long as the song, and quieter in the line's slot.
+func TestFFmpegMixesTheNarrationIntoTheSong(t *testing.T) {
+	src := toneFixture(t)
+	dir := t.TempDir()
 	clip := filepath.Join(dir, "line.wav")
 	_ = os.WriteFile(clip, wav(narratedRate, 1, make([]int16, narratedRate/2)), 0o644)
 	dst := filepath.Join(dir, "narrated.m4a")
@@ -235,17 +242,7 @@ func TestFFmpegMixesTheNarrationIntoTheSong(t *testing.T) {
 	if secs := float64(len(pcm)) / 4 / narratedRate; math.Abs(secs-4) > 0.1 {
 		t.Fatalf("%.2fs out of a 4s song", secs)
 	}
-	rms := func(from, to float64) float64 {
-		var sum float64
-		n := 0
-		for i := int(from * narratedRate); i < int(to*narratedRate); i++ {
-			v := float64(int16(binary.LittleEndian.Uint16(pcm[i*4:]))) / 32768
-			sum += v * v
-			n++
-		}
-		return math.Sqrt(sum / float64(n))
-	}
-	before, during := rms(0.5, 1.4), rms(1.7, 2.4)
+	before, during := pcmRMS(pcm, 0.5, 1.4), pcmRMS(pcm, 1.7, 2.4)
 	if ratio := during / before; math.Abs(ratio-narratedDuckLevel) > 0.03 {
 		t.Fatalf("the song in the slot is %.2f of itself, want %.2f", ratio, narratedDuckLevel)
 	}
