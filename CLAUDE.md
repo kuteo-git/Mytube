@@ -1094,7 +1094,7 @@ the Smart TV browser it was for would still have needed HTTPS (risk 3) to play.
 
 ### Build status
 
-- 4 services (`catalog` 8181 · `recsys` 8182 · `ingest` 8183) + `gateway` 8180 + `logview` 8184 + web 5173.
+- 5 services (`catalog` 8181 · `recsys` 8182 · `ingest` 8183 · `cast` 8186) + `gateway` 8180 + `logview` 8184 + web 5173, and `castbridge` 8187 (Python, loopback only).
 - Postgres 17, one schema and one role per service.
 - `scripts/dev.sh` runs the stack; `scripts/stop.sh` stops by port. `make check` = buf lint + tsc + go build.
 
@@ -1906,3 +1906,68 @@ sheets of 25 hold 150 slots for a video with 128 stills — so the second form
 stretches every still's share by however much of that sheet is blank, and the
 preview drifts further the longer somebody scrubs. Both clients' tests assert
 against the mistake by name.
+
+## Cast: the household's speakers play the library (2026-10-31)
+
+The R1 and the Google Nest speakers (a Nest Audio, two Nest Minis, and any
+group made in Google Home) play a video's sound from the library. A session is
+the server's, not a phone's: every client sees it, any of them drives it, and
+closing all of them changes nothing on the speaker. Plan and decisions:
+`docs/superpowers/plans/2026-10-31-cast-to-speakers.md`.
+
+- **`cast` is a service, not gateway code**, because a session has to survive a
+  restart and the gateway has no database (§3, rule 1). Schema `cast`, role
+  `cast_svc`, one table. A unique index allows one session per speaker that has
+  not ended; a new one ends the old as `replaced` in the same transaction.
+- **One loop, a second a tick, every session** (`usecase.Engine`), and every
+  command takes the same per-speaker lock, so a tick can never load the next
+  song over a session a command has just replaced. What a tick decides is
+  `domain.Reconcile` — pure, and the whole of the rules below is its table test.
+- **A speaker is handed one song at a time**, and the next only when this one
+  has ended. Running out of queue stops; nothing related is added.
+- **How an end is told from a stop.** A Nest says (`idle_reason` FINISHED vs
+  CANCELLED, measured on the Nest Audio and a Mini). The R1 says nothing, and is
+  judged by where it was last seen: within 5s of the end is finished. Its
+  position is not the device's: xiaozhi-server pushes it every 3s from
+  `_wait_song`, so the last report is at most 3s short.
+- **Just after a load the R1 still reports `stopped`**, and the previous song of
+  ours can still be sounding. A loading session therefore ignores idle until the
+  speaker has shown the song it was handed (`load_acked`), and ignores the
+  previous key; idle *after* showing it is a song the R1 could not fetch, and is
+  skipped rather than called a stop.
+- **Another source on the speaker ends the session as `taken_over`** and nothing
+  is sent to the speaker. On the R1 that is a different `video_id` (somebody
+  asked it for a song by voice); on a Nest, any app but the Default Media
+  Receiver (`CC1AD845`).
+- **The R1's position stands still while it answers a question** by voice and
+  says `playing` throughout. That is copied as it is, never read as a stop.
+- **Sound for a speaker is `GET /api/videos/{id}/audio`.** On disk: the AAC track
+  copied out once into `<id>/audio.m4a` (`ffmpeg -c:a copy`, one ffmpeg per
+  video however many ask), served with ranges. Not on disk: ingest's
+  `GET /audio/{id}`, the same AAC track the HLS ladder resolves, in pieces of at
+  most 1 MiB — the audio track refuses ≥2 MiB (§4) and a speaker asks for the
+  whole file. Pressing cast schedules the download as pressing play does.
+- **`audio.m4a` is ~3 MB per cast video and is not counted in `size_bytes`.**
+  Eviction removes it with the media file (`usecase.CastAudioName`); captions
+  beside them stay.
+- **`CAST_MEDIA_BASE_URL` is required**, and `dev.sh` sets it from `en0`. On a
+  speaker, localhost is the speaker.
+- **The R1s are written down** in `data/cast-devices.json` (`[{id, name, url}]`,
+  gitignored): the R1 announces nothing. Online is `/api/media/state` answering
+  within 1s. The Nests are found by `castbridge` (pychromecast 14.1.0, mDNS),
+  which leaves out a `cast_type` of `cast` — the television.
+- **pychromecast's `play_media` defaults to `stream_type="LIVE"`.** A file is
+  `BUFFERED`, or a speaker treats it as a stream with no position to seek to.
+  And `CastBrowser` browses mDNS only when handed a `Zeroconf`; without one it
+  finds nothing and says nothing.
+
+Measured on the real speakers, volume set to 0 first (it was night):
+
+| | |
+|---|---|
+| Nest Mini, plain `http://` on the LAN | plays — no TLS needed |
+| Nest, press to PLAYING (file already cut) | 0.28s spike, ≤1.4s through the whole stack |
+| Nest, seek to 60s | 0.14s |
+| Nest, end of song to the next one loading / playing | ~1s / ~2s |
+| `audio.m4a` cut and served, 185s video | 0.078s, 2.98 MB, AAC only |
+| xiaozhi-server fetch + mp3, same video | 0.97s |

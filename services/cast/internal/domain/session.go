@@ -1,0 +1,188 @@
+// Package domain is what a cast session is and how it follows a speaker. It
+// imports no database, HTTP or framework.
+package domain
+
+import (
+	"errors"
+	"time"
+)
+
+// Kind is the family of speaker, which decides the driver that talks to it.
+type Kind string
+
+const (
+	KindR1     Kind = "r1"
+	KindGoogle Kind = "google"
+)
+
+// State is the session's, not the speaker's. Ended is final.
+type State string
+
+const (
+	Loading State = "loading"
+	Playing State = "playing"
+	Paused  State = "paused"
+	Ended   State = "ended"
+)
+
+// EndedReason says why a session ended, so the remote can say it too.
+type EndedReason string
+
+const (
+	QueueFinished   EndedReason = "queue_finished"
+	Stopped         EndedReason = "stopped"
+	Replaced        EndedReason = "replaced"
+	TakenOver       EndedReason = "taken_over"
+	StoppedOnDevice EndedReason = "stopped_on_device"
+	DeviceOffline   EndedReason = "device_offline"
+	Handoff         EndedReason = "handoff"
+	Failed          EndedReason = "failed"
+)
+
+var (
+	ErrNotFound      = errors.New("not found")
+	ErrEnded         = errors.New("session has ended")
+	ErrStaleVersion  = errors.New("queue version is stale")
+	ErrLive          = errors.New("a broadcast cannot be cast")
+	ErrDeviceOffline = errors.New("device is offline")
+	ErrEmptyQueue    = errors.New("nothing to play")
+)
+
+// Device is a speaker the household has. Online is whether it answered just
+// now; one that did not is known but cannot be cast to.
+type Device struct {
+	ID     string
+	Name   string
+	Kind   Kind
+	Model  string
+	Online bool
+}
+
+// Item is one song in the queue, described when it was queued so the remote
+// can draw it without asking the catalogue.
+type Item struct {
+	VideoID      string
+	Title        string
+	Channel      string
+	ThumbnailURL string
+	DurationS    int
+}
+
+// Session is one sitting on one speaker.
+type Session struct {
+	ID         string
+	DeviceID   string
+	DeviceName string
+	DeviceKind Kind
+	StartedBy  string
+
+	Queue        []Item
+	CurrentIndex int
+
+	State       State
+	EndedReason EndedReason
+
+	// What the speaker was last seen doing with our song.
+	PositionS int
+	DurationS int
+	Volume    int
+
+	// LoadedMediaKey is what was handed to the speaker for the current item,
+	// and how a takeover is recognised. PrevMediaKey is the one before it,
+	// which may still be sounding for a moment after a load.
+	LoadedMediaKey string
+	PrevMediaKey   string
+	// LoadAcked: the speaker has shown the loaded song at least once. An idle
+	// speaker before that has not started yet; after it, it has given up.
+	LoadAcked bool
+
+	LoadingSince   time.Time
+	LastSeenOK     time.Time
+	LastProgressAt time.Time
+
+	// Version changes with the queue or the current item, never with a
+	// position, so a remote's edit is refused only when the queue moved.
+	Version int
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// Current is the item being played or loaded.
+func (s Session) Current() (Item, bool) {
+	if s.CurrentIndex < 0 || s.CurrentIndex >= len(s.Queue) {
+		return Item{}, false
+	}
+	return s.Queue[s.CurrentIndex], true
+}
+
+// Loaded records what the driver handed the speaker for the current item.
+func (s Session) Loaded(mediaKey string) Session {
+	s.PrevMediaKey, s.LoadedMediaKey = s.LoadedMediaKey, mediaKey
+	return s
+}
+
+// End finishes a session. A session already ended keeps its first reason.
+func End(s Session, reason EndedReason, now time.Time) Session {
+	if s.State == Ended {
+		return s
+	}
+	s.State, s.EndedReason, s.UpdatedAt = Ended, reason, now
+	return s
+}
+
+// LoadAt makes item `index` the current one and asks for it to be loaded.
+func LoadAt(s Session, index, startS int, first bool, now time.Time) (Session, Action) {
+	s.CurrentIndex = index
+	s.State = Loading
+	s.LoadingSince = now
+	s.LoadAcked = false
+	s.PositionS = startS
+	s.DurationS = s.Queue[index].DurationS
+	s.LastProgressAt = time.Time{}
+	s.Version++
+	return s, Load{Index: index, StartS: startS, First: first}
+}
+
+// Advance moves to the next item, or finishes the queue and stops the speaker.
+func Advance(s Session, now time.Time) (Session, []Action) {
+	next := s.CurrentIndex + 1
+	if next >= len(s.Queue) {
+		return End(s, QueueFinished, now), []Action{StopDevice{}}
+	}
+	s, load := LoadAt(s, next, 0, false, now)
+	return s, []Action{load}
+}
+
+// SkipFailed moves past an item the speaker could not play. The last one
+// failing ends the session as failed.
+func SkipFailed(s Session, now time.Time) (Session, []Action) {
+	if s.CurrentIndex+1 >= len(s.Queue) {
+		return End(s, Failed, now), nil
+	}
+	return Advance(s, now)
+}
+
+// ReplaceQueue swaps the queue. When the song playing is still in it, it keeps
+// playing and only the index moves to where it now is; otherwise the item at
+// `currentIndex` (clamped) is to be loaded, which `reload` reports.
+func ReplaceQueue(s Session, items []Item, currentIndex int) (Session, bool) {
+	current, hasCurrent := s.Current()
+	s.Queue = items
+	s.Version++
+	if hasCurrent {
+		if currentIndex >= 0 && currentIndex < len(items) && items[currentIndex].VideoID == current.VideoID {
+			s.CurrentIndex = currentIndex
+			return s, false
+		}
+		for i, it := range items {
+			if it.VideoID == current.VideoID {
+				s.CurrentIndex = i
+				return s, false
+			}
+		}
+	}
+	s.CurrentIndex = min(max(currentIndex, 0), len(items)-1)
+	s.State = Loading
+	return s, true
+}

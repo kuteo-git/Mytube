@@ -58,6 +58,12 @@ export interface PlayerState {
   onPlayNext?: () => void
   /** False when the player is being restored from a previous visit. */
   autoplay?: boolean
+  /**
+   * What follows this video in the list it was opened from, for a speaker to
+   * play after it. Empty outside a list: a cast plays what was queued and then
+   * stops, never a recommendation nobody chose.
+   */
+  castUpcoming?: string[]
 }
 
 export type PlayerMode = 'hidden' | 'full' | 'mini'

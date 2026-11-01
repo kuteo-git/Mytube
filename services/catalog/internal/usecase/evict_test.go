@@ -85,3 +85,32 @@ func TestSweepDoesNothingBelowTheHighWatermark(t *testing.T) {
 		t.Fatalf("swept below the watermark: freed=%d evicted=%v", freed, repo.evicted)
 	}
 }
+
+// The sound a speaker was served is cut from the media file, so it goes with
+// it; the captions beside them are not, and stay.
+func TestSweepTakesTheCastAudioWithTheMediaFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "v1")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"1080p.mp4", "audio.m4a", "1080p.mp4.en.vtt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, 100), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := &fakeEvictionRepo{
+		usedBytes:  300,
+		candidates: []domain.EvictionCandidate{{VideoID: "v1", MediaPath: "v1/1080p.mp4", SizeBytes: 200}},
+	}
+	evictor := NewEvictor(repo, root, 250, 150, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if _, err := evictor.SweepOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "audio.m4a")); !os.IsNotExist(err) {
+		t.Error("audio.m4a survived the sweep of its media file")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "1080p.mp4.en.vtt")); err != nil {
+		t.Error("the captions were deleted with the media file")
+	}
+}

@@ -4,8 +4,8 @@
 #   scripts/dev.sh
 #
 # Ports: gateway 8180 (the only one the browser talks to), catalog 8181,
-# recsys 8182, ingest 8183, logview 8184, transcript 8185, TTS 8002,
-# translate 8005, Vite 5173.
+# recsys 8182, ingest 8183, logview 8184, transcript 8185, cast 8186,
+# castbridge 8187, TTS 8002, translate 8005, Vite 5173.
 # Chosen off the 808x block because other projects on this machine hold 8080
 # and 8082 permanently.
 # Requires Postgres to be running:
@@ -53,6 +53,15 @@ export MEDIA_ROOT="${MEDIA_ROOT:-/Volumes/Data2/Youtube}"
 export STORAGE_BUDGET_BYTES="${STORAGE_BUDGET_BYTES:-322122547200}"    # 300 GiB
 export EVICTION_HIGH_BYTES="${EVICTION_HIGH_BYTES:-375809638400}"      # 350 GiB
 export EVICTION_LOW_BYTES="${EVICTION_LOW_BYTES:-322122547200}"        # 300 GiB
+
+# Where a speaker fetches the sound of what is cast to it: this Mac as the LAN
+# sees it. Never localhost -- on the speaker that is the speaker, and a song it
+# cannot fetch is skipped with nothing to say why. en0 is the address the
+# phones are set up with; set CAST_MEDIA_BASE_URL to override. Without an
+# address it stays unset, and the cast service refuses to start and says why.
+if [ -z "${CAST_MEDIA_BASE_URL:-}" ] && lan_ip=$(ipconfig getifaddr en0 2>/dev/null) && [ -n "$lan_ip" ]; then
+  export CAST_MEDIA_BASE_URL="http://$lan_ip:8180"
+fi
 
 # Debugging the streaming tiers: withhold the file on disk, so the player has to
 # use them. Off unless asked for, and passed through rather than defaulted here
@@ -144,7 +153,7 @@ fi
 # the four services have already started and stopping them again is worse than
 # not starting.
 busy=""
-for port in 8180 8181 8182 8183 8184 5173; do
+for port in 8180 8181 8182 8183 8184 8186 5173; do
   if pid=$(lsof -ti:"$port" 2>/dev/null | head -1); then
     busy+=$'\n'"  :$port held by pid $pid ($(ps -o comm= -p "$pid" 2>/dev/null | xargs basename 2>/dev/null))"
   fi
@@ -166,6 +175,7 @@ go build -o "$LOG_DIR/recsys" ./services/recsys/cmd/recsys
 go build -o "$LOG_DIR/ingest" ./services/ingest/cmd/ingest
 go build -o "$LOG_DIR/gateway" ./services/gateway/cmd/gateway
 go build -o "$LOG_DIR/logview" ./services/logview/cmd/logview
+go build -o "$LOG_DIR/cast" ./services/cast/cmd/cast
 
 # Logs are appended to, not overwritten.
 #
@@ -178,7 +188,7 @@ go build -o "$LOG_DIR/logview" ./services/logview/cmd/logview
 # and loses its oldest, which is the right half to lose and needs no second file
 # to go looking in.
 LOG_CEILING_BYTES="${LOG_CEILING_BYTES:-52428800}"   # 50 MiB
-for name in catalog recsys ingest gateway logview translate tts; do
+for name in catalog recsys ingest gateway logview cast castbridge translate tts; do
   file="$LOG_DIR/$name.log"
   [ -f "$file" ] || continue
   size=$(wc -c <"$file" | tr -d ' ')
@@ -193,6 +203,9 @@ done
 "$LOG_DIR/recsys"  >>"$LOG_DIR/recsys.log"  2>&1 & pids+=($!)
 "$LOG_DIR/ingest"  >>"$LOG_DIR/ingest.log"  2>&1 & pids+=($!)
 "$LOG_DIR/gateway" >>"$LOG_DIR/gateway.log" 2>&1 & pids+=($!)
+# Sessions on the household's speakers. It reads the R1s from
+# data/cast-devices.json and finds the Nest speakers through castbridge below.
+"$LOG_DIR/cast"    >>"$LOG_DIR/cast.log"    2>&1 & pids+=($!)
 # The log viewer, on a port of its own. Deliberately not part of the gateway:
 # the moment logs are wanted is the moment something has stopped working.
 "$LOG_DIR/logview" >>"$LOG_DIR/logview.log" 2>&1 & pids+=($!)
@@ -265,6 +278,31 @@ else
   echo "  python3 -m venv $TRANSCRIPT_VENV && $TRANSCRIPT_VENV/bin/pip install -r docs/transcript-server/requirements.txt" >&2
 fi
 
+# --- the Google Nest speakers ---
+#
+# The cast service finds and drives them through this sidecar, because the Cast
+# protocol lives in pychromecast. Asked who it is before being trusted, for the
+# reason the captions helper above is: a port is not an identity. Not fatal
+# when absent -- the R1 does not need it, and the Nests simply are not offered.
+CASTBRIDGE_VENV="${CASTBRIDGE_VENV:-$(pwd)/.venv-castbridge}"
+castbridge_is_ours() {
+  curl -sf --max-time 2 "http://127.0.0.1:8187/health" 2>/dev/null | grep -q "local-mytube-castbridge"
+}
+if lsof -ti:8187 >/dev/null 2>&1; then
+  if castbridge_is_ours; then
+    echo "castbridge already running on :8187, leaving it alone"
+  else
+    echo "PORT :8187 IS HELD BY SOMETHING ELSE -- the Nest speakers will not be offered." >&2
+    echo "  what is there: $(lsof -ti:8187 | head -1 | xargs -I{} ps -o command= -p {} 2>/dev/null)" >&2
+  fi
+elif [ -x "$CASTBRIDGE_VENV/bin/python" ]; then
+  echo "starting castbridge (port 8187)..."
+  "$CASTBRIDGE_VENV/bin/python" -I services/castbridge/castbridge.py >>"$LOG_DIR/castbridge.log" 2>&1 & pids+=($!)
+else
+  echo "no castbridge: the Nest speakers will not be offered. Create it with" >&2
+  echo "  python3 -m venv $CASTBRIDGE_VENV && $CASTBRIDGE_VENV/bin/pip install -r services/castbridge/requirements.txt" >&2
+fi
+
 # --- speech, for narration ---
 #
 # Lives in another repository, so this only starts it if that repository is
@@ -319,7 +357,7 @@ fi
 # of ports as though they were all listening.
 sleep 1
 echo
-for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8005:translate" "8002:speech" "$TRANSCRIPT_PORT:transcript"; do
+for entry in "8181:catalog" "8182:recsys" "8183:ingest" "8180:gateway" "8184:logview" "8186:cast" "8187:castbridge" "8005:translate" "8002:speech" "$TRANSCRIPT_PORT:transcript"; do
   port="${entry%%:*}"
   name="${entry##*:}"
   if lsof -ti:"$port" >/dev/null 2>&1; then

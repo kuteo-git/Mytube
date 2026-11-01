@@ -56,6 +56,10 @@ export function WatchPage() {
     upNext?.find((video) => video.id !== videoId) ??
     popular?.find((video) => video.id !== videoId)
   const nextInQueue = Boolean(queue.next)
+  const castUpcoming = queue.currentIndex >= 0 ? queue.items.slice(queue.currentIndex + 1).map((it) => it.id) : []
+  // A string, so the effect below re-runs when the list changes and not on
+  // every render that builds a new array with the same ids.
+  const castUpcomingKey = castUpcoming.join(',')
 
   // Whether this video was arrived at by advancing rather than by being chosen.
   //
@@ -100,8 +104,9 @@ export function WatchPage() {
       thumbnailURL: mediaURL(video.thumbnailPath) || undefined,
       nextVideoTitle: next?.title,
       onPlayNext,
+      castUpcoming: castUpcomingKey ? castUpcomingKey.split(',') : [],
     })
-  }, [video, isPending, isError, startAtBeginning, next?.title, activate])
+  }, [video, isPending, isError, startAtBeginning, next?.title, activate, castUpcomingKey])
 
   // Leaving the watch page needs no teardown. The player host lives in AppShell
   // and works out its own shape from the route, so unmounting this page simply

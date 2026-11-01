@@ -25,7 +25,7 @@ DO $$
 DECLARE
   svc text;
 BEGIN
-  FOREACH svc IN ARRAY ARRAY['identity', 'catalog', 'ingest', 'recsys'] LOOP
+  FOREACH svc IN ARRAY ARRAY['identity', 'catalog', 'ingest', 'recsys', 'cast'] LOOP
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = svc || '_svc') THEN
       EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', svc || '_svc', svc || '_dev');
     END IF;

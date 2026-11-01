@@ -137,6 +137,12 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useTTSConfig } from '@/features/settings/application/queries'
 import { useSuggestionsHidden, useSuggestionsToggleAvailable } from '@/features/watch/application/suggestions'
+import { useCast } from '@/features/cast/application/cast-context'
+import { useStartCast } from '@/features/cast/application/queries'
+import type { CastDevice } from '@/features/cast/domain/cast'
+import { CastError } from '@/features/cast/infrastructure/cast-repository'
+import { CastButton } from '@/features/cast/ui/CastButton'
+import { useToast } from '@/shared/ui/toast'
 
 /**
  * Progressive MP4 in a plain <video> element, served over HTTP range requests.
@@ -398,6 +404,7 @@ export function Player({
   thumbnailURL,
   nextVideoTitle,
   onPlayNext,
+  castUpcoming,
   title,
   channelTitle,
   variant = 'full',
@@ -426,6 +433,8 @@ export function Player({
   thumbnailURL?: string
   nextVideoTitle?: string
   onPlayNext?: () => void
+  /** What a speaker plays after this video; see PlayerState.castUpcoming. */
+  castUpcoming?: string[]
   /** The video title, shown in the miniplayer overlay on hover. */
   title?: string
   /** Shown beneath the title in the mobile bar, where there is room for it. */
@@ -2064,6 +2073,36 @@ export function Player({
     [seekTo],
   )
 
+  // Casting. The speaker takes over from where this player is, which pauses
+  // here; "Stop casting" hands back, and this player picks up at the speaker's
+  // position when it still holds that video.
+  const startCast = useStartCast()
+  const { setLocalResume } = useCast()
+  const toast = useToast()
+  useEffect(() => {
+    setLocalResume((id, seconds) => {
+      if (id !== videoId) return false
+      seekTo(seconds)
+      void front()?.play().catch(() => undefined)
+      return true
+    })
+    return () => setLocalResume(null)
+  }, [videoId, seekTo, front, setLocalResume])
+  const castTo = (device: CastDevice) => {
+    front()?.pause()
+    startCast.mutate(
+      { device, videoIds: [videoId, ...(castUpcoming ?? [])], startPositionSeconds: positionRef.current },
+      {
+        onError: (err) => {
+          const code = err instanceof CastError ? err.code : 'unknown'
+          toast(
+            code === 'live' ? t('cast.liveRefused') : code === 'device_offline' ? t('cast.offline') : t('cast.failedStart'),
+          )
+        },
+      },
+    )
+  }
+
   const applyVolume = (next: number) => {
     resetAutoplayChain()
     // Reaching for the volume is a decision about sound, so the automatic
@@ -3256,6 +3295,12 @@ export function Player({
                 {translateGroup}
               </SettingsMenu>
             )}
+
+          {/* Playing on a speaker in the house. Not for a broadcast: there is
+              no end for a speaker to play to, and the server refuses it too. */}
+          {variant === 'full' && !isLive && (
+            <CastButton className={controlButton} onPick={castTo} disabled={!playable} />
+          )}
 
           {/* Picture-in-picture, offered only where the browser has it.
               On iOS this is the *only* way playback survives leaving the page:

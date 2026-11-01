@@ -100,6 +100,9 @@ done
 for f in services/ingest/migrations/0*.sql; do
   PGPASSWORD=ingest_dev  psql -h localhost -U ingest_svc  -d localyoutube -v ON_ERROR_STOP=1 -q -f "$f"
 done
+for f in services/cast/migrations/0*.sql; do
+  PGPASSWORD=cast_dev    psql -h localhost -U cast_svc    -d localyoutube -v ON_ERROR_STOP=1 -q -f "$f"
+done
 ```
 
 There is no migration runner. They are plain files applied by hand, they are

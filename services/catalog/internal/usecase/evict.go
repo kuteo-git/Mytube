@@ -93,6 +93,12 @@ func (e *Evictor) SweepOnce(ctx context.Context) (int64, error) {
 			e.logger.Warn("remove media file", "video", c.VideoID, "path", path, "error", err)
 			continue
 		}
+		// The sound cut from it for a speaker (the gateway's /audio route) is
+		// the same bytes again, and means nothing without it.
+		castAudio := filepath.Join(filepath.Dir(path), CastAudioName)
+		if err := os.Remove(castAudio); err != nil && !os.IsNotExist(err) {
+			e.logger.Warn("remove cast audio", "video", c.VideoID, "path", castAudio, "error", err)
+		}
 
 		if err := e.repo.MarkEvicted(ctx, c.VideoID); err != nil {
 			e.logger.Warn("mark evicted", "video", c.VideoID, "error", err)
@@ -102,3 +108,7 @@ func (e *Evictor) SweepOnce(ctx context.Context) (int64, error) {
 	}
 	return freed, nil
 }
+
+// CastAudioName is the file the gateway writes beside a video's media file
+// when a speaker asks for its sound. The gateway names it the same.
+const CastAudioName = "audio.m4a"

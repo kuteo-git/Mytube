@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/http2"
 
+	"github.com/lucnguyen/local-youtube/gen/go/cast/v1/castv1connect"
 	"github.com/lucnguyen/local-youtube/gen/go/catalog/v1/catalogv1connect"
 	"github.com/lucnguyen/local-youtube/gen/go/ingest/v1/ingestv1connect"
 	"github.com/lucnguyen/local-youtube/gen/go/recsys/v1/recsysv1connect"
@@ -60,6 +61,7 @@ func main() {
 		catalogURL = env("CATALOG_URL", "http://localhost:8181")
 		recsysURL  = env("RECSYS_URL", "http://localhost:8182")
 		ingestURL  = env("INGEST_URL", "http://localhost:8183")
+		castURL    = env("CAST_URL", "http://localhost:8186")
 		configDir  = env("CONFIG_DIR", "./data")
 		devUserID  = env("DEV_USER_ID", "u_luc")
 		webOrigin  = env("WEB_ORIGIN", "http://localhost:5173")
@@ -83,6 +85,7 @@ func main() {
 		catalogv1connect.NewCatalogServiceClient(fastClient, catalogURL),
 		recsysv1connect.NewRecommendationServiceClient(fastClient, recsysURL),
 		ingestv1connect.NewIngestServiceClient(ingestClient, ingestURL),
+		castv1connect.NewCastServiceClient(fastClient, castURL),
 		logger,
 		devUserID,
 		ingestURL,

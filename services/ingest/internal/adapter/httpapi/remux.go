@@ -78,6 +78,8 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	// The browser combines the two adaptive tracks itself, so these three serve
 	// a description and some bytes rather than a muxed stream. See hls.go.
 	mux.HandleFunc("GET /hls/{videoId}/{name}", h.handleHLS)
+	// The sound alone, for a speaker. See audio.go.
+	mux.HandleFunc("GET /audio/{videoId}", h.handleAudio)
 }
 
 // handleStreamStart answers "if I ask for the stream at t, where will it really

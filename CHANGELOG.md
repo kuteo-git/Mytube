@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+**The library plays on the household's speakers.** A new `cast` service
+(:8186, schema `cast`) keeps a session per speaker and drives it a second at a
+time; the R1 is driven through its own control server, the Nest speakers
+through `castbridge` (:8187, pychromecast). The gateway serves `/api/cast/*`
+and `/api/videos/{id}/audio`; ingest serves `/audio/{id}` for a video not on
+disk, in pieces of at most 1 MiB. The web player has a cast button, a remote
+that takes the screen (seek, pause, next, stop, volume, queue edits, "Stop
+casting" back to the player at the speaker's position) and a bar on every page
+while something plays. Measured on the Nest Audio at volume 0: playing within
+1.4s of the press, the next song loading ~1s after the last ended. Needs
+`psql -f db/bootstrap.sql`, `services/cast/migrations/0001_init.sql` as
+`cast_svc`, the castbridge venv, and `data/cast-devices.json` for the R1. See
+CLAUDE.md, "Cast".
+
 **After a power cut the stack never came back.** The Mac restarted at 15:13
 with no shutdown record, and the phones answered every request with
 `ECONNREFUSED` on :8180. Postgres logged `lock file "postmaster.pid" already

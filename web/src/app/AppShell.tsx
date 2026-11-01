@@ -16,6 +16,9 @@ import { BOTTOM_NAV_HEIGHT } from '@/features/watch/application/player-geometry'
 import { useResumeLastWatched } from '@/features/watch/application/use-resume'
 import { dismissFade, layerOpacity } from '@/features/watch/application/watch-overlay'
 import { ToastProvider } from '@/shared/ui/toast'
+import { CastProvider } from '@/features/cast/application/cast-context'
+import { CastMiniBar } from '@/features/cast/ui/CastMiniBar'
+import { CastRemote } from '@/features/cast/ui/CastRemote'
 import { useTranslation } from 'react-i18next'
 import type { TranslationKey } from '@/shared/i18n/en'
 
@@ -26,7 +29,9 @@ export function AppShell() {
   return (
     <PlayerProvider isWatch={isWatch}>
       <ToastProvider>
-        <AppShellInner />
+        <CastProvider>
+          <AppShellInner />
+        </CastProvider>
       </ToastProvider>
     </PlayerProvider>
   )
@@ -332,6 +337,11 @@ function AppShellInner() {
       {/* Fades in exactly as the layer above it fades out — one number seen
           from two sides, so the navigation cannot arrive after the page it
           belongs to. */}
+      {/* A speaker playing, from any phone in the house, and its remote. Above
+          the tab bar and the miniplayer, by the same reserve the pages leave. */}
+      <CastMiniBar bottomOffset={(reservedBottom ?? 0) + 8} />
+      <CastRemote />
+
       <BottomNav opacity={chromeHidden ? fade : 1} />
     </div>
   )
@@ -469,6 +479,7 @@ function PlayerHost({ canGoBack }: { canGoBack: boolean }) {
         thumbnailURL={state.thumbnailURL}
         nextVideoTitle={state.nextVideoTitle}
         onPlayNext={state.onPlayNext}
+        castUpcoming={state.castUpcoming}
         variant={variant}
         // Only from full size on a phone. Dragging is a request to go back to
         // browsing, and leaving the watch page is exactly what turns the player

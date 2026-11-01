@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/singleflight"
 
+	"github.com/lucnguyen/local-youtube/gen/go/cast/v1/castv1connect"
 	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 	"github.com/lucnguyen/local-youtube/gen/go/catalog/v1/catalogv1connect"
 	ingestv1 "github.com/lucnguyen/local-youtube/gen/go/ingest/v1"
@@ -80,12 +82,19 @@ type Gateway struct {
 	// One resolve per broadcast per minute, shared by the stream answer and the
 	// playlist routes — see live_resolve.go.
 	liveResolves *liveResolveCache
+	// Playing on the household's speakers; see cast.go.
+	cast castv1connect.CastServiceClient
+	// Cutting the sound out of a downloaded video for a speaker, one ffmpeg per
+	// video however many ask; see cast_audio.go. A field so tests can count it.
+	extractAudio func(ctx context.Context, src, dst string) error
+	audioCuts    singleflight.Group
 }
 
 func NewGateway(
 	catalog catalogv1connect.CatalogServiceClient,
 	recsys recsysv1connect.RecommendationServiceClient,
 	ingest ingestv1connect.IngestServiceClient,
+	cast castv1connect.CastServiceClient,
 	logger *slog.Logger,
 	devUserID string,
 	ingestBaseURL string,
@@ -113,6 +122,8 @@ func NewGateway(
 		skipLocalTier: skipLocal,
 		narration:     newNarrationRegistry(),
 		liveResolves:  newLiveResolveCache(),
+		cast:          cast,
+		extractAudio:  ffmpegExtractAudio,
 	}
 }
 
@@ -240,6 +251,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/live/{id}/playlist.m3u8", g.handleLivePlaylist)
 	mux.HandleFunc("GET /api/live/{id}/segment", g.handleLiveSegment)
 	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
+	// The sound alone, fetched by a speaker the household casts to.
+	mux.HandleFunc("GET /api/videos/{id}/audio", g.handleCastAudio)
+	g.castRoutes(mux)
 
 	// Downloads are never requested directly: they are a side effect of asking
 	// to play something. These endpoints only report on them.

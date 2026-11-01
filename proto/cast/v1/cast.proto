@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package cast.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/lucnguyen/local-youtube/services/cast/gen/cast/v1;castv1";
+
+// The cast service plays the household's videos, as sound, on a speaker in the
+// house: the R1 and the Google Nest speakers.
+//
+// It owns the session and its queue rather than the speaker, because a speaker
+// plays one thing it is handed and knows nothing of what comes next. A session
+// lives in Postgres and is driven by a loop on this service, so it carries on
+// with every phone closed and survives a restart; every client in the house
+// sees the same one.
+service CastService {
+  // Speakers answering now. One that does not answer is not listed.
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+  // Sessions still playing or loading.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+  // Starts playing on a speaker. A session already on it ends as "replaced".
+  rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
+  // Any session, ended ones included, so a remote can say why it ended.
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  rpc Pause(PauseRequest) returns (PauseResponse);
+  rpc Resume(ResumeRequest) returns (ResumeResponse);
+  rpc Next(NextRequest) returns (NextResponse);
+  rpc Stop(StopRequest) returns (StopResponse);
+  rpc Seek(SeekRequest) returns (SeekResponse);
+  rpc SetVolume(SetVolumeRequest) returns (SetVolumeResponse);
+  rpc Jump(JumpRequest) returns (JumpResponse);
+  // Reorders, removes or adds. Refused with ABORTED when `version` is not the
+  // session's current one, so two remotes cannot overwrite each other's edit.
+  rpc ReplaceQueue(ReplaceQueueRequest) returns (ReplaceQueueResponse);
+  // Stops the speaker and hands back where it was, for the phone to carry on.
+  rpc Handoff(HandoffRequest) returns (HandoffResponse);
+}
+
+enum DeviceKind {
+  DEVICE_KIND_UNSPECIFIED = 0;
+  DEVICE_KIND_R1 = 1;
+  DEVICE_KIND_GOOGLE = 2;
+}
+
+message Device {
+  string id = 1;
+  string name = 2;
+  DeviceKind kind = 3;
+  string model = 4;
+  // The session playing on it, empty when none.
+  string active_session_id = 5;
+}
+
+enum SessionState {
+  SESSION_STATE_UNSPECIFIED = 0;
+  SESSION_STATE_LOADING = 1;
+  SESSION_STATE_PLAYING = 2;
+  SESSION_STATE_PAUSED = 3;
+  SESSION_STATE_ENDED = 4;
+}
+
+enum EndedReason {
+  ENDED_REASON_UNSPECIFIED = 0;
+  ENDED_REASON_QUEUE_FINISHED = 1;
+  ENDED_REASON_STOPPED = 2;
+  ENDED_REASON_REPLACED = 3;
+  ENDED_REASON_TAKEN_OVER = 4;
+  ENDED_REASON_STOPPED_ON_DEVICE = 5;
+  ENDED_REASON_DEVICE_OFFLINE = 6;
+  ENDED_REASON_HANDOFF = 7;
+  ENDED_REASON_FAILED = 8;
+}
+
+message QueueItem {
+  string video_id = 1;
+  string title = 2;
+  string channel = 3;
+  // Relative to the gateway, as every other thumbnail the app draws.
+  string thumbnail_url = 4;
+  int32 duration_seconds = 5;
+}
+
+message Session {
+  string id = 1;
+  Device device = 2;
+  SessionState state = 3;
+  EndedReason ended_reason = 4;
+  repeated QueueItem queue = 5;
+  int32 current_index = 6;
+  int32 position_seconds = 7;
+  int32 duration_seconds = 8;
+  int32 volume = 9;
+  // Changes when the queue or the current item does, and only then.
+  int32 version = 10;
+  string started_by = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message ListDevicesRequest {}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+message ListSessionsRequest {}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message StartSessionRequest {
+  string device_id = 1;
+  repeated string video_ids = 2;
+  int32 start_index = 3;
+  int32 start_position_seconds = 4;
+  string user_id = 5;
+}
+
+message StartSessionResponse {
+  Session session = 1;
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+}
+
+message GetSessionResponse {
+  Session session = 1;
+}
+
+message PauseRequest {
+  string session_id = 1;
+}
+
+message PauseResponse {
+  Session session = 1;
+}
+
+message ResumeRequest {
+  string session_id = 1;
+}
+
+message ResumeResponse {
+  Session session = 1;
+}
+
+message NextRequest {
+  string session_id = 1;
+}
+
+message NextResponse {
+  Session session = 1;
+}
+
+message StopRequest {
+  string session_id = 1;
+}
+
+message StopResponse {
+  Session session = 1;
+}
+
+message SeekRequest {
+  string session_id = 1;
+  int32 position_seconds = 2;
+}
+
+message SeekResponse {
+  Session session = 1;
+}
+
+message SetVolumeRequest {
+  string session_id = 1;
+  int32 percent = 2;
+}
+
+message SetVolumeResponse {
+  Session session = 1;
+}
+
+message JumpRequest {
+  string session_id = 1;
+  int32 index = 2;
+}
+
+message JumpResponse {
+  Session session = 1;
+}
+
+message ReplaceQueueRequest {
+  string session_id = 1;
+  int32 version = 2;
+  repeated string video_ids = 3;
+  int32 current_index = 4;
+}
+
+message ReplaceQueueResponse {
+  Session session = 1;
+}
+
+message HandoffRequest {
+  string session_id = 1;
+}
+
+message HandoffResponse {
+  string video_id = 1;
+  int32 position_seconds = 2;
+}
