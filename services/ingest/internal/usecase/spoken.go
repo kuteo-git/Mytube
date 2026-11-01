@@ -61,6 +61,10 @@ func (s *SpokenLanguages) Ask(ctx context.Context, videoID string) string {
 		s.Heard(ctx, videoID, lang)
 		return lang
 	}
+	if ctx.Err() != nil {
+		// The asker gave up, which says nothing about the video.
+		return ""
+	}
 	rest := spokenNoneRest
 	if refused {
 		rest = spokenRefusedRest

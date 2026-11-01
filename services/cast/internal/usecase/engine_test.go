@@ -162,6 +162,7 @@ type fakeCatalog struct {
 	mu       sync.Mutex
 	live     map[string]bool
 	gone     map[string]bool
+	spoken   map[string]string
 	progress []domain.Action
 }
 
@@ -170,7 +171,7 @@ func (c *fakeCatalog) Videos(_ context.Context, _ string, ids []string) ([]Catal
 	for _, id := range ids {
 		out = append(out, CatalogVideo{
 			Item: domain.Item{VideoID: id, Title: "T " + id, DurationS: 200},
-			Live: c.live[id], Unavailable: c.gone[id],
+			Live: c.live[id], Unavailable: c.gone[id], SpokenLanguage: c.spoken[id],
 		})
 	}
 	return out, nil
@@ -190,13 +191,16 @@ type fakeNarrator struct {
 	answers map[string]domain.Narrated
 	streams map[string]domain.Narrated
 	spoken  map[string]string
-	asked   []string
-	from    []int
+	// How many times the gateway was asked which language a song speaks.
+	spokenAsked int
+	asked       []string
+	from        []int
 }
 
 func (n *fakeNarrator) SpokenLanguage(_ context.Context, videoID string) (string, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	n.spokenAsked++
 	return n.spoken[videoID], nil
 }
 

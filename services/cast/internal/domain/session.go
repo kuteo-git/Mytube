@@ -79,10 +79,11 @@ func NarratesSong(s Session, videoID, spoken string) bool {
 }
 
 // NarrationStatusOf decides it from the session, whether narration covers
-// the current song, and the gateway's last word on it.
+// the current song (NarratesSong, which is false with narration off), and
+// the gateway's last word on it.
 func NarrationStatusOf(s Session, covers bool, current Narrated) NarrationStatus {
 	switch {
-	case !s.Narration || !covers:
+	case !covers:
 		return NarrationOff
 	case s.LoadedNarrated:
 		return NarrationOn

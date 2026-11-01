@@ -41,7 +41,9 @@ func (g *Gateway) spokenLanguage(ctx context.Context, v *catalogv1.Video) string
 	if lang := v.GetSpokenLanguage(); lang != "" {
 		return lang
 	}
-	ctx, cancel := context.WithTimeout(ctx, spokenAskTimeout)
+	// Not the asker's context: a listing that has begun is worth finishing
+	// for the catalogue, even when the speaker asking stopped waiting.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), spokenAskTimeout)
 	defer cancel()
 	if resp, err := g.ingest.SpokenLanguage(ctx, connect.NewRequest(&ingestv1.SpokenLanguageRequest{VideoId: v.GetId()})); err == nil {
 		if lang := resp.Msg.GetLanguage(); lang != "" {

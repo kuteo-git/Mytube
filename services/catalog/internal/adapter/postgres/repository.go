@@ -542,7 +542,7 @@ func (r *Repository) SetShort(ctx context.Context, videoID string, isShort bool)
 
 func (r *Repository) SetSpokenLanguage(ctx context.Context, videoID, language string) error {
 	_, err := r.pool.Exec(ctx,
-		`UPDATE videos SET spoken_language = $2 WHERE id = $1`, videoID, language)
+		`UPDATE videos SET spoken_language = $2 WHERE id = $1 AND spoken_language <> $2`, videoID, language)
 	return err
 }
 

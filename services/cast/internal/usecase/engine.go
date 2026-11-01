@@ -49,6 +49,8 @@ type CatalogVideo struct {
 	Item        domain.Item
 	Live        bool
 	Unavailable bool
+	// SpokenLanguage is the catalogue's word, or empty while it has none.
+	SpokenLanguage string
 }
 
 // Catalog is the catalogue, as far as casting needs it.
@@ -237,7 +239,10 @@ func (e *Engine) wantsNarrated(ctx context.Context, drv Driver, s domain.Session
 // domain.NarratesSong. The gateway is asked which language it speaks only
 // while narration is on.
 func (e *Engine) covers(ctx context.Context, s domain.Session, videoID string) bool {
-	return s.Narration && domain.NarratesSong(s, videoID, e.spokenLanguage(ctx, videoID))
+	if !s.Narration {
+		return false
+	}
+	return domain.NarratesSong(s, videoID, e.spokenLanguage(ctx, videoID))
 }
 
 type spokenAnswer struct {
@@ -474,6 +479,13 @@ func (e *Engine) queueFor(ctx context.Context, userID string, ids []string, star
 		if v.Live || v.Unavailable {
 			continue
 		}
+		// Known already for most songs: read with the queue, so the gateway
+		// is asked only about the rest.
+		if v.SpokenLanguage != "" {
+			e.narratedMu.Lock()
+			e.spoken[v.Item.VideoID] = spokenAnswer{language: v.SpokenLanguage, at: e.now()}
+			e.narratedMu.Unlock()
+		}
 		if i >= startIndex && start < 0 {
 			start = len(items)
 		}
@@ -646,8 +658,9 @@ func (e *Engine) SetNarration(ctx context.Context, id string, on bool) (domain.S
 		s.Narration = on
 		// Switched on while a Vietnamese song plays: narrate that song too,
 		// as asked; the next is decided by its own language again.
+		// Read only for a song that speaks Vietnamese, so set for any.
 		s.NarrationForcedFor = ""
-		if item, ok := s.Current(); ok && on && e.spokenLanguage(ctx, item.VideoID) == domain.Vietnamese {
+		if item, ok := s.Current(); ok && on {
 			s.NarrationForcedFor = item.VideoID
 		}
 		s, reload := e.narrationSwitch(ctx, drv, s, now)

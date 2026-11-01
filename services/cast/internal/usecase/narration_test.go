@@ -289,3 +289,18 @@ func TestNarrationSwitchedOnForAVietnameseSongNarratesIt(t *testing.T) {
 		t.Fatalf("loads = %+v, want b as it is", loads)
 	}
 }
+
+// The catalogue's word, read with the queue, needs no question of the gateway.
+func TestALanguageTheCatalogueKnowsIsNotAskedAgain(t *testing.T) {
+	r := newRig()
+	r.catalog.spoken = map[string]string{"a": "vi"}
+	r.narrator.set("a", domain.NarratedReady)
+	r.startNarrated(t, "a")
+	r.playing("a", 40)
+	if loads := r.driver.ops("load"); len(loads) != 1 || loads[0].narrated {
+		t.Fatalf("loads = %+v, want the Vietnamese song as it is", loads)
+	}
+	if r.narrator.spokenAsked != 0 {
+		t.Fatalf("asked the gateway %d times for a language the catalogue gave", r.narrator.spokenAsked)
+	}
+}

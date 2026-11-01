@@ -57,8 +57,9 @@ func toCatalogVideo(v *catalogv1.Video) usecase.CatalogVideo {
 		},
 		// Upcoming as well as on air: neither has an end to play to, and the
 		// gateway refuses both as a file for the same reason.
-		Live:        v.GetIsLiveNow() || v.GetLiveStatus() == "is_live" || v.GetLiveStatus() == "is_upcoming",
-		Unavailable: v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_UNAVAILABLE,
+		Live:           v.GetIsLiveNow() || v.GetLiveStatus() == "is_live" || v.GetLiveStatus() == "is_upcoming",
+		Unavailable:    v.GetMediaState() == catalogv1.MediaState_MEDIA_STATE_UNAVAILABLE,
+		SpokenLanguage: v.GetSpokenLanguage(),
 	}
 }
 
