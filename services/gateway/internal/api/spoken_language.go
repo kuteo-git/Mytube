@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/text/unicode/norm"
 
 	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 	ingestv1 "github.com/lucnguyen/local-youtube/gen/go/ingest/v1"
@@ -61,9 +62,12 @@ func (g *Gateway) spokenLanguage(ctx context.Context, v *catalogv1.Video) string
 // vowels under a dot or a hook. Two, so a word borrowed into an English title
 // ("Phở") does not make it Vietnamese; the accents French and Portuguese
 // share (á, à, ã, â, ê, ô) are not counted at all.
+//
+// Composed first: 304 titles in the catalogue are stored decomposed, a base
+// letter and a combining mark, which matched none of these.
 func vietnameseTitle(title string) bool {
 	n := 0
-	for _, r := range title {
+	for _, r := range norm.NFC.String(title) {
 		if vietnameseOnly[r] {
 			if n++; n >= 2 {
 				return true

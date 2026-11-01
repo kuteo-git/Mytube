@@ -86,3 +86,29 @@ func TestACaptionFetchsListingSparesThePlayItsOwn(t *testing.T) {
 		t.Fatalf("listed YouTube %d times straight after a caption fetch had", l.asked)
 	}
 }
+
+// slowLister answers after a while, unless its context is done first.
+type slowLister struct{ after time.Duration }
+
+func (l slowLister) SpokenLanguage(ctx context.Context, _ string) (string, bool, error) {
+	select {
+	case <-time.After(l.after):
+		return "vi", false, nil
+	case <-ctx.Done():
+		return "", false, ctx.Err()
+	}
+}
+
+// A listing slower than its asker's patience is finished and recorded all
+// the same: the asker comes back for it, and finds it in the catalogue
+// instead of listing YouTube again.
+func TestAListingOutlivesItsImpatientAsker(t *testing.T) {
+	st := &fakeSpokenStore{set: map[string]string{}}
+	s := NewSpokenLanguages(slowLister{after: 50 * time.Millisecond}, st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	s.Ask(ctx, "v")
+	if st.set["v"] != "vi" {
+		t.Fatalf("recorded %q: the listing died with the asker", st.set["v"])
+	}
+}

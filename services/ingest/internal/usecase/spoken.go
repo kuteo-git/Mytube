@@ -26,6 +26,8 @@ const (
 	// makes them hours after an upload, so a later play asks again; not the
 	// same play, whose caption fetch has just listed it.
 	spokenNoneRest = 10 * time.Minute
+	// spokenListTimeout bounds one listing: two requests, measured 0.7–1.1s.
+	spokenListTimeout = 20 * time.Second
 )
 
 // SpokenLanguages answers which language is spoken in a video, for a player
@@ -39,13 +41,15 @@ type SpokenLanguages struct {
 	store  SpokenStore
 	logger *slog.Logger
 	now    func() time.Time
+	// listTimeout is spokenListTimeout; a field for the tests.
+	listTimeout time.Duration
 
 	mu    sync.Mutex
 	until map[string]time.Time
 }
 
 func NewSpokenLanguages(lister SpokenLister, store SpokenStore, logger *slog.Logger) *SpokenLanguages {
-	return &SpokenLanguages{lister: lister, store: store, logger: logger, now: time.Now, until: map[string]time.Time{}}
+	return &SpokenLanguages{lister: lister, store: store, logger: logger, now: time.Now, listTimeout: spokenListTimeout, until: map[string]time.Time{}}
 }
 
 // Ask asks YouTube, unless it was asked about this video too recently.
@@ -56,15 +60,16 @@ func (s *SpokenLanguages) Ask(ctx context.Context, videoID string) string {
 	if resting || videoID == "" {
 		return ""
 	}
-	lang, refused, err := s.lister.SpokenLanguage(ctx, videoID)
+	// Its own clock, not the asker's: a listing begun is finished and
+	// recorded, so an asker that gave up finds the answer in the catalogue
+	// next time rather than listing YouTube again.
+	lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.listTimeout)
+	defer cancel()
+	lang, refused, err := s.lister.SpokenLanguage(lctx, videoID)
 	if err != nil {
 		s.logger.Warn("spoken language", "video", videoID, "refused", refused, "error", err)
-		if ctx.Err() != nil {
-			// The asker gave up, which says nothing about the video.
-			return ""
-		}
 	}
-	s.Listed(ctx, videoID, lang, refused)
+	s.Listed(lctx, videoID, lang, refused)
 	return lang
 }
 
