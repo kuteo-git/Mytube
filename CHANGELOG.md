@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**A broadcast further down a cast queue is left out, not a refusal.** Only the
+video asked for is refused as a broadcast (422); a live or upcoming one later
+in the list — an up-next rail or a channel page carries one as often as not —
+is dropped like an upstream-refused one. Before, the whole queue was refused,
+and the phone said "a broadcast cannot be cast" for a song that was not one.
+
 **The library plays on the household's speakers.** A new `cast` service
 (:8186, schema `cast`) keeps a session per speaker and drives it a second at a
 time; the R1 is driven through its own control server, the Nest speakers

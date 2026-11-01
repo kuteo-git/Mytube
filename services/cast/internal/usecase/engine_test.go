@@ -255,12 +255,28 @@ func TestStartOnABusySpeakerReplacesTheSessionOnIt(t *testing.T) {
 func TestStartRefusesABroadcast(t *testing.T) {
 	r := newRig()
 	r.catalog.live["live1"] = true
-	_, err := r.engine.StartSession(context.Background(), StartRequest{UserID: "u1", DeviceID: "r1", VideoIDs: []string{"a", "live1"}})
+	_, err := r.engine.StartSession(context.Background(), StartRequest{UserID: "u1", DeviceID: "r1", VideoIDs: []string{"live1", "a"}})
 	if !errors.Is(err, domain.ErrLive) {
 		t.Fatalf("err = %v, want ErrLive", err)
 	}
 	if len(r.driver.ops("load")) != 0 {
 		t.Fatal("a broadcast reached the speaker")
+	}
+}
+
+// A broadcast further down the list is not the one asked for: an up-next rail
+// or a channel page carries one as often as not, and refusing the whole queue
+// for it refused the song that was picked ("a broadcast cannot be cast" on a
+// video that was not one).
+func TestStartLeavesOutABroadcastLaterInTheQueue(t *testing.T) {
+	r := newRig()
+	r.catalog.live["live1"] = true
+	s, err := r.engine.StartSession(context.Background(), StartRequest{UserID: "u1", DeviceID: "r1", VideoIDs: []string{"a", "live1", "b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Queue) != 2 || s.Queue[0].VideoID != "a" || s.Queue[1].VideoID != "b" {
+		t.Fatalf("queue = %+v", s.Queue)
 	}
 }
 

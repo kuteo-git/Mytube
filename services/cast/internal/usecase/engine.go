@@ -274,8 +274,10 @@ func (e *Engine) StartSession(ctx context.Context, req StartRequest) (domain.Ses
 	return s, nil
 }
 
-// queueFor describes the videos, refusing a broadcast and leaving out what
-// upstream has refused for good. It returns where `startIndex` landed.
+// queueFor describes the videos, refusing a broadcast that is the one asked
+// for and leaving out the rest: a broadcast further down (an up-next rail or a
+// channel page carries one as often as not) and what upstream has refused for
+// good. It returns where `startIndex` landed.
 func (e *Engine) queueFor(ctx context.Context, userID string, ids []string, startIndex int) ([]domain.Item, int, error) {
 	if len(ids) == 0 {
 		return nil, 0, domain.ErrEmptyQueue
@@ -287,10 +289,10 @@ func (e *Engine) queueFor(ctx context.Context, userID string, ids []string, star
 	items := make([]domain.Item, 0, len(videos))
 	start := -1
 	for i, v := range videos {
-		if v.Live {
+		if v.Live && i == startIndex {
 			return nil, 0, fmt.Errorf("video %q: %w", v.Item.VideoID, domain.ErrLive)
 		}
-		if v.Unavailable {
+		if v.Live || v.Unavailable {
 			continue
 		}
 		if i >= startIndex && start < 0 {
