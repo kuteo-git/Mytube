@@ -20,11 +20,16 @@ type SpokenStore interface {
 }
 
 const (
-	// After a listing that gave no answer — no automatic captions (YouTube
-	// makes them hours after an upload), a refusal, a failure — the video is
-	// left alone for this long: a later play asks again, the same play does
-	// not, and asking through a wave of refusals is how one becomes a block.
-	spokenRest = 10 * time.Minute
+	// After a refusal the video is left alone for this long: the caption
+	// endpoint refuses in waves, and asking through one is how a refusal
+	// becomes a block.
+	spokenRefusedRest = 10 * time.Minute
+	// After any other listing without an answer — no automatic captions yet
+	// (YouTube makes them hours after an upload), or a failure. Long enough
+	// that the play which just listed it (its caption fetch, then the
+	// player's ask) does not list it again; short enough that a later play
+	// asks again.
+	spokenNoneRest = 2 * time.Minute
 	// spokenListTimeout bounds one listing: two requests, measured 0.7–1.1s.
 	spokenListTimeout = 20 * time.Second
 )
@@ -56,20 +61,21 @@ func NewSpokenLanguages(lister SpokenLister, store SpokenStore, logger *slog.Log
 // on to its own bound either way and records what it finds, so an asker that
 // gave up finds the answer in the catalogue next time.
 func (s *SpokenLanguages) Ask(ctx context.Context, videoID string) string {
-	s.mu.Lock()
-	resting := s.now().Before(s.until[videoID])
-	s.mu.Unlock()
-	if resting || videoID == "" {
+	if videoID == "" || s.resting(videoID) {
 		return ""
 	}
 	answer := s.listing.DoChan(videoID, func() (any, error) {
+		if s.resting(videoID) {
+			// A listing that finished between the check above and here.
+			return "", nil
+		}
 		lctx, cancel := context.WithTimeout(context.Background(), spokenListTimeout)
 		defer cancel()
 		lang, refused, err := s.lister.SpokenLanguage(lctx, videoID)
 		if err != nil {
 			s.logger.Warn("spoken language", "video", videoID, "refused", refused, "error", err)
 		}
-		s.Listed(lctx, videoID, lang)
+		s.Listed(lctx, videoID, lang, refused)
 		return lang, nil
 	})
 	select {
@@ -81,11 +87,16 @@ func (s *SpokenLanguages) Ask(ctx context.Context, videoID string) string {
 }
 
 // Listed takes what a listing said: the language is recorded; no answer
-// rests the video. A caption fetch's listing reports here too.
-func (s *SpokenLanguages) Listed(ctx context.Context, videoID, language string) {
+// rests the video, longer after a refusal. A caption fetch's listing reports
+// here too.
+func (s *SpokenLanguages) Listed(ctx context.Context, videoID, language string, refused bool) {
 	if language == "" {
+		rest := spokenNoneRest
+		if refused {
+			rest = spokenRefusedRest
+		}
 		s.mu.Lock()
-		s.until[videoID] = s.now().Add(spokenRest)
+		s.until[videoID] = s.now().Add(rest)
 		s.mu.Unlock()
 		return
 	}
@@ -95,4 +106,10 @@ func (s *SpokenLanguages) Listed(ctx context.Context, videoID, language string) 
 	s.mu.Lock()
 	delete(s.until, videoID)
 	s.mu.Unlock()
+}
+
+func (s *SpokenLanguages) resting(videoID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.now().Before(s.until[videoID])
 }

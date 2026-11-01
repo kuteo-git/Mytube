@@ -10,7 +10,7 @@ import (
 	"github.com/lucnguyen/local-youtube/services/cast/internal/domain"
 )
 
-// the next song is prepared only when narration would cover it.
+// The next song is prepared only when narration would cover it.
 func TestPrefetchSkipsAVietnameseNextSong(t *testing.T) {
 	r := newRig()
 	r.narrator.spoken["a"] = "en"
@@ -25,7 +25,7 @@ func TestPrefetchSkipsAVietnameseNextSong(t *testing.T) {
 	}
 }
 
-// off then on again on the same Vietnamese song narrates it again.
+// Off then on again on the same Vietnamese song narrates it again.
 func TestOffThenOnAgainOnAVietnameseSong(t *testing.T) {
 	r := newRig()
 	r.narrator.spoken["a"] = "vi"
@@ -49,8 +49,8 @@ func TestOffThenOnAgainOnAVietnameseSong(t *testing.T) {
 	}
 }
 
-// a restarted engine (empty cache) on a session playing a Vietnamese
-// song: one tick asks and settles it plain; a forced song stays narrated.
+// A restarted engine (empty cache) on a session playing a Vietnamese song
+// asks the gateway again, and a song forced narrated stays narrated.
 func TestRestartWithAnEmptyCache(t *testing.T) {
 	r := newRig()
 	r.narrator.spoken["a"] = "vi"
@@ -63,6 +63,7 @@ func TestRestartWithAnEmptyCache(t *testing.T) {
 	}
 	r.playing("a~narrated", 45)
 	loadsBefore := len(r.driver.ops("load"))
+	askedBefore := r.narrator.spokenAsked
 
 	fresh := NewEngine(r.repo, []Driver{r.driver}, r.catalog, r.narrator, r.clock.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	r.clock.advance(time.Second)
@@ -72,12 +73,15 @@ func TestRestartWithAnEmptyCache(t *testing.T) {
 	if n := len(r.driver.ops("load")); n != loadsBefore {
 		t.Fatalf("a forced Vietnamese song was reloaded after a restart: %+v", r.driver.ops("load"))
 	}
+	if r.narrator.spokenAsked == askedBefore {
+		t.Fatal("the restarted engine never asked which language the song speaks")
+	}
 	if st := fresh.NarrationStatus(forced); st == domain.NarrationOff {
 		t.Fatalf("status = %s for a forced song", st)
 	}
 }
 
-// an ask that timed out narrates as the switch says; once the answer
+// An ask that timed out narrates as the switch says; once the answer
 // is heard (Vietnamese) the song goes back to its own sound.
 func TestTimedOutAskThenVietnameseGoesBackToPlain(t *testing.T) {
 	r := newRig()
@@ -87,7 +91,7 @@ func TestTimedOutAskThenVietnameseGoesBackToPlain(t *testing.T) {
 	r.playing("a~narrated", 40)
 	r.narrator.spokenErr = nil
 	r.narrator.spoken["a"] = "vi"
-	r.clock.advance(spokenFailedRetry)
+	r.clock.advance(spokenRetry)
 	r.playing("a~narrated", 56)
 	r.playing("a", 57)
 	loads := r.driver.ops("load")
@@ -99,7 +103,7 @@ func TestTimedOutAskThenVietnameseGoesBackToPlain(t *testing.T) {
 	}
 }
 
-// an English language read with the queue is not asked of the gateway.
+// An English language read with the queue is not asked of the gateway.
 func TestCatalogueSeededEnglishIsNotAsked(t *testing.T) {
 	r := newRig()
 	r.catalog.spoken = map[string]string{"a": "en"}

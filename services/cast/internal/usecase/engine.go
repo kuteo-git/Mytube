@@ -251,14 +251,11 @@ type spokenAnswer struct {
 	retryAt time.Time
 }
 
-const (
-	// spokenRetry is how long "not known" stands before the gateway is asked
-	// again: it asks YouTube, and must not on every tick.
-	spokenRetry = 5 * time.Minute
-	// spokenFailedRetry is how long an ask that timed out stands: ingest
-	// finishes the listing and records it, so the next ask has the answer.
-	spokenFailedRetry = 15 * time.Second
-)
+// spokenRetry is how long "not known" stands before the gateway is asked
+// again. Short, because the gateway answers "not known" while ingest is still
+// listing (it waits 1.5s; ingest goes on and records), and it costs YouTube
+// nothing: ingest rests a video it could not answer for.
+const spokenRetry = 15 * time.Second
 
 func (a spokenAnswer) stands(now time.Time) bool {
 	return a.language != "" || now.Before(a.retryAt)
@@ -283,11 +280,7 @@ func (e *Engine) spokenLanguage(ctx context.Context, videoID string) string {
 		e.logger.Warn("spoken language", "video", videoID, "error", err)
 	}
 	e.narratedMu.Lock()
-	retry := spokenRetry
-	if err != nil {
-		retry = spokenFailedRetry
-	}
-	e.spoken[videoID] = spokenAnswer{language: lang, retryAt: e.now().Add(retry)}
+	e.spoken[videoID] = spokenAnswer{language: lang, retryAt: e.now().Add(spokenRetry)}
 	e.narratedMu.Unlock()
 	return lang
 }

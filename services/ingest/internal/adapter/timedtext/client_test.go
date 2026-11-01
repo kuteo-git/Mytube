@@ -229,7 +229,7 @@ func TestACaptionFetchHearsTheLanguageSpoken(t *testing.T) {
 	c, _ := newTestClient(t, f)
 	f.tracks = []map[string]any{track("vi", "asr", c.watchHost()+"/timedtext?lang=vi")}
 	var heard []string
-	c.OnListed(func(_ context.Context, videoID, lang string) {
+	c.OnListed(func(_ context.Context, videoID, lang string, _ bool) {
 		heard = append(heard, videoID+" "+lang)
 	})
 

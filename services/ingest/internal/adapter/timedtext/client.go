@@ -74,15 +74,15 @@ type Client struct {
 	watch  string
 	player string
 	// listed is told what every caption fetch's listing said about the
-	// language spoken — the language, or nothing (also when it failed) — so
-	// the fetch records it for no request of its own, and a play straight
-	// after it does not list again. Nil until OnListed.
-	listed func(ctx context.Context, videoID, language string)
+	// language spoken — the language, nothing, or a refusal — so the fetch
+	// records it for no request of its own, and a play straight after it
+	// does not list again. Nil until OnListed.
+	listed func(ctx context.Context, videoID, language string, refused bool)
 }
 
 // OnListed has every caption fetch report what its listing said about the
 // language spoken in the video.
-func (c *Client) OnListed(listed func(ctx context.Context, videoID, language string)) {
+func (c *Client) OnListed(listed func(ctx context.Context, videoID, language string, refused bool)) {
 	c.listed = listed
 }
 
@@ -200,12 +200,12 @@ func (c *Client) FetchSubtitles(ctx context.Context, videoURL, videoID string, h
 	if err != nil {
 		c.logger.Warn("caption list", "video", videoID, "error", err)
 		if c.listed != nil {
-			c.listed(ctx, videoID, "")
+			c.listed(ctx, videoID, "", errors.Is(err, errRefused))
 		}
 		return nil, errors.Is(err, errRefused)
 	}
 	if c.listed != nil {
-		c.listed(ctx, videoID, l.spoken)
+		c.listed(ctx, videoID, l.spoken, false)
 	}
 	tracks := l.tracks
 	if len(tracks) == 0 {

@@ -27,19 +27,18 @@ func (f *fakeLister) SpokenLanguage(context.Context, string) (string, bool, erro
 type fakeSpokenStore struct {
 	mu  sync.Mutex
 	set map[string]string
+	// recorded, when set, is told of every write.
+	recorded chan string
 }
 
 func (f *fakeSpokenStore) SetSpokenLanguage(_ context.Context, id, lang string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.set[id] = lang
+	f.mu.Unlock()
+	if f.recorded != nil {
+		f.recorded <- id
+	}
 	return nil
-}
-
-func (f *fakeSpokenStore) get(id string) string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.set[id]
 }
 
 func spokenRig() (*SpokenLanguages, *fakeLister, *fakeSpokenStore, *time.Time) {
@@ -68,7 +67,7 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 	if l.asked != 1 {
 		t.Fatalf("asked YouTube %d times through a refusal", l.asked)
 	}
-	*now = now.Add(spokenRest + time.Second)
+	*now = now.Add(spokenRefusedRest + time.Second)
 	l.refused = false
 	s.Ask(context.Background(), "v")
 	s.Ask(context.Background(), "v")
@@ -78,7 +77,7 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 	if len(st.set) != 0 {
 		t.Fatalf("recorded %v for no answer", st.set)
 	}
-	*now = now.Add(spokenRest + time.Second)
+	*now = now.Add(spokenNoneRest + time.Second)
 	l.lang = "en"
 	if got := s.Ask(context.Background(), "v"); got != "en" {
 		t.Fatalf("after the rest: %q", got)
@@ -91,75 +90,83 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 func TestACaptionFetchsListingSparesThePlayItsOwn(t *testing.T) {
 	s, l, st, _ := spokenRig()
 	l.lang = "en"
-	s.Listed(context.Background(), "v", "")
+	s.Listed(context.Background(), "v", "", false)
 	s.Ask(context.Background(), "v")
 	if l.asked != 0 || len(st.set) != 0 {
 		t.Fatalf("listed YouTube %d times straight after a caption fetch had; recorded %v", l.asked, st.set)
 	}
 }
 
-// slowLister answers after a while, unless its context is done first.
-type slowLister struct{ after time.Duration }
+// heldLister answers when released, and says when it has been asked.
+type heldLister struct {
+	asked   chan struct{}
+	release chan struct{}
+	mu      sync.Mutex
+	n       int
+}
 
-func (l slowLister) SpokenLanguage(ctx context.Context, _ string) (string, bool, error) {
-	select {
-	case <-time.After(l.after):
-		return "vi", false, nil
-	case <-ctx.Done():
-		return "", false, ctx.Err()
-	}
+func newHeldLister() *heldLister {
+	return &heldLister{asked: make(chan struct{}, 8), release: make(chan struct{})}
+}
+
+func (l *heldLister) SpokenLanguage(context.Context, string) (string, bool, error) {
+	l.mu.Lock()
+	l.n++
+	l.mu.Unlock()
+	l.asked <- struct{}{}
+	<-l.release
+	return "vi", false, nil
+}
+
+func (l *heldLister) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.n
 }
 
 // A listing slower than its asker's patience is finished and recorded all
 // the same: the asker comes back for it, and finds it in the catalogue
 // instead of listing YouTube again.
 func TestAListingOutlivesItsImpatientAsker(t *testing.T) {
-	st := &fakeSpokenStore{set: map[string]string{}}
-	s := NewSpokenLanguages(slowLister{after: 50 * time.Millisecond}, st, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-	defer cancel()
+	l := newHeldLister()
+	st := &fakeSpokenStore{set: map[string]string{}, recorded: make(chan string, 1)}
+	s := NewSpokenLanguages(l, st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { <-l.asked; cancel() }()
 	if got := s.Ask(ctx, "v"); got != "" {
 		t.Fatalf("answered %q after the asker gave up", got)
 	}
-	for deadline := time.Now().Add(2 * time.Second); st.get("v") == "" && time.Now().Before(deadline); {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if st.get("v") != "vi" {
+	close(l.release)
+	select {
+	case id := <-st.recorded:
+		if id != "v" {
+			t.Fatalf("recorded %q", id)
+		}
+	case <-time.After(2 * time.Second):
 		t.Fatal("the listing died with the asker")
 	}
 }
 
-// Two asks at once share one listing.
-func TestAsksAtOnceShareOneListing(t *testing.T) {
-	l := &countingSlowLister{after: 30 * time.Millisecond}
+// Asks while a listing is under way join it.
+func TestAsksDuringAListingJoinIt(t *testing.T) {
+	l := newHeldLister()
 	s := NewSpokenLanguages(l, &fakeSpokenStore{set: map[string]string{}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	var wg sync.WaitGroup
+	answers := make(chan string, 3)
+	go func() { answers <- s.Ask(context.Background(), "v") }()
+	<-l.asked // the first is listing, and held
+	for i := 0; i < 2; i++ {
+		go func() { answers <- s.Ask(context.Background(), "v") }()
+	}
+	// The two joiners are in DoChan once they wait; give them the chance
+	// before the listing ends, then release it.
+	time.Sleep(20 * time.Millisecond)
+	close(l.release)
 	for i := 0; i < 3; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); s.Ask(context.Background(), "v") }()
+		if got := <-answers; got != "vi" {
+			t.Fatalf("answer %q", got)
+		}
 	}
-	wg.Wait()
 	if n := l.count(); n != 1 {
-		t.Fatalf("listed YouTube %d times for three asks at once", n)
+		t.Fatalf("listed YouTube %d times for three asks during one listing", n)
 	}
-}
-
-type countingSlowLister struct {
-	after time.Duration
-	mu    sync.Mutex
-	n     int
-}
-
-func (l *countingSlowLister) SpokenLanguage(context.Context, string) (string, bool, error) {
-	l.mu.Lock()
-	l.n++
-	l.mu.Unlock()
-	time.Sleep(l.after)
-	return "vi", false, nil
-}
-
-func (l *countingSlowLister) count() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.n
 }
