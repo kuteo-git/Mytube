@@ -184,7 +184,7 @@ func (e *Engine) followNarration(ctx context.Context, drv Driver, s domain.Sessi
 		return e.apply(ctx, drv, s, reload)
 	}
 	if s.State == domain.Playing && s.LoadedNarrated && s.CurrentIndex+1 < len(s.Queue) {
-		e.narratedReady(ctx, drv, s.Queue[s.CurrentIndex+1].VideoID, 0)
+		e.narratedForm(ctx, drv, s.Queue[s.CurrentIndex+1].VideoID, 0)
 	}
 	return s
 }
@@ -192,9 +192,25 @@ func (e *Engine) followNarration(ctx context.Context, drv Driver, s domain.Sessi
 // narrationSwitch reloads the song playing, from where it is, when what the
 // speaker has is not the form narration asks for. Only while playing: a
 // reload starts the speaker, and a paused one must stay paused.
+//
+// A gateway that cannot say yet leaves the song as it is, either way: a
+// narrated song is not reloaded plain because the cast service restarted and
+// forgot, or one ask timed out.
 func (e *Engine) narrationSwitch(ctx context.Context, drv Driver, s domain.Session, now time.Time) (domain.Session, []domain.Action) {
 	item, ok := s.Current()
-	if !ok || s.State != domain.Playing || e.wantsNarrated(ctx, drv, s, item.VideoID, s.PositionS) == s.LoadedNarrated {
+	if !ok || s.State != domain.Playing {
+		return s, nil
+	}
+	want := false
+	if s.Narration {
+		switch e.narratedForm(ctx, drv, item.VideoID, s.PositionS) {
+		case domain.NarratedReady:
+			want = true
+		case domain.NarratedPreparing:
+			want = s.LoadedNarrated
+		}
+	}
+	if want == s.LoadedNarrated {
 		return s, nil
 	}
 	s, load := domain.Reload(s, now)
@@ -204,15 +220,15 @@ func (e *Engine) narrationSwitch(ctx context.Context, drv Driver, s domain.Sessi
 // wantsNarrated is whether a song of s is to be loaded narrated: asked for,
 // and ready in the form this speaker is handed it.
 func (e *Engine) wantsNarrated(ctx context.Context, drv Driver, s domain.Session, videoID string, fromS int) bool {
-	return s.Narration && e.narratedReady(ctx, drv, videoID, fromS)
+	return s.Narration && e.narratedForm(ctx, drv, videoID, fromS) == domain.NarratedReady
 }
 
-// narratedReady asks the gateway about a song, in the form this speaker is
+// narratedForm asks the gateway about a song, in the form this speaker is
 // handed it, and remembers the answer. A gateway that does not answer is
-// "still preparing": the song plays as it is.
-func (e *Engine) narratedReady(ctx context.Context, drv Driver, videoID string, fromS int) bool {
+// "still preparing".
+func (e *Engine) narratedForm(ctx context.Context, drv Driver, videoID string, fromS int) domain.Narrated {
 	if e.narrator == nil {
-		return false
+		return domain.NarratedPreparing
 	}
 	e.narratedMu.Lock()
 	known := e.narrated[videoID]
@@ -220,19 +236,19 @@ func (e *Engine) narratedReady(ctx context.Context, drv Driver, videoID string, 
 	// Ready is final; anything else is asked again, so a pass that failed
 	// for a moment (the TTS server restarting) is tried again.
 	if formFor(drv, known) == domain.NarratedReady {
-		return true
+		return domain.NarratedReady
 	}
 	askCtx, cancel := context.WithTimeout(ctx, narratorTimeout)
 	answer, err := e.narrator.Prepare(askCtx, videoID, fromS)
 	cancel()
 	if err != nil {
 		e.logger.Warn("prepare narrated sound", "video", videoID, "error", err)
-		return false
+		return domain.NarratedPreparing
 	}
 	e.narratedMu.Lock()
 	e.narrated[videoID] = answer
 	e.narratedMu.Unlock()
-	return formFor(drv, answer) == domain.NarratedReady
+	return formFor(drv, answer)
 }
 
 func formFor(drv Driver, a domain.NarratedAnswer) domain.Narrated {

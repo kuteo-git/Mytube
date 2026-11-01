@@ -13,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 )
 
 // A song's narrated sound, for a speaker: the song turned down under each
@@ -245,5 +247,32 @@ func TestFFmpegMixesTheNarrationIntoTheSong(t *testing.T) {
 	before, during := pcmRMS(pcm, 0.5, 1.4), pcmRMS(pcm, 1.7, 2.4)
 	if ratio := during / before; math.Abs(ratio-narratedDuckLevel) > 0.03 {
 		t.Fatalf("the song in the slot is %.2f of itself, want %.2f", ratio, narratedDuckLevel)
+	}
+}
+
+// "bật thuyết minh thì ko có work khi cast": a song with nothing to say is
+// not offered to a Nest as narrated. Handed the stream, the speaker played the
+// song as it is while the remote showed narration on, for good.
+func TestASongWithNothingToSayIsNotOfferedAsNarrated(t *testing.T) {
+	g := narratedGateway(t)
+	g.catalog = &oneVideo{video: &catalogv1.Video{Id: "v"}}
+	_ = os.MkdirAll(filepath.Join(g.mediaRoot, "v"), 0o755) // no captions
+	noSource := func() (string, error) { return "", os.ErrNotExist }
+
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Stream == "ready" {
+		t.Fatalf("no captions, offered as narrated: %+v", a)
+	}
+	waitFor(t, func() bool {
+		return g.prepareNarrated(context.Background(), "v", 0, noSource).Stream == "none"
+	}, "never said there is nothing to narrate")
+
+	// Lines known, none spoken: whether any will be is not known yet.
+	g.narration.passes["v"] = &narrationPass{Status: narrationRunning, Total: 5}
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Stream != "preparing" {
+		t.Fatalf("nothing spoken yet: %+v", a)
+	}
+	g.narration.passes["v"].Clips = []narrationClip{{StartSeconds: 1, DurationSeconds: 2, ClipURL: "/media/v/narration-tts/a.wav"}}
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Stream != "ready" {
+		t.Fatalf("a line spoken: %+v", a)
 	}
 }

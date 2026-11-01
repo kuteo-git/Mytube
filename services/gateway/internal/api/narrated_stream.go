@@ -35,14 +35,16 @@ import (
 // The R1 downloads a song whole before playing it, so it gets the file
 // (narrated_audio.go), which needs the whole pass anyway.
 
+// How long a stream may wait for the pass in all, before blocks are sent
+// without the lines they are missing: a pass that has stopped moving (the
+// synthesiser hung) must not hold the song. Over the whole stream, not per
+// block — per block, every line held it again. A variable for the tests.
+var streamLineWait = 20 * time.Second
+
 const (
 	wavHeaderBytes = 44
 	wavFrameBytes  = narratedChannels * 2
 
-	// How long one block waits for the pass before it is sent without the
-	// lines it is missing: a pass that has stopped moving (the synthesiser
-	// gone) must not hold the song.
-	streamLineWait = 20 * time.Second
 	// How long a block waits before the pass is asked to work from here.
 	streamRetargetAfter = 3 * time.Second
 )
@@ -185,9 +187,12 @@ func (g *Gateway) streamNarrated(ctx context.Context, w io.Writer, videoID, src 
 	m.frame = frame
 	var seen linesSeen
 	buf := make([]byte, narratedRate/10*wavFrameBytes)
+	patience := streamLineWait
 	for remaining > 0 {
 		blockStart := float64(m.frame) / narratedRate
-		lines, now, err := g.linesUntil(ctx, videoID, blockStart, blockStart+0.1, seen)
+		asked := time.Now()
+		lines, now, err := g.linesUntil(ctx, videoID, blockStart, blockStart+0.1, asked.Add(patience), seen)
+		patience = max(patience-time.Since(asked), 0)
 		if err != nil {
 			return err
 		}
@@ -230,9 +235,8 @@ type linesSeen struct {
 // are still the ones `seen`. Only the block: a pass working from where the
 // speaker is leaves the start for last, and a stream that waited on it sent
 // 0.1s of sound in 40s. It starts a pass when there is none, moves it here
-// when it is working somewhere else, and gives up waiting after
-// streamLineWait.
-func (g *Gateway) linesUntil(ctx context.Context, videoID string, from, until float64, seen linesSeen) ([]narratedLine, linesSeen, error) {
+// when it is working somewhere else, and gives up waiting at `deadline`.
+func (g *Gateway) linesUntil(ctx context.Context, videoID string, from, until float64, deadline time.Time, seen linesSeen) ([]narratedLine, linesSeen, error) {
 	started := time.Now()
 	asked := false
 	for {
@@ -247,7 +251,7 @@ func (g *Gateway) linesUntil(ctx context.Context, videoID string, from, until fl
 				(pass.Total > 0 && spokenIn(pass.cues, from, until))
 		}
 		waited := time.Since(started)
-		if ready || waited > streamLineWait {
+		if ready || !time.Now().Before(deadline) {
 			var clips []narrationClip
 			if now != seen && pass != nil {
 				clips = append(clips, pass.Clips...)

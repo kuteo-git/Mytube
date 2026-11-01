@@ -95,9 +95,13 @@ func (e *Evictor) SweepOnce(ctx context.Context) (int64, error) {
 		}
 		// The sound cut from it for a speaker (the gateway's /audio route) is
 		// the same bytes again, and means nothing without it.
-		castAudio := filepath.Join(filepath.Dir(path), CastAudioName)
-		if err := os.Remove(castAudio); err != nil && !os.IsNotExist(err) {
-			e.logger.Warn("remove cast audio", "video", c.VideoID, "path", castAudio, "error", err)
+		// So is its narrated mix, the same sound with the lines over it.
+		castAudio := []string{filepath.Join(filepath.Dir(path), CastAudioName)}
+		mixes, _ := filepath.Glob(filepath.Join(filepath.Dir(path), NarratedMixPattern))
+		for _, f := range append(castAudio, mixes...) {
+			if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+				e.logger.Warn("remove cast audio", "video", c.VideoID, "path", f, "error", err)
+			}
 		}
 
 		if err := e.repo.MarkEvicted(ctx, c.VideoID); err != nil {
@@ -112,3 +116,7 @@ func (e *Evictor) SweepOnce(ctx context.Context) (int64, error) {
 // CastAudioName is the file the gateway writes beside a video's media file
 // when a speaker asks for its sound. The gateway names it the same.
 const CastAudioName = "audio.m4a"
+
+// NarratedMixPattern matches the narrated mixes the gateway writes beside
+// it for a speaker that downloads a song whole. The gateway names them so.
+const NarratedMixPattern = "narrated-*.m4a"

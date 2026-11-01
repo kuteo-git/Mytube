@@ -172,3 +172,26 @@ func TestAStoppedPassDoesNotHoldTheSongForEver(t *testing.T) {
 		t.Fatal("a failed pass held the stream")
 	}
 }
+
+// A pass that has hung (the synthesiser never answering) holds the song for
+// streamLineWait once in all, not once per line: the song may fall that far
+// behind the clock and no further.
+func TestAHungPassHoldsTheSongOnceNotOncePerLine(t *testing.T) {
+	src := toneFixture(t)
+	g := narratedGateway(t)
+	defer func(was time.Duration) { streamLineWait = was }(streamLineWait)
+	streamLineWait = 300 * time.Millisecond
+	g.narration.passes["v"] = &narrationPass{
+		Status: narrationRunning, Total: 3, gen: 1,
+		cues: []passCue{{start: 1}, {start: 2}, {start: 3}},
+	}
+	frames := int64(4 * narratedRate)
+	started := time.Now()
+	var out bytes.Buffer
+	if err := g.streamNarrated(context.Background(), &out, "v", src, frames, 0, wavHeaderBytes+frames*wavFrameBytes-1); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(started); took > 700*time.Millisecond {
+		t.Fatalf("took %s: each of three lines held the song %s", took.Round(time.Millisecond), streamLineWait)
+	}
+}

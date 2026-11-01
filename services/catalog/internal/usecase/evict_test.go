@@ -94,7 +94,7 @@ func TestSweepTakesTheCastAudioWithTheMediaFile(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"1080p.mp4", "audio.m4a", "1080p.mp4.en.vtt"} {
+	for _, name := range []string{"1080p.mp4", "audio.m4a", "narrated-0123456789ab.m4a", "1080p.mp4.en.vtt"} {
 		if err := os.WriteFile(filepath.Join(dir, name), make([]byte, 100), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -109,6 +109,10 @@ func TestSweepTakesTheCastAudioWithTheMediaFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "audio.m4a")); !os.IsNotExist(err) {
 		t.Error("audio.m4a survived the sweep of its media file")
+	}
+	// The speaker's narrated mix is that sound again with the lines over it.
+	if _, err := os.Stat(filepath.Join(dir, "narrated-0123456789ab.m4a")); !os.IsNotExist(err) {
+		t.Error("the narrated mix survived the sweep of its media file")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "1080p.mp4.en.vtt")); err != nil {
 		t.Error("the captions were deleted with the media file")

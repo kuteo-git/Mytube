@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -201,5 +203,34 @@ func TestTheFileIsNotWaitedOnByASpeakerThatStreams(t *testing.T) {
 	r.startNarrated(t, "a")
 	if !r.driver.ops("load")[0].narrated {
 		t.Fatal("waited for the file")
+	}
+}
+
+// A speaker playing the narrated sound keeps it while the gateway cannot say
+// it is ready — the cast service restarted and its answers with it, the
+// gateway restarted and is reading the lines again, an ask that timed out.
+// Only narration switched off, or the gateway saying there is nothing to
+// narrate, takes the voice away mid-song.
+func TestANarratedSongKeepsItsVoiceWhileTheGatewayIsUnsure(t *testing.T) {
+	r := newRig()
+	r.narrator.set("a", domain.NarratedReady)
+	r.startNarrated(t, "a")
+	r.playing("a~narrated", 60)
+
+	// The cast service restarted: what it knew of the narrated sound is gone,
+	// and the gateway is making it again.
+	r.engine = NewEngine(r.repo, []Driver{r.driver}, r.catalog, r.narrator, r.clock.Now,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r.narrator.set("a", domain.NarratedPreparing)
+	r.playing("a~narrated", 61)
+	r.playing("a~narrated", 62)
+	if loads := r.driver.ops("load"); len(loads) != 1 {
+		t.Fatalf("loads = %+v, want the narrated song left playing", loads)
+	}
+
+	r.narrator.set("a", domain.NarratedNone)
+	r.playing("a~narrated", 63)
+	if loads := r.driver.ops("load"); len(loads) != 2 || loads[1].narrated {
+		t.Fatalf("loads = %+v, want the song as it is once nothing is narrated", loads)
 	}
 }

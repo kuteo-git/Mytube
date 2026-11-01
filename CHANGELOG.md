@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+**Narration on a speaker says what it does.** Four faults found in review,
+each red on its symptom first:
+- A song with no captions was handed to a Nest as narrated, and the remote
+  showed narration on, for good, over a song nothing was spoken in: the
+  stream was offered as soon as a pass ran. It is offered once a line is
+  spoken (`streamAnswer`), and `none` once a pass ends with nothing said.
+- A narrated song was reloaded plain when the gateway could not say it was
+  ready — the cast service restarted and forgot, or one ask timed out. Only
+  narration off, or `none`, takes the voice away now.
+- A hung pass (the synthesiser's client has no timeout) held the stream 20s
+  once per line; 20s is now the stream's patience in all (three lines held a
+  300ms test patience 949ms, now under 700ms).
+- Eviction left `narrated-*.m4a` beside the evicted video; it goes with
+  `audio.m4a` now.
+
 **A Nest narrates seconds after narration is switched on**, not once the
 whole pass is done. Measured on a video never narrated: the listener waited a
 minute and heard nothing — the pass was at 68 of 130 lines, and the file

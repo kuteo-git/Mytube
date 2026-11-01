@@ -63,9 +63,9 @@ type narratedAnswer struct {
 	Status string `json:"status"`
 	Done   int    `json:"done"`
 	Total  int    `json:"total"`
-	// The stream (narrated.wav): ready as soon as a pass is running — the
-	// stream waits on the lines itself, block by block — and none when there
-	// is nothing to narrate.
+	// The stream (narrated.wav): ready once a line is spoken — the stream
+	// waits on the rest itself, block by block — and none when there is
+	// nothing to narrate. See streamAnswer.
 	Stream string `json:"stream"`
 }
 
@@ -124,6 +124,23 @@ func (g *Gateway) narratedSource(ctx context.Context, v *catalogv1.Video) func()
 	}
 }
 
+// streamAnswer is whether a pass has a narrated stream to offer: ready once
+// a line has been spoken, none when it ended with nothing said. Not on the
+// pass merely running — a song with no captions, or none translated, would be
+// handed to the speaker as narrated and the remote would say so, for good,
+// over a song nothing is spoken in. Read under g.narration.mu.
+func streamAnswer(pass *narrationPass) string {
+	switch {
+	case pass == nil:
+		return "preparing"
+	case len(pass.Clips) > 0:
+		return "ready"
+	case pass.Status == narrationRunning || pass.Status == narrationIdle:
+		return "preparing"
+	}
+	return "none"
+}
+
 // prepareNarrated answers where the song's narrated sound is, and starts the
 // step that is missing: the narration pass, from where the speaker is
 // (`from`), or the mix.
@@ -133,6 +150,7 @@ func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, from floa
 	var status narrationStatus
 	var done, total int
 	var clips []narrationClip
+	stream := streamAnswer(pass)
 	if pass != nil {
 		status, done, total = pass.Status, pass.Done, pass.Total
 		clips = append(clips, pass.Clips...)
@@ -145,9 +163,18 @@ func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, from floa
 		// pass over lines already on disk is a read, so this is cheap when
 		// the phone has narrated it before.
 		g.startNarrationPass(context.WithoutCancel(ctx), videoID, from)
-		return narratedAnswer{Status: "preparing", Stream: "ready"}
+		// A moment for its first line, so the stream can be offered on this
+		// answer rather than one reload later. A second at most: the cast
+		// service asks inside its tick.
+		stream = "preparing"
+		for wait := 0; wait < 10 && stream == "preparing" && sleepCtx(ctx, 100*time.Millisecond); wait++ {
+			g.narration.mu.Lock()
+			stream = streamAnswer(g.narration.passes[videoID])
+			g.narration.mu.Unlock()
+		}
+		return narratedAnswer{Status: "preparing", Stream: stream}
 	case status == narrationRunning:
-		return narratedAnswer{Status: "preparing", Done: done, Total: total, Stream: "ready"}
+		return narratedAnswer{Status: "preparing", Done: done, Total: total, Stream: stream}
 	case status == narrationFailed:
 		return narratedAnswer{Status: "failed", Done: done, Total: total, Stream: "none"}
 	case len(clips) == 0:
@@ -156,6 +183,8 @@ func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, from floa
 
 	dir, _ := safeVideoDir(g.mediaRoot, videoID)
 	key := narratedKey(clips)
+	// Catalog's eviction removes these with the media file, by the same
+	// pattern (usecase.NarratedMixPattern).
 	dst := filepath.Join(dir, "narrated-"+key+".m4a")
 	if _, err := os.Stat(dst); err == nil {
 		return narratedAnswer{Status: "ready", Done: done, Total: total, Stream: "ready"}
