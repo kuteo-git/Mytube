@@ -1959,6 +1959,20 @@ closing all of them changes nothing on the speaker. Plan and decisions:
   fetched; a block waits only for the lines that start in it. The file above
   needs the whole pass (minutes for a video never narrated) and is the R1's,
   which downloads a song whole. `Driver.StreamsNarration` decides which.
+- **A song that speaks Vietnamese is not narrated unless asked for on that
+  song** (`domain.NarratesSong`): its narration would read its Vietnamese
+  captions over its own voice. The language spoken is catalog's
+  `spoken_language`, the language of YouTube's automatic (`asr`) captions —
+  not `language`, which said "en" for 13,736 Vietnamese titles. Ingest records
+  it from the listing every caption fetch makes anyway (`OnListed`); a video
+  never listed is asked once at play (`GET /api/videos/{id}/spoken-language`,
+  then ingest's `SpokenLanguage`, then Vietnamese letters in the title, which
+  are not recorded). No answer rests the video 10 minutes in ingest. Switching
+  narration on while a Vietnamese song plays narrates that song
+  (`narration_forced_for`). **Applying `services/catalog/migrations/0020_spoken_language.sql`
+  and, as `cast_svc`, `services/cast/migrations/0003_narration_forced.sql` is
+  required before running the new code**: catalog's video query and the cast
+  service's session columns read them.
 - **`audio.m4a` is ~3 MB per cast video and is not counted in `size_bytes`.**
   Eviction removes it with the media file (`usecase.CastAudioName`); captions
   beside them stay.

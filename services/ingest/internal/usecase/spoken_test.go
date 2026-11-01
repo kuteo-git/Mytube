@@ -72,3 +72,17 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 		t.Fatalf("after the rest: %q", got)
 	}
 }
+
+// A caption fetch has just listed the video and found no automatic captions,
+// or was refused: the play that follows does not list it again.
+func TestACaptionFetchsListingSparesThePlayItsOwn(t *testing.T) {
+	s, l, _, _ := spokenRig()
+	l.lang = "en"
+	s.Listed(context.Background(), "v", "", false)
+	s.Listed(context.Background(), "w", "", true)
+	s.Ask(context.Background(), "v")
+	s.Ask(context.Background(), "w")
+	if l.asked != 0 {
+		t.Fatalf("listed YouTube %d times straight after a caption fetch had", l.asked)
+	}
+}

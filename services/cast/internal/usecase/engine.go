@@ -248,11 +248,28 @@ func (e *Engine) covers(ctx context.Context, s domain.Session, videoID string) b
 type spokenAnswer struct {
 	language string
 	at       time.Time
+	// The gateway did not answer in time. It finishes the listing and
+	// records it all the same, so the next ask soon after has the answer.
+	failed bool
 }
 
-// spokenRetry is how long "not known" stands before the gateway is asked
-// again: it asks YouTube, and must not on every tick.
-const spokenRetry = 5 * time.Minute
+const (
+	// spokenRetry is how long "not known" stands before the gateway is asked
+	// again: it asks YouTube, and must not on every tick.
+	spokenRetry = 5 * time.Minute
+	// spokenFailedRetry is how long an ask that timed out stands.
+	spokenFailedRetry = 15 * time.Second
+)
+
+func (a spokenAnswer) stands(now time.Time) bool {
+	switch {
+	case a.language != "":
+		return true
+	case a.failed:
+		return now.Sub(a.at) < spokenFailedRetry
+	}
+	return now.Sub(a.at) < spokenRetry
+}
 
 // spokenLanguage is the language spoken in a song, asked of the gateway once
 // and remembered; empty when not known.
@@ -263,7 +280,7 @@ func (e *Engine) spokenLanguage(ctx context.Context, videoID string) string {
 	e.narratedMu.Lock()
 	known, asked := e.spoken[videoID]
 	e.narratedMu.Unlock()
-	if asked && (known.language != "" || e.now().Sub(known.at) < spokenRetry) {
+	if asked && known.stands(e.now()) {
 		return known.language
 	}
 	askCtx, cancel := context.WithTimeout(ctx, narratorTimeout)
@@ -273,7 +290,7 @@ func (e *Engine) spokenLanguage(ctx context.Context, videoID string) string {
 		e.logger.Warn("spoken language", "video", videoID, "error", err)
 	}
 	e.narratedMu.Lock()
-	e.spoken[videoID] = spokenAnswer{language: lang, at: e.now()}
+	e.spoken[videoID] = spokenAnswer{language: lang, at: e.now(), failed: err != nil}
 	e.narratedMu.Unlock()
 	return lang
 }

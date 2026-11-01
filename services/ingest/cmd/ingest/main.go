@@ -172,7 +172,7 @@ func main() {
 	// player opens a video nobody has listed.
 	listings := timedtext.New(mediaRoot, logger)
 	spoken := usecase.NewSpokenLanguages(listings, catalogclient.New(catalogHTTP, catalogURL, devUserID), logger)
-	listings.OnSpoken(spoken.Heard)
+	listings.OnListed(spoken.Listed)
 	captions := timedtext.NewFirst(
 		listings,
 		remotetranscript.New(mediaRoot, proxies, logger),

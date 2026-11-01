@@ -73,21 +73,23 @@ type Client struct {
 	// to somebody else's server.
 	watch  string
 	player string
-	// heard is told the language spoken in a video whenever a listing shows
-	// it, so a caption fetch records it for no request of its own. Nil until
-	// OnSpoken.
-	heard func(ctx context.Context, videoID, language string)
+	// listed is told what every caption fetch's listing said about the
+	// language spoken — the language, or nothing, or a refusal — so the
+	// fetch records it for no request of its own, and a play straight after
+	// it does not list again. Nil until OnListed.
+	listed func(ctx context.Context, videoID, language string, refused bool)
 }
 
-// OnSpoken has every listing report the language spoken in its video.
-func (c *Client) OnSpoken(heard func(ctx context.Context, videoID, language string)) {
-	c.heard = heard
+// OnListed has every caption fetch report what its listing said about the
+// language spoken in the video.
+func (c *Client) OnListed(listed func(ctx context.Context, videoID, language string, refused bool)) {
+	c.listed = listed
 }
 
 // SpokenLanguage asks YouTube which language is spoken in a video: one
 // listing, the same one a caption fetch begins with, and no download. Empty
 // when it has no automatic captions; refused when the endpoint said no.
-// Recorded by the caller, not through [Client.OnSpoken].
+// Recorded by the caller, not through [Client.OnListed].
 func (c *Client) SpokenLanguage(ctx context.Context, videoID string) (language string, refused bool, err error) {
 	tracks, err := c.list(ctx, videoID)
 	if err != nil {
@@ -171,10 +173,13 @@ func (c *Client) FetchSubtitles(ctx context.Context, videoURL, videoID string, h
 	tracks, err := c.list(ctx, videoID)
 	if err != nil {
 		c.logger.Warn("caption list", "video", videoID, "error", err)
+		if c.listed != nil {
+			c.listed(ctx, videoID, "", errors.Is(err, errRefused))
+		}
 		return nil, errors.Is(err, errRefused)
 	}
-	if lang := spokenOf(tracks); lang != "" && c.heard != nil {
-		c.heard(ctx, videoID, lang)
+	if c.listed != nil {
+		c.listed(ctx, videoID, spokenOf(tracks), false)
 	}
 	if len(tracks) == 0 {
 		// Nothing to fetch, and nothing refused us. A video with no captions is

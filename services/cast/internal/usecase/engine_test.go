@@ -193,6 +193,7 @@ type fakeNarrator struct {
 	spoken  map[string]string
 	// How many times the gateway was asked which language a song speaks.
 	spokenAsked int
+	spokenErr   error
 	asked       []string
 	from        []int
 }
@@ -201,6 +202,9 @@ func (n *fakeNarrator) SpokenLanguage(_ context.Context, videoID string) (string
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.spokenAsked++
+	if n.spokenErr != nil {
+		return "", n.spokenErr
+	}
 	return n.spoken[videoID], nil
 }
 

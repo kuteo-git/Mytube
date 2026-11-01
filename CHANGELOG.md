@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+**A video that speaks Vietnamese is not narrated when it opens.** Its
+narration read its Vietnamese captions over its own Vietnamese voice. The
+language spoken is now known: the language of YouTube's automatic captions,
+which are made from the sound, kept as catalog's `spoken_language` (0020)
+beside a `language` column that said "en" for 13,736 of 68,064 videos with
+Vietnamese titles. Every caption fetch records it from the listing it makes
+anyway — no request of its own. A video never listed is asked once, when it is
+played: `GET /api/videos/{id}/spoken-language` answers from the catalogue, then
+ingest's new `SpokenLanguage` (one listing, recorded; nothing or a refusal
+rests the video 10 minutes), then Vietnamese letters in the title. On a
+speaker each song is decided by its own language: a Vietnamese song plays as it
+is with narration on and the remote shows it off; switched on while it plays,
+that song is narrated (cast 0003, `narration_forced_for`). Needs both
+migrations applied first.
+
 **Narration on a speaker says what it does.** Four faults found in review,
 each red on its symptom first:
 - A song with no captions was handed to a Nest as narrated, and the remote

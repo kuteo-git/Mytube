@@ -304,3 +304,20 @@ func TestALanguageTheCatalogueKnowsIsNotAskedAgain(t *testing.T) {
 		t.Fatalf("asked the gateway %d times for a language the catalogue gave", r.narrator.spokenAsked)
 	}
 }
+
+// An ask that timed out is asked again within seconds, not minutes: the
+// gateway goes on and records the answer.
+func TestALanguageAskThatTimedOutIsAskedAgainSoon(t *testing.T) {
+	r := newRig()
+	r.narrator.spokenErr = context.DeadlineExceeded
+	r.startNarrated(t, "a")
+	r.playing("a", 40)
+	asked := r.narrator.spokenAsked
+	r.narrator.spokenErr = nil
+	r.narrator.spoken["a"] = "vi"
+	r.clock.advance(spokenFailedRetry)
+	r.playing("a", 56)
+	if r.narrator.spokenAsked == asked {
+		t.Fatal("not asked again after a timeout")
+	}
+}
