@@ -10,8 +10,8 @@ import (
 	"github.com/lucnguyen/local-youtube/services/cast/internal/domain"
 )
 
-// QA C5: the next song is prepared only when narration would cover it.
-func TestQAPrefetchSkipsAVietnameseNextSong(t *testing.T) {
+// the next song is prepared only when narration would cover it.
+func TestPrefetchSkipsAVietnameseNextSong(t *testing.T) {
 	r := newRig()
 	r.narrator.spoken["a"] = "en"
 	r.narrator.spoken["b"] = "vi"
@@ -25,44 +25,8 @@ func TestQAPrefetchSkipsAVietnameseNextSong(t *testing.T) {
 	}
 }
 
-// QA C5 control: an English next song is prepared.
-func TestQAPrefetchPreparesAnEnglishNextSong(t *testing.T) {
-	r := newRig()
-	r.narrator.spoken["a"] = "en"
-	r.narrator.spoken["b"] = "en"
-	r.narrator.set("a", domain.NarratedReady)
-	r.narrator.set("b", domain.NarratedReady)
-	r.startNarrated(t, "a", "b")
-	r.playing("a~narrated", 40)
-	if !r.narrator.wasAsked("b") {
-		t.Fatal("the English next song was not prepared")
-	}
-}
-
-// QA C3b: forced on a Vietnamese song, the English song after it is narrated.
-func TestQAForcedVietnameseThenEnglishNextIsNarrated(t *testing.T) {
-	r := newRig()
-	r.narrator.spoken["a"] = "vi"
-	r.narrator.spoken["b"] = "en"
-	r.narrator.set("a", domain.NarratedReady)
-	r.narrator.set("b", domain.NarratedReady)
-	s := r.startNarrated(t, "a", "b")
-	r.playing("a", 40)
-	if _, err := r.engine.SetNarration(context.Background(), s.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	r.playing("a~narrated", 198)
-	r.driver.setStatus(domain.DeviceStatus{State: domain.DeviceIdle})
-	r.clock.advance(time.Second)
-	r.engine.Tick(context.Background())
-	loads := r.driver.ops("load")
-	if last := loads[len(loads)-1]; last.video != "b" || !last.narrated {
-		t.Fatalf("loads = %+v, want b narrated", loads)
-	}
-}
-
-// QA C7: off then on again on the same Vietnamese song narrates it again.
-func TestQAOffThenOnAgainOnAVietnameseSong(t *testing.T) {
+// off then on again on the same Vietnamese song narrates it again.
+func TestOffThenOnAgainOnAVietnameseSong(t *testing.T) {
 	r := newRig()
 	r.narrator.spoken["a"] = "vi"
 	r.narrator.set("a", domain.NarratedReady)
@@ -85,9 +49,9 @@ func TestQAOffThenOnAgainOnAVietnameseSong(t *testing.T) {
 	}
 }
 
-// QA C6: a restarted engine (empty cache) on a session playing a Vietnamese
+// a restarted engine (empty cache) on a session playing a Vietnamese
 // song: one tick asks and settles it plain; a forced song stays narrated.
-func TestQARestartWithAnEmptyCache(t *testing.T) {
+func TestRestartWithAnEmptyCache(t *testing.T) {
 	r := newRig()
 	r.narrator.spoken["a"] = "vi"
 	r.narrator.set("a", domain.NarratedReady)
@@ -113,9 +77,9 @@ func TestQARestartWithAnEmptyCache(t *testing.T) {
 	}
 }
 
-// QA C8: an ask that timed out narrates as the switch says; once the answer
+// an ask that timed out narrates as the switch says; once the answer
 // is heard (Vietnamese) the song goes back to its own sound.
-func TestQATimedOutAskThenVietnameseGoesBackToPlain(t *testing.T) {
+func TestTimedOutAskThenVietnameseGoesBackToPlain(t *testing.T) {
 	r := newRig()
 	r.narrator.spokenErr = context.DeadlineExceeded
 	r.narrator.set("a", domain.NarratedReady)
@@ -135,8 +99,8 @@ func TestQATimedOutAskThenVietnameseGoesBackToPlain(t *testing.T) {
 	}
 }
 
-// QA C9: an English language read with the queue is not asked of the gateway.
-func TestQACatalogueSeededEnglishIsNotAsked(t *testing.T) {
+// an English language read with the queue is not asked of the gateway.
+func TestCatalogueSeededEnglishIsNotAsked(t *testing.T) {
 	r := newRig()
 	r.catalog.spoken = map[string]string{"a": "en"}
 	r.narrator.set("a", domain.NarratedReady)

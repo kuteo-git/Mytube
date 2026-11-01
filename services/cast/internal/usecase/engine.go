@@ -247,28 +247,21 @@ func (e *Engine) covers(ctx context.Context, s domain.Session, videoID string) b
 
 type spokenAnswer struct {
 	language string
-	at       time.Time
-	// The gateway did not answer in time. It finishes the listing and
-	// records it all the same, so the next ask soon after has the answer.
-	failed bool
+	// When "not known" stops standing and the gateway is asked again.
+	retryAt time.Time
 }
 
 const (
 	// spokenRetry is how long "not known" stands before the gateway is asked
 	// again: it asks YouTube, and must not on every tick.
 	spokenRetry = 5 * time.Minute
-	// spokenFailedRetry is how long an ask that timed out stands.
+	// spokenFailedRetry is how long an ask that timed out stands: ingest
+	// finishes the listing and records it, so the next ask has the answer.
 	spokenFailedRetry = 15 * time.Second
 )
 
 func (a spokenAnswer) stands(now time.Time) bool {
-	switch {
-	case a.language != "":
-		return true
-	case a.failed:
-		return now.Sub(a.at) < spokenFailedRetry
-	}
-	return now.Sub(a.at) < spokenRetry
+	return a.language != "" || now.Before(a.retryAt)
 }
 
 // spokenLanguage is the language spoken in a song, asked of the gateway once
@@ -290,7 +283,11 @@ func (e *Engine) spokenLanguage(ctx context.Context, videoID string) string {
 		e.logger.Warn("spoken language", "video", videoID, "error", err)
 	}
 	e.narratedMu.Lock()
-	e.spoken[videoID] = spokenAnswer{language: lang, at: e.now(), failed: err != nil}
+	retry := spokenRetry
+	if err != nil {
+		retry = spokenFailedRetry
+	}
+	e.spoken[videoID] = spokenAnswer{language: lang, retryAt: e.now().Add(retry)}
 	e.narratedMu.Unlock()
 	return lang
 }
@@ -500,7 +497,7 @@ func (e *Engine) queueFor(ctx context.Context, userID string, ids []string, star
 		// is asked only about the rest.
 		if v.SpokenLanguage != "" {
 			e.narratedMu.Lock()
-			e.spoken[v.Item.VideoID] = spokenAnswer{language: v.SpokenLanguage, at: e.now()}
+			e.spoken[v.Item.VideoID] = spokenAnswer{language: v.SpokenLanguage}
 			e.narratedMu.Unlock()
 		}
 		if i >= startIndex && start < 0 {

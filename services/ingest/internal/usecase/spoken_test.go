@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 )
@@ -23,11 +24,22 @@ func (f *fakeLister) SpokenLanguage(context.Context, string) (string, bool, erro
 	return f.lang, false, nil
 }
 
-type fakeSpokenStore struct{ set map[string]string }
+type fakeSpokenStore struct {
+	mu  sync.Mutex
+	set map[string]string
+}
 
 func (f *fakeSpokenStore) SetSpokenLanguage(_ context.Context, id, lang string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.set[id] = lang
 	return nil
+}
+
+func (f *fakeSpokenStore) get(id string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.set[id]
 }
 
 func spokenRig() (*SpokenLanguages, *fakeLister, *fakeSpokenStore, *time.Time) {
@@ -56,7 +68,7 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 	if l.asked != 1 {
 		t.Fatalf("asked YouTube %d times through a refusal", l.asked)
 	}
-	*now = now.Add(spokenRefusedRest + time.Second)
+	*now = now.Add(spokenRest + time.Second)
 	l.refused = false
 	s.Ask(context.Background(), "v")
 	s.Ask(context.Background(), "v")
@@ -66,7 +78,7 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 	if len(st.set) != 0 {
 		t.Fatalf("recorded %v for no answer", st.set)
 	}
-	*now = now.Add(spokenNoneRest + time.Second)
+	*now = now.Add(spokenRest + time.Second)
 	l.lang = "en"
 	if got := s.Ask(context.Background(), "v"); got != "en" {
 		t.Fatalf("after the rest: %q", got)
@@ -74,16 +86,15 @@ func TestNoAnswerRestsBeforeAskingAgain(t *testing.T) {
 }
 
 // A caption fetch has just listed the video and found no automatic captions,
-// or was refused: the play that follows does not list it again.
+// or failed: the play that follows does not list it again, and nothing is
+// recorded for it.
 func TestACaptionFetchsListingSparesThePlayItsOwn(t *testing.T) {
-	s, l, _, _ := spokenRig()
+	s, l, st, _ := spokenRig()
 	l.lang = "en"
-	s.Listed(context.Background(), "v", "", false)
-	s.Listed(context.Background(), "w", "", true)
+	s.Listed(context.Background(), "v", "")
 	s.Ask(context.Background(), "v")
-	s.Ask(context.Background(), "w")
-	if l.asked != 0 {
-		t.Fatalf("listed YouTube %d times straight after a caption fetch had", l.asked)
+	if l.asked != 0 || len(st.set) != 0 {
+		t.Fatalf("listed YouTube %d times straight after a caption fetch had; recorded %v", l.asked, st.set)
 	}
 }
 
@@ -107,8 +118,48 @@ func TestAListingOutlivesItsImpatientAsker(t *testing.T) {
 	s := NewSpokenLanguages(slowLister{after: 50 * time.Millisecond}, st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
 	defer cancel()
-	s.Ask(ctx, "v")
-	if st.set["v"] != "vi" {
-		t.Fatalf("recorded %q: the listing died with the asker", st.set["v"])
+	if got := s.Ask(ctx, "v"); got != "" {
+		t.Fatalf("answered %q after the asker gave up", got)
 	}
+	for deadline := time.Now().Add(2 * time.Second); st.get("v") == "" && time.Now().Before(deadline); {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if st.get("v") != "vi" {
+		t.Fatal("the listing died with the asker")
+	}
+}
+
+// Two asks at once share one listing.
+func TestAsksAtOnceShareOneListing(t *testing.T) {
+	l := &countingSlowLister{after: 30 * time.Millisecond}
+	s := NewSpokenLanguages(l, &fakeSpokenStore{set: map[string]string{}}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.Ask(context.Background(), "v") }()
+	}
+	wg.Wait()
+	if n := l.count(); n != 1 {
+		t.Fatalf("listed YouTube %d times for three asks at once", n)
+	}
+}
+
+type countingSlowLister struct {
+	after time.Duration
+	mu    sync.Mutex
+	n     int
+}
+
+func (l *countingSlowLister) SpokenLanguage(context.Context, string) (string, bool, error) {
+	l.mu.Lock()
+	l.n++
+	l.mu.Unlock()
+	time.Sleep(l.after)
+	return "vi", false, nil
+}
+
+func (l *countingSlowLister) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.n
 }

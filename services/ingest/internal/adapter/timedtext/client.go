@@ -74,15 +74,15 @@ type Client struct {
 	watch  string
 	player string
 	// listed is told what every caption fetch's listing said about the
-	// language spoken — the language, or nothing, or a refusal — so the
-	// fetch records it for no request of its own, and a play straight after
-	// it does not list again. Nil until OnListed.
-	listed func(ctx context.Context, videoID, language string, refused bool)
+	// language spoken — the language, or nothing (also when it failed) — so
+	// the fetch records it for no request of its own, and a play straight
+	// after it does not list again. Nil until OnListed.
+	listed func(ctx context.Context, videoID, language string)
 }
 
 // OnListed has every caption fetch report what its listing said about the
 // language spoken in the video.
-func (c *Client) OnListed(listed func(ctx context.Context, videoID, language string, refused bool)) {
+func (c *Client) OnListed(listed func(ctx context.Context, videoID, language string)) {
 	c.listed = listed
 }
 
@@ -98,11 +98,22 @@ func (c *Client) SpokenLanguage(ctx context.Context, videoID string) (language s
 	return l.spoken, false, nil
 }
 
-// spokenOf is the language of YouTube's automatic captions, which it makes
-// from the sound — so the language spoken, where an uploaded track is only
-// the language somebody wrote.
-func spokenOf(tracks []captionTrack) string {
-	for _, t := range tracks {
+// spokenOf is the language spoken in a listed video: the language of
+// YouTube's automatic captions, which it makes from the sound, where an
+// uploaded track is only the language somebody wrote. A dubbed video has an
+// automatic track per audio track, so there it is the default audio track's
+// language, which is the original. One listed (EhHvt1dhuV0): automatic en
+// and vi, audio en-US.10 and vi.4, default vi.4 — and the HLS ladder's
+// original audio is vi. Empty when the listing does not say.
+func spokenOf(r captionRenderer) string {
+	if len(r.AudioTracks) > 1 {
+		if d := r.DefaultAudio; d >= 0 && d < len(r.AudioTracks) {
+			id, _, _ := strings.Cut(r.AudioTracks[d].ID, ".")
+			return strings.ToLower(primary(id))
+		}
+		return ""
+	}
+	for _, t := range r.Tracks {
 		if t.Kind == "asr" {
 			return strings.ToLower(primary(t.Lang))
 		}
@@ -153,16 +164,18 @@ func (t captionTrack) label() string {
 
 type playerResponse struct {
 	Captions struct {
-		Renderer struct {
-			Tracks []captionTrack `json:"captionTracks"`
-			// A dubbed video's audio tracks ("vi.4", "en-US.10"), and the
-			// one played by default, which is the original.
-			AudioTracks []struct {
-				ID string `json:"audioTrackId"`
-			} `json:"audioTracks"`
-			DefaultAudio int `json:"defaultAudioTrackIndex"`
-		} `json:"playerCaptionsTracklistRenderer"`
+		Renderer captionRenderer `json:"playerCaptionsTracklistRenderer"`
 	} `json:"captions"`
+}
+
+type captionRenderer struct {
+	Tracks []captionTrack `json:"captionTracks"`
+	// A dubbed video's audio tracks ("vi.4", "en-US.10"), and the one played
+	// by default, which is the original.
+	AudioTracks []struct {
+		ID string `json:"audioTrackId"`
+	} `json:"audioTracks"`
+	DefaultAudio int `json:"defaultAudioTrackIndex"`
 }
 
 // listing is what one listing says: the caption tracks, and the language
@@ -187,12 +200,12 @@ func (c *Client) FetchSubtitles(ctx context.Context, videoURL, videoID string, h
 	if err != nil {
 		c.logger.Warn("caption list", "video", videoID, "error", err)
 		if c.listed != nil {
-			c.listed(ctx, videoID, "", errors.Is(err, errRefused))
+			c.listed(ctx, videoID, "")
 		}
 		return nil, errors.Is(err, errRefused)
 	}
 	if c.listed != nil {
-		c.listed(ctx, videoID, l.spoken, false)
+		c.listed(ctx, videoID, l.spoken)
 	}
 	tracks := l.tracks
 	if len(tracks) == 0 {
@@ -303,19 +316,7 @@ func (c *Client) list(ctx context.Context, videoID string) (listing, error) {
 		return listing{}, fmt.Errorf("player response: %w", err)
 	}
 	r := p.Captions.Renderer
-	l := listing{tracks: r.Tracks, spoken: spokenOf(r.Tracks)}
-	// Dubbed: an automatic track per audio track, so the first says nothing
-	// about which is spoken. The default audio track is the original. One
-	// listed (EhHvt1dhuV0): en and vi automatic tracks, audio en-US.10 and
-	// vi.4, default vi.4 — and the HLS ladder's original audio is vi.
-	if len(r.AudioTracks) > 1 {
-		l.spoken = ""
-		if d := r.DefaultAudio; d >= 0 && d < len(r.AudioTracks) {
-			id, _, _ := strings.Cut(r.AudioTracks[d].ID, ".")
-			l.spoken = strings.ToLower(primary(id))
-		}
-	}
-	return l, nil
+	return listing{tracks: r.Tracks, spoken: spokenOf(r)}, nil
 }
 
 // download takes the one file, asking for WebVTT directly.

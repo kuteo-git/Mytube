@@ -11,7 +11,12 @@ Vietnamese titles. Every caption fetch records it from the listing it makes
 anyway — no request of its own. A video never listed is asked once, when it is
 played: `GET /api/videos/{id}/spoken-language` answers from the catalogue, then
 ingest's new `SpokenLanguage` (one listing, recorded; nothing or a refusal
-rests the video 10 minutes), then Vietnamese letters in the title. On a
+rests the video 10 minutes), then Vietnamese letters in the title (composed
+first: 304 titles are stored decomposed). A dubbed video has an automatic
+track per audio track, so its language is the default audio track's — the
+original: EhHvt1dhuV0, Vietnamese dubbed into English, listed English first.
+One listing per video at a time, and one that outlives its asker still
+records. On a
 speaker each song is decided by its own language: a Vietnamese song plays as it
 is with narration on and the remote shows it off; switched on while it plays,
 that song is narrated (cast 0003, `narration_forced_for`). Needs both

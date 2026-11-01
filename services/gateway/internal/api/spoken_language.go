@@ -24,9 +24,11 @@ import (
 // read: Vietnamese letters in it say Vietnamese. Empty is "not known", which
 // the player takes as its switch says.
 
-// spokenAskTimeout bounds the one listing ingest makes; the player waits on
-// this answer only to decide narration, never to play.
-const spokenAskTimeout = 5 * time.Second
+// spokenAskTimeout bounds the wait for ingest's listing (measured 0.7–1.1s);
+// the player waits on this answer only to decide narration, never to play.
+// Under the cast service's 2s, so a speaker still gets the title's answer
+// when YouTube is slow.
+const spokenAskTimeout = 1500 * time.Millisecond
 
 func (g *Gateway) handleSpokenLanguage(w http.ResponseWriter, r *http.Request) {
 	resp, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{VideoId: r.PathValue("id")}))
@@ -42,9 +44,9 @@ func (g *Gateway) spokenLanguage(ctx context.Context, v *catalogv1.Video) string
 	if lang := v.GetSpokenLanguage(); lang != "" {
 		return lang
 	}
-	// Not the asker's context: a listing that has begun is worth finishing
-	// for the catalogue, even when the speaker asking stopped waiting.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), spokenAskTimeout)
+	// Ingest finishes a listing it has begun and records it, whoever stops
+	// waiting; this only bounds how long the answer is waited for.
+	ctx, cancel := context.WithTimeout(ctx, spokenAskTimeout)
 	defer cancel()
 	if resp, err := g.ingest.SpokenLanguage(ctx, connect.NewRequest(&ingestv1.SpokenLanguageRequest{VideoId: v.GetId()})); err == nil {
 		if lang := resp.Msg.GetLanguage(); lang != "" {

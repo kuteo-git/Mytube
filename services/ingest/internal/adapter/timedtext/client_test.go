@@ -3,7 +3,6 @@ package timedtext
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -230,13 +229,13 @@ func TestACaptionFetchHearsTheLanguageSpoken(t *testing.T) {
 	c, _ := newTestClient(t, f)
 	f.tracks = []map[string]any{track("vi", "asr", c.watchHost()+"/timedtext?lang=vi")}
 	var heard []string
-	c.OnListed(func(_ context.Context, videoID, lang string, refused bool) {
-		heard = append(heard, fmt.Sprint(videoID, " ", lang, " ", refused))
+	c.OnListed(func(_ context.Context, videoID, lang string) {
+		heard = append(heard, videoID+" "+lang)
 	})
 
 	c.FetchSubtitles(context.Background(), "", "abc123", 1080)
 
-	if len(heard) != 1 || heard[0] != "abc123 vi false" {
+	if len(heard) != 1 || heard[0] != "abc123 vi" {
 		t.Fatalf("heard %v", heard)
 	}
 	if f.hits != 1 {

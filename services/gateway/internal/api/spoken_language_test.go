@@ -38,12 +38,29 @@ func TestAVietnameseTitleIsReadAsVietnamese(t *testing.T) {
 type spokenIngest struct {
 	ingestv1connect.IngestServiceClient
 	lang  string
+	err   error
 	asked int
 }
 
 func (s *spokenIngest) SpokenLanguage(context.Context, *connect.Request[ingestv1.SpokenLanguageRequest]) (*connect.Response[ingestv1.SpokenLanguageResponse], error) {
 	s.asked++
+	if s.err != nil {
+		return nil, s.err
+	}
 	return connect.NewResponse(&ingestv1.SpokenLanguageResponse{Language: s.lang}), nil
+}
+
+// Titles stored decomposed (NFD), a base letter and a combining mark, copied
+// byte for byte from catalog.videos (_QibWgiYS_Y, 5AsycqoEzDQ; 304 such titles on 2026-11-01).
+func TestADecomposedVietnameseTitleIsVietnamese(t *testing.T) {
+	for _, title := range []string{
+		"Con Gái Của Mẹ",        // _QibWgiYS_Y
+		"THUỶ ĐÀI NẤM SAIGON XƯA", // 5AsycqoEzDQ
+	} {
+		if !vietnameseTitle(title) {
+			t.Errorf("%q (NFD) not read as Vietnamese", title)
+		}
+	}
 }
 
 // The catalogue first, YouTube (through ingest) when it does not know, and
@@ -68,6 +85,10 @@ func TestTheSpokenLanguageIsAskedInOrder(t *testing.T) {
 	}
 	if lang, _ := ask(&catalogv1.Video{Id: "v", Title: "Phở Hà Nội ngon nhất"}, ""); lang != "vi" {
 		t.Errorf("the title: %q", lang)
+	}
+	g := &Gateway{catalog: &oneVideo{}, ingest: &spokenIngest{err: connect.NewError(connect.CodeUnavailable, nil)}, logger: discardLogger()}
+	if lang := g.spokenLanguage(context.Background(), &catalogv1.Video{Id: "v", Title: "Phở Hà Nội ngon nhất"}); lang != "vi" {
+		t.Errorf("ingest down, the title: %q", lang)
 	}
 	if lang, _ := ask(&catalogv1.Video{Id: "v", Title: "Never Gonna Give You Up"}, ""); lang != "" {
 		t.Errorf("not known: %q", lang)

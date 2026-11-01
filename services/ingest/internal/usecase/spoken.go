@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // SpokenLister asks YouTube which language is spoken in a video.
@@ -18,14 +20,11 @@ type SpokenStore interface {
 }
 
 const (
-	// After YouTube refuses, the video is left alone for this long: the
-	// caption endpoint refuses in waves, and asking through one is how a
-	// refusal becomes a block.
-	spokenRefusedRest = 10 * time.Minute
-	// After an answer of "none" — no automatic captions yet, or ever. YouTube
-	// makes them hours after an upload, so a later play asks again; not the
-	// same play, whose caption fetch has just listed it.
-	spokenNoneRest = 10 * time.Minute
+	// After a listing that gave no answer — no automatic captions (YouTube
+	// makes them hours after an upload), a refusal, a failure — the video is
+	// left alone for this long: a later play asks again, the same play does
+	// not, and asking through a wave of refusals is how one becomes a block.
+	spokenRest = 10 * time.Minute
 	// spokenListTimeout bounds one listing: two requests, measured 0.7–1.1s.
 	spokenListTimeout = 20 * time.Second
 )
@@ -34,25 +33,28 @@ const (
 // opening one nobody has asked about, and records what it hears.
 //
 // The answer is written to the catalogue and asked for no more. Nothing that
-// is not an answer is written: a refusal or an empty listing is asked again
-// on a later play, after a rest.
+// is not an answer is written: the video rests, and a later play asks again.
 type SpokenLanguages struct {
 	lister SpokenLister
 	store  SpokenStore
 	logger *slog.Logger
 	now    func() time.Time
-	// listTimeout is spokenListTimeout; a field for the tests.
-	listTimeout time.Duration
+
+	// One listing per video at a time, whoever asks.
+	listing singleflight.Group
 
 	mu    sync.Mutex
 	until map[string]time.Time
 }
 
 func NewSpokenLanguages(lister SpokenLister, store SpokenStore, logger *slog.Logger) *SpokenLanguages {
-	return &SpokenLanguages{lister: lister, store: store, logger: logger, now: time.Now, listTimeout: spokenListTimeout, until: map[string]time.Time{}}
+	return &SpokenLanguages{lister: lister, store: store, logger: logger, now: time.Now, until: map[string]time.Time{}}
 }
 
-// Ask asks YouTube, unless it was asked about this video too recently.
+// Ask asks YouTube, unless the video is resting. It answers when the listing
+// does or when the asker stops waiting, whichever is first; the listing runs
+// on to its own bound either way and records what it finds, so an asker that
+// gave up finds the answer in the catalogue next time.
 func (s *SpokenLanguages) Ask(ctx context.Context, videoID string) string {
 	s.mu.Lock()
 	resting := s.now().Before(s.until[videoID])
@@ -60,37 +62,37 @@ func (s *SpokenLanguages) Ask(ctx context.Context, videoID string) string {
 	if resting || videoID == "" {
 		return ""
 	}
-	// Its own clock, not the asker's: a listing begun is finished and
-	// recorded, so an asker that gave up finds the answer in the catalogue
-	// next time rather than listing YouTube again.
-	lctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.listTimeout)
-	defer cancel()
-	lang, refused, err := s.lister.SpokenLanguage(lctx, videoID)
-	if err != nil {
-		s.logger.Warn("spoken language", "video", videoID, "refused", refused, "error", err)
+	answer := s.listing.DoChan(videoID, func() (any, error) {
+		lctx, cancel := context.WithTimeout(context.Background(), spokenListTimeout)
+		defer cancel()
+		lang, refused, err := s.lister.SpokenLanguage(lctx, videoID)
+		if err != nil {
+			s.logger.Warn("spoken language", "video", videoID, "refused", refused, "error", err)
+		}
+		s.Listed(lctx, videoID, lang)
+		return lang, nil
+	})
+	select {
+	case r := <-answer:
+		return r.Val.(string)
+	case <-ctx.Done():
+		return ""
 	}
-	s.Listed(lctx, videoID, lang, refused)
-	return lang
 }
 
-// Listed takes what a listing said: the language is recorded; nothing, or a
-// refusal, rests the video so the next play does not list it again at once.
-// A caption fetch's listing reports here too.
-func (s *SpokenLanguages) Listed(ctx context.Context, videoID, language string, refused bool) {
-	if language != "" {
-		if err := s.store.SetSpokenLanguage(context.WithoutCancel(ctx), videoID, language); err != nil {
-			s.logger.Warn("record spoken language", "video", videoID, "error", err)
-		}
+// Listed takes what a listing said: the language is recorded; no answer
+// rests the video. A caption fetch's listing reports here too.
+func (s *SpokenLanguages) Listed(ctx context.Context, videoID, language string) {
+	if language == "" {
 		s.mu.Lock()
-		delete(s.until, videoID)
+		s.until[videoID] = s.now().Add(spokenRest)
 		s.mu.Unlock()
 		return
 	}
-	rest := spokenNoneRest
-	if refused {
-		rest = spokenRefusedRest
+	if err := s.store.SetSpokenLanguage(context.WithoutCancel(ctx), videoID, language); err != nil {
+		s.logger.Warn("record spoken language", "video", videoID, "error", err)
 	}
 	s.mu.Lock()
-	s.until[videoID] = s.now().Add(rest)
+	delete(s.until, videoID)
 	s.mu.Unlock()
 }
