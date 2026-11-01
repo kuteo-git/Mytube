@@ -96,16 +96,26 @@ type song struct {
 	Silent    bool   `json:"_silent"`
 }
 
-func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, startS int, first bool) (string, error) {
+// narratedSuffix marks the narrated sound of a song on the R1. It keeps its
+// download under `video_id` (play_youtube.py, `_download_url`), so the same id
+// would play the sound as it is from that cache; and it reports the id back,
+// which is how a switch between the two is told from a takeover.
+const narratedSuffix = "~narrated"
+
+func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, startS int, first, narrated bool) (string, error) {
 	base, err := d.base(deviceID)
 	if err != nil {
 		return "", err
 	}
+	key, audio := it.VideoID, d.mediaBase+"/api/videos/"+url.PathEscape(it.VideoID)+"/audio"
+	if narrated {
+		key, audio = it.VideoID+narratedSuffix, audio+"/narrated"
+	}
 	body, err := json.Marshal(map[string]any{
 		"items": []song{{
-			VideoID: it.VideoID, Title: it.Title, Artist: it.Channel,
+			VideoID: key, Title: it.Title, Artist: it.Channel,
 			Thumbnail: d.absolute(it.ThumbnailURL), Duration: clock(it.DurationS),
-			AudioURL: d.mediaBase + "/api/videos/" + url.PathEscape(it.VideoID) + "/audio",
+			AudioURL: audio,
 			Source:   "mytube", Seek: startS,
 			// Only the session's opening song says "Đang tải bài …".
 			Silent: !first,
@@ -130,7 +140,7 @@ func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, star
 	if !answer.OK {
 		return "", fmt.Errorf("r1 refused the song: %s", answer.Error)
 	}
-	return it.VideoID, nil
+	return key, nil
 }
 
 func (d *Driver) Pause(ctx context.Context, deviceID string) error {

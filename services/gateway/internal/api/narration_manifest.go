@@ -153,8 +153,13 @@ func (g *Gateway) handleStartNarration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from := narrationStartAt(r)
+	pass := g.startNarrationPass(r.Context(), videoID, narrationStartAt(r))
+	writeJSON(w, http.StatusAccepted, pass)
+}
 
+// startNarrationPass begins a pass from `from`, or leaves the one already
+// running from about there, and answers it.
+func (g *Gateway) startNarrationPass(reqCtx context.Context, videoID string, from float64) *narrationPass {
 	g.narration.mu.Lock()
 	pass := g.narration.passes[videoID]
 	if pass != nil && pass.Status == narrationRunning {
@@ -162,8 +167,7 @@ func (g *Gateway) handleStartNarration(w http.ResponseWriter, r *http.Request) {
 		// racing a start, must not begin the work again.
 		if math.Abs(pass.startedAt-from) < narrationRetargetSeconds {
 			g.narration.mu.Unlock()
-			writeJSON(w, http.StatusAccepted, pass)
-			return
+			return pass
 		}
 		// Somewhere else now: the viewer has seeked far enough that the order
 		// this pass is working in is the wrong order. Nothing is thrown away —
@@ -195,12 +199,12 @@ func (g *Gateway) handleStartNarration(w http.ResponseWriter, r *http.Request) {
 	// A broadcast is a different pass, not a parameter on this one. Everything
 	// `runNarration` does is indexed against a caption file that exists in
 	// full; a live stream has a feed instead, and no end. See narration_live.go.
-	if live, sourceURL := g.broadcast(r.Context(), videoID); live {
+	if live, sourceURL := g.broadcast(reqCtx, videoID); live {
 		go g.runLiveNarration(ctx, videoID, gen, sourceURL)
 	} else {
 		go g.runNarration(ctx, videoID, gen, from)
 	}
-	writeJSON(w, http.StatusAccepted, pass)
+	return pass
 }
 
 // broadcast reports whether this video is on air, and where it came from.

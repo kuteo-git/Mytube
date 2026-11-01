@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+**Narration plays on the speakers.** A speaker plays one sound it is handed,
+so the gateway now makes a song's *narrated sound* — its own sound turned down
+to 0.2 under each line's slot (30ms ramps) with the line over it at 0.5, the
+phone narrator's default levels — once the video's narration pass is done, and
+serves it with ranges like `audio.m4a`: `POST /api/videos/{id}/audio/narrated`
+starts what is missing (the pass from 0, then the mix) and answers `ready`,
+`preparing`, `none` or `failed`; `GET` serves the file. A session carries
+`narration` (`POST /api/cast/sessions/{id}/narration {"on"}`, or `narration` in
+the start body); the cast service plays the song as it is meanwhile, moves onto
+the narrated sound from where it is once ready — only while playing, and
+without changing the queue's version — and asks for the next song while the
+narrated one plays. `narration_status` is `off`, `preparing`, `on` or
+`unavailable`. On the R1 the narrated sound is `<id>~narrated`: it caches a
+download by `video_id` and would otherwise play the sound as it is. Measured:
+a 9-minute video with its lines on disk mixed in 8.2s (166 lines, its sound
+streamed from ingest), `ready` 12s after the first ask; in the mix the residual
+over the ducked song matches each line at correlation ≥0.995. Needs
+`services/cast/migrations/0002_narration.sql` as `cast_svc`.
+
 **A broadcast further down a cast queue is left out, not a refusal.** Only the
 video asked for is refused as a broadcast (422); a live or upcoming one later
 in the list — an up-next rail or a channel page carries one as often as not —

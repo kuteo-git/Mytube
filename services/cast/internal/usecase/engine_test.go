@@ -80,11 +80,12 @@ func (r *fakeRepo) activeCount(deviceID string) int {
 }
 
 type call struct {
-	op     string
-	device string
-	video  string
-	arg    int
-	first  bool
+	op       string
+	device   string
+	video    string
+	arg      int
+	first    bool
+	narrated bool
 }
 
 type fakeDriver struct {
@@ -106,9 +107,12 @@ func (d *fakeDriver) record(c call) error {
 	return d.failErr
 }
 
-func (d *fakeDriver) Load(_ context.Context, dev string, it domain.Item, startS int, first bool) (string, error) {
-	if err := d.record(call{op: "load", device: dev, video: it.VideoID, arg: startS, first: first}); err != nil {
+func (d *fakeDriver) Load(_ context.Context, dev string, it domain.Item, startS int, first, narrated bool) (string, error) {
+	if err := d.record(call{op: "load", device: dev, video: it.VideoID, arg: startS, first: first, narrated: narrated}); err != nil {
 		return "", err
+	}
+	if narrated {
+		return it.VideoID + "~narrated", nil
 	}
 	return it.VideoID, nil
 }
@@ -176,6 +180,39 @@ func (c *fakeCatalog) RecordProgress(_ context.Context, _ string, videoID string
 	return nil
 }
 
+type fakeNarrator struct {
+	mu      sync.Mutex
+	answers map[string]domain.Narrated
+	asked   []string
+}
+
+func (n *fakeNarrator) Prepare(_ context.Context, videoID string) (domain.Narrated, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.asked = append(n.asked, videoID)
+	if a, ok := n.answers[videoID]; ok {
+		return a, nil
+	}
+	return domain.NarratedPreparing, nil
+}
+
+func (n *fakeNarrator) set(videoID string, a domain.Narrated) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.answers[videoID] = a
+}
+
+func (n *fakeNarrator) wasAsked(videoID string) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, v := range n.asked {
+		if v == videoID {
+			return true
+		}
+	}
+	return false
+}
+
 type clock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -194,11 +231,12 @@ func (c *clock) advance(d time.Duration) {
 }
 
 type rig struct {
-	engine  *Engine
-	repo    *fakeRepo
-	driver  *fakeDriver
-	catalog *fakeCatalog
-	clock   *clock
+	engine   *Engine
+	repo     *fakeRepo
+	driver   *fakeDriver
+	catalog  *fakeCatalog
+	clock    *clock
+	narrator *fakeNarrator
 }
 
 func newRig() rig {
@@ -206,8 +244,9 @@ func newRig() rig {
 	drv := &fakeDriver{devices: []domain.Device{{ID: "r1", Name: "Loa R1", Kind: domain.KindR1, Online: true}}}
 	cat := &fakeCatalog{live: map[string]bool{}, gone: map[string]bool{}}
 	clk := &clock{now: time.Date(2026, 10, 31, 21, 0, 0, 0, time.UTC)}
-	e := NewEngine(repo, []Driver{drv}, cat, clk.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	return rig{engine: e, repo: repo, driver: drv, catalog: cat, clock: clk}
+	nar := &fakeNarrator{answers: map[string]domain.Narrated{}}
+	e := NewEngine(repo, []Driver{drv}, cat, nar, clk.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return rig{engine: e, repo: repo, driver: drv, catalog: cat, clock: clk, narrator: nar}
 }
 
 func (r rig) start(t *testing.T, ids ...string) domain.Session {
@@ -445,7 +484,7 @@ func TestARestartedEngineFollowsWithoutReloading(t *testing.T) {
 	r.clock.advance(time.Second)
 	r.engine.Tick(ctx)
 
-	restarted := NewEngine(r.repo, []Driver{r.driver}, r.catalog, r.clock.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	restarted := NewEngine(r.repo, []Driver{r.driver}, r.catalog, r.narrator, r.clock.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	r.driver.setStatus(domain.DeviceStatus{State: domain.DevicePlaying, MediaKey: "a", PositionS: 52, DurationS: 200})
 	r.clock.advance(2 * time.Second)
 	restarted.Tick(ctx)

@@ -22,6 +22,7 @@ import (
 	"github.com/lucnguyen/local-youtube/gen/go/catalog/v1/catalogv1connect"
 	"github.com/lucnguyen/local-youtube/services/cast/internal/adapter/catalog"
 	"github.com/lucnguyen/local-youtube/services/cast/internal/adapter/googlecast"
+	"github.com/lucnguyen/local-youtube/services/cast/internal/adapter/narration"
 	"github.com/lucnguyen/local-youtube/services/cast/internal/adapter/postgres"
 	"github.com/lucnguyen/local-youtube/services/cast/internal/adapter/r1"
 	"github.com/lucnguyen/local-youtube/services/cast/internal/adapter/rpc"
@@ -89,6 +90,9 @@ func main() {
 			googlecast.New(castbridgeURL, mediaBase, 3*time.Second),
 		},
 		catalog.New(catalogv1connect.NewCatalogServiceClient(catalogHTTP, catalogURL)),
+		// The gateway mixes a song's narration into its sound; it is the
+		// server the speakers fetch from, so the same address reaches it.
+		narration.New(mediaBase, &http.Client{Timeout: 3 * time.Second}),
 		time.Now,
 		logger,
 	)

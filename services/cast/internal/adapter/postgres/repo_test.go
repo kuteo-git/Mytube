@@ -62,6 +62,7 @@ func TestARoundTripKeepsEveryField(t *testing.T) {
 	}
 	s.State, s.PositionS, s.DurationS, s.Volume, s.LoadAcked = domain.Playing, 33, 245, 40, true
 	s.PrevMediaKey, s.LastProgressAt, s.Version = "z", now.Add(time.Second), 2
+	s.Narration, s.LoadedNarrated = true, true
 	if err := repo.Save(ctx, s); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,8 @@ func TestARoundTripKeepsEveryField(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.DeviceName != "Loa R1" || got.State != domain.Playing || got.PositionS != 33 || got.Volume != 40 || !got.LoadAcked ||
-		got.PrevMediaKey != "z" || got.Version != 2 || !got.LastProgressAt.Equal(s.LastProgressAt) {
+		got.PrevMediaKey != "z" || got.Version != 2 || !got.LastProgressAt.Equal(s.LastProgressAt) ||
+		!got.Narration || !got.LoadedNarrated {
 		t.Fatalf("got %+v", got)
 	}
 	if len(got.Queue) != 2 || got.Queue[0] != s.Queue[0] {

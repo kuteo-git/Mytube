@@ -39,7 +39,7 @@ type item struct {
 
 const columns = `id, device_id, device_name, device_kind, started_by, queue, current_index, position_s,
 	duration_s, volume, state, ended_reason, loaded_media_key, prev_media_key, load_acked,
-	loading_since, last_seen_ok, last_progress_at, version, created_at, updated_at`
+	loading_since, last_seen_ok, last_progress_at, version, created_at, updated_at, narration, loaded_narrated`
 
 func (r *Repo) Active(ctx context.Context) ([]domain.Session, error) {
 	rows, err := r.db.Query(ctx, `SELECT `+columns+` FROM sessions WHERE state <> 'ended' ORDER BY created_at`)
@@ -86,7 +86,7 @@ func (r *Repo) Create(ctx context.Context, s domain.Session, now time.Time) erro
 		return err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO sessions (`+columns+`) VALUES
-		($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`, args...); err != nil {
+		($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`, args...); err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
 	return tx.Commit(ctx)
@@ -104,7 +104,7 @@ func (r *Repo) Save(ctx context.Context, s domain.Session) error {
 		current_index = $7, position_s = $8, duration_s = $9, volume = $10, state = $11,
 		ended_reason = $12, loaded_media_key = $13, prev_media_key = $14, load_acked = $15,
 		loading_since = $16, last_seen_ok = $17, last_progress_at = $18, version = $19,
-		created_at = $20, updated_at = $21
+		created_at = $20, updated_at = $21, narration = $22, loaded_narrated = $23
 		WHERE id = $1 AND state <> 'ended'`, args...)
 	if err != nil {
 		return fmt.Errorf("save session %s: %w", s.ID, err)
@@ -133,7 +133,7 @@ func values(s domain.Session) ([]any, error) {
 		s.ID, s.DeviceID, s.DeviceName, string(s.DeviceKind), s.StartedBy, raw, s.CurrentIndex, s.PositionS,
 		s.DurationS, s.Volume, string(s.State), reason, s.LoadedMediaKey, s.PrevMediaKey, s.LoadAcked,
 		nullTime(s.LoadingSince), nullTime(s.LastSeenOK), nullTime(s.LastProgressAt), s.Version,
-		s.CreatedAt, s.UpdatedAt,
+		s.CreatedAt, s.UpdatedAt, s.Narration, s.LoadedNarrated,
 	}, nil
 }
 
@@ -147,7 +147,8 @@ func scan(row pgx.Row) (domain.Session, error) {
 	)
 	if err := row.Scan(&s.ID, &s.DeviceID, &s.DeviceName, &kind, &s.StartedBy, &raw, &s.CurrentIndex, &s.PositionS,
 		&s.DurationS, &s.Volume, &state, &reason, &s.LoadedMediaKey, &s.PrevMediaKey, &s.LoadAcked,
-		&loadingSince, &lastSeen, &lastProgress, &s.Version, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		&loadingSince, &lastSeen, &lastProgress, &s.Version, &s.CreatedAt, &s.UpdatedAt,
+		&s.Narration, &s.LoadedNarrated); err != nil {
 		return domain.Session{}, err
 	}
 	var queue []item

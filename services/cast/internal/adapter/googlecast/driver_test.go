@@ -52,7 +52,7 @@ func TestATelevisionIsNotASpeaker(t *testing.T) {
 func TestLoadHandsTheSpeakerTheAudioURL(t *testing.T) {
 	d, calls := bridge(t, nil)
 	key, err := d.Load(context.Background(), "u1",
-		domain.Item{VideoID: "abc", Title: "Bài", ThumbnailURL: "https://i.ytimg.com/a.jpg"}, 90, true)
+		domain.Item{VideoID: "abc", Title: "Bài", ThumbnailURL: "https://i.ytimg.com/a.jpg"}, 90, true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,5 +107,17 @@ func TestABridgeThatIsDownIsAnError(t *testing.T) {
 	d := New("http://127.0.0.1:1", "http://x", 200*time.Millisecond)
 	if _, err := d.Devices(context.Background()); err == nil {
 		t.Fatal("no error from a bridge that is not there")
+	}
+}
+
+func TestTheNarratedSoundHasItsOwnAddress(t *testing.T) {
+	d, calls := bridge(t, nil)
+	key, err := d.Load(context.Background(), "u1", domain.Item{VideoID: "abc"}, 47, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "http://10.0.0.2:8180/api/videos/abc/audio/narrated"
+	if key != want || (*calls)[0].body["url"] != want {
+		t.Fatalf("key = %q, url = %v", key, (*calls)[0].body["url"])
 	}
 }

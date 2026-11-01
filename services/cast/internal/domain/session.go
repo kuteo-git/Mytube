@@ -39,6 +39,42 @@ const (
 	Failed          EndedReason = "failed"
 )
 
+// Narrated is the gateway's word on a song's narrated sound.
+type Narrated string
+
+const (
+	// NarratedPreparing: its narration pass or the mix is still running.
+	NarratedPreparing Narrated = "preparing"
+	NarratedReady     Narrated = "ready"
+	// NarratedNone: nothing to narrate (no captions), or the pass failed.
+	NarratedNone Narrated = "none"
+)
+
+// NarrationStatus is what the remote shows about narration on the speaker.
+type NarrationStatus string
+
+const (
+	NarrationOff         NarrationStatus = "off"
+	NarrationPreparing   NarrationStatus = "preparing"
+	NarrationOn          NarrationStatus = "on"
+	NarrationUnavailable NarrationStatus = "unavailable"
+)
+
+// NarrationStatusOf decides it from the session and the gateway's last word
+// on the current song.
+func NarrationStatusOf(s Session, current Narrated) NarrationStatus {
+	switch {
+	case !s.Narration:
+		return NarrationOff
+	case s.LoadedNarrated:
+		return NarrationOn
+	case current == NarratedNone:
+		return NarrationUnavailable
+	default:
+		return NarrationPreparing
+	}
+}
+
 var (
 	ErrNotFound      = errors.New("not found")
 	ErrEnded         = errors.New("session has ended")
@@ -86,6 +122,12 @@ type Session struct {
 	PositionS int
 	DurationS int
 	Volume    int
+
+	// Narration is asked for; LoadedNarrated is whether what the speaker was
+	// handed for the current item is the narrated sound. The two differ while
+	// the gateway makes it, and the song plays as it is meanwhile.
+	Narration      bool
+	LoadedNarrated bool
 
 	// LoadedMediaKey is what was handed to the speaker for the current item,
 	// and how a takeover is recognised. PrevMediaKey is the one before it,
@@ -142,6 +184,16 @@ func LoadAt(s Session, index, startS int, first bool, now time.Time) (Session, A
 	s.LastProgressAt = time.Time{}
 	s.Version++
 	return s, Load{Index: index, StartS: startS, First: first}
+}
+
+// Reload hands the speaker the current item again from where it is, to switch
+// it between its sound as it is and narrated. The queue has not moved, so
+// neither does Version: a remote's edit in flight is still about this queue.
+func Reload(s Session, now time.Time) (Session, Action) {
+	version := s.Version
+	s, load := LoadAt(s, s.CurrentIndex, s.PositionS, false, now)
+	s.Version = version
+	return s, load
 }
 
 // Advance moves to the next item, or finishes the queue and stops the speaker.

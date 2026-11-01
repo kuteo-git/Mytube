@@ -58,7 +58,7 @@ func TestLoadSendsTheSongTheServerExpects(t *testing.T) {
 	d, _ := setup(t, fake)
 	item := domain.Item{VideoID: "abc", Title: "Bài", Channel: "Kênh", ThumbnailURL: "/media/abc/thumb.jpg", DurationS: 245}
 
-	key, err := d.Load(context.Background(), "r1-living", item, 90, false)
+	key, err := d.Load(context.Background(), "r1-living", item, 90, false, false)
 	if err != nil || key != "abc" {
 		t.Fatalf("load = %q %v", key, err)
 	}
@@ -83,7 +83,7 @@ func TestLoadSendsTheSongTheServerExpects(t *testing.T) {
 func TestOnlyTheFirstSongIsAnnounced(t *testing.T) {
 	fake := &fakeR1{media: `{"state":"idle"}`}
 	d, _ := setup(t, fake)
-	if _, err := d.Load(context.Background(), "r1-living", domain.Item{VideoID: "a"}, 0, true); err != nil {
+	if _, err := d.Load(context.Background(), "r1-living", domain.Item{VideoID: "a"}, 0, true, false); err != nil {
 		t.Fatal(err)
 	}
 	if got := fake.playBody["items"].([]any)[0].(map[string]any)["_silent"]; got != false {
@@ -172,7 +172,22 @@ func TestARefusedPlayIsAnError(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "d.json")
 	_ = os.WriteFile(file, []byte(`[{"id":"r","name":"R","url":"`+srv.URL+`"}]`), 0o644)
 	d := New(file, "http://x", time.Second)
-	if _, err := d.Load(context.Background(), "r", domain.Item{VideoID: "a"}, 0, true); err == nil {
+	if _, err := d.Load(context.Background(), "r", domain.Item{VideoID: "a"}, 0, true, false); err == nil {
 		t.Fatal("a refused play was taken as loaded")
+	}
+}
+
+// The R1 keeps a song's download under its video_id: the narrated sound under
+// the same id would be played from the cache of the sound as it is.
+func TestTheNarratedSoundIsASongOfItsOwnOnTheR1(t *testing.T) {
+	fake := &fakeR1{media: `{"state":"idle"}`}
+	d, _ := setup(t, fake)
+	key, err := d.Load(context.Background(), "r1-living", domain.Item{VideoID: "abc"}, 47, false, true)
+	if err != nil || key != "abc~narrated" {
+		t.Fatalf("load = %q %v", key, err)
+	}
+	got := fake.playBody["items"].([]any)[0].(map[string]any)
+	if got["video_id"] != "abc~narrated" || got["audio_url"] != "http://10.0.0.2:8180/api/videos/abc/audio/narrated" {
+		t.Fatalf("song = %v", got)
 	}
 }

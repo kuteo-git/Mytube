@@ -82,33 +82,11 @@ func (g *Gateway) handleCastAudio(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) serveCutAudio(w http.ResponseWriter, r *http.Request, videoID, mediaFile string) {
-	dst := filepath.Join(filepath.Dir(mediaFile), castAudioName)
-	if _, err := os.Stat(dst); err != nil {
-		// One ffmpeg per video however many ask at once: a speaker retries, and
-		// a phone and a speaker can ask in the same second.
-		_, err, _ := g.audioCuts.Do(videoID, func() (any, error) {
-			if _, err := os.Stat(dst); err == nil {
-				return nil, nil
-			}
-			// Into a file of its own first and renamed after, so a cut that dies
-			// half way never leaves an audio.m4a that looks whole.
-			tmp := fmt.Sprintf("%s.%d.part", dst, time.Now().UnixNano())
-			defer func() { _ = os.Remove(tmp) }()
-			started := time.Now()
-			if err := g.extractAudio(context.WithoutCancel(r.Context()), mediaFile, tmp); err != nil {
-				return nil, err
-			}
-			if err := os.Rename(tmp, dst); err != nil {
-				return nil, err
-			}
-			g.logger.Info("cast audio cut", "video", videoID, "took", time.Since(started).Round(time.Millisecond))
-			return nil, nil
-		})
-		if err != nil {
-			g.logger.Error("cut cast audio", "video", videoID, "error", err)
-			http.Error(w, "cannot prepare audio", http.StatusInternalServerError)
-			return
-		}
+	dst, err := g.cutAudio(r.Context(), videoID, mediaFile)
+	if err != nil {
+		g.logger.Error("cut cast audio", "video", videoID, "error", err)
+		http.Error(w, "cannot prepare audio", http.StatusInternalServerError)
+		return
 	}
 	f, err := os.Open(dst)
 	if err != nil {
@@ -123,6 +101,38 @@ func (g *Gateway) serveCutAudio(w http.ResponseWriter, r *http.Request, videoID,
 	}
 	w.Header().Set("Content-Type", "audio/mp4")
 	http.ServeContent(w, r, castAudioName, info.ModTime(), f)
+}
+
+// cutAudio answers where the video's audio.m4a is, cutting it first when it
+// is not there yet.
+func (g *Gateway) cutAudio(ctx context.Context, videoID, mediaFile string) (string, error) {
+	dst := filepath.Join(filepath.Dir(mediaFile), castAudioName)
+	if _, err := os.Stat(dst); err != nil {
+		// One ffmpeg per video however many ask at once: a speaker retries, and
+		// a phone and a speaker can ask in the same second.
+		_, err, _ := g.audioCuts.Do(videoID, func() (any, error) {
+			if _, err := os.Stat(dst); err == nil {
+				return nil, nil
+			}
+			// Into a file of its own first and renamed after, so a cut that dies
+			// half way never leaves an audio.m4a that looks whole.
+			tmp := fmt.Sprintf("%s.%d.part", dst, time.Now().UnixNano())
+			defer func() { _ = os.Remove(tmp) }()
+			started := time.Now()
+			if err := g.extractAudio(context.WithoutCancel(ctx), mediaFile, tmp); err != nil {
+				return nil, err
+			}
+			if err := os.Rename(tmp, dst); err != nil {
+				return nil, err
+			}
+			g.logger.Info("cast audio cut", "video", videoID, "took", time.Since(started).Round(time.Millisecond))
+			return nil, nil
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	return dst, nil
 }
 
 // ffmpegExtractAudio copies the sound out of a video file. -c:a copy, because

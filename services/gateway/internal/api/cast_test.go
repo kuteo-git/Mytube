@@ -20,6 +20,7 @@ type fakeCast struct {
 	start  *castv1.StartSessionRequest
 	queue  *castv1.ReplaceQueueRequest
 	seek   *castv1.SeekRequest
+	narr   *castv1.SetNarrationRequest
 	err    error
 	called string
 }
@@ -82,6 +83,13 @@ func (f *fakeCast) ListDevices(context.Context, *connect.Request[castv1.ListDevi
 
 func (f *fakeCast) Handoff(context.Context, *connect.Request[castv1.HandoffRequest]) (*connect.Response[castv1.HandoffResponse], error) {
 	return connect.NewResponse(&castv1.HandoffResponse{VideoId: "abc", PositionSeconds: 130}), nil
+}
+
+func (f *fakeCast) SetNarration(_ context.Context, req *connect.Request[castv1.SetNarrationRequest]) (*connect.Response[castv1.SetNarrationResponse], error) {
+	f.narr = req.Msg
+	s := sessionMsg()
+	s.Narration, s.NarrationStatus = true, castv1.NarrationStatus_NARRATION_STATUS_PREPARING
+	return connect.NewResponse(&castv1.SetNarrationResponse{Session: s}), nil
 }
 
 func castCall(t *testing.T, cast *fakeCast, method, path, body string) *httptest.ResponseRecorder {
@@ -186,5 +194,24 @@ func TestSeekAndHandoff(t *testing.T) {
 func TestABadBodyIsABadRequest(t *testing.T) {
 	if rec := castCall(t, &fakeCast{}, http.MethodPost, "/api/cast/sessions", `{`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+func TestNarrationIsAskedForAndReported(t *testing.T) {
+	cast := &fakeCast{}
+	rec := castCall(t, cast, http.MethodPost, "/api/cast/sessions",
+		`{"device_id":"r1-living","items":[{"video_id":"abc"}],"narration":true}`)
+	if rec.Code != http.StatusOK || !cast.start.GetNarration() {
+		t.Fatalf("start: status %d, narration asked = %v", rec.Code, cast.start.GetNarration())
+	}
+
+	rec = castCall(t, cast, http.MethodPost, "/api/cast/sessions/s1/narration", `{"on":true}`)
+	if rec.Code != http.StatusOK || cast.narr.GetSessionId() != "s1" || !cast.narr.GetOn() {
+		t.Fatalf("set: status %d request %+v", rec.Code, cast.narr)
+	}
+	var view map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &view)
+	if view["narration"] != true || view["narration_status"] != "preparing" {
+		t.Fatalf("view = %v", view)
 	}
 }

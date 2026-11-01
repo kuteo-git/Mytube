@@ -193,6 +193,67 @@ func (EndedReason) EnumDescriptor() ([]byte, []int) {
 	return file_cast_v1_cast_proto_rawDescGZIP(), []int{2}
 }
 
+// Narration on the speaker, for the song playing now.
+type NarrationStatus int32
+
+const (
+	NarrationStatus_NARRATION_STATUS_UNSPECIFIED NarrationStatus = 0
+	// Not asked for.
+	NarrationStatus_NARRATION_STATUS_OFF NarrationStatus = 1
+	// Asked for; the song plays as it is while the narrated sound is made.
+	NarrationStatus_NARRATION_STATUS_PREPARING NarrationStatus = 2
+	// The speaker is playing the narrated sound.
+	NarrationStatus_NARRATION_STATUS_ON NarrationStatus = 3
+	// Asked for, and this song has nothing to narrate (no captions) or its
+	// pass failed. It plays as it is.
+	NarrationStatus_NARRATION_STATUS_UNAVAILABLE NarrationStatus = 4
+)
+
+// Enum value maps for NarrationStatus.
+var (
+	NarrationStatus_name = map[int32]string{
+		0: "NARRATION_STATUS_UNSPECIFIED",
+		1: "NARRATION_STATUS_OFF",
+		2: "NARRATION_STATUS_PREPARING",
+		3: "NARRATION_STATUS_ON",
+		4: "NARRATION_STATUS_UNAVAILABLE",
+	}
+	NarrationStatus_value = map[string]int32{
+		"NARRATION_STATUS_UNSPECIFIED": 0,
+		"NARRATION_STATUS_OFF":         1,
+		"NARRATION_STATUS_PREPARING":   2,
+		"NARRATION_STATUS_ON":          3,
+		"NARRATION_STATUS_UNAVAILABLE": 4,
+	}
+)
+
+func (x NarrationStatus) Enum() *NarrationStatus {
+	p := new(NarrationStatus)
+	*p = x
+	return p
+}
+
+func (x NarrationStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NarrationStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_cast_v1_cast_proto_enumTypes[3].Descriptor()
+}
+
+func (NarrationStatus) Type() protoreflect.EnumType {
+	return &file_cast_v1_cast_proto_enumTypes[3]
+}
+
+func (x NarrationStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NarrationStatus.Descriptor instead.
+func (NarrationStatus) EnumDescriptor() ([]byte, []int) {
+	return file_cast_v1_cast_proto_rawDescGZIP(), []int{3}
+}
+
 type Device struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -359,11 +420,14 @@ type Session struct {
 	DurationSeconds int32                  `protobuf:"varint,8,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
 	Volume          int32                  `protobuf:"varint,9,opt,name=volume,proto3" json:"volume,omitempty"`
 	// Changes when the queue or the current item does, and only then.
-	Version       int32                  `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
-	StartedBy     string                 `protobuf:"bytes,11,opt,name=started_by,json=startedBy,proto3" json:"started_by,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Version   int32                  `protobuf:"varint,10,opt,name=version,proto3" json:"version,omitempty"`
+	StartedBy string                 `protobuf:"bytes,11,opt,name=started_by,json=startedBy,proto3" json:"started_by,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Narration asked for. What the speaker is playing is narration_status.
+	Narration       bool            `protobuf:"varint,13,opt,name=narration,proto3" json:"narration,omitempty"`
+	NarrationStatus NarrationStatus `protobuf:"varint,14,opt,name=narration_status,json=narrationStatus,proto3,enum=cast.v1.NarrationStatus" json:"narration_status,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Session) Reset() {
@@ -478,6 +542,20 @@ func (x *Session) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Session) GetNarration() bool {
+	if x != nil {
+		return x.Narration
+	}
+	return false
+}
+
+func (x *Session) GetNarrationStatus() NarrationStatus {
+	if x != nil {
+		return x.NarrationStatus
+	}
+	return NarrationStatus_NARRATION_STATUS_UNSPECIFIED
 }
 
 type ListDevicesRequest struct {
@@ -647,6 +725,7 @@ type StartSessionRequest struct {
 	StartIndex           int32                  `protobuf:"varint,3,opt,name=start_index,json=startIndex,proto3" json:"start_index,omitempty"`
 	StartPositionSeconds int32                  `protobuf:"varint,4,opt,name=start_position_seconds,json=startPositionSeconds,proto3" json:"start_position_seconds,omitempty"`
 	UserId               string                 `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Narration            bool                   `protobuf:"varint,6,opt,name=narration,proto3" json:"narration,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -714,6 +793,13 @@ func (x *StartSessionRequest) GetUserId() string {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *StartSessionRequest) GetNarration() bool {
+	if x != nil {
+		return x.Narration
+	}
+	return false
 }
 
 type StartSessionResponse struct {
@@ -1696,6 +1782,102 @@ func (x *HandoffResponse) GetPositionSeconds() int32 {
 	return 0
 }
 
+type SetNarrationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	On            bool                   `protobuf:"varint,2,opt,name=on,proto3" json:"on,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetNarrationRequest) Reset() {
+	*x = SetNarrationRequest{}
+	mi := &file_cast_v1_cast_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetNarrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetNarrationRequest) ProtoMessage() {}
+
+func (x *SetNarrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_cast_v1_cast_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetNarrationRequest.ProtoReflect.Descriptor instead.
+func (*SetNarrationRequest) Descriptor() ([]byte, []int) {
+	return file_cast_v1_cast_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SetNarrationRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *SetNarrationRequest) GetOn() bool {
+	if x != nil {
+		return x.On
+	}
+	return false
+}
+
+type SetNarrationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *Session               `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetNarrationResponse) Reset() {
+	*x = SetNarrationResponse{}
+	mi := &file_cast_v1_cast_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetNarrationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetNarrationResponse) ProtoMessage() {}
+
+func (x *SetNarrationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_cast_v1_cast_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetNarrationResponse.ProtoReflect.Descriptor instead.
+func (*SetNarrationResponse) Descriptor() ([]byte, []int) {
+	return file_cast_v1_cast_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SetNarrationResponse) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
 var File_cast_v1_cast_proto protoreflect.FileDescriptor
 
 const file_cast_v1_cast_proto_rawDesc = "" +
@@ -1712,7 +1894,7 @@ const file_cast_v1_cast_proto_rawDesc = "" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
 	"\achannel\x18\x03 \x01(\tR\achannel\x12#\n" +
 	"\rthumbnail_url\x18\x04 \x01(\tR\fthumbnailUrl\x12)\n" +
-	"\x10duration_seconds\x18\x05 \x01(\x05R\x0fdurationSeconds\"\xd9\x03\n" +
+	"\x10duration_seconds\x18\x05 \x01(\x05R\x0fdurationSeconds\"\xbc\x04\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x06device\x18\x02 \x01(\v2\x0f.cast.v1.DeviceR\x06device\x12+\n" +
@@ -1728,20 +1910,23 @@ const file_cast_v1_cast_proto_rawDesc = "" +
 	"\n" +
 	"started_by\x18\v \x01(\tR\tstartedBy\x129\n" +
 	"\n" +
-	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x14\n" +
+	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1c\n" +
+	"\tnarration\x18\r \x01(\bR\tnarration\x12C\n" +
+	"\x10narration_status\x18\x0e \x01(\x0e2\x18.cast.v1.NarrationStatusR\x0fnarrationStatus\"\x14\n" +
 	"\x12ListDevicesRequest\"@\n" +
 	"\x13ListDevicesResponse\x12)\n" +
 	"\adevices\x18\x01 \x03(\v2\x0f.cast.v1.DeviceR\adevices\"\x15\n" +
 	"\x13ListSessionsRequest\"D\n" +
 	"\x14ListSessionsResponse\x12,\n" +
-	"\bsessions\x18\x01 \x03(\v2\x10.cast.v1.SessionR\bsessions\"\xbf\x01\n" +
+	"\bsessions\x18\x01 \x03(\v2\x10.cast.v1.SessionR\bsessions\"\xdd\x01\n" +
 	"\x13StartSessionRequest\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\tR\bdeviceId\x12\x1b\n" +
 	"\tvideo_ids\x18\x02 \x03(\tR\bvideoIds\x12\x1f\n" +
 	"\vstart_index\x18\x03 \x01(\x05R\n" +
 	"startIndex\x124\n" +
 	"\x16start_position_seconds\x18\x04 \x01(\x05R\x14startPositionSeconds\x12\x17\n" +
-	"\auser_id\x18\x05 \x01(\tR\x06userId\"B\n" +
+	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x1c\n" +
+	"\tnarration\x18\x06 \x01(\bR\tnarration\"B\n" +
 	"\x14StartSessionResponse\x12*\n" +
 	"\asession\x18\x01 \x01(\v2\x10.cast.v1.SessionR\asession\"2\n" +
 	"\x11GetSessionRequest\x12\x1d\n" +
@@ -1800,7 +1985,13 @@ const file_cast_v1_cast_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"W\n" +
 	"\x0fHandoffResponse\x12\x19\n" +
 	"\bvideo_id\x18\x01 \x01(\tR\avideoId\x12)\n" +
-	"\x10position_seconds\x18\x02 \x01(\x05R\x0fpositionSeconds*U\n" +
+	"\x10position_seconds\x18\x02 \x01(\x05R\x0fpositionSeconds\"D\n" +
+	"\x13SetNarrationRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x0e\n" +
+	"\x02on\x18\x02 \x01(\bR\x02on\"B\n" +
+	"\x14SetNarrationResponse\x12*\n" +
+	"\asession\x18\x01 \x01(\v2\x10.cast.v1.SessionR\asession*U\n" +
 	"\n" +
 	"DeviceKind\x12\x1b\n" +
 	"\x17DEVICE_KIND_UNSPECIFIED\x10\x00\x12\x12\n" +
@@ -1821,7 +2012,13 @@ const file_cast_v1_cast_proto_rawDesc = "" +
 	"\x1eENDED_REASON_STOPPED_ON_DEVICE\x10\x05\x12\x1f\n" +
 	"\x1bENDED_REASON_DEVICE_OFFLINE\x10\x06\x12\x18\n" +
 	"\x14ENDED_REASON_HANDOFF\x10\a\x12\x17\n" +
-	"\x13ENDED_REASON_FAILED\x10\b2\xce\x06\n" +
+	"\x13ENDED_REASON_FAILED\x10\b*\xa8\x01\n" +
+	"\x0fNarrationStatus\x12 \n" +
+	"\x1cNARRATION_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14NARRATION_STATUS_OFF\x10\x01\x12\x1e\n" +
+	"\x1aNARRATION_STATUS_PREPARING\x10\x02\x12\x17\n" +
+	"\x13NARRATION_STATUS_ON\x10\x03\x12 \n" +
+	"\x1cNARRATION_STATUS_UNAVAILABLE\x10\x042\x9b\a\n" +
 	"\vCastService\x12H\n" +
 	"\vListDevices\x12\x1b.cast.v1.ListDevicesRequest\x1a\x1c.cast.v1.ListDevicesResponse\x12K\n" +
 	"\fListSessions\x12\x1c.cast.v1.ListSessionsRequest\x1a\x1d.cast.v1.ListSessionsResponse\x12K\n" +
@@ -1836,7 +2033,8 @@ const file_cast_v1_cast_proto_rawDesc = "" +
 	"\tSetVolume\x12\x19.cast.v1.SetVolumeRequest\x1a\x1a.cast.v1.SetVolumeResponse\x123\n" +
 	"\x04Jump\x12\x14.cast.v1.JumpRequest\x1a\x15.cast.v1.JumpResponse\x12K\n" +
 	"\fReplaceQueue\x12\x1c.cast.v1.ReplaceQueueRequest\x1a\x1d.cast.v1.ReplaceQueueResponse\x12<\n" +
-	"\aHandoff\x12\x17.cast.v1.HandoffRequest\x1a\x18.cast.v1.HandoffResponseB\x8f\x01\n" +
+	"\aHandoff\x12\x17.cast.v1.HandoffRequest\x1a\x18.cast.v1.HandoffResponse\x12K\n" +
+	"\fSetNarration\x12\x1c.cast.v1.SetNarrationRequest\x1a\x1d.cast.v1.SetNarrationResponseB\x8f\x01\n" +
 	"\vcom.cast.v1B\tCastProtoP\x01Z8github.com/lucnguyen/local-youtube/gen/go/cast/v1;castv1\xa2\x02\x03CXX\xaa\x02\aCast.V1\xca\x02\aCast\\V1\xe2\x02\x13Cast\\V1\\GPBMetadata\xea\x02\bCast::V1b\x06proto3"
 
 var (
@@ -1851,93 +2049,100 @@ func file_cast_v1_cast_proto_rawDescGZIP() []byte {
 	return file_cast_v1_cast_proto_rawDescData
 }
 
-var file_cast_v1_cast_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_cast_v1_cast_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_cast_v1_cast_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_cast_v1_cast_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_cast_v1_cast_proto_goTypes = []any{
 	(DeviceKind)(0),               // 0: cast.v1.DeviceKind
 	(SessionState)(0),             // 1: cast.v1.SessionState
 	(EndedReason)(0),              // 2: cast.v1.EndedReason
-	(*Device)(nil),                // 3: cast.v1.Device
-	(*QueueItem)(nil),             // 4: cast.v1.QueueItem
-	(*Session)(nil),               // 5: cast.v1.Session
-	(*ListDevicesRequest)(nil),    // 6: cast.v1.ListDevicesRequest
-	(*ListDevicesResponse)(nil),   // 7: cast.v1.ListDevicesResponse
-	(*ListSessionsRequest)(nil),   // 8: cast.v1.ListSessionsRequest
-	(*ListSessionsResponse)(nil),  // 9: cast.v1.ListSessionsResponse
-	(*StartSessionRequest)(nil),   // 10: cast.v1.StartSessionRequest
-	(*StartSessionResponse)(nil),  // 11: cast.v1.StartSessionResponse
-	(*GetSessionRequest)(nil),     // 12: cast.v1.GetSessionRequest
-	(*GetSessionResponse)(nil),    // 13: cast.v1.GetSessionResponse
-	(*PauseRequest)(nil),          // 14: cast.v1.PauseRequest
-	(*PauseResponse)(nil),         // 15: cast.v1.PauseResponse
-	(*ResumeRequest)(nil),         // 16: cast.v1.ResumeRequest
-	(*ResumeResponse)(nil),        // 17: cast.v1.ResumeResponse
-	(*NextRequest)(nil),           // 18: cast.v1.NextRequest
-	(*NextResponse)(nil),          // 19: cast.v1.NextResponse
-	(*StopRequest)(nil),           // 20: cast.v1.StopRequest
-	(*StopResponse)(nil),          // 21: cast.v1.StopResponse
-	(*SeekRequest)(nil),           // 22: cast.v1.SeekRequest
-	(*SeekResponse)(nil),          // 23: cast.v1.SeekResponse
-	(*SetVolumeRequest)(nil),      // 24: cast.v1.SetVolumeRequest
-	(*SetVolumeResponse)(nil),     // 25: cast.v1.SetVolumeResponse
-	(*JumpRequest)(nil),           // 26: cast.v1.JumpRequest
-	(*JumpResponse)(nil),          // 27: cast.v1.JumpResponse
-	(*ReplaceQueueRequest)(nil),   // 28: cast.v1.ReplaceQueueRequest
-	(*ReplaceQueueResponse)(nil),  // 29: cast.v1.ReplaceQueueResponse
-	(*HandoffRequest)(nil),        // 30: cast.v1.HandoffRequest
-	(*HandoffResponse)(nil),       // 31: cast.v1.HandoffResponse
-	(*timestamppb.Timestamp)(nil), // 32: google.protobuf.Timestamp
+	(NarrationStatus)(0),          // 3: cast.v1.NarrationStatus
+	(*Device)(nil),                // 4: cast.v1.Device
+	(*QueueItem)(nil),             // 5: cast.v1.QueueItem
+	(*Session)(nil),               // 6: cast.v1.Session
+	(*ListDevicesRequest)(nil),    // 7: cast.v1.ListDevicesRequest
+	(*ListDevicesResponse)(nil),   // 8: cast.v1.ListDevicesResponse
+	(*ListSessionsRequest)(nil),   // 9: cast.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),  // 10: cast.v1.ListSessionsResponse
+	(*StartSessionRequest)(nil),   // 11: cast.v1.StartSessionRequest
+	(*StartSessionResponse)(nil),  // 12: cast.v1.StartSessionResponse
+	(*GetSessionRequest)(nil),     // 13: cast.v1.GetSessionRequest
+	(*GetSessionResponse)(nil),    // 14: cast.v1.GetSessionResponse
+	(*PauseRequest)(nil),          // 15: cast.v1.PauseRequest
+	(*PauseResponse)(nil),         // 16: cast.v1.PauseResponse
+	(*ResumeRequest)(nil),         // 17: cast.v1.ResumeRequest
+	(*ResumeResponse)(nil),        // 18: cast.v1.ResumeResponse
+	(*NextRequest)(nil),           // 19: cast.v1.NextRequest
+	(*NextResponse)(nil),          // 20: cast.v1.NextResponse
+	(*StopRequest)(nil),           // 21: cast.v1.StopRequest
+	(*StopResponse)(nil),          // 22: cast.v1.StopResponse
+	(*SeekRequest)(nil),           // 23: cast.v1.SeekRequest
+	(*SeekResponse)(nil),          // 24: cast.v1.SeekResponse
+	(*SetVolumeRequest)(nil),      // 25: cast.v1.SetVolumeRequest
+	(*SetVolumeResponse)(nil),     // 26: cast.v1.SetVolumeResponse
+	(*JumpRequest)(nil),           // 27: cast.v1.JumpRequest
+	(*JumpResponse)(nil),          // 28: cast.v1.JumpResponse
+	(*ReplaceQueueRequest)(nil),   // 29: cast.v1.ReplaceQueueRequest
+	(*ReplaceQueueResponse)(nil),  // 30: cast.v1.ReplaceQueueResponse
+	(*HandoffRequest)(nil),        // 31: cast.v1.HandoffRequest
+	(*HandoffResponse)(nil),       // 32: cast.v1.HandoffResponse
+	(*SetNarrationRequest)(nil),   // 33: cast.v1.SetNarrationRequest
+	(*SetNarrationResponse)(nil),  // 34: cast.v1.SetNarrationResponse
+	(*timestamppb.Timestamp)(nil), // 35: google.protobuf.Timestamp
 }
 var file_cast_v1_cast_proto_depIdxs = []int32{
 	0,  // 0: cast.v1.Device.kind:type_name -> cast.v1.DeviceKind
-	3,  // 1: cast.v1.Session.device:type_name -> cast.v1.Device
+	4,  // 1: cast.v1.Session.device:type_name -> cast.v1.Device
 	1,  // 2: cast.v1.Session.state:type_name -> cast.v1.SessionState
 	2,  // 3: cast.v1.Session.ended_reason:type_name -> cast.v1.EndedReason
-	4,  // 4: cast.v1.Session.queue:type_name -> cast.v1.QueueItem
-	32, // 5: cast.v1.Session.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 6: cast.v1.ListDevicesResponse.devices:type_name -> cast.v1.Device
-	5,  // 7: cast.v1.ListSessionsResponse.sessions:type_name -> cast.v1.Session
-	5,  // 8: cast.v1.StartSessionResponse.session:type_name -> cast.v1.Session
-	5,  // 9: cast.v1.GetSessionResponse.session:type_name -> cast.v1.Session
-	5,  // 10: cast.v1.PauseResponse.session:type_name -> cast.v1.Session
-	5,  // 11: cast.v1.ResumeResponse.session:type_name -> cast.v1.Session
-	5,  // 12: cast.v1.NextResponse.session:type_name -> cast.v1.Session
-	5,  // 13: cast.v1.StopResponse.session:type_name -> cast.v1.Session
-	5,  // 14: cast.v1.SeekResponse.session:type_name -> cast.v1.Session
-	5,  // 15: cast.v1.SetVolumeResponse.session:type_name -> cast.v1.Session
-	5,  // 16: cast.v1.JumpResponse.session:type_name -> cast.v1.Session
-	5,  // 17: cast.v1.ReplaceQueueResponse.session:type_name -> cast.v1.Session
-	6,  // 18: cast.v1.CastService.ListDevices:input_type -> cast.v1.ListDevicesRequest
-	8,  // 19: cast.v1.CastService.ListSessions:input_type -> cast.v1.ListSessionsRequest
-	10, // 20: cast.v1.CastService.StartSession:input_type -> cast.v1.StartSessionRequest
-	12, // 21: cast.v1.CastService.GetSession:input_type -> cast.v1.GetSessionRequest
-	14, // 22: cast.v1.CastService.Pause:input_type -> cast.v1.PauseRequest
-	16, // 23: cast.v1.CastService.Resume:input_type -> cast.v1.ResumeRequest
-	18, // 24: cast.v1.CastService.Next:input_type -> cast.v1.NextRequest
-	20, // 25: cast.v1.CastService.Stop:input_type -> cast.v1.StopRequest
-	22, // 26: cast.v1.CastService.Seek:input_type -> cast.v1.SeekRequest
-	24, // 27: cast.v1.CastService.SetVolume:input_type -> cast.v1.SetVolumeRequest
-	26, // 28: cast.v1.CastService.Jump:input_type -> cast.v1.JumpRequest
-	28, // 29: cast.v1.CastService.ReplaceQueue:input_type -> cast.v1.ReplaceQueueRequest
-	30, // 30: cast.v1.CastService.Handoff:input_type -> cast.v1.HandoffRequest
-	7,  // 31: cast.v1.CastService.ListDevices:output_type -> cast.v1.ListDevicesResponse
-	9,  // 32: cast.v1.CastService.ListSessions:output_type -> cast.v1.ListSessionsResponse
-	11, // 33: cast.v1.CastService.StartSession:output_type -> cast.v1.StartSessionResponse
-	13, // 34: cast.v1.CastService.GetSession:output_type -> cast.v1.GetSessionResponse
-	15, // 35: cast.v1.CastService.Pause:output_type -> cast.v1.PauseResponse
-	17, // 36: cast.v1.CastService.Resume:output_type -> cast.v1.ResumeResponse
-	19, // 37: cast.v1.CastService.Next:output_type -> cast.v1.NextResponse
-	21, // 38: cast.v1.CastService.Stop:output_type -> cast.v1.StopResponse
-	23, // 39: cast.v1.CastService.Seek:output_type -> cast.v1.SeekResponse
-	25, // 40: cast.v1.CastService.SetVolume:output_type -> cast.v1.SetVolumeResponse
-	27, // 41: cast.v1.CastService.Jump:output_type -> cast.v1.JumpResponse
-	29, // 42: cast.v1.CastService.ReplaceQueue:output_type -> cast.v1.ReplaceQueueResponse
-	31, // 43: cast.v1.CastService.Handoff:output_type -> cast.v1.HandoffResponse
-	31, // [31:44] is the sub-list for method output_type
-	18, // [18:31] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	5,  // 4: cast.v1.Session.queue:type_name -> cast.v1.QueueItem
+	35, // 5: cast.v1.Session.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 6: cast.v1.Session.narration_status:type_name -> cast.v1.NarrationStatus
+	4,  // 7: cast.v1.ListDevicesResponse.devices:type_name -> cast.v1.Device
+	6,  // 8: cast.v1.ListSessionsResponse.sessions:type_name -> cast.v1.Session
+	6,  // 9: cast.v1.StartSessionResponse.session:type_name -> cast.v1.Session
+	6,  // 10: cast.v1.GetSessionResponse.session:type_name -> cast.v1.Session
+	6,  // 11: cast.v1.PauseResponse.session:type_name -> cast.v1.Session
+	6,  // 12: cast.v1.ResumeResponse.session:type_name -> cast.v1.Session
+	6,  // 13: cast.v1.NextResponse.session:type_name -> cast.v1.Session
+	6,  // 14: cast.v1.StopResponse.session:type_name -> cast.v1.Session
+	6,  // 15: cast.v1.SeekResponse.session:type_name -> cast.v1.Session
+	6,  // 16: cast.v1.SetVolumeResponse.session:type_name -> cast.v1.Session
+	6,  // 17: cast.v1.JumpResponse.session:type_name -> cast.v1.Session
+	6,  // 18: cast.v1.ReplaceQueueResponse.session:type_name -> cast.v1.Session
+	6,  // 19: cast.v1.SetNarrationResponse.session:type_name -> cast.v1.Session
+	7,  // 20: cast.v1.CastService.ListDevices:input_type -> cast.v1.ListDevicesRequest
+	9,  // 21: cast.v1.CastService.ListSessions:input_type -> cast.v1.ListSessionsRequest
+	11, // 22: cast.v1.CastService.StartSession:input_type -> cast.v1.StartSessionRequest
+	13, // 23: cast.v1.CastService.GetSession:input_type -> cast.v1.GetSessionRequest
+	15, // 24: cast.v1.CastService.Pause:input_type -> cast.v1.PauseRequest
+	17, // 25: cast.v1.CastService.Resume:input_type -> cast.v1.ResumeRequest
+	19, // 26: cast.v1.CastService.Next:input_type -> cast.v1.NextRequest
+	21, // 27: cast.v1.CastService.Stop:input_type -> cast.v1.StopRequest
+	23, // 28: cast.v1.CastService.Seek:input_type -> cast.v1.SeekRequest
+	25, // 29: cast.v1.CastService.SetVolume:input_type -> cast.v1.SetVolumeRequest
+	27, // 30: cast.v1.CastService.Jump:input_type -> cast.v1.JumpRequest
+	29, // 31: cast.v1.CastService.ReplaceQueue:input_type -> cast.v1.ReplaceQueueRequest
+	31, // 32: cast.v1.CastService.Handoff:input_type -> cast.v1.HandoffRequest
+	33, // 33: cast.v1.CastService.SetNarration:input_type -> cast.v1.SetNarrationRequest
+	8,  // 34: cast.v1.CastService.ListDevices:output_type -> cast.v1.ListDevicesResponse
+	10, // 35: cast.v1.CastService.ListSessions:output_type -> cast.v1.ListSessionsResponse
+	12, // 36: cast.v1.CastService.StartSession:output_type -> cast.v1.StartSessionResponse
+	14, // 37: cast.v1.CastService.GetSession:output_type -> cast.v1.GetSessionResponse
+	16, // 38: cast.v1.CastService.Pause:output_type -> cast.v1.PauseResponse
+	18, // 39: cast.v1.CastService.Resume:output_type -> cast.v1.ResumeResponse
+	20, // 40: cast.v1.CastService.Next:output_type -> cast.v1.NextResponse
+	22, // 41: cast.v1.CastService.Stop:output_type -> cast.v1.StopResponse
+	24, // 42: cast.v1.CastService.Seek:output_type -> cast.v1.SeekResponse
+	26, // 43: cast.v1.CastService.SetVolume:output_type -> cast.v1.SetVolumeResponse
+	28, // 44: cast.v1.CastService.Jump:output_type -> cast.v1.JumpResponse
+	30, // 45: cast.v1.CastService.ReplaceQueue:output_type -> cast.v1.ReplaceQueueResponse
+	32, // 46: cast.v1.CastService.Handoff:output_type -> cast.v1.HandoffResponse
+	34, // 47: cast.v1.CastService.SetNarration:output_type -> cast.v1.SetNarrationResponse
+	34, // [34:48] is the sub-list for method output_type
+	20, // [20:34] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_cast_v1_cast_proto_init() }
@@ -1950,8 +2155,8 @@ func file_cast_v1_cast_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_cast_v1_cast_proto_rawDesc), len(file_cast_v1_cast_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   29,
+			NumEnums:      4,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

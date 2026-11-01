@@ -35,6 +35,9 @@ service CastService {
   rpc ReplaceQueue(ReplaceQueueRequest) returns (ReplaceQueueResponse);
   // Stops the speaker and hands back where it was, for the phone to carry on.
   rpc Handoff(HandoffRequest) returns (HandoffResponse);
+  // Narration on the speaker, or off. On, the song plays as it is until the
+  // gateway has its narrated sound ready, and then from where it is.
+  rpc SetNarration(SetNarrationRequest) returns (SetNarrationResponse);
 }
 
 enum DeviceKind {
@@ -95,6 +98,23 @@ message Session {
   int32 version = 10;
   string started_by = 11;
   google.protobuf.Timestamp updated_at = 12;
+  // Narration asked for. What the speaker is playing is narration_status.
+  bool narration = 13;
+  NarrationStatus narration_status = 14;
+}
+
+// Narration on the speaker, for the song playing now.
+enum NarrationStatus {
+  NARRATION_STATUS_UNSPECIFIED = 0;
+  // Not asked for.
+  NARRATION_STATUS_OFF = 1;
+  // Asked for; the song plays as it is while the narrated sound is made.
+  NARRATION_STATUS_PREPARING = 2;
+  // The speaker is playing the narrated sound.
+  NARRATION_STATUS_ON = 3;
+  // Asked for, and this song has nothing to narrate (no captions) or its
+  // pass failed. It plays as it is.
+  NARRATION_STATUS_UNAVAILABLE = 4;
 }
 
 message ListDevicesRequest {}
@@ -115,6 +135,7 @@ message StartSessionRequest {
   int32 start_index = 3;
   int32 start_position_seconds = 4;
   string user_id = 5;
+  bool narration = 6;
 }
 
 message StartSessionResponse {
@@ -206,4 +227,13 @@ message HandoffRequest {
 message HandoffResponse {
   string video_id = 1;
   int32 position_seconds = 2;
+}
+
+message SetNarrationRequest {
+  string session_id = 1;
+  bool on = 2;
+}
+
+message SetNarrationResponse {
+  Session session = 1;
 }

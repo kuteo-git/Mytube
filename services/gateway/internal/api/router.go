@@ -79,6 +79,9 @@ type Gateway struct {
 	// translations and the clips — is on disk, so a restarted pass is fast
 	// rather than repeated.
 	narration *narrationRegistry
+	// Mixes of a song with its narration, running or failed; see
+	// narrated_audio.go.
+	narratedMixes *narratedMixes
 	// One resolve per broadcast per minute, shared by the stream answer and the
 	// playlist routes — see live_resolve.go.
 	liveResolves *liveResolveCache
@@ -121,6 +124,7 @@ func NewGateway(
 		configDir:     configDir,
 		skipLocalTier: skipLocal,
 		narration:     newNarrationRegistry(),
+		narratedMixes: newNarratedMixes(),
 		liveResolves:  newLiveResolveCache(),
 		cast:          cast,
 		extractAudio:  ffmpegExtractAudio,
@@ -253,6 +257,9 @@ func (g *Gateway) Routes() http.Handler {
 	mux.HandleFunc("GET /api/videos/{id}/remux/start", g.handleRemuxStart)
 	// The sound alone, fetched by a speaker the household casts to.
 	mux.HandleFunc("GET /api/videos/{id}/audio", g.handleCastAudio)
+	// The same sound with its narration mixed in; see narrated_audio.go.
+	mux.HandleFunc("POST /api/videos/{id}/audio/narrated", g.handlePrepareNarratedAudio)
+	mux.HandleFunc("GET /api/videos/{id}/audio/narrated", g.handleNarratedAudio)
 	g.castRoutes(mux)
 
 	// Downloads are never requested directly: they are a side effect of asking

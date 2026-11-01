@@ -26,11 +26,12 @@ type Repo interface {
 }
 
 // Driver talks to one family of speaker. Load returns the media key the
-// speaker will report while playing what it was handed.
+// speaker will report while playing what it was handed; narrated hands it the
+// song's narrated sound instead of its own.
 type Driver interface {
 	Kind() domain.Kind
 	Devices(ctx context.Context) ([]domain.Device, error)
-	Load(ctx context.Context, deviceID string, it domain.Item, startS int, first bool) (string, error)
+	Load(ctx context.Context, deviceID string, it domain.Item, startS int, first, narrated bool) (string, error)
 	Pause(ctx context.Context, deviceID string) error
 	Resume(ctx context.Context, deviceID string) error
 	Stop(ctx context.Context, deviceID string) error
@@ -53,15 +54,28 @@ type Catalog interface {
 	RecordProgress(ctx context.Context, userID, videoID string, positionS, durationS int) error
 }
 
+// Narrator is the gateway, as far as narration on a speaker needs it.
+type Narrator interface {
+	// Prepare asks for the song's narrated sound — starting its narration
+	// pass and the mix if they have not run — and says where it is. Asking
+	// again is how it is followed.
+	Prepare(ctx context.Context, videoID string) (domain.Narrated, error)
+}
+
 // How long one speaker gets to answer a status request.
 const statusTimeout = 2 * time.Second
 
+// How long the gateway gets to say whether a narrated sound is ready. It
+// answers from memory; the work it starts runs on after the answer.
+const narratorTimeout = 2 * time.Second
+
 type Engine struct {
-	repo    Repo
-	drivers map[domain.Kind]Driver
-	catalog Catalog
-	now     func() time.Time
-	logger  *slog.Logger
+	repo     Repo
+	drivers  map[domain.Kind]Driver
+	catalog  Catalog
+	narrator Narrator
+	now      func() time.Time
+	logger   *slog.Logger
 
 	// One lock per speaker, held by a tick and by every command. A speaker has
 	// at most one session, so this also serialises everything done to it: a
@@ -69,14 +83,23 @@ type Engine struct {
 	// replaced.
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
+
+	// The gateway's last word on each song's narrated sound. Kept in memory:
+	// it is asked again every tick it matters, and lost on a restart costs
+	// one question.
+	narratedMu sync.Mutex
+	narrated   map[string]domain.Narrated
 }
 
-func NewEngine(repo Repo, drivers []Driver, catalog Catalog, now func() time.Time, logger *slog.Logger) *Engine {
+func NewEngine(repo Repo, drivers []Driver, catalog Catalog, narrator Narrator, now func() time.Time, logger *slog.Logger) *Engine {
 	byKind := map[domain.Kind]Driver{}
 	for _, d := range drivers {
 		byKind[d.Kind()] = d
 	}
-	return &Engine{repo: repo, drivers: byKind, catalog: catalog, now: now, logger: logger, locks: map[string]*sync.Mutex{}}
+	return &Engine{
+		repo: repo, drivers: byKind, catalog: catalog, narrator: narrator, now: now, logger: logger,
+		locks: map[string]*sync.Mutex{}, narrated: map[string]domain.Narrated{},
+	}
 }
 
 func (e *Engine) deviceLock(deviceID string) *sync.Mutex {
@@ -144,7 +167,68 @@ func (e *Engine) follow(ctx context.Context, sessionID string) {
 
 	next, actions := domain.Reconcile(s, st, statusErr, e.now())
 	next = e.apply(ctx, drv, next, actions)
+	next = e.followNarration(ctx, drv, next)
 	e.save(ctx, s, next)
+}
+
+// followNarration switches the song playing to its narrated sound once the
+// gateway has it, or back once narration is off, from where it is. Only while
+// playing: a reload starts the speaker, and a paused one must stay paused.
+// With the narrated song playing, the next one is asked for, so it is ready
+// by the time it is reached.
+func (e *Engine) followNarration(ctx context.Context, drv Driver, s domain.Session) domain.Session {
+	if s.State != domain.Playing {
+		return s
+	}
+	item, ok := s.Current()
+	if !ok {
+		return s
+	}
+	want := s.Narration && e.narratedReady(ctx, item.VideoID)
+	if want != s.LoadedNarrated {
+		s, load := domain.Reload(s, e.now())
+		return e.apply(ctx, drv, s, []domain.Action{load})
+	}
+	if s.LoadedNarrated && s.CurrentIndex+1 < len(s.Queue) {
+		e.narratedReady(ctx, s.Queue[s.CurrentIndex+1].VideoID)
+	}
+	return s
+}
+
+// narratedReady asks the gateway about a song and remembers the answer. A
+// gateway that does not answer is "still preparing": the song plays as it is.
+func (e *Engine) narratedReady(ctx context.Context, videoID string) bool {
+	if e.narrator == nil {
+		return false
+	}
+	e.narratedMu.Lock()
+	known := e.narrated[videoID]
+	e.narratedMu.Unlock()
+	// Ready is final; anything else is asked again, so a pass that failed
+	// for a moment (the TTS server restarting) is tried again.
+	if known == domain.NarratedReady {
+		return true
+	}
+	askCtx, cancel := context.WithTimeout(ctx, narratorTimeout)
+	answer, err := e.narrator.Prepare(askCtx, videoID)
+	cancel()
+	if err != nil {
+		e.logger.Warn("prepare narrated sound", "video", videoID, "error", err)
+		return false
+	}
+	e.narratedMu.Lock()
+	e.narrated[videoID] = answer
+	e.narratedMu.Unlock()
+	return answer == domain.NarratedReady
+}
+
+// NarrationStatus is what the remote shows about narration on s.
+func (e *Engine) NarrationStatus(s domain.Session) domain.NarrationStatus {
+	item, _ := s.Current()
+	e.narratedMu.Lock()
+	known := e.narrated[item.VideoID]
+	e.narratedMu.Unlock()
+	return domain.NarrationStatusOf(s, known)
 }
 
 // apply carries out what a decision asked for. A load the speaker refuses
@@ -154,7 +238,8 @@ func (e *Engine) apply(ctx context.Context, drv Driver, s domain.Session, action
 		switch a := actions[i].(type) {
 		case domain.Load:
 			item := s.Queue[a.Index]
-			key, err := drv.Load(ctx, s.DeviceID, item, a.StartS, a.First)
+			narrated := s.Narration && e.narratedReady(ctx, item.VideoID)
+			key, err := drv.Load(ctx, s.DeviceID, item, a.StartS, a.First, narrated)
 			if err != nil {
 				e.logger.Warn("load refused, skipping", "session", s.ID, "video", item.VideoID, "error", err)
 				var more []domain.Action
@@ -163,7 +248,9 @@ func (e *Engine) apply(ctx context.Context, drv Driver, s domain.Session, action
 				continue
 			}
 			s = s.Loaded(key)
-			e.logger.Info("loaded", "session", s.ID, "device", s.DeviceID, "video", item.VideoID, "start", a.StartS)
+			s.LoadedNarrated = narrated
+			e.logger.Info("loaded", "session", s.ID, "device", s.DeviceID, "video", item.VideoID, "start", a.StartS,
+				"narrated", narrated)
 		case domain.StopDevice:
 			if err := drv.Stop(ctx, s.DeviceID); err != nil {
 				e.logger.Warn("stop speaker", "session", s.ID, "error", err)
@@ -197,6 +284,7 @@ type StartRequest struct {
 	VideoIDs       []string
 	StartIndex     int
 	StartPositionS int
+	Narration      bool
 }
 
 // Devices lists the speakers answering now.
@@ -252,7 +340,7 @@ func (e *Engine) StartSession(ctx context.Context, req StartRequest) (domain.Ses
 	now := e.now()
 	s := domain.Session{
 		ID: uuid.NewString(), DeviceID: device.ID, DeviceName: device.Name, DeviceKind: device.Kind, StartedBy: req.UserID,
-		Queue: items, LastSeenOK: now, CreatedAt: now, UpdatedAt: now,
+		Queue: items, LastSeenOK: now, CreatedAt: now, UpdatedAt: now, Narration: req.Narration,
 	}
 	startS := req.StartPositionS
 	if start != req.StartIndex {
@@ -260,11 +348,13 @@ func (e *Engine) StartSession(ctx context.Context, req StartRequest) (domain.Ses
 		startS = 0
 	}
 	s, load := domain.LoadAt(s, start, max(startS, 0), true, now)
-	key, err := drv.Load(ctx, s.DeviceID, s.Queue[start], load.(domain.Load).StartS, true)
+	narrated := s.Narration && e.narratedReady(ctx, s.Queue[start].VideoID)
+	key, err := drv.Load(ctx, s.DeviceID, s.Queue[start], load.(domain.Load).StartS, true, narrated)
 	if err != nil {
 		return domain.Session{}, fmt.Errorf("load on %q: %v: %w", device.ID, err, domain.ErrDeviceOffline)
 	}
 	s = s.Loaded(key)
+	s.LoadedNarrated = narrated
 	if err := e.repo.Create(ctx, s, now); err != nil {
 		_ = drv.Stop(ctx, s.DeviceID)
 		return domain.Session{}, err
@@ -455,6 +545,24 @@ func (e *Engine) ReplaceQueue(ctx context.Context, id string, version int, ids [
 			return s, nil, nil
 		}
 		s, load := domain.LoadAt(s, s.CurrentIndex, 0, false, now)
+		return s, []domain.Action{load}, nil
+	})
+}
+
+// SetNarration turns narration on the speaker on or off. The switch happens
+// now when it can — the narrated sound ready, or narration going off — and
+// otherwise on the tick that finds it ready.
+func (e *Engine) SetNarration(ctx context.Context, id string, on bool) (domain.Session, error) {
+	return e.command(ctx, id, func(s domain.Session, drv Driver, now time.Time) (domain.Session, []domain.Action, error) {
+		s.Narration = on
+		item, ok := s.Current()
+		if !ok || s.State != domain.Playing {
+			return s, nil, nil
+		}
+		if want := on && e.narratedReady(ctx, item.VideoID); want == s.LoadedNarrated {
+			return s, nil, nil
+		}
+		s, load := domain.Reload(s, now)
 		return s, []domain.Action{load}, nil
 	})
 }

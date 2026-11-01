@@ -1947,6 +1947,14 @@ closing all of them changes nothing on the speaker. Plan and decisions:
   `GET /audio/{id}`, the same AAC track the HLS ladder resolves, in pieces of at
   most 1 MiB — the audio track refuses ≥2 MiB (§4) and a speaker asks for the
   whole file. Pressing cast schedules the download as pressing play does.
+- **Narration on a speaker is a second file, `narrated-<key>.m4a`**, made by
+  the gateway once the narration pass is done: the song decoded by ffmpeg,
+  turned down under each line's slot and the line added in Go, AAC out. A
+  speaker cannot play a second voice over a URL. The session plays the song as
+  it is until the file is ready and then reloads from where it is (only while
+  playing; the queue's version is kept). The R1 gets it as `<id>~narrated`,
+  because it caches downloads by `video_id`. The key hashes the lines and the
+  levels, so a new pass makes a new file and the old one is removed.
 - **`audio.m4a` is ~3 MB per cast video and is not counted in `size_bytes`.**
   Eviction removes it with the media file (`usecase.CastAudioName`); captions
   beside them stay.

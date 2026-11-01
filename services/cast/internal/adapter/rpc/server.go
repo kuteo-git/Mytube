@@ -74,7 +74,7 @@ func (s *Server) ListSessions(ctx context.Context, _ *connect.Request[castv1.Lis
 	}
 	out := make([]*castv1.Session, 0, len(sessions))
 	for _, sess := range sessions {
-		out = append(out, toProto(sess))
+		out = append(out, s.toProto(sess))
 	}
 	return connect.NewResponse(&castv1.ListSessionsResponse{Sessions: out}), nil
 }
@@ -84,11 +84,12 @@ func (s *Server) StartSession(ctx context.Context, req *connect.Request[castv1.S
 	sess, err := s.engine.StartSession(ctx, usecase.StartRequest{
 		UserID: m.GetUserId(), DeviceID: m.GetDeviceId(), VideoIDs: m.GetVideoIds(),
 		StartIndex: int(m.GetStartIndex()), StartPositionS: int(m.GetStartPositionSeconds()),
+		Narration: m.GetNarration(),
 	})
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.StartSessionResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.StartSessionResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) GetSession(ctx context.Context, req *connect.Request[castv1.GetSessionRequest]) (*connect.Response[castv1.GetSessionResponse], error) {
@@ -96,7 +97,7 @@ func (s *Server) GetSession(ctx context.Context, req *connect.Request[castv1.Get
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.GetSessionResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.GetSessionResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Pause(ctx context.Context, req *connect.Request[castv1.PauseRequest]) (*connect.Response[castv1.PauseResponse], error) {
@@ -104,7 +105,7 @@ func (s *Server) Pause(ctx context.Context, req *connect.Request[castv1.PauseReq
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.PauseResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.PauseResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Resume(ctx context.Context, req *connect.Request[castv1.ResumeRequest]) (*connect.Response[castv1.ResumeResponse], error) {
@@ -112,7 +113,7 @@ func (s *Server) Resume(ctx context.Context, req *connect.Request[castv1.ResumeR
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.ResumeResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.ResumeResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Next(ctx context.Context, req *connect.Request[castv1.NextRequest]) (*connect.Response[castv1.NextResponse], error) {
@@ -120,7 +121,7 @@ func (s *Server) Next(ctx context.Context, req *connect.Request[castv1.NextReque
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.NextResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.NextResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Stop(ctx context.Context, req *connect.Request[castv1.StopRequest]) (*connect.Response[castv1.StopResponse], error) {
@@ -128,7 +129,7 @@ func (s *Server) Stop(ctx context.Context, req *connect.Request[castv1.StopReque
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.StopResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.StopResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Seek(ctx context.Context, req *connect.Request[castv1.SeekRequest]) (*connect.Response[castv1.SeekResponse], error) {
@@ -136,7 +137,7 @@ func (s *Server) Seek(ctx context.Context, req *connect.Request[castv1.SeekReque
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.SeekResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.SeekResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) SetVolume(ctx context.Context, req *connect.Request[castv1.SetVolumeRequest]) (*connect.Response[castv1.SetVolumeResponse], error) {
@@ -144,7 +145,7 @@ func (s *Server) SetVolume(ctx context.Context, req *connect.Request[castv1.SetV
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.SetVolumeResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.SetVolumeResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Jump(ctx context.Context, req *connect.Request[castv1.JumpRequest]) (*connect.Response[castv1.JumpResponse], error) {
@@ -152,7 +153,7 @@ func (s *Server) Jump(ctx context.Context, req *connect.Request[castv1.JumpReque
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.JumpResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.JumpResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) ReplaceQueue(ctx context.Context, req *connect.Request[castv1.ReplaceQueueRequest]) (*connect.Response[castv1.ReplaceQueueResponse], error) {
@@ -161,7 +162,7 @@ func (s *Server) ReplaceQueue(ctx context.Context, req *connect.Request[castv1.R
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&castv1.ReplaceQueueResponse{Session: toProto(sess)}), nil
+	return connect.NewResponse(&castv1.ReplaceQueueResponse{Session: s.toProto(sess)}), nil
 }
 
 func (s *Server) Handoff(ctx context.Context, req *connect.Request[castv1.HandoffRequest]) (*connect.Response[castv1.HandoffResponse], error) {
@@ -170,6 +171,14 @@ func (s *Server) Handoff(ctx context.Context, req *connect.Request[castv1.Handof
 		return nil, toConnect(err)
 	}
 	return connect.NewResponse(&castv1.HandoffResponse{VideoId: videoID, PositionSeconds: int32(position)}), nil
+}
+
+func (s *Server) SetNarration(ctx context.Context, req *connect.Request[castv1.SetNarrationRequest]) (*connect.Response[castv1.SetNarrationResponse], error) {
+	sess, err := s.engine.SetNarration(ctx, req.Msg.GetSessionId(), req.Msg.GetOn())
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&castv1.SetNarrationResponse{Session: s.toProto(sess)}), nil
 }
 
 func kind(k domain.Kind) castv1.DeviceKind {
@@ -201,7 +210,14 @@ var reasons = map[domain.EndedReason]castv1.EndedReason{
 	domain.Failed:          castv1.EndedReason_ENDED_REASON_FAILED,
 }
 
-func toProto(s domain.Session) *castv1.Session {
+var narrationStatuses = map[domain.NarrationStatus]castv1.NarrationStatus{
+	domain.NarrationOff:         castv1.NarrationStatus_NARRATION_STATUS_OFF,
+	domain.NarrationPreparing:   castv1.NarrationStatus_NARRATION_STATUS_PREPARING,
+	domain.NarrationOn:          castv1.NarrationStatus_NARRATION_STATUS_ON,
+	domain.NarrationUnavailable: castv1.NarrationStatus_NARRATION_STATUS_UNAVAILABLE,
+}
+
+func (srv *Server) toProto(s domain.Session) *castv1.Session {
 	queue := make([]*castv1.QueueItem, len(s.Queue))
 	for i, it := range s.Queue {
 		queue[i] = &castv1.QueueItem{
@@ -216,5 +232,6 @@ func toProto(s domain.Session) *castv1.Session {
 		Queue: queue, CurrentIndex: int32(s.CurrentIndex),
 		PositionSeconds: int32(s.PositionS), DurationSeconds: int32(s.DurationS), Volume: int32(s.Volume),
 		Version: int32(s.Version), StartedBy: s.StartedBy, UpdatedAt: timestamppb.New(s.UpdatedAt),
+		Narration: s.Narration, NarrationStatus: narrationStatuses[srv.engine.NarrationStatus(s)],
 	}
 }

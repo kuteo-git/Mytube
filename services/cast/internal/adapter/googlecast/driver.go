@@ -66,12 +66,16 @@ func (d *Driver) Devices(ctx context.Context) ([]domain.Device, error) {
 	return out, nil
 }
 
-func (d *Driver) audioURL(videoID string) string {
-	return d.mediaBase + "/api/videos/" + url.PathEscape(videoID) + "/audio"
+func (d *Driver) audioURL(videoID string, narrated bool) string {
+	u := d.mediaBase + "/api/videos/" + url.PathEscape(videoID) + "/audio"
+	if narrated {
+		u += "/narrated"
+	}
+	return u
 }
 
-func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, startS int, _ bool) (string, error) {
-	media := d.audioURL(it.VideoID)
+func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, startS int, _, narrated bool) (string, error) {
+	media := d.audioURL(it.VideoID, narrated)
 	thumb := it.ThumbnailURL
 	if thumb != "" && !strings.HasPrefix(thumb, "http") {
 		thumb = d.mediaBase + thumb

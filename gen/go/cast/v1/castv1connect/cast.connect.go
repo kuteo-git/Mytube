@@ -62,6 +62,9 @@ const (
 	CastServiceReplaceQueueProcedure = "/cast.v1.CastService/ReplaceQueue"
 	// CastServiceHandoffProcedure is the fully-qualified name of the CastService's Handoff RPC.
 	CastServiceHandoffProcedure = "/cast.v1.CastService/Handoff"
+	// CastServiceSetNarrationProcedure is the fully-qualified name of the CastService's SetNarration
+	// RPC.
+	CastServiceSetNarrationProcedure = "/cast.v1.CastService/SetNarration"
 )
 
 // CastServiceClient is a client for the cast.v1.CastService service.
@@ -86,6 +89,9 @@ type CastServiceClient interface {
 	ReplaceQueue(context.Context, *connect.Request[v1.ReplaceQueueRequest]) (*connect.Response[v1.ReplaceQueueResponse], error)
 	// Stops the speaker and hands back where it was, for the phone to carry on.
 	Handoff(context.Context, *connect.Request[v1.HandoffRequest]) (*connect.Response[v1.HandoffResponse], error)
+	// Narration on the speaker, or off. On, the song plays as it is until the
+	// gateway has its narrated sound ready, and then from where it is.
+	SetNarration(context.Context, *connect.Request[v1.SetNarrationRequest]) (*connect.Response[v1.SetNarrationResponse], error)
 }
 
 // NewCastServiceClient constructs a client for the cast.v1.CastService service. By default, it uses
@@ -177,6 +183,12 @@ func NewCastServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(castServiceMethods.ByName("Handoff")),
 			connect.WithClientOptions(opts...),
 		),
+		setNarration: connect.NewClient[v1.SetNarrationRequest, v1.SetNarrationResponse](
+			httpClient,
+			baseURL+CastServiceSetNarrationProcedure,
+			connect.WithSchema(castServiceMethods.ByName("SetNarration")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -195,6 +207,7 @@ type castServiceClient struct {
 	jump         *connect.Client[v1.JumpRequest, v1.JumpResponse]
 	replaceQueue *connect.Client[v1.ReplaceQueueRequest, v1.ReplaceQueueResponse]
 	handoff      *connect.Client[v1.HandoffRequest, v1.HandoffResponse]
+	setNarration *connect.Client[v1.SetNarrationRequest, v1.SetNarrationResponse]
 }
 
 // ListDevices calls cast.v1.CastService.ListDevices.
@@ -262,6 +275,11 @@ func (c *castServiceClient) Handoff(ctx context.Context, req *connect.Request[v1
 	return c.handoff.CallUnary(ctx, req)
 }
 
+// SetNarration calls cast.v1.CastService.SetNarration.
+func (c *castServiceClient) SetNarration(ctx context.Context, req *connect.Request[v1.SetNarrationRequest]) (*connect.Response[v1.SetNarrationResponse], error) {
+	return c.setNarration.CallUnary(ctx, req)
+}
+
 // CastServiceHandler is an implementation of the cast.v1.CastService service.
 type CastServiceHandler interface {
 	// Speakers answering now. One that does not answer is not listed.
@@ -284,6 +302,9 @@ type CastServiceHandler interface {
 	ReplaceQueue(context.Context, *connect.Request[v1.ReplaceQueueRequest]) (*connect.Response[v1.ReplaceQueueResponse], error)
 	// Stops the speaker and hands back where it was, for the phone to carry on.
 	Handoff(context.Context, *connect.Request[v1.HandoffRequest]) (*connect.Response[v1.HandoffResponse], error)
+	// Narration on the speaker, or off. On, the song plays as it is until the
+	// gateway has its narrated sound ready, and then from where it is.
+	SetNarration(context.Context, *connect.Request[v1.SetNarrationRequest]) (*connect.Response[v1.SetNarrationResponse], error)
 }
 
 // NewCastServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -371,6 +392,12 @@ func NewCastServiceHandler(svc CastServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(castServiceMethods.ByName("Handoff")),
 		connect.WithHandlerOptions(opts...),
 	)
+	castServiceSetNarrationHandler := connect.NewUnaryHandler(
+		CastServiceSetNarrationProcedure,
+		svc.SetNarration,
+		connect.WithSchema(castServiceMethods.ByName("SetNarration")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/cast.v1.CastService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CastServiceListDevicesProcedure:
@@ -399,6 +426,8 @@ func NewCastServiceHandler(svc CastServiceHandler, opts ...connect.HandlerOption
 			castServiceReplaceQueueHandler.ServeHTTP(w, r)
 		case CastServiceHandoffProcedure:
 			castServiceHandoffHandler.ServeHTTP(w, r)
+		case CastServiceSetNarrationProcedure:
+			castServiceSetNarrationHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -458,4 +487,8 @@ func (UnimplementedCastServiceHandler) ReplaceQueue(context.Context, *connect.Re
 
 func (UnimplementedCastServiceHandler) Handoff(context.Context, *connect.Request[v1.HandoffRequest]) (*connect.Response[v1.HandoffResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("cast.v1.CastService.Handoff is not implemented"))
+}
+
+func (UnimplementedCastServiceHandler) SetNarration(context.Context, *connect.Request[v1.SetNarrationRequest]) (*connect.Response[v1.SetNarrationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("cast.v1.CastService.SetNarration is not implemented"))
 }

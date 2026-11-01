@@ -29,6 +29,7 @@ func (g *Gateway) castRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/cast/sessions/{id}/volume", g.castCommand(g.castVolume))
 	mux.HandleFunc("POST /api/cast/sessions/{id}/jump", g.castCommand(g.castJump))
 	mux.HandleFunc("PUT /api/cast/sessions/{id}/queue", g.castCommand(g.castQueue))
+	mux.HandleFunc("POST /api/cast/sessions/{id}/narration", g.castCommand(g.castNarration))
 	mux.HandleFunc("POST /api/cast/sessions/{id}/handoff", g.handleCastHandoff)
 }
 
@@ -62,6 +63,17 @@ type castSessionDTO struct {
 	Version      int32         `json:"version"`
 	StartedBy    string        `json:"started_by"`
 	UpdatedAt    string        `json:"updated_at"`
+	// Narration asked for, and what the speaker is doing about it: off,
+	// preparing (the song plays as it is meanwhile), on, or unavailable.
+	Narration       bool   `json:"narration"`
+	NarrationStatus string `json:"narration_status"`
+}
+
+var castNarrationStatuses = map[castv1.NarrationStatus]string{
+	castv1.NarrationStatus_NARRATION_STATUS_OFF:         "off",
+	castv1.NarrationStatus_NARRATION_STATUS_PREPARING:   "preparing",
+	castv1.NarrationStatus_NARRATION_STATUS_ON:          "on",
+	castv1.NarrationStatus_NARRATION_STATUS_UNAVAILABLE: "unavailable",
 }
 
 var castKinds = map[castv1.DeviceKind]string{
@@ -115,6 +127,7 @@ func toCastSession(s *castv1.Session) castSessionDTO {
 		Queue: queue, CurrentIndex: s.GetCurrentIndex(), PositionS: s.GetPositionSeconds(),
 		DurationS: s.GetDurationSeconds(), Volume: s.GetVolume(), Version: s.GetVersion(),
 		StartedBy: s.GetStartedBy(), UpdatedAt: updated,
+		Narration: s.GetNarration(), NarrationStatus: castNarrationStatuses[s.GetNarrationStatus()],
 	}
 }
 
@@ -189,6 +202,7 @@ func (g *Gateway) handleStartCast(w http.ResponseWriter, r *http.Request) {
 		Items          castItemsBody `json:"items"`
 		StartIndex     int32         `json:"start_index"`
 		StartPositionS int32         `json:"start_position_s"`
+		Narration      bool          `json:"narration"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
@@ -196,7 +210,7 @@ func (g *Gateway) handleStartCast(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := g.cast.StartSession(r.Context(), connect.NewRequest(&castv1.StartSessionRequest{
 		DeviceId: body.DeviceID, VideoIds: body.Items.ids(), StartIndex: body.StartIndex,
-		StartPositionSeconds: body.StartPositionS, UserId: g.userID(r),
+		StartPositionSeconds: body.StartPositionS, UserId: g.userID(r), Narration: body.Narration,
 	}))
 	if err != nil {
 		g.writeCastErr(w, r, err)
@@ -349,6 +363,20 @@ func (g *Gateway) castQueue(r *http.Request, id string, body json.RawMessage) (*
 	resp, err := g.cast.ReplaceQueue(r.Context(), connect.NewRequest(&castv1.ReplaceQueueRequest{
 		SessionId: id, Version: b.Version, VideoIds: b.Items.ids(), CurrentIndex: b.CurrentIndex,
 	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.GetSession(), nil
+}
+
+func (g *Gateway) castNarration(r *http.Request, id string, body json.RawMessage) (*castv1.Session, error) {
+	var b struct {
+		On bool `json:"on"`
+	}
+	if err := decode(body, &b); err != nil {
+		return nil, err
+	}
+	resp, err := g.cast.SetNarration(r.Context(), connect.NewRequest(&castv1.SetNarrationRequest{SessionId: id, On: b.On}))
 	if err != nil {
 		return nil, err
 	}
