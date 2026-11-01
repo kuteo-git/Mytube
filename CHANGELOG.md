@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+**A Nest narrates seconds after narration is switched on**, not once the
+whole pass is done. Measured on a video never narrated: the listener waited a
+minute and heard nothing — the pass was at 68 of 130 lines, and the file
+waits for all of them and the mix. A Google speaker is now handed
+`GET /api/videos/{id}/audio/narrated.wav`, made as it is fetched: WAV, so its
+length is known before a sample is made and a range is a place in the song
+(seek, position and duration work as with a file); each 0.1s block is mixed
+once the pass has been through the lines that start in it, and a block that
+waits 3s moves the pass there. The pass starts where the speaker is
+(`POST …/audio/narrated?from=`). The R1, which downloads a song whole, keeps
+the file. Measured from 60s into a never-narrated 11-minute video: first byte
+1.9s, 186s of sound in 40s, and each line in the stream matches its clip at
+correlation ≥0.986. The first build waited on every line before the block,
+which a pass working from 60s leaves for last: 0.1s of sound in 40s.
+
 **Narration plays on the speakers.** A speaker plays one sound it is handed,
 so the gateway now makes a song's *narrated sound* — its own sound turned down
 to 0.2 under each line's slot (30ms ramps) with the line over it at 0.5, the

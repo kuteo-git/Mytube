@@ -102,6 +102,10 @@ type song struct {
 // which is how a switch between the two is told from a takeover.
 const narratedSuffix = "~narrated"
 
+// StreamsNarration: the R1 downloads a song whole before it plays it, so a
+// stream would be waited on to its end; it gets the finished file.
+func (d *Driver) StreamsNarration() bool { return false }
+
 func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, startS int, first, narrated bool) (string, error) {
 	base, err := d.base(deviceID)
 	if err != nil {

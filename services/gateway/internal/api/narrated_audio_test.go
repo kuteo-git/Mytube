@@ -131,15 +131,15 @@ func TestPrepareAnswersWhereTheNarratedSoundIs(t *testing.T) {
 	clip := narrationClip{StartSeconds: 1, DurationSeconds: 2, ClipURL: "/media/v/narration-tts/a.wav"}
 
 	g.narration.passes["v"] = &narrationPass{Status: narrationRunning, Done: 3, Total: 10}
-	if a := g.prepareNarrated(context.Background(), "v", noSource); a.Status != "preparing" || a.Done != 3 || a.Total != 10 {
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Status != "preparing" || a.Done != 3 || a.Total != 10 {
 		t.Errorf("running pass: %+v", a)
 	}
 	g.narration.passes["v"] = &narrationPass{Status: narrationFailed}
-	if a := g.prepareNarrated(context.Background(), "v", noSource); a.Status != "failed" {
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Status != "failed" {
 		t.Errorf("failed pass: %+v", a)
 	}
 	g.narration.passes["v"] = &narrationPass{Status: narrationDone}
-	if a := g.prepareNarrated(context.Background(), "v", noSource); a.Status != "none" {
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Status != "none" {
 		t.Errorf("a video with nothing to narrate: %+v", a)
 	}
 
@@ -150,7 +150,7 @@ func TestPrepareAnswersWhereTheNarratedSoundIs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "narrated-"+narratedKey(clips)+".m4a"), []byte("m4a"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if a := g.prepareNarrated(context.Background(), "v", noSource); a.Status != "ready" {
+	if a := g.prepareNarrated(context.Background(), "v", 0, noSource); a.Status != "ready" {
 		t.Errorf("mixed already: %+v", a)
 	}
 }
@@ -162,7 +162,7 @@ func TestAMixThatFailedIsNotRetriedEverySecond(t *testing.T) {
 	calls := 0
 	source := func() (string, error) { calls++; return "", os.ErrNotExist }
 
-	if a := g.prepareNarrated(context.Background(), "v", source); a.Status != "preparing" {
+	if a := g.prepareNarrated(context.Background(), "v", 0, source); a.Status != "preparing" {
 		t.Fatalf("first ask: %+v", a)
 	}
 	waitFor(t, func() bool {
@@ -170,7 +170,7 @@ func TestAMixThatFailedIsNotRetriedEverySecond(t *testing.T) {
 		defer g.narratedMixes.mu.Unlock()
 		return len(g.narratedMixes.failed) == 1
 	}, "the mix never failed")
-	if a := g.prepareNarrated(context.Background(), "v", source); a.Status != "failed" {
+	if a := g.prepareNarrated(context.Background(), "v", 0, source); a.Status != "failed" {
 		t.Fatalf("asked again: %+v", a)
 	}
 	if calls != 1 {

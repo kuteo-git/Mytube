@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/lucnguyen/local-youtube/services/cast/internal/domain"
@@ -27,36 +28,41 @@ func New(gateway string, client *http.Client) *Narrator {
 
 // Prepare is POST /api/videos/{id}/audio/narrated, which starts what is
 // missing and answers at once.
-func (n *Narrator) Prepare(ctx context.Context, videoID string) (domain.Narrated, error) {
+func (n *Narrator) Prepare(ctx context.Context, videoID string, fromS int) (domain.NarratedAnswer, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		n.gateway+"/api/videos/"+url.PathEscape(videoID)+"/audio/narrated", nil)
+		n.gateway+"/api/videos/"+url.PathEscape(videoID)+"/audio/narrated?from="+strconv.Itoa(max(fromS, 0)), nil)
 	if err != nil {
-		return "", err
+		return domain.NarratedAnswer{}, err
 	}
 	resp, err := n.client.Do(req)
 	if err != nil {
-		return "", err
+		return domain.NarratedAnswer{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnprocessableEntity {
 		// A broadcast: never narrated on a speaker, it is never cast at all.
-		return domain.NarratedNone, nil
+		return domain.NarratedAnswer{File: domain.NarratedNone, Stream: domain.NarratedNone}, nil
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return "", fmt.Errorf("gateway answered %d for narrated sound of %s", resp.StatusCode, videoID)
+		return domain.NarratedAnswer{}, fmt.Errorf("gateway answered %d for narrated sound of %s", resp.StatusCode, videoID)
 	}
 	var body struct {
 		Status string `json:"status"`
+		Stream string `json:"stream"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", err
+		return domain.NarratedAnswer{}, err
 	}
-	switch body.Status {
+	return domain.NarratedAnswer{File: narrated(body.Status), Stream: narrated(body.Stream)}, nil
+}
+
+func narrated(word string) domain.Narrated {
+	switch word {
 	case "ready":
-		return domain.NarratedReady, nil
+		return domain.NarratedReady
 	case "none", "failed":
-		return domain.NarratedNone, nil
+		return domain.NarratedNone
 	default:
-		return domain.NarratedPreparing, nil
+		return domain.NarratedPreparing
 	}
 }

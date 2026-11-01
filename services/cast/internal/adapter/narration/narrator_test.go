@@ -10,26 +10,27 @@ import (
 )
 
 func TestPrepareReadsTheGatewaysWord(t *testing.T) {
-	cases := map[string]domain.Narrated{
-		`{"status":"ready"}`:     domain.NarratedReady,
-		`{"status":"preparing"}`: domain.NarratedPreparing,
-		`{"status":"none"}`:      domain.NarratedNone,
-		`{"status":"failed"}`:    domain.NarratedNone,
-		`{"status":"later"}`:     domain.NarratedPreparing,
+	cases := map[string]domain.NarratedAnswer{
+		`{"status":"ready","stream":"ready"}`:         {File: domain.NarratedReady, Stream: domain.NarratedReady},
+		`{"status":"preparing","stream":"ready"}`:     {File: domain.NarratedPreparing, Stream: domain.NarratedReady},
+		`{"status":"preparing","stream":"preparing"}`: {File: domain.NarratedPreparing, Stream: domain.NarratedPreparing},
+		`{"status":"none","stream":"none"}`:           {File: domain.NarratedNone, Stream: domain.NarratedNone},
+		`{"status":"failed","stream":"ready"}`:        {File: domain.NarratedNone, Stream: domain.NarratedReady},
+		`{"status":"later"}`:                          {File: domain.NarratedPreparing, Stream: domain.NarratedPreparing},
 	}
 	for body, want := range cases {
-		var path, method string
+		var path, method, from string
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			path, method = r.URL.Path, r.Method
+			path, method, from = r.URL.Path, r.Method, r.URL.Query().Get("from")
 			_, _ = w.Write([]byte(body))
 		}))
-		got, err := New(srv.URL+"/", srv.Client()).Prepare(context.Background(), "abc")
+		got, err := New(srv.URL+"/", srv.Client()).Prepare(context.Background(), "abc", 47)
 		srv.Close()
 		if err != nil || got != want {
-			t.Errorf("%s: got %q %v, want %q", body, got, err, want)
+			t.Errorf("%s: got %+v %v, want %+v", body, got, err, want)
 		}
-		if method != http.MethodPost || path != "/api/videos/abc/audio/narrated" {
-			t.Errorf("asked %s %s", method, path)
+		if method != http.MethodPost || path != "/api/videos/abc/audio/narrated" || from != "47" {
+			t.Errorf("asked %s %s from=%s", method, path, from)
 		}
 	}
 }
@@ -39,7 +40,7 @@ func TestAGatewayFailureIsAnError(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-	if _, err := New(srv.URL, srv.Client()).Prepare(context.Background(), "abc"); err == nil {
+	if _, err := New(srv.URL, srv.Client()).Prepare(context.Background(), "abc", 0); err == nil {
 		t.Fatal("a 502 was read as an answer")
 	}
 }

@@ -89,6 +89,7 @@ type call struct {
 }
 
 type fakeDriver struct {
+	streams bool
 	mu      sync.Mutex
 	calls   []call
 	status  domain.DeviceStatus
@@ -97,6 +98,8 @@ type fakeDriver struct {
 }
 
 func (d *fakeDriver) Kind() domain.Kind { return domain.KindR1 }
+
+func (d *fakeDriver) StreamsNarration() bool { return d.streams }
 
 func (d *fakeDriver) Devices(context.Context) ([]domain.Device, error) { return d.devices, nil }
 
@@ -180,26 +183,41 @@ func (c *fakeCatalog) RecordProgress(_ context.Context, _ string, videoID string
 	return nil
 }
 
+// fakeNarrator answers the file as set, and the stream as set by setStream
+// (preparing otherwise).
 type fakeNarrator struct {
 	mu      sync.Mutex
 	answers map[string]domain.Narrated
+	streams map[string]domain.Narrated
 	asked   []string
+	from    []int
 }
 
-func (n *fakeNarrator) Prepare(_ context.Context, videoID string) (domain.Narrated, error) {
+func (n *fakeNarrator) Prepare(_ context.Context, videoID string, fromS int) (domain.NarratedAnswer, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.asked = append(n.asked, videoID)
-	if a, ok := n.answers[videoID]; ok {
-		return a, nil
+	n.from = append(n.from, fromS)
+	a := domain.NarratedAnswer{File: domain.NarratedPreparing, Stream: domain.NarratedPreparing}
+	if f, ok := n.answers[videoID]; ok {
+		a.File = f
 	}
-	return domain.NarratedPreparing, nil
+	if s, ok := n.streams[videoID]; ok {
+		a.Stream = s
+	}
+	return a, nil
 }
 
 func (n *fakeNarrator) set(videoID string, a domain.Narrated) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.answers[videoID] = a
+}
+
+func (n *fakeNarrator) setStream(videoID string, a domain.Narrated) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.streams[videoID] = a
 }
 
 func (n *fakeNarrator) wasAsked(videoID string) bool {
@@ -244,7 +262,7 @@ func newRig() rig {
 	drv := &fakeDriver{devices: []domain.Device{{ID: "r1", Name: "Loa R1", Kind: domain.KindR1, Online: true}}}
 	cat := &fakeCatalog{live: map[string]bool{}, gone: map[string]bool{}}
 	clk := &clock{now: time.Date(2026, 10, 31, 21, 0, 0, 0, time.UTC)}
-	nar := &fakeNarrator{answers: map[string]domain.Narrated{}}
+	nar := &fakeNarrator{answers: map[string]domain.Narrated{}, streams: map[string]domain.Narrated{}}
 	e := NewEngine(repo, []Driver{drv}, cat, nar, clk.Now, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	return rig{engine: e, repo: repo, driver: drv, catalog: cat, clock: clk, narrator: nar}
 }

@@ -116,8 +116,8 @@ func TestTheNarratedSoundHasItsOwnAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "http://10.0.0.2:8180/api/videos/abc/audio/narrated"
-	if key != want || (*calls)[0].body["url"] != want {
-		t.Fatalf("key = %q, url = %v", key, (*calls)[0].body["url"])
+	const want = "http://10.0.0.2:8180/api/videos/abc/audio/narrated.wav"
+	if key != want || (*calls)[0].body["url"] != want || (*calls)[0].body["content_type"] != "audio/wav" {
+		t.Fatalf("key = %q, body = %v", key, (*calls)[0].body)
 	}
 }

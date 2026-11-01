@@ -69,19 +69,27 @@ func (d *Driver) Devices(ctx context.Context) ([]domain.Device, error) {
 func (d *Driver) audioURL(videoID string, narrated bool) string {
 	u := d.mediaBase + "/api/videos/" + url.PathEscape(videoID) + "/audio"
 	if narrated {
-		u += "/narrated"
+		u += "/narrated.wav"
 	}
 	return u
 }
 
+// StreamsNarration: a Nest fetches by ranges as it plays, so it is handed the
+// narrated stream, which is there seconds after narration is switched on.
+func (d *Driver) StreamsNarration() bool { return true }
+
 func (d *Driver) Load(ctx context.Context, deviceID string, it domain.Item, startS int, _, narrated bool) (string, error) {
 	media := d.audioURL(it.VideoID, narrated)
+	contentType := "audio/mp4"
+	if narrated {
+		contentType = "audio/wav"
+	}
 	thumb := it.ThumbnailURL
 	if thumb != "" && !strings.HasPrefix(thumb, "http") {
 		thumb = d.mediaBase + thumb
 	}
 	body := map[string]any{
-		"url": media, "content_type": "audio/mp4", "title": it.Title, "thumbnail": thumb, "start_s": startS,
+		"url": media, "content_type": contentType, "title": it.Title, "thumbnail": thumb, "start_s": startS,
 	}
 	if err := d.call(ctx, http.MethodPost, d.devicePath(deviceID, "load"), body, nil); err != nil {
 		return "", err

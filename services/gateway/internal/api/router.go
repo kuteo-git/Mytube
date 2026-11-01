@@ -260,6 +260,9 @@ func (g *Gateway) Routes() http.Handler {
 	// The same sound with its narration mixed in; see narrated_audio.go.
 	mux.HandleFunc("POST /api/videos/{id}/audio/narrated", g.handlePrepareNarratedAudio)
 	mux.HandleFunc("GET /api/videos/{id}/audio/narrated", g.handleNarratedAudio)
+	// And as a stream made while it is fetched, for a Google speaker; see
+	// narrated_stream.go.
+	mux.HandleFunc("GET /api/videos/{id}/audio/narrated.wav", g.handleNarratedStream)
 	g.castRoutes(mux)
 
 	// Downloads are never requested directly: they are a side effect of asking

@@ -1955,6 +1955,10 @@ closing all of them changes nothing on the speaker. Plan and decisions:
   playing; the queue's version is kept). The R1 gets it as `<id>~narrated`,
   because it caches downloads by `video_id`. The key hashes the lines and the
   levels, so a new pass makes a new file and the old one is removed.
+- **A Nest gets the narrated sound as a stream, `narrated.wav`**, mixed as it is
+  fetched; a block waits only for the lines that start in it. The file above
+  needs the whole pass (minutes for a video never narrated) and is the R1's,
+  which downloads a song whole. `Driver.StreamsNarration` decides which.
 - **`audio.m4a` is ~3 MB per cast video and is not counted in `size_bytes`.**
   Eviction removes it with the media file (`usecase.CastAudioName`); captions
   beside them stay.

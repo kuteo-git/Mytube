@@ -50,6 +50,13 @@ const (
 	NarratedNone Narrated = "none"
 )
 
+// NarratedAnswer is the gateway's word on both forms of a song's narrated
+// sound: the file, made once the whole pass is done, and the stream, made as
+// it is fetched and ready as soon as the pass knows its lines.
+type NarratedAnswer struct {
+	File, Stream Narrated
+}
+
 // NarrationStatus is what the remote shows about narration on the speaker.
 type NarrationStatus string
 

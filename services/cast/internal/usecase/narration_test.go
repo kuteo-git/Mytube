@@ -173,3 +173,33 @@ func TestNarrationOffNeverAsksTheGateway(t *testing.T) {
 		t.Fatal("asked the gateway for a narration nobody wanted")
 	}
 }
+
+// A Nest is handed the stream, which is ready as soon as the pass knows its
+// lines: the voice in seconds, not after the whole pass — "chờ cả 1 phút".
+func TestASpeakerThatStreamsIsNarratedAtOnce(t *testing.T) {
+	r := newRig()
+	r.driver.streams = true
+	r.narrator.setStream("a", domain.NarratedReady)
+	s := r.startNarrated(t, "a")
+	loads := r.driver.ops("load")
+	if len(loads) != 1 || !loads[0].narrated || loads[0].arg != 30 {
+		t.Fatalf("loads = %+v, want the narrated stream from 30 straight away", loads)
+	}
+	if got := r.engine.NarrationStatus(s); got != domain.NarrationOn {
+		t.Fatalf("status = %s", got)
+	}
+	if r.narrator.from[0] != 30 {
+		t.Fatalf("the pass was asked to start at %d, not where the speaker is", r.narrator.from[0])
+	}
+}
+
+func TestTheFileIsNotWaitedOnByASpeakerThatStreams(t *testing.T) {
+	r := newRig()
+	r.driver.streams = true
+	r.narrator.set("a", domain.NarratedPreparing)
+	r.narrator.setStream("a", domain.NarratedReady)
+	r.startNarrated(t, "a")
+	if !r.driver.ops("load")[0].narrated {
+		t.Fatal("waited for the file")
+	}
+}

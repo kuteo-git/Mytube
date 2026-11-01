@@ -38,6 +38,10 @@ type Driver interface {
 	Seek(ctx context.Context, deviceID string, s int) error
 	SetVolume(ctx context.Context, deviceID string, pct int) error
 	Status(ctx context.Context, deviceID string) (domain.DeviceStatus, error)
+	// StreamsNarration: the speaker is handed the narrated sound as a stream
+	// made while it plays (a Nest), not the file made once the whole pass is
+	// done (an R1, which downloads a song whole before playing it).
+	StreamsNarration() bool
 }
 
 // CatalogVideo is what the catalogue says about a video being queued.
@@ -57,9 +61,9 @@ type Catalog interface {
 // Narrator is the gateway, as far as narration on a speaker needs it.
 type Narrator interface {
 	// Prepare asks for the song's narrated sound — starting its narration
-	// pass and the mix if they have not run — and says where it is. Asking
-	// again is how it is followed.
-	Prepare(ctx context.Context, videoID string) (domain.Narrated, error)
+	// pass, from fromS, and the mix if they have not run — and says where it
+	// is. Asking again is how it is followed.
+	Prepare(ctx context.Context, videoID string, fromS int) (domain.NarratedAnswer, error)
 }
 
 // How long one speaker gets to answer a status request.
@@ -88,7 +92,7 @@ type Engine struct {
 	// it is asked again every tick it matters, and lost on a restart costs
 	// one question.
 	narratedMu sync.Mutex
-	narrated   map[string]domain.Narrated
+	narrated   map[string]domain.NarratedAnswer
 }
 
 func NewEngine(repo Repo, drivers []Driver, catalog Catalog, narrator Narrator, now func() time.Time, logger *slog.Logger) *Engine {
@@ -98,7 +102,7 @@ func NewEngine(repo Repo, drivers []Driver, catalog Catalog, narrator Narrator, 
 	}
 	return &Engine{
 		repo: repo, drivers: byKind, catalog: catalog, narrator: narrator, now: now, logger: logger,
-		locks: map[string]*sync.Mutex{}, narrated: map[string]domain.Narrated{},
+		locks: map[string]*sync.Mutex{}, narrated: map[string]domain.NarratedAnswer{},
 	}
 }
 
@@ -184,20 +188,21 @@ func (e *Engine) followNarration(ctx context.Context, drv Driver, s domain.Sessi
 	if !ok {
 		return s
 	}
-	want := s.Narration && e.narratedReady(ctx, item.VideoID)
+	want := s.Narration && e.narratedReady(ctx, drv, item.VideoID, s.PositionS)
 	if want != s.LoadedNarrated {
 		s, load := domain.Reload(s, e.now())
 		return e.apply(ctx, drv, s, []domain.Action{load})
 	}
 	if s.LoadedNarrated && s.CurrentIndex+1 < len(s.Queue) {
-		e.narratedReady(ctx, s.Queue[s.CurrentIndex+1].VideoID)
+		e.narratedReady(ctx, drv, s.Queue[s.CurrentIndex+1].VideoID, 0)
 	}
 	return s
 }
 
-// narratedReady asks the gateway about a song and remembers the answer. A
-// gateway that does not answer is "still preparing": the song plays as it is.
-func (e *Engine) narratedReady(ctx context.Context, videoID string) bool {
+// narratedReady asks the gateway about a song, in the form this speaker is
+// handed it, and remembers the answer. A gateway that does not answer is
+// "still preparing": the song plays as it is.
+func (e *Engine) narratedReady(ctx context.Context, drv Driver, videoID string, fromS int) bool {
 	if e.narrator == nil {
 		return false
 	}
@@ -206,11 +211,11 @@ func (e *Engine) narratedReady(ctx context.Context, videoID string) bool {
 	e.narratedMu.Unlock()
 	// Ready is final; anything else is asked again, so a pass that failed
 	// for a moment (the TTS server restarting) is tried again.
-	if known == domain.NarratedReady {
+	if formFor(drv, known) == domain.NarratedReady {
 		return true
 	}
 	askCtx, cancel := context.WithTimeout(ctx, narratorTimeout)
-	answer, err := e.narrator.Prepare(askCtx, videoID)
+	answer, err := e.narrator.Prepare(askCtx, videoID, fromS)
 	cancel()
 	if err != nil {
 		e.logger.Warn("prepare narrated sound", "video", videoID, "error", err)
@@ -219,7 +224,14 @@ func (e *Engine) narratedReady(ctx context.Context, videoID string) bool {
 	e.narratedMu.Lock()
 	e.narrated[videoID] = answer
 	e.narratedMu.Unlock()
-	return answer == domain.NarratedReady
+	return formFor(drv, answer) == domain.NarratedReady
+}
+
+func formFor(drv Driver, a domain.NarratedAnswer) domain.Narrated {
+	if drv != nil && drv.StreamsNarration() {
+		return a.Stream
+	}
+	return a.File
 }
 
 // NarrationStatus is what the remote shows about narration on s.
@@ -228,7 +240,7 @@ func (e *Engine) NarrationStatus(s domain.Session) domain.NarrationStatus {
 	e.narratedMu.Lock()
 	known := e.narrated[item.VideoID]
 	e.narratedMu.Unlock()
-	return domain.NarrationStatusOf(s, known)
+	return domain.NarrationStatusOf(s, formFor(e.drivers[s.DeviceKind], known))
 }
 
 // apply carries out what a decision asked for. A load the speaker refuses
@@ -238,7 +250,7 @@ func (e *Engine) apply(ctx context.Context, drv Driver, s domain.Session, action
 		switch a := actions[i].(type) {
 		case domain.Load:
 			item := s.Queue[a.Index]
-			narrated := s.Narration && e.narratedReady(ctx, item.VideoID)
+			narrated := s.Narration && e.narratedReady(ctx, drv, item.VideoID, a.StartS)
 			key, err := drv.Load(ctx, s.DeviceID, item, a.StartS, a.First, narrated)
 			if err != nil {
 				e.logger.Warn("load refused, skipping", "session", s.ID, "video", item.VideoID, "error", err)
@@ -348,7 +360,7 @@ func (e *Engine) StartSession(ctx context.Context, req StartRequest) (domain.Ses
 		startS = 0
 	}
 	s, load := domain.LoadAt(s, start, max(startS, 0), true, now)
-	narrated := s.Narration && e.narratedReady(ctx, s.Queue[start].VideoID)
+	narrated := s.Narration && e.narratedReady(ctx, drv, s.Queue[start].VideoID, load.(domain.Load).StartS)
 	key, err := drv.Load(ctx, s.DeviceID, s.Queue[start], load.(domain.Load).StartS, true, narrated)
 	if err != nil {
 		return domain.Session{}, fmt.Errorf("load on %q: %v: %w", device.ID, err, domain.ErrDeviceOffline)
@@ -559,7 +571,7 @@ func (e *Engine) SetNarration(ctx context.Context, id string, on bool) (domain.S
 		if !ok || s.State != domain.Playing {
 			return s, nil, nil
 		}
-		if want := on && e.narratedReady(ctx, item.VideoID); want == s.LoadedNarrated {
+		if want := on && e.narratedReady(ctx, drv, item.VideoID, s.PositionS); want == s.LoadedNarrated {
 			return s, nil, nil
 		}
 		s, load := domain.Reload(s, now)

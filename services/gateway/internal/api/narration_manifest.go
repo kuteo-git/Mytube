@@ -129,6 +129,13 @@ type narrationPass struct {
 	// startedAt is the position the current run began from, so asking again for
 	// the same place is not a reason to start over.
 	startedAt float64
+
+	// cueStarts and spoken are per cue, in the caption file's order: whether
+	// each line has been through the pass, spoken or not. They outlive a
+	// retarget, as Clips do, and are what a speaker's narrated stream waits
+	// on (narrated_audio.go).
+	cueStarts []float64
+	spoken    []bool
 }
 
 type narrationRegistry struct {
@@ -303,6 +310,13 @@ func (g *Gateway) runNarration(ctx context.Context, videoID string, gen int, fro
 	g.narration.mu.Lock()
 	if pass := g.narration.passes[videoID]; pass != nil && pass.gen == gen {
 		pass.Total = len(cues)
+		if len(pass.spoken) != len(cues) {
+			pass.spoken = make([]bool, len(cues))
+			pass.cueStarts = make([]float64, len(cues))
+			for i, c := range cues {
+				pass.cueStarts[i] = c.Start
+			}
+		}
 	}
 	g.narration.mu.Unlock()
 
@@ -629,6 +643,7 @@ func (g *Gateway) speakCue(
 	voice string,
 ) {
 	defer g.advanceNarration(videoID, gen)
+	defer g.markSpoken(videoID, gen, i)
 
 	line := translations[cues[i].Text]
 	if line == "" {
@@ -767,6 +782,15 @@ func (g *Gateway) advanceNarration(videoID string, gen int) {
 	defer g.narration.mu.Unlock()
 	if pass := g.current(videoID, gen); pass != nil {
 		pass.Done++
+	}
+}
+
+// markSpoken records that cue i has been through the pass.
+func (g *Gateway) markSpoken(videoID string, gen, i int) {
+	g.narration.mu.Lock()
+	defer g.narration.mu.Unlock()
+	if pass := g.current(videoID, gen); pass != nil && i < len(pass.spoken) {
+		pass.spoken[i] = true
 	}
 }
 

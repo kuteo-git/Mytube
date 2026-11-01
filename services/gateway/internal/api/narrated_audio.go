@@ -36,7 +36,7 @@ import (
 // a pass already on disk finishes in about no time, a new one in a few
 // minutes (measured: 507 lines in 461s).
 //
-//	POST /api/videos/{id}/audio/narrated   start what is missing; answers at once
+//	POST /api/videos/{id}/audio/narrated?from=<s>   start what is missing; answers at once
 //	GET  /api/videos/{id}/audio/narrated   the file, or 404 not_ready
 
 // The levels the phone's narrator uses by default (the app's
@@ -58,20 +58,25 @@ const (
 )
 
 type narratedAnswer struct {
-	// ready, preparing, none (nothing to narrate) or failed.
+	// The file: ready, preparing, none (nothing to narrate) or failed.
 	Status string `json:"status"`
 	Done   int    `json:"done"`
 	Total  int    `json:"total"`
+	// The stream (narrated.wav): ready as soon as the pass knows its lines,
+	// preparing before that, none when there is nothing to narrate.
+	Stream string `json:"stream"`
 }
 
 type narratedMixes struct {
 	mu      sync.Mutex
 	running map[string]bool
 	failed  map[string]time.Time
+	// The song's length, by video, for the stream's header.
+	durations map[string]float64
 }
 
 func newNarratedMixes() *narratedMixes {
-	return &narratedMixes{running: map[string]bool{}, failed: map[string]time.Time{}}
+	return &narratedMixes{running: map[string]bool{}, failed: map[string]time.Time{}, durations: map[string]float64{}}
 }
 
 func (g *Gateway) handlePrepareNarratedAudio(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +95,7 @@ func (g *Gateway) handlePrepareNarratedAudio(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"code": "live"})
 		return
 	}
-	writeJSON(w, http.StatusOK, g.prepareNarrated(r.Context(), videoID, g.narratedSource(r.Context(), v)))
+	writeJSON(w, http.StatusOK, g.prepareNarrated(r.Context(), videoID, narrationStartAt(r), g.narratedSource(r.Context(), v)))
 }
 
 // narratedSource is where the song's own sound is read from: its audio.m4a
@@ -107,8 +112,9 @@ func (g *Gateway) narratedSource(ctx context.Context, v *catalogv1.Video) func()
 }
 
 // prepareNarrated answers where the song's narrated sound is, and starts the
-// step that is missing: the narration pass, from the beginning, or the mix.
-func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, source func() (string, error)) narratedAnswer {
+// step that is missing: the narration pass, from where the speaker is
+// (`from`), or the mix.
+func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, from float64, source func() (string, error)) narratedAnswer {
 	g.narration.mu.Lock()
 	pass := g.narration.passes[videoID]
 	var status narrationStatus
@@ -125,33 +131,51 @@ func (g *Gateway) prepareNarrated(ctx context.Context, videoID string, source fu
 		// Not running, or cancelled part way (the phone's close button). A
 		// pass over lines already on disk is a read, so this is cheap when
 		// the phone has narrated it before.
-		g.startNarrationPass(context.WithoutCancel(ctx), videoID, 0)
-		return narratedAnswer{Status: "preparing"}
+		g.startNarrationPass(context.WithoutCancel(ctx), videoID, from)
+		// A moment for it to read its lines, so the stream can be offered on
+		// this answer rather than one reload later.
+		stream := "preparing"
+		for wait := 0; wait < 15; wait++ {
+			time.Sleep(100 * time.Millisecond)
+			g.narration.mu.Lock()
+			p := g.narration.passes[videoID]
+			known, over := p != nil && p.Total > 0, p != nil && p.Status != narrationRunning
+			g.narration.mu.Unlock()
+			if known || over {
+				stream = "ready"
+				break
+			}
+		}
+		return narratedAnswer{Status: "preparing", Stream: stream}
 	case status == narrationRunning:
-		return narratedAnswer{Status: "preparing", Done: done, Total: total}
+		stream := "ready"
+		if total == 0 {
+			stream = "preparing"
+		}
+		return narratedAnswer{Status: "preparing", Done: done, Total: total, Stream: stream}
 	case status == narrationFailed:
-		return narratedAnswer{Status: "failed", Done: done, Total: total}
+		return narratedAnswer{Status: "failed", Done: done, Total: total, Stream: "none"}
 	case len(clips) == 0:
-		return narratedAnswer{Status: "none", Done: done, Total: total}
+		return narratedAnswer{Status: "none", Done: done, Total: total, Stream: "none"}
 	}
 
 	dir, _ := safeVideoDir(g.mediaRoot, videoID)
 	key := narratedKey(clips)
 	dst := filepath.Join(dir, "narrated-"+key+".m4a")
 	if _, err := os.Stat(dst); err == nil {
-		return narratedAnswer{Status: "ready", Done: done, Total: total}
+		return narratedAnswer{Status: "ready", Done: done, Total: total, Stream: "ready"}
 	}
 
 	g.narratedMixes.mu.Lock()
 	defer g.narratedMixes.mu.Unlock()
 	if at, ok := g.narratedMixes.failed[key]; ok && time.Since(at) < narratedRetryAfter {
-		return narratedAnswer{Status: "failed", Done: done, Total: total}
+		return narratedAnswer{Status: "failed", Done: done, Total: total, Stream: "ready"}
 	}
 	if !g.narratedMixes.running[key] {
 		g.narratedMixes.running[key] = true
 		go g.mixNarrated(videoID, key, dir, dst, clips, source)
 	}
-	return narratedAnswer{Status: "preparing", Done: done, Total: total}
+	return narratedAnswer{Status: "preparing", Done: done, Total: total, Stream: "ready"}
 }
 
 func (g *Gateway) mixNarrated(videoID, key, dir, dst string, clips []narrationClip, source func() (string, error)) {
@@ -322,12 +346,24 @@ type narrationMixer struct {
 	active []narratedLine
 	gain   float64
 	frame  int64
+	// The latest line taken in, so lines handed in again are not spoken twice.
+	admittedAt float64
 }
 
 func newNarrationMixer(lines []narratedLine, read func(string) ([]float32, error)) *narrationMixer {
+	m := &narrationMixer{read: read, gain: 1, admittedAt: math.Inf(-1)}
+	m.refresh(lines)
+	return m
+}
+
+// refresh hands the mixer the lines known now, for a stream whose lines are
+// still arriving. Those already taken in keep sounding; the rest are picked
+// up as the song reaches them.
+func (m *narrationMixer) refresh(lines []narratedLine) {
 	sorted := append([]narratedLine(nil), lines...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].At < sorted[j].At })
-	return &narrationMixer{lines: sorted, read: read, gain: 1}
+	m.lines = sorted
+	m.next = sort.Search(len(sorted), func(i int) bool { return sorted[i].At > m.admittedAt })
 }
 
 // run mixes interleaved s16le stereo from r to w until r ends.
@@ -398,11 +434,16 @@ func (m *narrationMixer) admit(t float64) {
 	m.active = kept
 	for m.next < len(m.lines) && m.lines[m.next].At <= t {
 		l := m.lines[m.next]
+		m.next++
+		m.admittedAt = l.At
+		// Over before the song got here: a stream begun past it.
+		if l.At+l.Slot <= t-narratedRampSeconds {
+			continue
+		}
 		if l.Pcm == nil && l.Path != "" {
 			l.Pcm, _ = m.read(l.Path)
 		}
 		m.active = append(m.active, l)
-		m.next++
 	}
 }
 
