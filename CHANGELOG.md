@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.1.7 — 2026-11-04
+
+**A phone sees only its own profile's casts.** Profile A cast to a speaker,
+the phone switched to profile B, and B's next video went to A's speaker:
+`GET /api/cast/sessions` listed every cast in the house. `?mine=true` keeps the
+sessions whose `started_by` is the asker (`X-User-Id`, or the default profile
+without one); without it the list is unchanged, for the web app's bar. B can
+still cast to that speaker, which replaces A's session.
+
+**A channel opened from a search result opens.** The gateway answered 404 for
+a channel the catalogue had never recorded. `GET /api/channels/{id}` and
+`GET /api/channels/{id}/videos` both learn it from YouTube now
+(`channelOrLearn`); when only the first did, the app (which asks the two
+together) lost the race 3 times in 3 on fresh channels and said the channel
+did not exist. Concurrent lookups of one channel are one upstream request.
+
+**Discover results carry their channel.** Each result has its `channelId`,
+its avatar where the catalogue holds one (looked up 8 at a time within 1s),
+and its upload date. A search keeps only videos: `ytsearchN:` also answers
+with channels and playlists, which opened nothing. A page asked for at a
+larger size is capped at 50 rather than reset to 20.
 
 **A video that speaks Vietnamese is not narrated when it opens.** Its
 narration read its Vietnamese captions over its own Vietnamese voice. The
