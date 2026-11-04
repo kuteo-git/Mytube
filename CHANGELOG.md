@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8 — 2026-11-04
 
 **Narration speaks a sentence when the person on screen says it, for captions
 with no punctuation.** Old YouTube automatic captions carry no `. , ? !` at all,
