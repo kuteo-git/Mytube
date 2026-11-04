@@ -62,6 +62,28 @@ const minClauseBefore = 5
 // constant must not do, so it has room to let a sentence finish.
 const forceSplitWords = 40
 
+// pauseSeconds: in a track with no punctuation, a clause ends where the speaker
+// pauses at least this long between the starts of two words.
+//
+// Measured on t_YyrMV7SuE, old ASR with no mark in 3,577 words: the gap between
+// one word's start and the next runs 0.16s at the median and 0.48s at the 90th
+// percentile, so 0.7s is above nearly everything said without drawing breath.
+// With it, 90 cues that were all the 40-word ceiling (89 exactly) became 214 of
+// 14 words at the median, 13 of them still hitting the ceiling.
+const pauseSeconds = 0.7
+
+// punctuationPerHundredWords: below this rate a track is treated as having no
+// punctuation. One mark per hundred words.
+//
+// The rate is bimodal across the 1,149 automatic English tracks in the library:
+// about 104 sit under one mark per hundred words, two between one and five, and
+// over 1,040 carry five or more. A track is either punctuated by its ASR or it
+// is not; Vietnamese ASR is often not. "None at all" is
+// the wrong test, because a bare track can carry a stray mark (0.01 per hundred
+// over 38,515 words in one), and a single comma would then switch the pause
+// rule off for an hour of speech.
+const punctuationPerHundredWords = 1
+
 var (
 	abbreviations = regexp.MustCompile(`(?i)^(Dr|Mr|Mrs|Ms|Prof|Sr|Jr|vs|etc)$`)
 	tagRe         = regexp.MustCompile(`<[^>]+>`)
@@ -393,7 +415,39 @@ func (b *clauseBuilder) joined() string {
 	return strings.Join(parts, " ")
 }
 
-func groupIntoClauses(pieces []piece) []vttCue {
+// lacksPunctuation reports whether the track's ASR wrote no punctuation.
+//
+// Decided once over the whole track, not clause by clause: a punctuated track
+// has long comma-less stretches, and a pause inside one is breath or
+// hesitation, not the end of a clause. Those must keep cutting only at marks.
+func lacksPunctuation(pieces []piece) bool {
+	words, marks := 0, 0
+	for _, p := range pieces {
+		words += len(strings.Fields(p.text))
+		marks += strings.Count(p.text, ".") + strings.Count(p.text, "!") +
+			strings.Count(p.text, "?") + strings.Count(p.text, ",")
+	}
+	return marks*100 < words*punctuationPerHundredWords
+}
+
+// pauseBefore is the silence between the last piece in the buffer and next.
+//
+// A word's end is set to the next word's start, so inside a tagged block
+// next.start - last.end is zero and cannot see a pause; start to start can. A
+// piece holding several words (a line with no word timing) is the opposite:
+// its start is the line's, so start to start would be the whole line's
+// duration, and its end is the real one.
+func pauseBefore(last, next piece) float64 {
+	if len(strings.Fields(last.text)) == 1 {
+		return next.start - last.start
+	}
+	return next.start - last.end
+}
+
+// groupIntoClauses cuts pieces into clauses at punctuation and at the
+// forceSplitWords ceiling. When bare is set, the track has no punctuation, and a
+// pause of pauseSeconds ends a clause too, once it holds minClauseBefore words.
+func groupIntoClauses(pieces []piece, bare bool) []vttCue {
 	b := &clauseBuilder{}
 
 	for _, p := range pieces {
@@ -403,6 +457,13 @@ func groupIntoClauses(pieces []piece) []vttCue {
 		// the line after it is spoken from the moment the music began.
 		if stripBrackets(p.text) == "" {
 			continue
+		}
+
+		// Measured from the last piece kept, so the time a skipped [Applause]
+		// took counts as the pause it was.
+		if bare && len(b.buf) > 0 && pauseBefore(b.buf[len(b.buf)-1], p) >= pauseSeconds &&
+			len(strings.Fields(b.joined())) >= minClauseBefore {
+			b.emit(len([]rune(b.joined())))
 		}
 		b.buf = append(b.buf, p)
 
@@ -508,5 +569,5 @@ func parseVTT(raw, sourceLang string) []vttCue {
 		return out
 	}
 
-	return groupIntoClauses(pieces)
+	return groupIntoClauses(pieces, lacksPunctuation(pieces))
 }

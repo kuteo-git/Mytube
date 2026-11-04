@@ -122,6 +122,32 @@ const MIN_CLAUSE_BEFORE = 5
  */
 const FORCE_SPLIT_WORDS = 40
 
+/**
+ * In a track with no punctuation, a clause ends where the speaker pauses at
+ * least this long between the starts of two words.
+ *
+ * Measured on t_YyrMV7SuE, old ASR with no mark in 3,577 words: the gap between
+ * one word's start and the next runs 0.16s at the median and 0.48s at the 90th
+ * percentile, so 0.7s is above nearly everything said without drawing breath.
+ * With it, 90 cues that were all the 40-word ceiling (89 exactly) became 214 of
+ * 14 words at the median, 13 of them still hitting the ceiling.
+ */
+const PAUSE_SECONDS = 0.7
+
+/**
+ * Below this many marks per hundred words a track is treated as having no
+ * punctuation.
+ *
+ * The rate is bimodal across the 1,149 automatic English tracks in the library:
+ * about 104 sit under one mark per hundred words, two between one and five, and
+ * over 1,040 carry five or more. A track is either punctuated by its ASR or it
+ * is not; Vietnamese ASR is often not. "None at all" is
+ * the wrong test, because a bare track can carry a stray mark (0.01 per hundred
+ * over 38,515 words in one), and a single comma would then switch the pause
+ * rule off for an hour of speech.
+ */
+const PUNCTUATION_PER_HUNDRED_WORDS = 1
+
 const ABBREVIATIONS = /^(Dr|Mr|Mrs|Ms|DR|Prof|Sr|Jr|vs|etc)$/i
 
 /** One word or phrase with the time it is spoken. */
@@ -272,14 +298,49 @@ export function firstClauseBoundary(text: string): number {
 }
 
 /**
+ * Whether the track's ASR wrote no punctuation.
+ *
+ * Decided once over the whole track, not clause by clause: a punctuated track
+ * has long comma-less stretches, and a pause inside one is breath or
+ * hesitation, not the end of a clause. Those must keep cutting only at marks.
+ */
+export function lacksPunctuation(pieces: Piece[]): boolean {
+  let words = 0
+  let marks = 0
+  for (const p of pieces) {
+    words += p.text.split(/\s+/).filter(Boolean).length
+    marks += p.text.match(/[.!?,]/g)?.length ?? 0
+  }
+  return marks * 100 < words * PUNCTUATION_PER_HUNDRED_WORDS
+}
+
+/**
+ * The silence between the last piece in the buffer and `next`.
+ *
+ * A word's end is set to the next word's start, so inside a tagged block
+ * `next.start - last.end` is zero and cannot see a pause; start to start can.
+ * A piece holding several words (a line with no word timing) is the opposite:
+ * its start is the line's, so start to start would be the whole line's
+ * duration, and its end is the real one.
+ */
+function pauseBefore(last: Piece, next: Piece): number {
+  const single = last.text.split(/\s+/).filter(Boolean).length === 1
+  return single ? next.start - last.start : next.start - last.end
+}
+
+/**
  * Gather word pieces into clauses.
+ *
+ * Clauses end at punctuation and at the FORCE_SPLIT_WORDS ceiling. When `bare`
+ * is set the track has no punctuation, and a pause of PAUSE_SECONDS ends a
+ * clause too, once it holds MIN_CLAUSE_BEFORE words.
  *
  * A clause carries the start of its first word and the end of its last, which
  * is the whole point of keeping per-word timing this far: a clause that claimed
  * the timing of the block it came from would be wrong by however much of that
  * block belonged to the clause before it.
  */
-function groupIntoClauses(pieces: Piece[]): CueText[] {
+function groupIntoClauses(pieces: Piece[], bare: boolean): CueText[] {
   const out: CueText[] = []
   let buf: Piece[] = []
 
@@ -316,6 +377,13 @@ function groupIntoClauses(pieces: Piece[]): CueText[] {
     // by which time the clause has already taken its start — so the line after
     // it is spoken from the moment the music began.
     if (!stripBrackets(piece.text)) continue
+
+    // Measured from the last piece kept, so the time a skipped [Applause] took
+    // counts as the pause it was.
+    if (bare && buf.length > 0 && pauseBefore(buf[buf.length - 1], piece) >= PAUSE_SECONDS) {
+      const joined = buf.map((p) => p.text).join(' ')
+      if (joined.trim().split(/\s+/).filter(Boolean).length >= MIN_CLAUSE_BEFORE) emit(joined.length)
+    }
     buf.push(piece)
 
     // Loop: one block can complete more than one clause.
@@ -388,5 +456,5 @@ export function parseVTT(raw: string, sourceLang = 'vi'): CueText[] {
       .filter((c) => c.text)
   }
 
-  return groupIntoClauses(pieces)
+  return groupIntoClauses(pieces, lacksPunctuation(pieces))
 }

@@ -118,6 +118,24 @@ Accumulate cues into a text buffer, split at clause boundaries.
 ### Forced split
 If buffer reaches **30 words** without any punctuation, force a split.
 
+### Pauses, in a track with no punctuation
+Old YouTube ASR writes no `. , ? !` at all, so the forced split above was the
+only boundary and every cue was a blind cut, mid-sentence. `lacksPunctuation`
+decides once per track, over all its pieces, whether it has fewer than one mark
+per hundred words. If so, `groupIntoClauses` also ends a clause when the next
+word starts 0.7s or more after the last one (`PAUSE_SECONDS`) and the clause
+already holds 5 words (`MIN_CLAUSE_BEFORE`).
+
+- **Per track, not per stretch**: a punctuated track has long comma-less
+  stretches, and a pause inside one is not the end of a clause.
+- **A rate, not "none"**: a bare track can carry a stray mark.
+- **Start to start**: a word's `end` is the next word's `start`, so only
+  `next.start - last.start` sees the pause. A piece of several words (a line
+  with no word timing) is measured from its `end`.
+- `services/gateway/internal/api/narration_vtt.go` applies the same rule with
+  the same numbers. The two must agree cue for cue, because they share the
+  translation cache keyed by cue text.
+
 ### Timing
 Clause `start` = first word's start. Clause `end` = last word's start (not its scheduled end, which is the next word's start). This gives natural gaps between sentences.
 

@@ -6,6 +6,7 @@ import {
   type CueText,
   cleanCueText,
   firstClauseBoundary,
+  lacksPunctuation,
   parseVTT,
   parseVTTTime,
   stripBrackets,
@@ -366,4 +367,210 @@ describe('clauses break at punctuation, not mid-phrase', () => {
       expect(parseVTT(rolling(c.sentence), 'en').map((cue) => cue.text)).toEqual(c.want)
     })
   }
+})
+
+/**
+ * Automatic captions with no punctuation at all.
+ *
+ * `auto-en-bare.vtt` is the first minute of t_YyrMV7SuE, copied verbatim: old
+ * ASR, lowercase, not one of . , ? ! in 3,577 words. With nothing to cut on,
+ * the 40-word ceiling was the only boundary, so 89 of its 90 cues were exactly
+ * 40 words and "every new idea that comes out of there they adopted
+ * immediately" was voiced as two halves. The expected cues below were worked
+ * out from this file's word timestamps (a pause is >= 0.7s between the starts
+ * of two words, with five words already gathered), not from the parser.
+ *
+ * `auto-vi-bare.vtt` is the first 14 seconds of _f5QLW5tphE, likewise.
+ */
+describe('automatic captions with no punctuation', () => {
+  const bareEn = read('auto-en-bare.vtt')
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
+
+  /** The blocks from the one whose timing line contains `from`, up to the one containing `to`. */
+  const between = (raw: string, from: string, to: string): string => {
+    const kept: string[] = []
+    let on = false
+    for (const line of raw.split('\n')) {
+      if (line.includes('-->')) {
+        if (line.includes(from)) on = true
+        if (line.includes(to)) on = false
+      }
+      if (on) kept.push(line)
+    }
+    return `WEBVTT\n\n${kept.join('\n')}\n`
+  }
+
+  /** Every timestamp moved later by whole seconds. */
+  const shift = (raw: string, seconds: number): string =>
+    raw.replace(/\d{2}:\d{2}:\d{2}\.\d{3}/g, (ts) => {
+      const ms = Math.round(parseVTTTime(ts) * 1000) + seconds * 1000
+      const p = (n: number, w: number) => String(n).padStart(w, '0')
+      return `${p(Math.floor(ms / 3600000), 2)}:${p(Math.floor(ms / 60000) % 60, 2)}:${p(Math.floor(ms / 1000) % 60, 2)}.${p(ms % 1000, 3)}`
+    })
+
+  const expectCues = (got: CueText[], want: Array<[number, string]>) => {
+    expect(got.length).toBeGreaterThanOrEqual(want.length)
+    want.forEach(([start, text], i) => {
+      expect(near(got[i].start, start), `cue ${i} starts at ${got[i].start}, want ${start}`).toBe(true)
+      expect(got[i].text).toBe(text)
+    })
+  }
+
+  const FIRST_SEVEN: Array<[number, string]> = [
+    [0.16, "some of you know what i'm talking about can you turn a compliment into an argument that's what i want to know"],
+    [8.08, 'i i live in los angeles california'],
+    [10.08, 'and uh every new idea that comes out of there they adopted immediately'],
+    [13.679, "and i'm a little more conservative"],
+    [15.36, "like the new one is any man that says they're a woman immediately you must address him as a woman and i'm progressive i'm like all right but they should have to pass a test first"],
+    [24.0, "because women have skills men don't have you can't just say i'm a woman do something a woman can do then i'll believe you"],
+    [30.0, 'right can you break into my iphone and the time i go to the bathroom and come back to the dinner table'],
+  ]
+
+  it('ends a clause at a pause in speech', () => {
+    const cues = parseVTT(bareEn, 'en')
+    expectCues(cues, [...FIRST_SEVEN, [38.239, 'just something basic can you be totally starving but have no idea what you want to']])
+
+    // A clause ends where the last word of it ends: "california" runs until "and".
+    expect(near(cues[1].end, 10.08)).toBe(true)
+
+    for (const c of cues) {
+      expect(words(c.text).length, `cue at ${c.start} is a blind 40-word cut: ${c.text}`).toBeLessThan(40)
+    }
+  })
+
+  it('starts the cue after applause at the next word, not at the applause', () => {
+    // "[Applause]" runs from 6.29 to 8.07 and "i" is spoken at 8.08.
+    const cues = parseVTT(bareEn, 'en')
+    expect(cues[0].text.endsWith("that's what i want to know")).toBe(true)
+    expect(cues[0].text + cues[1].text).not.toMatch(/applause/i)
+    expect(near(cues[1].start, 8.08)).toBe(true)
+  })
+
+  it('ends a clause at a pause only where the track has no punctuation', () => {
+    // The same twenty words, once bare and once with a single full stop on the
+    // last word. A punctuated track has long comma-less stretches that are not
+    // pauses between clauses, so the 0.8s between "california" and "and" ends a
+    // clause only in the bare track.
+    const bare = between(bareEn, '00:00:08.080', '00:00:13.679')
+    const punctuated = bare.replace('immediately</c>', 'immediately.</c>')
+    expect(punctuated).not.toBe(bare)
+
+    expectCues(parseVTT(bare, 'en'), [
+      [8.08, 'i i live in los angeles california'],
+      [10.08, 'and uh every new idea that comes out of there they adopted immediately'],
+    ])
+    expect(parseVTT(punctuated, 'en').map((c) => [c.start, c.text])).toEqual([
+      [8.08, 'i i live in los angeles california and uh every new idea that comes out of there they adopted immediately.'],
+    ])
+  })
+
+  it('still cuts at 40 words where there is no pause', () => {
+    // Words from the fixture, said at an even 0.25s.
+    const ws = (
+      "like the new one is any man that says they're a woman immediately " +
+      'you must address him as a woman and i\'m progressive i\'m like all right but ' +
+      "they should have to pass a test first because women have skills men don't " +
+      "have you can't"
+    ).split(' ')
+    expect(ws).toHaveLength(45)
+    const at = (t: number) => `00:00:${t.toFixed(3).padStart(6, '0')}`
+    const line = ws.map((w, i) => (i === 0 ? w : `<${at(i * 0.25)}><c> ${w}</c>`)).join('')
+    const raw = `WEBVTT\n\n00:00:00.000 --> 00:00:11.500\n \n${line}\n`
+
+    expect(parseVTT(raw, 'en').map((c) => c.text)).toEqual([ws.slice(0, 40).join(' '), ws.slice(40).join(' ')])
+  })
+
+  it('needs five words before a pause ends a clause', () => {
+    // "and uh every new idea" with the pause after the fourth word, then after
+    // the fifth. Times are the fixture's, 10.08 onward, with one gap widened.
+    const cue = (line: string) =>
+      parseVTT(`WEBVTT\n\n00:00:10.080 --> 00:00:13.000\n \n${line}\n`, 'en').map((c) => c.text)
+
+    expect(
+      cue('and<00:00:10.320><c> uh</c><00:00:10.719><c> every</c><00:00:11.120><c> new</c><00:00:12.000><c> idea</c><00:00:12.240><c> that</c>'),
+    ).toEqual(['and uh every new idea that'])
+    expect(
+      cue('and<00:00:10.320><c> uh</c><00:00:10.719><c> every</c><00:00:11.120><c> new</c><00:00:11.360><c> idea</c><00:00:12.240><c> that</c>'),
+    ).toEqual(['and uh every new idea', 'that'])
+  })
+
+  it('is not made punctuated by one stray mark in 338 words', () => {
+    // Three bare tracks in the library carry one. The threshold is a rate
+    // (fewer than one mark per hundred words), not "none at all".
+    const first = bareEn.replace('<c> table</c>', '<c> table.</c>')
+    const raw = `${first}\n${shift(bareEn, 60)}`
+    const cues = parseVTT(raw, 'en')
+
+    expectCues(cues, [
+      ...FIRST_SEVEN.slice(0, 6),
+      [30.0, 'right can you break into my iphone and the time i go to the bathroom and come back to the dinner table.'],
+    ])
+
+    const byStart = new Map(cues.map((c) => [Math.round(c.start * 1000), c.text]))
+    expect(byStart.get(68080)).toBe('i i live in los angeles california')
+    expect(byStart.get(70080)).toBe('and uh every new idea that comes out of there they adopted immediately')
+    expect(byStart.get(73679)).toBe("and i'm a little more conservative")
+  })
+
+  it('splits Vietnamese on pauses too', () => {
+    // 39 words in the first 13s: below the 40-word ceiling, so before this it
+    // was one cue.
+    const cues = parseVTT(read('auto-vi-bare.vtt'), 'vi')
+    expect(cues).toHaveLength(3)
+    expectCues(cues, [
+      [0.32, 'chỉ có lời hứa thôi Mà lỡ dở ra tôi còn buồn như vậy con langan còn buồn như vậy Huân'],
+      [7.6, 'chi hoàn cảnh của cha con ông phủ Trần Còn khổ sở đến mức nào nữa'],
+      [12.44, 'chị Chị'],
+    ])
+  })
+
+  it('leaves other languages in whole pieces', () => {
+    const cues = parseVTT(bareEn, 'ja')
+    expect(cues).toHaveLength(169)
+    expect(cues[0].text).toBe('some')
+    expect(near(cues[0].start, 0.16)).toBe(true)
+  })
+
+  it('measures a pause after a line with no word timing from the line\'s end', () => {
+    // A rolling cue without tags is one piece holding several words. Its start
+    // is the line's, so measured start to start the pause before the next line
+    // would be the whole line's duration.
+    const raw = (nextStart: string) =>
+      [
+        'WEBVTT',
+        '',
+        '00:00:00.000 --> 00:00:01.000',
+        ' ',
+        'zero<00:00:00.500><c> a</c>',
+        '',
+        '00:00:01.000 --> 00:00:03.000',
+        'zero a',
+        'one two three four five six',
+        '',
+        `${nextStart} --> 00:00:09.000`,
+        'one two three four five six',
+        'seven',
+        '',
+      ].join('\n')
+
+    expect(parseVTT(raw('00:00:03.500'), 'en').map((c) => c.text)).toEqual(['zero a one two three four five six seven'])
+    expect(parseVTT(raw('00:00:04.000'), 'en').map((c) => c.text)).toEqual(['zero a one two three four five six', 'seven'])
+  })
+})
+
+describe('lacksPunctuation', () => {
+  const pieces = (n: number, marked = '') =>
+    Array.from({ length: n }, (_, i) => ({ start: i, end: i + 1, text: i === 0 && marked ? marked : 'word' }))
+
+  it('is a rate, not an absence', () => {
+    expect(lacksPunctuation(pieces(300))).toBe(true)
+    expect(lacksPunctuation(pieces(300, 'end.'))).toBe(true)
+    expect(lacksPunctuation(pieces(101, 'end.'))).toBe(true)
+    expect(lacksPunctuation(pieces(100, 'end.'))).toBe(false)
+  })
+
+  it('counts commas, question marks and exclamation marks', () => {
+    expect(lacksPunctuation(pieces(50, 'a,'))).toBe(false)
+    expect(lacksPunctuation([...pieces(150, 'why?'), { start: 0, end: 1, text: 'no!' }])).toBe(false)
+  })
 })

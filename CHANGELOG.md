@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+**Narration speaks a sentence when the person on screen says it, for captions
+with no punctuation.** Old YouTube automatic captions carry no `. , ? !` at all,
+so the clause splitter only ever fired its 40-word blind cut: every cue was 40
+words (~13.6s), sentences were cut in half before translation ("mọi ý tưởng mới
+xuất phát từ đó đều" / "được tiếp nhận ngay lập tức") and the voice drifted
+from the speaker. When a whole track has fewer than one mark per hundred words,
+a clause now also ends at a pause in speech: 0.7s or more between the starts of
+two words, with five words already gathered. The 40-word ceiling and the
+punctuation rules are unchanged, and a punctuated track is not touched.
+Measured on `t_YyrMV7SuE` (no mark in 3,577 words): 90 cues, 89 of them exactly
+40 words, became 214 cues of 14 words at the median, 13 at the ceiling. Across
+the library's 2,199 caption tracks 247 changed (99 English, 148 Vietnamese),
+all of them tracks with no punctuation; the other 1,952 are cue-for-cue
+identical. The track is judged by a rate, not by "no marks": the 1,149 automatic
+English tracks are bimodal (about 104 under one mark per hundred words, two
+between one and five, over 1,040 at five or more), and one bare track carries a
+stray mark in 38,515 words. The web app's own parser has the same rule and the
+same numbers, because the two share the translation cache keyed by cue text;
+run over every track they agree on text, start and end. The 247 changed tracks
+have new cue texts, so their cached translations miss once and are asked for
+again.
+
 ## 0.1.7 — 2026-11-04
 
 **A phone sees only its own profile's casts.** Profile A cast to a speaker,
