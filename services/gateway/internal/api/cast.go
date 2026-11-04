@@ -177,8 +177,16 @@ func (g *Gateway) handleCastSessions(w http.ResponseWriter, r *http.Request) {
 		g.writeCastErr(w, r, err)
 		return
 	}
+	// ?mine=true is a phone's question: its own casts, so a profile switched to
+	// on that phone neither sees nor sends videos to the speaker another
+	// profile started. Without it, every cast in the house (the web app's bar).
+	mine := r.URL.Query().Get("mine") == "true"
+	user := g.userID(r)
 	out := make([]castSessionDTO, 0, len(resp.Msg.GetSessions()))
 	for _, s := range resp.Msg.GetSessions() {
+		if mine && s.GetStartedBy() != user {
+			continue
+		}
 		out = append(out, toCastSession(s))
 	}
 	writeJSON(w, http.StatusOK, out)
