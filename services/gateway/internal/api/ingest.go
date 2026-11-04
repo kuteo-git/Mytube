@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	catalogv1 "github.com/lucnguyen/local-youtube/gen/go/catalog/v1"
 	ingestv1 "github.com/lucnguyen/local-youtube/gen/go/ingest/v1"
@@ -160,13 +162,19 @@ func toJobDTO(j *ingestv1.Job) jobDTO {
 }
 
 type externalVideoDTO struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	ChannelName     string `json:"channelName"`
-	DurationSeconds int32  `json:"durationSeconds"`
-	ViewCount       int64  `json:"viewCount"`
-	ThumbnailURL    string `json:"thumbnailUrl"`
-	SourceURL       string `json:"sourceUrl"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	ChannelName string `json:"channelName"`
+	// Empty when upstream sent none. The search page opens the channel from
+	// the avatar, as Home does.
+	ChannelID string `json:"channelId,omitempty"`
+	// The avatar the library holds for that channel, a path under /media.
+	// Empty for a channel it has never seen, which draws its initial.
+	ChannelAvatarPath string `json:"channelAvatarPath,omitempty"`
+	DurationSeconds   int32  `json:"durationSeconds"`
+	ViewCount         int64  `json:"viewCount"`
+	ThumbnailURL      string `json:"thumbnailUrl"`
+	SourceURL         string `json:"sourceUrl"`
 	// Empty when unknown. A flat listing carries no upload date, and printing a
 	// made-up one would render as "1 minute ago" on every card.
 	PublishedAt string `json:"publishedAt,omitempty"`
@@ -211,26 +219,111 @@ func (g *Gateway) handleDiscover(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]externalVideoDTO, 0, len(resp.Msg.GetVideos()))
 	for _, v := range resp.Msg.GetVideos() {
-		out = append(out, externalVideoDTO{
-			ID:              v.GetId(),
-			Title:           v.GetTitle(),
-			ChannelName:     v.GetChannelName(),
-			DurationSeconds: v.GetDurationSeconds(),
-			ViewCount:       v.GetViewCount(),
-			ThumbnailURL:    v.GetThumbnailUrl(),
-			SourceURL:       v.GetSourceUrl(),
-			InLibrary:       v.GetInLibrary(),
-		})
+		out = append(out, externalDTO(v))
 	}
+	g.withChannelAvatars(r.Context(), g.userID(r), out)
 	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
 }
 
-// discoverOne answers the "On YouTube" half of a pasted address.
+// externalDTO is one upstream result as the search page draws it: a card like
+// Home's, with the channel to open from its avatar.
+func externalDTO(v *ingestv1.ExternalVideo) externalVideoDTO {
+	return externalVideoDTO{
+		ID:              v.GetId(),
+		Title:           v.GetTitle(),
+		ChannelName:     v.GetChannelName(),
+		ChannelID:       v.GetChannelId(),
+		DurationSeconds: v.GetDurationSeconds(),
+		ViewCount:       v.GetViewCount(),
+		ThumbnailURL:    v.GetThumbnailUrl(),
+		SourceURL:       v.GetSourceUrl(),
+		InLibrary:       v.GetInLibrary(),
+		PublishedAt:     publishedAtString(v.GetPublishedAt()),
+	}
+}
+
+// libraryDTO is a video already on this disk, in the shape of a search result.
+func libraryDTO(v *catalogv1.Video) externalVideoDTO {
+	return externalVideoDTO{
+		ID:                v.GetId(),
+		Title:             v.GetTitle(),
+		ChannelName:       v.GetChannel().GetName(),
+		ChannelID:         v.GetChannel().GetId(),
+		ChannelAvatarPath: v.GetChannel().GetAvatarPath(),
+		DurationSeconds:   v.GetDurationSeconds(),
+		ViewCount:         v.GetViewCount(),
+		// A path under /media rather than a URL; the app resolves both.
+		ThumbnailURL: v.GetThumbnailPath(),
+		SourceURL:    v.GetSourceUrl(),
+		PublishedAt:  publishedAtString(v.GetPublishedAt()),
+		InLibrary:    true,
+	}
+}
+
+// publishedAtString is an upload date as the wire carries it, or empty when
+// unknown: a flat listing often has none, and the zero time would render as a
+// date in 1970 rather than as no date.
+func publishedAtString(ts *timestamppb.Timestamp) string {
+	if ts == nil || ts.AsTime().Unix() <= 0 {
+		return ""
+	}
+	return ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+}
+
+// withChannelAvatars fills in each result's avatar from the library, which
+// holds one for nearly every channel the household has met. One lookup per
+// channel, a few at a time and for a second at most: there is no batch call,
+// and the results are worth sending without their pictures. A channel the
+// library has never seen, or a lookup that fails or runs late, leaves the
+// avatar empty and the card draws an initial.
+func (g *Gateway) withChannelAvatars(ctx context.Context, userID string, videos []externalVideoDTO) {
+	ctx, cancel := context.WithTimeout(ctx, avatarLookupBudget)
+	defer cancel()
+
+	var mu sync.Mutex
+	avatars := map[string]string{}
+	var lookups errgroup.Group
+	lookups.SetLimit(8)
+	for _, id := range distinctChannelIDs(videos) {
+		lookups.Go(func() error {
+			resp, err := g.catalog.GetChannel(ctx, connect.NewRequest(&catalogv1.GetChannelRequest{
+				ChannelId: id,
+				UserId:    userID,
+			}))
+			if err == nil {
+				mu.Lock()
+				avatars[id] = resp.Msg.GetChannel().GetAvatarPath()
+				mu.Unlock()
+			}
+			return nil
+		})
+	}
+	_ = lookups.Wait()
+	for i := range videos {
+		videos[i].ChannelAvatarPath = avatars[videos[i].ChannelID]
+	}
+}
+
+const avatarLookupBudget = time.Second
+
+func distinctChannelIDs(videos []externalVideoDTO) []string {
+	seen := map[string]bool{}
+	var ids []string
+	for _, v := range videos {
+		if v.ChannelID != "" && !seen[v.ChannelID] {
+			seen[v.ChannelID] = true
+			ids = append(ids, v.ChannelID)
+		}
+	}
+	return ids
+}
+
+// discoverOne answers a pasted address with the one video it names.
 //
 // The catalog is asked first, and a hit ends the request without touching
-// YouTube at all: the video is already on the page, under "In your library",
-// which is where something on this disk belongs. That check is the whole reason
-// this lives at the gateway — it is the only place holding both answers.
+// YouTube at all. It used to answer *nothing* for a hit, because the search
+// page had a library half that already showed the video; search now asks this
+// alone, so the hit is the answer, marked as in the library.
 func (g *Gateway) discoverOne(w http.ResponseWriter, r *http.Request, videoID string) {
 	empty := map[string]any{"videos": []externalVideoDTO{}}
 
@@ -242,11 +335,11 @@ func (g *Gateway) discoverOne(w http.ResponseWriter, r *http.Request, videoID st
 		return
 	}
 
-	if _, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{
+	if found, err := g.catalog.GetVideo(r.Context(), connect.NewRequest(&catalogv1.GetVideoRequest{
 		VideoId: videoID,
 		UserId:  g.userID(r),
 	})); err == nil {
-		writeJSON(w, http.StatusOK, empty)
+		writeJSON(w, http.StatusOK, map[string]any{"videos": []externalVideoDTO{libraryDTO(found.Msg.GetVideo())}})
 		return
 	}
 
@@ -261,16 +354,9 @@ func (g *Gateway) discoverOne(w http.ResponseWriter, r *http.Request, videoID st
 		return
 	}
 
-	v := resp.Msg.GetVideo()
-	writeJSON(w, http.StatusOK, map[string]any{"videos": []externalVideoDTO{{
-		ID:              v.GetId(),
-		Title:           v.GetTitle(),
-		ChannelName:     v.GetChannelName(),
-		DurationSeconds: v.GetDurationSeconds(),
-		ViewCount:       v.GetViewCount(),
-		ThumbnailURL:    v.GetThumbnailUrl(),
-		SourceURL:       v.GetSourceUrl(),
-	}}})
+	out := []externalVideoDTO{externalDTO(resp.Msg.GetVideo())}
+	g.withChannelAvatars(r.Context(), g.userID(r), out)
+	writeJSON(w, http.StatusOK, map[string]any{"videos": out})
 }
 
 type ensureExternalRequest struct {

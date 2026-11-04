@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -257,9 +258,7 @@ func toExternal(info *ytdlp.ExtractedInfo) domain.ExternalVideo {
 }
 
 func (d *Downloader) Search(ctx context.Context, query string, limit int32) ([]domain.ExternalVideo, error) {
-	if limit <= 0 || limit > 50 {
-		limit = 20
-	}
+	limit = searchLimit(limit)
 
 	// A flat playlist search fetches listing metadata only: no formats are
 	// resolved, which is what keeps search fast and reduces upstream load.
@@ -277,14 +276,35 @@ func (d *Downloader) Search(ctx context.Context, query string, limit int32) ([]d
 		return nil, err
 	}
 
+	return searchResults(infos), nil
+}
+
+// searchLimit is the page size actually asked of YouTube: 20 when none is
+// given, and at most 50. Capped rather than reset — callers page by asking for
+// a larger page, and a reset made the third page shorter than the second.
+func searchLimit(limit int32) int32 {
+	if limit <= 0 {
+		return 20
+	}
+	return min(limit, 50)
+}
+
+// videoID is the shape of a YouTube video id; a channel's is 24 characters
+// starting UC, a playlist's longer still.
+var videoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+
+// searchResults keeps the videos a search answered with. `ytsearchN:` also
+// answers with channels and playlists — a singer's name finds the singer's
+// channel — and listed as videos they open nothing.
+func searchResults(infos []*ytdlp.ExtractedInfo) []domain.ExternalVideo {
 	videos := make([]domain.ExternalVideo, 0, len(infos))
 	for _, info := range infos {
-		if info.ID == "" {
+		if !videoID.MatchString(info.ID) {
 			continue
 		}
 		videos = append(videos, toExternal(info))
 	}
-	return videos, nil
+	return videos
 }
 
 func (d *Downloader) Preview(ctx context.Context, url string) (domain.ExternalVideo, error) {
