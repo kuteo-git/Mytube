@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -167,17 +168,34 @@ func (g *Gateway) handleResolveChannel(w http.ResponseWriter, r *http.Request) {
 	if key == "" {
 		key = ref.ID
 	}
-	resolved, err := g.ingest.ResolveChannel(ctx, connect.NewRequest(&ingestv1.ResolveChannelRequest{
-		Channel: key,
-	}))
+	id, err := g.learnChannel(ctx, key)
 	if err != nil {
 		g.logger.Warn("resolve channel", "query", query, "error", err)
 		writeJSON(w, http.StatusOK, map[string]any{"channel": nil})
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{"channel": id})
+}
 
-	// Written down before it is handed over, because the page that opens next
-	// reads the catalog and not this answer.
+// learnChannel asks YouTube about a channel the library has never met, by
+// handle or id, and writes it down — the page that opens next reads the
+// catalog, not this answer. One request upstream, for the header rather than
+// the videos.
+func (g *Gateway) learnChannel(ctx context.Context, key string) (string, error) {
+	id, err, _ := g.learning.Do(key, func() (any, error) { return g.resolveAndRecord(ctx, key) })
+	if err != nil {
+		return "", err
+	}
+	return id.(string), nil
+}
+
+func (g *Gateway) resolveAndRecord(ctx context.Context, key string) (string, error) {
+	resolved, err := g.ingest.ResolveChannel(ctx, connect.NewRequest(&ingestv1.ResolveChannelRequest{
+		Channel: key,
+	}))
+	if err != nil {
+		return "", err
+	}
 	if _, err := g.catalog.UpsertChannel(ctx, connect.NewRequest(&catalogv1.UpsertChannelRequest{
 		Channel: &catalogv1.Channel{
 			Id:              resolved.Msg.GetChannelId(),
@@ -187,11 +205,9 @@ func (g *Gateway) handleResolveChannel(w http.ResponseWriter, r *http.Request) {
 			SubscriberCount: resolved.Msg.GetSubscriberCount(),
 		},
 	})); err != nil {
-		// The address was understood and the channel exists; only the note
-		// failed. Say so and let the page try — it may well find the row was
-		// written by something else in the meantime.
+		// The channel exists; only the note failed. Say so and let the page
+		// try — the row may well have been written by something else.
 		g.logger.Warn("record resolved channel", "channel", resolved.Msg.GetChannelId(), "error", err)
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"channel": resolved.Msg.GetChannelId()})
+	return resolved.Msg.GetChannelId(), nil
 }

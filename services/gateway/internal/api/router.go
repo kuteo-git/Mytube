@@ -35,6 +35,9 @@ type Gateway struct {
 	// One expansion at a time. Concurrent passes would double the request rate
 	// against YouTube for material the first pass is already fetching.
 	expanding atomic.Bool
+	// learning collapses concurrent lookups of one unknown channel into one
+	// upstream request: the app opens a channel and its listing together.
+	learning singleflight.Group
 	// ingestBaseURL and streamClient exist for the muxed stream, which is raw
 	// bytes over plain HTTP rather than an RPC. The client has no timeout: the
 	// response lasts as long as the video plays.
@@ -1020,11 +1023,30 @@ func (g *Gateway) handleFetchComments(w http.ResponseWriter, r *http.Request) {
 // Channels & subscriptions
 // ---------------------------------------------------------------------------
 
+// channelOrLearn reads the channel a request names from the catalog. A
+// channel the library has never met (opened from a search result's avatar,
+// say) is learned from YouTube rather than answered 404. Both the channel and
+// its listing go through here: the app asks for the two together, and when
+// only one learned, the other lost the race and the page said the channel
+// does not exist.
+func (g *Gateway) channelOrLearn(r *http.Request) (*connect.Response[catalogv1.GetChannelResponse], error) {
+	ask := func() (*connect.Response[catalogv1.GetChannelResponse], error) {
+		return g.catalog.GetChannel(r.Context(), connect.NewRequest(&catalogv1.GetChannelRequest{
+			ChannelId: r.PathValue("id"),
+			UserId:    g.userID(r),
+		}))
+	}
+	resp, err := ask()
+	if connect.CodeOf(err) == connect.CodeNotFound {
+		if _, learnErr := g.learnChannel(r.Context(), r.PathValue("id")); learnErr == nil {
+			resp, err = ask()
+		}
+	}
+	return resp, err
+}
+
 func (g *Gateway) handleGetChannel(w http.ResponseWriter, r *http.Request) {
-	resp, err := g.catalog.GetChannel(r.Context(), connect.NewRequest(&catalogv1.GetChannelRequest{
-		ChannelId: r.PathValue("id"),
-		UserId:    g.userID(r),
-	}))
+	resp, err := g.channelOrLearn(r)
 	if err != nil {
 		g.writeErr(w, r, err)
 		return
@@ -1063,10 +1085,7 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 	// Ask YouTube, not the catalog. A scan only ever brings in the newest few
 	// dozen uploads, so serving this page from the catalog would cap a channel
 	// at that number for reasons the viewer cannot see.
-	channel, err := g.catalog.GetChannel(ctx, connect.NewRequest(&catalogv1.GetChannelRequest{
-		ChannelId: channelID,
-		UserId:    g.userID(r),
-	}))
+	channel, err := g.channelOrLearn(r)
 	if err != nil {
 		g.writeErr(w, r, err)
 		return
@@ -1130,9 +1149,7 @@ func (g *Gateway) handleChannelVideos(w http.ResponseWriter, r *http.Request) {
 		}
 		// Sent as an empty string when unknown, so the client omits the line
 		// rather than printing an invented date.
-		if ts := v.GetPublishedAt(); ts != nil && ts.AsTime().Unix() > 0 {
-			dto.PublishedAt = ts.AsTime().UTC().Format("2006-01-02T15:04:05Z")
-		}
+		dto.PublishedAt = publishedAtString(v.GetPublishedAt())
 		out = append(out, dto)
 	}
 
