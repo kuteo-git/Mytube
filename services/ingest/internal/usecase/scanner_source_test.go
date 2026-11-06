@@ -1,10 +1,12 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -498,7 +500,7 @@ func TestTheFastPassPicksUpAnUploadFromMinutesAgo(t *testing.T) {
 	}
 	library.subscribed = []domain.SubscribedChannel{{ID: "UC_followed", Name: "A Channel"}}
 
-	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+	if _, err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
 		t.Fatalf("ScanSubscribed: %v", err)
 	}
 
@@ -523,7 +525,7 @@ func TestTheFastPassNeverAsksForAListing(t *testing.T) {
 	library.subscribed = []domain.SubscribedChannel{{ID: "UC_a"}, {ID: "UC_b"}}
 	down := &feedDownloader{}
 
-	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+	if _, err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
 		t.Fatalf("ScanSubscribed: %v", err)
 	}
 
@@ -556,7 +558,7 @@ func TestTheFastPassIgnoresOlderUploadsInTheSameFeed(t *testing.T) {
 		},
 	}}
 
-	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+	if _, err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
 		t.Fatalf("ScanSubscribed: %v", err)
 	}
 
@@ -571,10 +573,80 @@ func TestOneBrokenFeedDoesNotStopTheRest(t *testing.T) {
 	library.subscribed = []domain.SubscribedChannel{{ID: "UC_broken"}, {ID: "UC_fine"}}
 	down := &feedDownloader{err: errors.New("connection reset")}
 
-	if err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
+	if _, err := newFeedScanner(down, library).ScanSubscribed(context.Background()); err != nil {
 		t.Fatalf("a failing feed became a failing pass: %v", err)
 	}
 	if down.feedCalls != 2 {
 		t.Fatalf("stopped after %d feeds; every channel gets its own try", down.feedCalls)
+	}
+}
+
+// Measured on 2026-11-07: 37 of 40 subscribed channels' feeds answered 404 or
+// 500, and nothing in the log said so, because each failure was a Debug line.
+// The pass has to say how many feeds it could not read, once, where it is seen.
+func TestTheFastPassReportsFeedsItCouldNotRead(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}}
+	library.subscribed = []domain.SubscribedChannel{{ID: "UC_a"}, {ID: "UC_b"}, {ID: "UC_c"}}
+	down := &feedDownloader{err: errors.New(`rss fetch "UC_a": HTTP 404`)}
+	var log bytes.Buffer
+	scanner := NewScanner(nil, down, nil, library, nil,
+		slog.New(slog.NewTextHandler(&log, nil)), time.Hour)
+
+	if _, err := scanner.ScanSubscribed(context.Background()); err != nil {
+		t.Fatalf("ScanSubscribed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(log.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("logged %d lines, want one summary:\n%s", len(lines), log.String())
+	}
+	for _, want := range []string{"level=WARN", "failed=3", "channels=3", "HTTP 404"} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("summary %q is missing %q", lines[0], want)
+		}
+	}
+}
+
+func TestTheFastPassIsQuietWhenEveryFeedAnswers(t *testing.T) {
+	library := &recordingLibrary{known: map[string]bool{}}
+	library.subscribed = []domain.SubscribedChannel{{ID: "UC_a"}}
+	var log bytes.Buffer
+	scanner := NewScanner(nil, &feedDownloader{}, nil, library, nil,
+		slog.New(slog.NewTextHandler(&log, nil)), time.Hour)
+
+	if _, err := scanner.ScanSubscribed(context.Background()); err != nil {
+		t.Fatalf("ScanSubscribed: %v", err)
+	}
+	if log.Len() != 0 {
+		t.Fatalf("a pass with no failures logged %q", log.String())
+	}
+}
+
+// While YouTube's feed server refuses most channels the fast pass is 660
+// requests every five minutes that bring nothing back. It rests, doubling, up to
+// the hour the full pass reads every feed anyway, and is back at its own pace
+// the first time most feeds answer.
+func TestTheFastPassRestsWhileMostFeedsAreRefused(t *testing.T) {
+	base := 5 * time.Minute
+	refused := feedPass{read: 25, unreadable: 635}
+	tests := []struct {
+		name string
+		last time.Duration
+		pass feedPass
+		want time.Duration
+	}{
+		{"most refused doubles", base, refused, 10 * time.Minute},
+		{"keeps doubling", 20 * time.Minute, refused, 40 * time.Minute},
+		{"never past the full pass", 40 * time.Minute, refused, time.Hour},
+		{"stays at the ceiling", time.Hour, refused, time.Hour},
+		{"recovered returns at once", time.Hour, feedPass{read: 640, unreadable: 20}, base},
+		{"half is not most", base, feedPass{read: 5, unreadable: 5}, base},
+		{"no channels", 20 * time.Minute, feedPass{}, base},
+	}
+	for _, tt := range tests {
+		if got := nextFeedWait(base, tt.last, tt.pass); got != tt.want {
+			t.Errorf("%s: nextFeedWait(%v, %v, %+v) = %v, want %v",
+				tt.name, base, tt.last, tt.pass, got, tt.want)
+		}
 	}
 }

@@ -131,19 +131,46 @@ func (s *Scanner) RunSubscribed(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	wait := interval
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			if err := s.ScanSubscribed(ctx); err != nil {
+		case <-timer.C:
+			pass, err := s.ScanSubscribed(ctx)
+			if err != nil {
 				s.logger.Warn("subscribed scan", "error", err)
 			}
+			next := nextFeedWait(interval, wait, pass)
+			if next != wait {
+				s.logger.Info("subscribed scan: next pass", "after", next)
+			}
+			wait = next
+			timer.Reset(wait)
 		}
 	}
+}
+
+// feedPass is what one fast pass could read.
+type feedPass struct {
+	read, unreadable int
+}
+
+// The longest the fast pass rests. Past an hour it would be later than the full
+// pass, which reads every subscribed channel's feed for its dates anyway.
+const feedWaitCeiling = time.Hour
+
+// nextFeedWait is how long the fast pass waits before its next run: doubled,
+// up to feedWaitCeiling, while most feeds are refused, and back to base the
+// first pass most of them answer.
+func nextFeedWait(base, last time.Duration, pass feedPass) time.Duration {
+	if pass.unreadable <= pass.read {
+		return base
+	}
+	return min(max(last, base)*2, feedWaitCeiling)
 }
 
 // ScanSubscribed upserts recent uploads from every followed channel via RSS.
@@ -152,17 +179,31 @@ func (s *Scanner) RunSubscribed(ctx context.Context, interval time.Duration) {
 // overlap: both end in an upsert of the same rows with the same values, and
 // making the cheap pass wait on the expensive one would give back the latency it
 // exists to remove.
-func (s *Scanner) ScanSubscribed(ctx context.Context) error {
+func (s *Scanner) ScanSubscribed(ctx context.Context) (feedPass, error) {
+	var pass feedPass
 	channels, err := s.library.ListSubscribedChannels(ctx)
 	if err != nil {
-		return err
+		return pass, err
 	}
 
+	// Counted, not logged per channel: a feed server that refuses most channels
+	// is one fact, and at Debug it was no fact at all (37 of 40 refused,
+	// 2026-11-07, with nothing in the log).
+	var lastErr error
 	for _, channel := range channels {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return pass, ctx.Err()
 		}
-		entries := s.fetchChannelFeed(ctx, channel.ID)
+		if channel.ID == "" {
+			continue
+		}
+		entries, err := s.fetch.FetchChannelFeed(ctx, channel.ID)
+		if err != nil {
+			pass.unreadable++
+			lastErr = err
+			continue
+		}
+		pass.read++
 		for _, entry := range entries {
 			// Only genuinely recent uploads. The feed carries fifteen videos and
 			// most of them are old news the full pass has already filed; writing
@@ -175,7 +216,11 @@ func (s *Scanner) ScanSubscribed(ctx context.Context) error {
 			s.upsertFromFeed(ctx, entry, channel)
 		}
 	}
-	return nil
+	if pass.unreadable > 0 {
+		s.logger.Warn("subscribed scan: feeds unreadable",
+			"failed", pass.unreadable, "channels", len(channels), "last_error", lastErr)
+	}
+	return pass, nil
 }
 
 // How recent an upload has to be for the fast pass to write it.

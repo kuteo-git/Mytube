@@ -234,7 +234,9 @@ func main() {
 	go scanner.RunSubscribed(ctx, envDuration("SUBSCRIBED_SCAN_INTERVAL", 5*time.Minute))
 	// Its own timer, because a broadcast is the one fact here that is worthless
 	// an hour late and costs almost nothing to establish. Zero disables it.
-	go scanner.RunLive(ctx, envDuration("LIVE_SCAN_INTERVAL", 10*time.Minute))
+	// Twenty minutes, not ten: at 662 channels a pass took 9.6 of its ten
+	// minutes, so it never rested and was a third of the traffic to YouTube.
+	go scanner.RunLive(ctx, envDuration("LIVE_SCAN_INTERVAL", 20*time.Minute))
 
 	// Fill in what the listings could not. A flat listing carries no publish
 	// date, so videos arrive undated and the feed excludes them outright — 1127
