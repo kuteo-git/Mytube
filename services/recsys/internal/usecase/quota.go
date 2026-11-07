@@ -409,17 +409,16 @@ func applyChannelDiversity(
 	// One held back by the *gap* becomes placeable a few slots later, and
 	// leaving it until the boundary sent six uploads that should have shared the
 	// first page onto the second.
+	//
+	// Popped from the front, never copied: this runs before every video, and a
+	// prolific channel keeps tens of thousands held back. Copying the rest on
+	// each miss was 22 GB allocated per ranking of 85,793 videos (2026-11-07).
 	drain := func() {
-		if len(deferred) == 0 {
-			return
-		}
-		remaining := deferred
-		deferred = nil
-		for i, held := range remaining {
-			if inWindow >= window || !take(held) {
-				deferred = append(deferred, remaining[i:]...)
+		for len(deferred) > 0 {
+			if inWindow >= window || !take(deferred[0]) {
 				return
 			}
+			deferred = deferred[1:]
 		}
 	}
 

@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -204,5 +206,36 @@ func TestUpNextDrawsOnSeveralChannelsWithinTheSubject(t *testing.T) {
 	// Still on subject: every suggestion shares the topic.
 	if len(ranked) == 0 {
 		t.Fatal("expected suggestions")
+	}
+}
+
+// Measured on 2026-11-07: a cold Home took 2.4–2.9s, and 22 GB was allocated
+// per ranking of 85,793 videos. A channel with many videos keeps most of them
+// held back, and the held-back list was copied whole before every video. The
+// pass has to stay linear in the size of the library.
+func TestDiversityStaysLinearWhenOneChannelDominates(t *testing.T) {
+	const n = 5000
+	ranked := make([]domain.RankedVideo, n)
+	channelOf := make(map[string]string, n)
+	for i := range ranked {
+		id := fmt.Sprintf("v%d", i)
+		ranked[i] = domain.RankedVideo{VideoID: id, Score: float64(n - i)}
+		channelOf[id] = "UC_prolific"
+		if i%10 == 0 {
+			channelOf[id] = fmt.Sprintf("UC_other%d", i)
+		}
+	}
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	out := applyChannelDiversity(ranked, channelOf, map[string]feedSlot{},
+		maxPerChannelPerWindow, quotaWindow)
+	runtime.ReadMemStats(&after)
+
+	if len(out) != n {
+		t.Fatalf("returned %d videos, want all %d", len(out), n)
+	}
+	if mb := (after.TotalAlloc - before.TotalAlloc) >> 20; mb > 16 {
+		t.Fatalf("allocated %d MB for %d videos; the held-back list is being copied per video", mb, n)
 	}
 }
