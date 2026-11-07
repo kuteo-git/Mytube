@@ -147,3 +147,51 @@ func TestNarrationCuesComeFromTheVietnameseFile(t *testing.T) {
 		t.Errorf("narrating %q, want the Vietnamese line", cues[0].Text)
 	}
 }
+
+// Reported 2026-11-07: videos narrated on the phone and the TV offered no
+// Vietnamese subtitle. Their translations were on disk (narration.vi.json),
+// but only the web app wrote them out as a track, from the browser; the pass
+// these clients run never did.
+func TestAServerPassLeavesTheTranslationAsASubtitleTrack(t *testing.T) {
+	root, configDir := t.TempDir(), t.TempDir()
+	dir := filepath.Join(root, "envideo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	vtt := "WEBVTT\n\n00:00:01.000 --> 00:00:03.500\nHello everyone.\n\n" +
+		"00:00:04.000 --> 00:00:06.000\nWelcome back.\n"
+	if err := os.WriteFile(filepath.Join(dir, "1080p.mp4.en.vtt"), []byte(vtt), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "translate-config.json"),
+		[]byte(`{"model":"test-model"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Every line already translated, so the pass asks no model.
+	if err := writeNarrationCache(root, "envideo", "omniroute:test-model", map[string]string{
+		"Hello everyone.": "Xin chào mọi người.",
+		"Welcome back.":   "Chào mừng trở lại.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	g := &Gateway{
+		mediaRoot:    root,
+		configDir:    configDir,
+		narration:    newNarrationRegistry(),
+		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		streamClient: &http.Client{},
+	}
+	g.narration.passes["envideo"] = &narrationPass{Status: narrationRunning}
+
+	g.runNarration(context.Background(), "envideo", 0, 0)
+
+	got, err := os.ReadFile(filepath.Join(dir, "1080p.mp4.vi-mt.vtt"))
+	if err != nil {
+		t.Fatalf("no Vietnamese track was written: %v", err)
+	}
+	want := "WEBVTT\n\n00:00:01.000 --> 00:00:03.500\nXin chào mọi người.\n\n" +
+		"00:00:04.000 --> 00:00:06.000\nChào mừng trở lại.\n"
+	if string(got) != want {
+		t.Fatalf("track =\n%q\nwant\n%q", got, want)
+	}
+}

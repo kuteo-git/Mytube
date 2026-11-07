@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -314,21 +315,12 @@ func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "bad body", http.StatusBadRequest)
 		return
 	}
-	dir, err := safeVideoDir(g.mediaRoot, r.PathValue("id"))
-	if err != nil {
+	if _, err := safeVideoDir(g.mediaRoot, r.PathValue("id")); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		g.logger.Warn("narration vtt mkdir", "error", err)
-		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	name := narrationVTTName(dir)
-	path := filepath.Join(dir, name)
-	// One file per video, rewritten after every batch — the writes that
-	// overlapped the most, and the ones that surfaced as a 503.
-	if err := withFileLock(path, func() error { return writeFileAtomic(path, body) }); err != nil {
+	name, err := writeMachineVTT(g.mediaRoot, r.PathValue("id"), body)
+	if err != nil {
 		g.logger.Warn("narration vtt write", "error", err)
 		http.Error(w, "cache unavailable", http.StatusServiceUnavailable)
 		return
@@ -336,6 +328,51 @@ func (g *Gateway) handlePutNarrationVTT(w http.ResponseWriter, r *http.Request) 
 	g.logger.Info("narration vtt", "video", r.PathValue("id"), "file", name, "bytes", len(body))
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"file": name, "bytes": len(body)})
+}
+
+// writeMachineVTT stores a video's machine-translated track beside its other
+// subtitles. Two writers: the web app's pass, which posts the file, and the
+// server's own pass, which the phone, the TV and the speakers run.
+func writeMachineVTT(root, videoID string, body []byte) (string, error) {
+	dir, err := safeVideoDir(root, videoID)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	name := narrationVTTName(dir)
+	path := filepath.Join(dir, name)
+	// One file per video, rewritten after every batch — the writes that
+	// overlapped the most, and the ones that surfaced as a 503.
+	if err := withFileLock(path, func() error { return writeFileAtomic(path, body) }); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+// machineVTT is the translation written out as WebVTT, the web app's toVTT
+// (narration-vtt-write.ts) on this side. Untranslated cues are left out: a
+// Vietnamese track half in English is worse than a shorter one.
+func machineVTT(cues []vttCue, translations map[string]string) []byte {
+	var b strings.Builder
+	for _, cue := range cues {
+		line := strings.Join(strings.Fields(translations[cue.Text]), " ")
+		if line == "" {
+			continue
+		}
+		if b.Len() == 0 {
+			b.WriteString("WEBVTT\n")
+		}
+		fmt.Fprintf(&b, "\n%s --> %s\n%s\n", vttTime(cue.Start), vttTime(cue.End), line)
+	}
+	return []byte(b.String())
+}
+
+// vttTime is 12.5 as 00:00:12.500.
+func vttTime(seconds float64) string {
+	ms := int64(math.Round(max(0, seconds) * 1000))
+	return fmt.Sprintf("%02d:%02d:%02d.%03d", ms/3600000, ms/60000%60, ms/1000%60, ms%1000)
 }
 
 // handleDeleteNarrationVTT removes the machine-translated track.

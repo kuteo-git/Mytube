@@ -429,6 +429,17 @@ func (g *Gateway) narrateRange(
 		end := min(i+size, to)
 
 		g.translateInto(ctx, cues[i:end], cues, i, translations, videoID, partition)
+		// After every batch, as the web app does: the file is what makes the
+		// translation a subtitle anybody can pick, and a pass takes minutes.
+		// Only a translated pass writes one; a Vietnamese source already is the
+		// Vietnamese track.
+		if partition != "" {
+			if body := machineVTT(cues, translations); len(body) > 0 {
+				if _, err := writeMachineVTT(g.mediaRoot, videoID, body); err != nil {
+					g.logger.Warn("narration vtt write", "video", videoID, "error", err)
+				}
+			}
+		}
 
 		for k := i; k < end; k++ {
 			if ctx.Err() != nil {
