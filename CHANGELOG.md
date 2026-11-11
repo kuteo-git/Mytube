@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.9 — 2026-11-11
+
+**A video narrated from the phone, the TV or a speaker offers its Vietnamese
+subtitle.** The translations were on disk in `narration.vi.json`, but only the
+web app wrote them out as the `*.vi-mt.vtt` track the menu lists. The server's
+own pass now writes the same file, in the same format, after every batch; the
+334 videos already narrated that way were given their track from their cached
+translations.
+
+**Home ranks a cold feed in 0.1s, not 2.5s.** The channel diversity pass copied
+its held-back list on every miss, quadratic for a prolific channel: 22 GB
+allocated per ranking. Measured on the real library: 2.43-2.89s to 0.09-0.19s,
+22-27 GB to 80-101 MB, with the ordering unchanged on 200 random libraries.
+
+**Refused feeds are said, and rested on.** A feed server refusing 635 of 660
+channels (2026-11-07) logged nothing above Debug. Each RSS pass now logs one
+Warn with the count and, while most feeds are refused, rests, doubling up to
+the hour. The live pass's default goes from ten minutes to twenty.
+
 ## 0.1.8 — 2026-11-04
 
 **Narration speaks a sentence when the person on screen says it, for captions
